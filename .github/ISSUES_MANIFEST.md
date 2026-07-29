@@ -1,14 +1,16 @@
 # LEAPWare-ShellUX — Issues Manifest
 
 This manifest is the authoritative work breakdown for the initial build of
-LEAPWare-ShellUX. It is a **specification of intended work**, not a record of
-completed work. Nothing in this file should be read as a claim that the
-described behaviour currently exists.
+LEAPWare-ShellUX. Except where an issue is explicitly marked `LANDED`, it is a
+**specification of intended work**, not a record of completed work. Nothing
+marked otherwise should be read as a claim that the described behaviour
+currently exists.
 
 ## Status legend
 
 | Marker | Meaning |
 |---|---|
+| `LANDED` | Merged. The source files exist, are tested, and pass the coverage gate. |
 | `IN PROGRESS` | Someone is actively writing this code now. |
 | `NOT STARTED` | Specified only. No source file exists. |
 | `BLOCKED` | Cannot start until a listed dependency lands. |
@@ -17,20 +19,43 @@ described behaviour currently exists.
 
 | Issue | Title | Status |
 |---|---|---|
-| ISSUE-001 | Type-Safe IoC Extension Registry & Primitives | `IN PROGRESS` |
-| ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `BLOCKED` (on 001) |
+| ISSUE-001 | Type-Safe IoC Extension Registry & Primitives | `LANDED` |
+| ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `NOT STARTED` |
 | ISSUE-003 | UI State Hydration & Serialization Engine | `NOT STARTED` |
 | ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `BLOCKED` (on 002) |
-| ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `BLOCKED` (on 001–004) |
+| ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `BLOCKED` (on 002–004) |
 
-No issue below has been verified against running code. Every "Definition of
-Done" is a gate that still has to be passed.
+ISSUE-001 was verified against running code by an independent adversarial
+verification on **2026-07-29**. What that verification actually did, so the
+claim is checkable rather than decorative:
+
+- Re-ran `npm run lint`, `npm run typecheck`, `npm run test:coverage` and
+  `npm run build` itself rather than trusting a reported result.
+  `src/core/types.ts`, `src/core/RegistryContext.tsx` and `src/core/ShellAPI.ts`
+  exist and hold a 100% statement/branch/function/line gate over `src/core/**`.
+- Reproduced eight attack classes against the built registry and confirmed all
+  eight are closed: registration hijack via a mutating `id` getter, reserved-id
+  bypass, `register` throwing rather than returning a failure, a hostile
+  `setBadgeCount`, a hostile `setSelectedItem`, `Proxy` `length` mutation
+  between the bounds check and the walk, post-registration mutation of the
+  stored record, and a weaponised `ShellUXError` relocated into the host.
+- Measured, through a logging `Proxy`, that every untrusted property is read
+  exactly once — not asserted from reading the source.
+
+**Caveat, and it is open.** The same verification found that
+`validateBlueprint` can escape a raw `TypeError` rather than a `ShellUXError`
+on exotic input. It is recorded under "Follow-up defects" below and is not
+closed by this landing. It is not reachable through `register`.
+
+Its unblocking of ISSUE-002 is why that row now reads `NOT STARTED` rather than
+`BLOCKED`. **No other issue has been verified against running code**, and every
+remaining "Definition of Done" is a gate that still has to be passed.
 
 ---
 
 ## ISSUE-001 — Type-Safe IoC Extension Registry & Primitives
 
-**Status:** `IN PROGRESS`
+**Status:** `LANDED`
 
 ### Technical Specification
 
@@ -110,17 +135,74 @@ None. This is the root of the dependency graph.
 - Duplicate-id registration is covered by a test asserting the deterministic
   failure behaviour.
 - Prototype-pollution-shaped ids are covered by a test.
-- A throwing visibility predicate is covered by a test asserting the action is
-  hidden and the ribbon still renders.
+- ~~A throwing visibility predicate is covered by a test asserting the action is
+  hidden and the ribbon still renders.~~ **Carried to ISSUE-002.** This gate
+  cannot be met by ISSUE-001: containing a throwing predicate requires a call
+  site, and the ribbon renderer that would evaluate predicates is ISSUE-002.
+  What ISSUE-001 does enforce is that `isVisible` and `onExecute` are functions
+  at registration. Recorded here rather than quietly dropped.
 - The Vitest coverage gate passes for `src/core/**`.
 - `DEVELOPER.md` is updated to replace its "signature not yet settled" notes
   with the real, as-shipped signatures.
+
+### As landed — decisions taken during implementation
+
+- **The registry stores a normalised copy, not the caller's object.**
+  Validating a payload and then keeping the plugin's live object leaves every
+  check revocable: fields stay re-readable through getters and mutable through
+  ordinary assignment, so a bounds check measures a number the plugin can
+  revise afterwards. Registration therefore reads each untrusted value once and
+  writes it into a host-owned, deeply frozen record, which is what
+  `getExtension` returns. Function and React-component references are carried
+  across unchanged — they must stay callable and keep their identity — and the
+  plugin's original object is retained privately for the StrictMode
+  reference-identity check and nothing else.
+- **`unregister` has no authorisation, deliberately.** See ADR-0001 and the
+  declaration comment in `src/core/RegistryContext.tsx`. This issue never
+  specified an ownership model and one was not invented here.
+
+### Follow-up defects — confirmed, open, non-blocking
+
+Found by the 2026-07-29 adversarial verification. Each was reproduced, not
+inferred. None of them blocks ISSUE-001 from landing, and none is a reason to
+weaken its status — but they are real, they are open, and they are recorded
+here rather than quietly dropped, in the same spirit as the struck-through
+carried-forward gate above.
+
+- **`validateBlueprint` can throw a raw `TypeError`.** `Array.isArray` throws
+  when handed a revoked `Proxy`, and five call sites in
+  `src/core/RegistryContext.tsx` reach it with an unvalidated value: `isRecord`,
+  `describeType`, the `children` check in `normalizeNavigationNode`, and the
+  `navigationTree` and `ribbonActions` checks in `normalizeBlueprint`. Thirteen
+  distinct field positions can steer a revoked `Proxy` into one of them.
+  **Not reachable through `register`** — its `try`/`catch` absorbs the throw and
+  returns a `ShellUXError`, so the "never throws" contract is intact. Only the
+  exported `validateBlueprint`, which has no catch, leaks it. The fix is to
+  guard **all five** sites, not just `describeType`; guarding one leaves the
+  other four live. Deferred because this file is held to a 100% branch gate and
+  each new guard needs its own test.
+- **A revoked `Proxy` over a function passes `validateFunction` and
+  `validateViewComponent`.** Its `typeof` is `'function'`, so it satisfies the
+  check and is stored by reference like any other handler; calling it later
+  throws. This sits within ADR-0001's stated limit — the host validates shape at
+  registration and does not vouch for what a handler does when invoked — but the
+  host has **no invocation guard**, so the first caller wears the throw. Worth
+  closing when a call site exists (ISSUE-002 for `isVisible`/`onExecute`,
+  ISSUE-004 for the view components).
+- **Untrusted fields are read through the prototype chain.** Field reads use
+  plain property access with no `Object.hasOwn` guard, so a polluted
+  `Object.prototype.badgeCount` is inherited by a navigation node that declares
+  none. **No unvalidated value can be smuggled in this way** — an inherited
+  value goes through exactly the same checks as an own value, so the type and
+  bound guarantees hold either way. This is a robustness and
+  least-surprise defect, **not a validation bypass**, and it is stated that way
+  deliberately rather than inflated.
 
 ---
 
 ## ISSUE-002 — Compact Desktop 3-Pane Resizable Layout Matrix
 
-**Status:** `BLOCKED` on ISSUE-001
+**Status:** `NOT STARTED` (unblocked — ISSUE-001 has landed)
 
 ### Technical Specification
 
@@ -338,7 +420,7 @@ covered by `FaultBoundary`.
 
 ## ISSUE-005 — Verification Remotes & Adversarial Integration Suite
 
-**Status:** `BLOCKED` on ISSUE-001 through ISSUE-004
+**Status:** `BLOCKED` on ISSUE-002 through ISSUE-004
 
 ### Technical Specification
 
@@ -457,9 +539,13 @@ These apply to every issue above and are not restated per ticket.
 
 - **Type safety.** No `any` in a public contract. No `@ts-ignore` without a
   written justification in the same commit.
-- **Coverage.** The Vitest coverage threshold is enforced as a build gate and
-  applies per module as each module lands. There is no project-wide coverage
-  figure to report yet, and none should be claimed.
+- **Coverage.** The Vitest coverage threshold is enforced as a build gate by
+  `.github/workflows/ci.yml`, whose `Test with coverage` step runs
+  `npm run test:coverage` on every push to `main` and every pull request;
+  `vitest.config.ts` sets the threshold and Vitest exits non-zero when it is
+  unmet, failing the job. The threshold applies per module as each module lands.
+  There is no project-wide coverage figure to report yet, and none should be
+  claimed.
 - **Accessibility.** WCAG 2.2 **AA** is the target. See `README.md` for the
   known conflicts that keep AAA out of scope.
 - **Untrusted plugin content.** Any surface that renders extension-supplied

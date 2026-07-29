@@ -7,27 +7,31 @@ LEAPWare-ShellUX host.
 
 ## Read this before you read anything else
 
-**The host is pre-alpha and the core contract is being written right now.**
-ISSUE-001 — the file set that defines `LEAPExtensionBlueprint` and `IShellAPI` —
-is in progress and has not landed. See [`README.md`](README.md#project-status).
+**The host is pre-alpha.** ISSUE-001 — the file set that defines
+`LEAPExtensionBlueprint`, `IShellAPI` and the extension registry — **has
+landed**: `src/core/types.ts`, `src/core/RegistryContext.tsx` and
+`src/core/ShellAPI.ts` all exist and are covered by tests. The signatures in
+this guide are now printed from those files rather than withheld. See
+[`README.md`](README.md#project-status).
 
-That has a direct consequence for this document, and it is important that you
-understand it rather than working around it:
+Everything *else* the host is specified to do — the three-pane layout, the
+ribbon renderer, state hydration, the row virtualizer, the fault boundaries — is
+ISSUE-002 and later, and **does not exist yet**. This guide marks those passages
+explicitly as forthcoming behaviour.
 
-> **Where an exact TypeScript signature has not yet been settled by ISSUE-001,
-> this guide says so and does not print one.** You will find "not yet settled"
-> markers below where a concrete type would normally be. That is deliberate. A
-> confidently wrong signature in an onboarding guide is worse than an
-> acknowledged gap — it produces code that compiles against a fiction and has to
-> be thrown away.
+> **The types in `src/core/types.ts` are the single source of truth.** Read it.
+> Where this guide and that file disagree, that file wins and this guide is a
+> bug.
 >
-> **The generated types in `src/core/types.ts` are the single source of truth.**
-> When it lands, read it. Where this guide and that file disagree, that file
-> wins and this guide is a bug.
+> **Where behaviour has not been implemented, this guide says so in the same
+> place it describes the behaviour**, rather than describing it in the present
+> tense. A guide that describes an unbuilt feature as though it works is worse
+> than an acknowledged gap: it produces extensions that rely on a host guarantee
+> nobody has written.
 
-What *is* settled, and what you can safely design around today, is the **shape
-of the contract**: which concepts exist, what each one is responsible for, and
-what the host guarantees. That is what this guide covers.
+What is settled and safe to build against today is the **registration
+contract**: the blueprint shape, the validation rules, the `IShellAPI` surface,
+and the registry's failure modes. That is what the next three sections cover.
 
 ---
 
@@ -46,12 +50,18 @@ module) is a contract violation that will break without warning.
    your extension                   the host
    ─────────────                    ────────
    exports  ──►  LEAPExtensionBlueprint  ──►  registry validates + indexes
-                                                        │
+                                                        │          ← BUILT
+   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄
+                                                        │      ← ISSUE-002+
    receives ◄──  IShellAPI (deep-frozen)  ◄─────────────┘
                                                         │
    host renders your Pane 1 entry, Pane 2 view,  ◄──────┘
    Pane 3 view, and your ribbon actions
 ```
+
+Everything above the dashed line exists today. Everything below it — activation,
+the shell API actually reaching you, and anything being rendered — is ISSUE-002
+and later.
 
 The host contains zero business logic. It does not know what your data means. It
 will not special-case you, and you should not need it to — if you cannot express
@@ -66,20 +76,212 @@ Your extension's entry point exports one blueprint object. It is data, not
 behaviour: the host reads it during registration, before anything of yours
 renders.
 
-| Concept | Responsibility | Signature status |
-|---|---|---|
-| **Extension id** | Stable, unique identifier. Used to index the registry and to namespace your persisted state. Never change it after release — changing it orphans every user's saved state for your extension. | Settled as a string. Exact branding/validation rules **not yet settled** by ISSUE-001. |
-| **Display label** | Human-readable name shown in the navigation sidebar. | Settled as a string. |
-| **Icon** | Optional icon reference for the sidebar, and the only thing visible when Pane 1 collapses to its 48px icon track. | Concept settled. **Exact type not yet settled** — whether this is a component, a name from a set, or a node is an open ISSUE-001 decision. Do not assume. |
-| **Navigation entry** | Your Pane 1 contribution: the tree or list a user navigates. Supports runtime-mutable badge counts (unread, pending, stock level). | Concept settled. **Exact shape not yet settled**, including how badge counts are updated. |
-| **Pane 2 view** | Your master/list view component. Rendered inside the host's virtualized list container. | Settled as a React component. **Exact props not yet settled.** |
-| **Pane 3 view** | Your detail view component. Gets a header region, a scroll container, and a utility drawer slot. | Settled as a React component. **Exact props not yet settled.** |
-| **Ribbon actions** | Your contextual actions, rendered on the right side of the ribbon. See below. | Concept settled. Field names settled (id, label, invoke handler, visibility predicate). **Exact types not yet settled.** |
+Every field below is required. There are no optional fields on the blueprint
+itself — the only optional fields in the contract are `NavigationNode.badgeCount`,
+`NavigationNode.children` and `RibbonAction.isDisabled`.
 
-**Do not hand-write a type declaration matching this table.** Import the real
-type from the host's `src/core/types.ts` once ISSUE-001 lands and let the
-compiler tell you what you got wrong. That is the whole point of a type-safe
-registry.
+| Field | Type | Responsibility and rules |
+|---|---|---|
+| `id` | `string` | Stable, unique identifier. Indexes the registry and namespaces your persisted state. Must match `/^[a-z0-9][a-z0-9-]{0,63}$/` — lowercase alphanumerics and internal hyphens, 1–64 characters, first character alphanumeric — and must not be `__proto__`, `constructor` or `prototype`. Unique across the whole registry. Never change it after release; changing it orphans every user's saved state for your extension. |
+| `name` | `string` | Human-readable extension name. Non-blank, at most 256 characters. **Untrusted display text** — see the security section. |
+| `version` | `string` | Your version string, e.g. `"1.0.0"`. Non-blank, at most 32 characters. Completely opaque to the host: it is not parsed, compared or range-checked. |
+| `navigationTree` | `readonly NavigationNode[]` | Your Pane 1 contribution. May be empty. At most 512 nodes in total across the whole tree, nested at most 8 deep (roots are depth 1). |
+| `ribbonActions` | `readonly RibbonAction[]` | Your contextual ribbon commands. May be empty. At most 128. |
+| `views` | `{ pane2: ExtensionView; pane3: ExtensionView }` | Your two pane components. Both are required; there is no blueprint-level Pane 1 view, because Pane 1 is the host's navigation chrome rendering *your* `navigationTree`. |
+
+There is **no `icon` field on the blueprint.** Earlier drafts of this guide
+described one; it does not exist. Icons are per ribbon action only.
+
+### `NavigationNode`
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique **within your own tree** — a duplicate anywhere in the tree, at any depth, rejects the whole blueprint. |
+| `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
+| `badgeCount?` | `number` | Optional. Non-negative safe integer. An explicit `undefined` is treated as absent. |
+| `children?` | `readonly NavigationNode[]` | Optional. An explicit `undefined` is treated as absent. Counts against the 512-node and 8-level limits. |
+
+### `RibbonAction`
+
+| Field | Type | Rules |
+|---|---|---|
+| `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique within your own `ribbonActions`. |
+| `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
+| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The host will resolve it through its own lookup table; it is never interpolated into a URL or into markup. |
+| `isDisabled?` | `boolean` | Optional. When present it must be a boolean. Renders the action greyed out but still visible. |
+| `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate — **see the caveat in the predicates section below: the registry checks that this is a function, and nothing calls it yet.** |
+| `onExecute` | `(ctx: RibbonContext) => void` | Required. Invoked on activation. Nothing calls it yet either; the ribbon renderer is ISSUE-002. |
+
+### `ExtensionView` and its props
+
+`ExtensionView` is `ComponentType<ExtensionViewProps>` — a React component. A
+plain function component, a `React.memo` wrapper and a `React.forwardRef`
+wrapper are all accepted.
+
+```ts
+interface ExtensionViewProps {
+  readonly shell: IShellAPI;                  // deep-frozen host API
+  readonly context: Readonly<RibbonContext>;  // host context at render time
+}
+```
+
+### `RibbonContext`
+
+The ambient host state passed to your predicates, your execute handlers and your
+views. It is a real closed interface, not `any`:
+
+```ts
+interface RibbonContext {
+  readonly activeExtensionId: string | null;  // owner of panes 2/3, or null
+  readonly activeNavNodeId: string | null;    // selected pane-1 node, or null
+  readonly selectedItemId: string | null;     // selection inside the view, or null
+  readonly focusedPane: PaneId | null;        // 'pane1' | 'pane2' | 'pane3', or null
+}
+```
+
+**Do not hand-write a type declaration matching these tables.** Import the real
+types from the host's `src/core/types.ts` and let the compiler tell you what you
+got wrong. That is the whole point of a type-safe registry.
+
+---
+
+## Registration: what the host does with your blueprint, and how it fails
+
+The registry validates your blueprint before it stores it, and it reports
+failure as a **returned value, never as a thrown exception**. `register` does
+not throw — not for a malformed blueprint, not for a duplicate id, not for a
+blueprint that detonates while it is being inspected. One bad plugin cannot take
+the shell down through an error boundary.
+
+```ts
+type RegistrationResult =
+  | { readonly ok: true;  readonly id: string; readonly alreadyRegistered: boolean }
+  | { readonly ok: false; readonly error: ShellUXError };
+```
+
+`ShellUXError` carries a stable machine-readable `code` and, where the failure
+is field-specific, the dotted `field` path that caused it — for example
+`"ribbonActions[2].icon"`. The codes are:
+
+| `code` | Meaning |
+|---|---|
+| `INVALID_PAYLOAD` | Not a plain object — `null`, an array, a string, or a value that threw while the host inspected it. |
+| `MISSING_FIELD` | A required field was absent. |
+| `INVALID_FIELD` | Present, but the wrong type, shape or value. |
+| `INVALID_ID` | An id failed the allowlist pattern. |
+| `RESERVED_ID` | An id was `__proto__`, `constructor` or `prototype`. |
+| `DUPLICATE_ID` | The id is already registered by a different blueprint, or an id repeats inside your own tree or action list. |
+| `PAYLOAD_TOO_LARGE` | A string or a collection exceeded its declared bound. |
+
+**Use the `id` the result gives you, not `blueprint.id`.** On success the result
+carries the id the registry actually validated and keyed your extension under.
+That is the authoritative value.
+
+### What the registry keeps is a copy of your blueprint, not your blueprint
+
+The registry does not store the object you passed to `register`. It builds a
+**normalised, host-owned record** from it and stores that. Concretely:
+
+- Every validated scalar — `id`, `name`, `version`, every `label`, `icon`,
+  `badgeCount` and `isDisabled` — is copied into a fresh value.
+- `navigationTree`, `children` and `ribbonActions` are rebuilt as fresh arrays,
+  each exactly as long as the count the registry bounds-checked.
+- The record is frozen at every level the host owns.
+- **Your functions and components are NOT copied.** `views.pane2`,
+  `views.pane3`, `isVisible` and `onExecute` are carried across by reference,
+  keep their identity, and stay callable. They are also left unfrozen — they are
+  yours, and freezing them would break `memo`/`forwardRef` internals.
+
+Two consequences you can rely on:
+
+1. **`getExtension(id)` does not return the object you registered.** Comparing
+   it with `===` against your exported blueprint will be `false`. Compare on
+   `id` instead. It *is* stable: the same registration always yields the same
+   record object, so `getExtension(id) === getExtension(id)`.
+2. **Editing your blueprint after registering it does nothing.** If you need to
+   change what the host shows, `unregister` and `register` again. Mutating the
+   object in place is silently ineffective, by design.
+
+This exists because a validated object you can still reach is a validated
+object you can still edit, and the host cannot tell an honest edit from a
+hostile one. Reference identity is still what makes StrictMode
+re-registration idempotent — the registry remembers your original object
+privately for exactly that comparison — so the module-level-singleton rule
+below is unchanged.
+
+### Export your blueprint as a module-level singleton
+
+**This is the one registration rule that will bite you in development, and the
+symptom looks like a host bug.**
+
+The registry rejects a *different* object claiming an id that is already taken —
+that is a real collision between two plugins, and it must be reported rather
+than silently last-write-wins. It distinguishes that from benign
+re-registration by **reference identity**: registering the exact same object
+again is an idempotent no-op that succeeds with `alreadyRegistered: true`.
+
+React StrictMode, which the host runs in development, mounts every subtree,
+unmounts it, and mounts it again. So an extension that registers from an effect
+runs `register` twice. If your blueprint is a module-level constant, the second
+call sees the same object and succeeds. If you build a **fresh object literal on
+every render**, the second call sees a different object claiming an id that is
+already taken, and you get `DUPLICATE_ID` from what looks like your first
+registration.
+
+```ts
+// CORRECT — src/extensions/my-ext/index.ts
+// One object for the module's lifetime. Stable identity across StrictMode
+// remounts, across re-renders, and across register/unregister effect pairs.
+export const blueprint: LEAPExtensionBlueprint = {
+  id: 'my-ext',
+  name: 'My Extension',
+  version: '1.0.0',
+  navigationTree: [...],
+  ribbonActions: [...],
+  views: { pane2: Pane2View, pane3: Pane3View },
+};
+
+function MyExtension(): null {
+  const registry = useRegistry();
+  useEffect(() => {
+    registry.register(blueprint);
+    return () => { registry.unregister('my-ext'); };
+  }, [registry]);
+  return null;
+}
+```
+
+```ts
+// WRONG — a new object every render. Fails with DUPLICATE_ID under StrictMode.
+function MyExtension(): null {
+  const registry = useRegistry();
+  useEffect(() => {
+    registry.register({ id: 'my-ext', name: 'My Extension', /* ... */ });
+  }, [registry]);
+  return null;
+}
+```
+
+`useMemo` is **not** a fix: React may discard memoized values, and StrictMode's
+second mount re-runs the memo factory. Hoist the blueprint to module scope. This
+also keeps your `views` component references stable, which is what stops the
+host remounting your panes on every render.
+
+The registry API object returned by `useRegistry` has a **stable identity for
+the provider's whole lifetime**, so listing it in a dependency array is safe and
+is the intended pattern. If you need to recompute when the registry's *contents*
+change, subscribe to `useRegistryRevision()` instead — a counter that increases
+by one on every successful registration or removal.
+
+**`unregister` is not authorised, and that is deliberate.** Any caller holding
+the registry can remove any id, including one it did not register. There is no
+ownership token and none is planned for ISSUE-001. This is not a hole being
+left open casually: extensions here are same-origin JavaScript in a shared
+page, so an extension that wanted to remove another's UI could equally reach
+into the DOM, and a token would advertise a guarantee the architecture cannot
+make (see the "No sandbox" limit in ADR-0001). Only ever call `unregister` with
+**your own** id. Removing someone else's is a contract violation that the
+runtime will not stop you from committing.
 
 ---
 
@@ -88,7 +290,15 @@ registry.
 `IShellAPI` is what the host hands *you*. It is the entire surface you are
 permitted to touch.
 
-Two properties of it are settled and load-bearing for how you write your code:
+> **Forthcoming: activation.** The interface, and the `createShellAPI` factory
+> that builds a deep-frozen instance of it, have landed and are tested. What has
+> **not** landed is the moment the host hands one to an extension — activation
+> happens when the shell renders your panes, which is ISSUE-002. Today nothing
+> in `src/` calls `createShellAPI` outside its own tests. Write your views to
+> take `shell` from their props, as the type says; just do not expect the host
+> to mount them yet.
+
+Two properties of it are load-bearing for how you write your code:
 
 **1. It is deeply frozen.** Recursively — not just the root object. You cannot
 add to it, replace anything on it, or patch a nested service. Attempts are a
@@ -98,23 +308,62 @@ stops one extension from tampering with the shell services other extensions
 depend on. Design your extension as a consumer of this object, never as a
 modifier of it.
 
-**2. It is scoped to you.** Your persisted state is namespaced by your extension
-id. You cannot read or overwrite another extension's state, and another
-extension cannot read or overwrite yours.
+**2. Forthcoming — it will be scoped to you.** The design intent is that your
+persisted state is namespaced by your extension id, so you cannot read or
+overwrite another extension's state and it cannot read or overwrite yours.
+**No persistence member exists on the interface today** (see the member list
+below); state hydration and serialization are ISSUE-003. Design as though the
+namespacing is there — it is the contract you will get — but do not write code
+that calls a persistence method, because there is not one to call.
 
-> **The member list of `IShellAPI` is not yet settled.** ISSUE-001 owns it.
-> This guide will not print a method list, because printing a plausible-looking
-> one that turns out to be wrong would send you writing calls that do not exist.
-> When `src/core/ShellAPI.ts` and `src/core/types.ts` land, the type is the
-> reference. Broadly, the services being scoped for it cover shell-level
-> concerns — selection and navigation state, scoped persistence, and
-> notification of shell events — but **treat that as a description of intent,
-> not as an API listing.**
+### The member list
 
-Practical advice that holds regardless of the final member list: **keep your
-calls into `IShellAPI` behind a thin adapter in your own code.** One small module
-that wraps every host call gives you a single place to fix when the contract
-settles, instead of a fix scattered through every view you wrote.
+As landed in `src/core/types.ts`, `IShellAPI` has exactly three members. It is
+deliberately small — every addition is a new capability handed to untrusted
+code.
+
+```ts
+interface IShellAPI {
+  setSelectedItem(id: string | null): void;
+  setBadgeCount(nodeId: string, count: number): void;
+  getContext(): Readonly<RibbonContext>;
+}
+```
+
+| Member | Behaviour |
+|---|---|
+| `setSelectedItem(id)` | Sets — or clears, with `null` — the currently selected item, which surfaces as `RibbonContext.selectedItemId`. **This one throws.** The value is opaque to the host — it is your own item identifier, not a registry key, so it is *not* held to `EXTENSION_ID_PATTERN` and may be a GUID, a path or a number-as-string. Its **type** is enforced: anything that is neither a `string` nor `null` raises `ShellUXError` with code `INVALID_FIELD` and field `"id"`, and the context is left unchanged. |
+| `setBadgeCount(nodeId, count)` | Sets the badge count for one of your navigation nodes. **This one throws.** It raises `ShellUXError` with code `INVALID_ID` when `nodeId` is not a string, or does not match the same allowlist and reserved-word rules the registry applied to your node ids, and code `INVALID_FIELD` when `count` is not a non-negative safe integer. Call it with values you control, or wrap it. |
+| `getContext()` | Returns a frozen snapshot of the current `RibbonContext`. A snapshot, not a live view: hold the result only for the duration of the work you are doing, and call again rather than caching it across renders. |
+
+`setSelectedItem` and `setBadgeCount` both throw; `getContext` does not. Note
+the asymmetry with `register`, which never throws — `IShellAPI` is called by
+*you*, so a bad argument is your bug and is reported as an exception, whereas
+`register` is called by the *host* on your data, where an exception would take
+the shell down.
+
+**Why `setSelectedItem` checks a value it otherwise treats as opaque.**
+`RibbonContext.selectedItemId` is declared `string | null`, and the host hands
+that snapshot to *other* extensions' `isVisible` predicates and `onExecute`
+handlers. Letting an arbitrary object through would make the declared type a
+runtime lie and would give one extension a way to push a live object — with its
+own getters and its own prototype — into another extension's code. It rejects
+rather than silently coercing to `null`, because a selection that mysteriously
+never sticks is a much worse bug to find than an exception at the call site.
+
+Both rejection messages describe an offending value by its `typeof` and never
+stringify it. Do not expect the value itself to appear in the message unless it
+was already a string.
+
+**Nothing else exists yet.** Scoped persistence and shell-event notification are
+described elsewhere in this guide as design intent; they are not on the
+interface, and there is no other channel to reach them. Anything not in the
+three-member list above is unbuilt.
+
+Practical advice that holds as the interface grows: **keep your calls into
+`IShellAPI` behind a thin adapter in your own code.** One small module that wraps
+every host call gives you a single place to fix when the contract grows, instead
+of a fix scattered through every view you wrote.
 
 ---
 
@@ -184,68 +433,99 @@ extension that ignores this makes the whole application feel inconsistent.
 
 ---
 
-## How `ribbonActions` visibility predicates work
+## How `ribbonActions` visibility predicates will work
+
+> ### ⚠ Forthcoming behaviour — predicate evaluation is ISSUE-002
+>
+> **The host does not evaluate `isVisible` today. Nothing calls it.** There is no
+> ribbon renderer in `src/`; the entire evaluation loop described in this section
+> arrives with ISSUE-002, the three-pane layout and ribbon.
+>
+> **What the host does today is exactly one thing:** at registration the registry
+> checks that `isVisible` is present and that `typeof isVisible === 'function'`,
+> rejecting the blueprint with `INVALID_FIELD` on `ribbonActions[n].isVisible`
+> otherwise. It does not call it, does not inspect its arity, does not evaluate
+> its result, and has no opinion about what it returns. The same is true of
+> `onExecute`.
+>
+> Read this section as the contract you should write your predicates *against*,
+> not as behaviour you can observe. Nothing here can be verified against a
+> running host yet, and the "Rules" below are correspondingly marked.
 
 The ribbon is split: **global host actions on the left, your contextual actions
 on the right.** Contextual means the set changes with context — and *you* define
 what context means, because the host cannot.
 
-Each ribbon action carries four things: an **id**, a **label**, an **invoke
-handler**, and a **visibility predicate**.
+Each ribbon action carries an **id**, a **label**, an **icon**, an optional
+**disabled** flag, an **`onExecute` handler**, and an **`isVisible` predicate**.
+All six are validated at registration; the two functions are checked for type
+and then stored.
 
-The predicate is the interesting one. On each relevant render, the host
-evaluates your predicate against current shell state and shows the action only
-if it returns true. This is the entire mechanism by which "Reply" appears when a
-message is selected and disappears when nothing is, without the host knowing
-what a message or a reply is.
+The predicate is the interesting one. Once ISSUE-002 lands, on each relevant
+render the host will evaluate your predicate against the current
+`RibbonContext` and show the action only if it returns true. That is the intended
+mechanism by which "Reply" appears when a message is selected and disappears
+when nothing is, without the host knowing what a message or a reply is.
 
 ```
+  ISSUE-002, NOT YET IMPLEMENTED — intended ribbon render loop
+  ───────────────────────────────────────────────────────────
   host renders ribbon
         │
         ├─ for each of your ribbonActions:
-        │     evaluate action's visibility predicate against shell state
+        │     evaluate action's isVisible against the current RibbonContext
         │        ├─ true  → render the action (label as a text node)
         │        ├─ false → omit it
-        │        └─ threw → omit it, report it, keep rendering the rest
+        │        └─ threw → intended: omit it, report it, keep rendering the
+        │                   rest. NOT IMPLEMENTED — there is no evaluation
+        │                   site, so today a throwing predicate never runs
+        │                   and therefore has no effect at all.
         │
         └─ ribbon renders
 ```
 
 ### Rules for writing predicates
 
-- **Predicates must be pure and cheap.** They are evaluated on render, possibly
-  often. No network calls, no writes, no state mutation, no `localStorage`
-  access. Read the state you were given and return a boolean.
-- **A throwing predicate is treated as "not visible."** The host will hide the
-  action, report the failure, and continue rendering the ribbon. Your action
-  silently vanishing is the symptom of a predicate that threw — check that first
-  when an action does not appear.
-- **Predicates must be defensive about their input.** Selection may be empty,
-  may be multiple, may reference an item that has since been removed. Write
-  predicates that return false in states you do not understand rather than
-  assuming a shape.
+The signature is settled — `isVisible(ctx: RibbonContext): boolean`, with
+`RibbonContext` as printed earlier in this guide. The rules below are how you
+should write against it. Everything describing what the *host* does with the
+result is forthcoming ISSUE-002 behaviour.
+
+- **Predicates must be pure and cheap.** They are intended to be evaluated on
+  render, possibly often. No network calls, no writes, no state mutation, no
+  `localStorage` access. Read the context you were given and return a boolean.
+- **Forthcoming: a throwing predicate will be treated as "not visible."** The
+  intent is that the host hides the action, reports the failure, and continues
+  rendering the ribbon. **This containment does not exist yet** — there is no
+  call site, so nothing catches anything. Do not rely on it, and do not treat a
+  throwing predicate as a supported way to hide an action. Return `false`.
+- **Predicates must be defensive about their input.** Every field of
+  `RibbonContext` is nullable. Selection may be empty, or may reference an item
+  that has since been removed. Write predicates that return false in states you
+  do not understand rather than assuming a shape.
 - **Do not use a predicate as a side-channel.** Using render-time predicate
-  evaluation to trigger work is an abuse that will break when the host changes
-  when it evaluates them.
-- **Keep action ids stable and namespaced.** Collisions with another extension's
-  action ids are a registration-time failure. Prefixing with your extension id
-  is the simple way to avoid it.
+  evaluation to trigger work is an abuse that will break the moment the host
+  changes when it evaluates them.
+- **Keep action ids stable and namespaced.** They must match the same allowlist
+  as your extension id, and must be unique within your own `ribbonActions` —
+  a repeat is a `DUPLICATE_ID` rejection of the whole blueprint at registration
+  time. Prefixing with your extension id is the simple way to avoid collisions.
 - **Labels are rendered as text nodes.** See below — this matters for security,
   and it also means markup in a label will be shown literally, not rendered.
-
-> **The exact predicate signature — what state object it receives and its precise
-> parameter list — is not yet settled by ISSUE-001.** What is settled is the
-> behaviour above: a pure function evaluated against current shell state,
-> returning a boolean, with throws treated as false. Write your predicates as
-> small, self-contained functions so that adapting them to the final signature is
-> a one-line change at the call boundary rather than a rewrite.
+- **Test your predicates directly.** Since nothing calls them yet, your own unit
+  tests are currently the *only* thing exercising them. See the testing section.
 
 ---
 
 ## Working with the virtualized list
 
-Pane 2 is virtualized: only rows intersecting the viewport, plus a small
-overscan, are mounted. Consequences for your Pane 2 view:
+> **Forthcoming — the virtualizer is ISSUE-004 and does not exist.** There is no
+> Pane 2 container in `src/`, virtualized or otherwise. The rules below are the
+> constraints you should write your row renderers against so that they work when
+> it lands; none of them can be observed against the host today.
+
+Pane 2 is to be virtualized: only rows intersecting the viewport, plus a small
+overscan, will be mounted. Consequences for your Pane 2 view:
 
 - **Never assume all your rows are in the DOM.** Do not query the document for
   rows, measure the full list by walking DOM nodes, or use `Ctrl+F`-style
@@ -261,10 +541,16 @@ overscan, are mounted. Consequences for your Pane 2 view:
 
 ## Fault containment — and its real limits
 
-The host wraps each pane and each extension subtree in a fault boundary. If your
-extension throws during render, it degrades to a contained error surface inside
-its own pane, naming your extension, while the rest of the shell stays
-interactive.
+> **Forthcoming — pane fault boundaries are ISSUE-004 and do not exist.** No
+> error boundary component is present in `src/`. The one containment guarantee
+> that *is* live today is at registration: `register` never throws, so a
+> malformed or actively hostile blueprint is reported as a returned failure
+> instead of unmounting the shell. Render-time containment is not yet built.
+
+The host is specified to wrap each pane and each extension subtree in a fault
+boundary. Once that lands, an extension that throws during render will degrade
+to a contained error surface inside its own pane, naming your extension, while
+the rest of the shell stays interactive.
 
 **Be clear about what this does not cover.** React error boundaries catch errors
 in render, in lifecycle methods and in constructors. They do **not** catch:
@@ -369,11 +655,47 @@ grows a member, your test stub fails to compile, which is exactly the signal you
 want. A hand-written interface that merely resembles `IShellAPI` will silently
 drift and give you passing tests against an API that no longer exists.
 
-> Because the member list of `IShellAPI` is **not yet settled** (ISSUE-001 is in
-> progress), this guide does not print a filled-in stub object. Doing so would
-> mean inventing the very method names the compiler is supposed to be checking
-> for you. Build your stub from the real type when it lands; the structure below
-> is the pattern, not the payload.
+The member list has landed, so here is the whole stub. Keep it typed as
+`IShellAPI` rather than as a structural literal — that is what makes the
+compiler tell you when the contract grows:
+
+```ts
+import { vi } from 'vitest';
+// Adjust the relative depth to your own file's location.
+import { deepFreeze } from 'src/core/ShellAPI';
+import type { IShellAPI, RibbonContext } from 'src/core/types';
+
+const context: Readonly<RibbonContext> = Object.freeze({
+  activeExtensionId: 'my-ext',
+  activeNavNodeId: null,
+  selectedItemId: null,
+  focusedPane: null,
+});
+
+export function makeShellStub(): IShellAPI {
+  // Deep-frozen, because the real one is: a test double you can monkey-patch
+  // will let code pass that fails against the host.
+  return deepFreeze<IShellAPI>({
+    setSelectedItem: vi.fn(),
+    setBadgeCount: vi.fn(),
+    getContext: vi.fn(() => context),
+  });
+}
+```
+
+If you prefer a real implementation over spies, `createShellStateStore()` and
+`createShellAPI(store)` from `src/core/ShellAPI.ts` build a working, deep-frozen
+instance backed by real state — useful when you want `getContext()` to reflect
+the `setSelectedItem` calls your extension just made. That route also gives you
+the real argument validation, so a test that passes a non-string to
+`setSelectedItem` fails the way production would.
+
+`deepFreeze` is safe to point at anything: it is **total and never throws**,
+including on a Proxy whose `isExtensible`, `preventExtensions`, `ownKeys` or
+`get` trap throws. An object that refuses to be frozen is returned unchanged
+rather than exploding in your test setup. That said, if your double is an
+ordinary object literal — as the stub above is — nothing exotic is happening
+and the guarantee costs you nothing.
 
 **2. Freeze your stub the way the host does.** The host hands out a deeply
 frozen object. If your test double is mutable, your tests will pass on code that
@@ -397,10 +719,13 @@ put you in:
   a security regression test and it is worth having.
 - Both light and dark theme.
 
-**5. Test your visibility predicates directly.** They are pure functions.
-Call them with the state shapes you expect, plus the states you do not — empty
-selection, stale selection, missing fields — and assert they return false rather
-than throwing. Remember a throwing predicate silently hides your action.
+**5. Test your visibility predicates directly.** They are pure functions taking
+a `RibbonContext`. Call them with the contexts you expect, plus the ones you do
+not — every field null, a stale `selectedItemId`, an `activeNavNodeId` that is
+not yours — and assert they return `false` rather than throwing. This matters
+more than usual right now: **nothing in the host calls `isVisible` yet** (see the
+predicates section), so your own tests are the only thing exercising them, and a
+predicate that throws will not be contained by anything.
 
 **6. Test your cleanup.** Mount and unmount your views repeatedly and assert
 that listeners, timers, subscriptions and observers are released. Extension
@@ -415,10 +740,17 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
 
 ## Checklist before you ship an extension
 
-- [ ] `index.ts` exports a blueprint with a stable, namespaced extension id.
+- [ ] `index.ts` exports the blueprint as a **module-level constant**, not an
+      object literal rebuilt per render. Rebuilding it fails with `DUPLICATE_ID`
+      under React StrictMode.
+- [ ] Every id — extension, navigation node, ribbon action — matches
+      `/^[a-z0-9][a-z0-9-]{0,63}$/` and is none of `__proto__`, `constructor`,
+      `prototype`.
 - [ ] No side effects, network calls or heavy imports at module scope in
       `index.ts`.
 - [ ] Ribbon action ids are namespaced; no collisions.
+- [ ] The `RegistrationResult` from `register` is checked, and the `id` it
+      returns is used rather than re-reading `blueprint.id`.
 - [ ] Every visibility predicate is pure, cheap, and returns false on states it
       does not understand.
 - [ ] All extension- and data-supplied strings render as text nodes. Zero uses of
@@ -446,4 +778,6 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
 | [`README.md`](README.md) | Project status, design system, accessibility target, performance targets. |
 | [`docs/adr/0001-ioc-registry-architecture.md`](docs/adr/0001-ioc-registry-architecture.md) | Why the registry works this way, and what was rejected. |
 | [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) | What is being built, in what order, and what "done" means. |
-| `src/core/types.ts` | **The source of truth for every contract in this guide.** Not yet landed — ISSUE-001. |
+| `src/core/types.ts` | **The source of truth for every contract in this guide.** Landed. |
+| `src/core/RegistryContext.tsx` | The registry, its validation rules and its limits. Landed. |
+| `src/core/ShellAPI.ts` | `createShellAPI`, `createShellStateStore`, `deepFreeze`. Landed. |

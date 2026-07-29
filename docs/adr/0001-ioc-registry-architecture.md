@@ -6,9 +6,17 @@
 - **Implemented by:** ISSUE-001 — Type-Safe IoC Extension Registry & Primitives
   (`src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`)
 
-> **Implementation status.** This ADR records a decision, not a completed
-> implementation. ISSUE-001 is in progress; the registry described here does not
-> yet exist in verified, tested form. The decision is settled; the code is not.
+> **Implementation status.** ISSUE-001 has landed: `src/core/types.ts`,
+> `src/core/RegistryContext.tsx` and `src/core/ShellAPI.ts` exist and are held
+> to a 100% coverage gate over `src/core/**`. Sections 1–3 of the decision
+> below are implemented. Sections 4 (predicate evaluation), 5 (lazy loading)
+> and 6 (pane fault boundaries) describe ISSUE-002 and ISSUE-004 behaviour and
+> are **still decision only** — nothing in `src/` evaluates a predicate or
+> catches a render error yet.
+>
+> Two amendments were made during implementation and are recorded at the end of
+> this document: **Amendment A — normalisation at the trust boundary**, and
+> **Amendment B — `unregister` carries no authorisation**.
 
 ---
 
@@ -72,8 +80,13 @@ Concretely:
 ### 1. Extensions are declarative blueprints, supplied to the host
 
 An extension exports a `LEAPExtensionBlueprint`: a plain data description of
-what it contributes — a stable id, a display label, an icon, a Pane 1
-navigation entry, a Pane 2 view, a Pane 3 view, and a set of ribbon actions.
+what it contributes — a stable id, a display label, a Pane 1 navigation entry, a
+Pane 2 view, a Pane 3 view, and a set of ribbon actions.
+
+There is **no `icon` field on the blueprint.** Earlier drafts of this ADR listed
+one in that sentence; it does not exist in `src/core/types.ts` and never
+shipped. Icons are carried per `RibbonAction` only. `DEVELOPER.md` records the
+same correction.
 
 The host never imports an extension. Extensions are supplied *to* the host, and
 the direction of that dependency is the whole architecture. `src/core/**`
@@ -103,8 +116,13 @@ from touching the DOM, but they can be prevented from monkey-patching the shell
 services that other extensions rely on. Freezing turns "please do not patch the
 host" from a request into a property of the runtime.
 
-Per-extension persisted state is namespaced by extension id for the same reason:
-isolation should be structural, not conventional.
+**Intent, not current behaviour:** per-extension persisted state *is to be*
+namespaced by extension id for the same reason — isolation should be structural,
+not conventional. **No persistence exists.** There is no persistence member on
+`IShellAPI` and no storage layer in `src/`. This is ISSUE-003, and until it
+lands nothing here should be read as a guarantee. `README.md` lists it under
+"Specified but not yet enforced"; this paragraph previously asserted it in the
+present tense and was wrong to.
 
 ### 4. Contextual behaviour through visibility predicates
 
@@ -150,7 +168,8 @@ handling and are documented as extension-author responsibility in
   to find out.
 - **Vendor isolation is real, within the limits of a shared page.** Deep freezing
   plus namespaced persistence means one extension cannot silently degrade
-  another.
+  another. Deep freezing has landed; the persistence half is ISSUE-003 intent
+  and is not in effect yet — see §3.
 - **Bounded blast radius.** A bad extension costs one pane.
 - **Testable in isolation.** Because everything an extension may do goes through
   one object, substituting a test double for that object gives a fully isolated
@@ -297,6 +316,110 @@ layer that this project does not currently need.
 The project remains free to adopt federated delivery later without invalidating
 this decision, precisely because the registry contract is independent of how the
 module arrived.
+
+---
+
+## Amendment A — Normalisation at the trust boundary
+
+**Date:** 2026-07-29 · **Status:** Accepted · **Amends:** Decision §2
+
+### What changed
+
+The registry validates a blueprint and then stores a **normalised, host-owned
+record built from it**, not the object the caller passed in. `getExtension` and
+`listExtensions` return that record.
+
+### Why the original shape was not sufficient
+
+Section 2 said the registry "accepts blueprints, validates them, indexes them by
+id". The first implementation read that literally: validate the payload, then
+put the caller's object in the `Map`. Two rounds of point-fixes against that
+shape each passed their own tests and each fell to a new instance of the same
+defect, which is the signal that the shape itself was wrong.
+
+The reason is that validation and storage were separated by a gap the plugin
+still had access to:
+
+- **A checked value stays re-readable.** Every field except a captured
+  primitive is read through a getter the plugin wrote. The getter is free to
+  return a benign value while it is inspected and a hostile one afterwards.
+- **A checked value stays mutable.** Even with no getters at all, the plugin
+  still holds a reference to the object the host approved, and can simply
+  assign to it: `blueprint.views = null` after a successful registration.
+- **Therefore a bounds check bounds nothing.** `Array.isArray` is true of a
+  Proxy wrapping an array, and `length` on an array is writable, so a payload
+  can report an honest count while it is measured and a larger one afterwards.
+  Comparing that number against `MAX_RIBBON_ACTIONS` constrains only the number,
+  not the collection.
+
+Reading each value exactly once — the previous fix — closes the first of these
+and neither of the other two. The property actually wanted is that **what was
+validated is what is stored**, and that is only achievable if the host owns the
+stored thing.
+
+### The decision
+
+Validation and normalisation are one pass. Each untrusted field is read once,
+checked as the resulting local, and that local is written into a fresh
+host-owned object; collections are rebuilt as fresh arrays of exactly the length
+that was bounds-checked; the record is frozen at every host-owned level before
+it is stored.
+
+Two carve-outs, both deliberate:
+
+- **Functions and React components are carried by reference, not copied, and
+  not frozen.** A function cannot be cloned without breaking its closure, a
+  component reference must keep its identity or React remounts the pane on every
+  render, and freezing another vendor's component object reaches into internals
+  this host has no business touching. They are type-checked and passed through.
+- **The plugin's original object is retained privately**, as
+  `RegistryEntry.source`, solely so that the StrictMode idempotency rule can
+  keep comparing by reference identity. It is never read from and never exposed.
+
+### Consequences
+
+- **`getExtension(id)` no longer returns the caller's object.** This is a
+  breaking change to the registry's read contract; it was made deliberately,
+  and four existing tests that asserted identity were rewritten to assert the
+  new contract rather than deleted. `DEVELOPER.md` documents it for extension
+  authors, whose correct comparison is on `id`.
+- **Mutating a blueprint after registration is now a silent no-op** rather than
+  a live edit of host state. Authors who want a change must unregister and
+  register again. That is the point.
+- **A small allocation cost per registration.** Registration is a rare,
+  boot-time operation on a bounded payload (≤512 nodes, ≤128 actions), so this
+  is not measurable against anything the shell does per frame.
+- **The claim in `README.md` — "what was validated is what is stored" — becomes
+  true.** It was false before this amendment and is now structural.
+
+---
+
+## Amendment B — `unregister` carries no authorisation
+
+**Date:** 2026-07-29 · **Status:** Accepted · **Amends:** nothing; records a
+scope decision
+
+Any holder of the registry can `unregister` any id, including one it did not
+register. **This is accepted, not overlooked.**
+
+- ISSUE-001 specifies no ownership, capability or token model, and inventing one
+  while closing a defect would be undocumented scope.
+- The shell is local-first and single-origin, and this ADR already records "No
+  sandbox" as a limit: extensions are same-origin JavaScript sharing the DOM.
+  An extension motivated to remove a competitor's UI does not need
+  `unregister` to do it. A token would move the lock while leaving the door
+  open, and would advertise a guarantee the architecture cannot make.
+- The registry is only reachable inside `ExtensionRegistryProvider`, and nothing
+  handed *down* to a plugin carries it — `IShellAPI` has no registry member. An
+  extension reaches it by calling `useRegistry()` from its own component, which
+  is the documented registration path.
+
+Recorded on the `unregister` declaration in `src/core/RegistryContext.tsx`, in
+`README.md` under accepted limits, and in `DEVELOPER.md` as a contract rule for
+extension authors. If an ownership model is ever wanted it needs its own issue
+and its own threat model first — starting with the question this decision turns
+on, which is whether extensions are ever expected to be mutually hostile rather
+than merely mutually untrusting.
 
 ---
 
