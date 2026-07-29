@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: CI only reads the repository. No packages, no deployments,
+# no write access to issues or PRs.
+permissions:
+  contents: read
+
+# One in-flight run per ref. A new push supersedes the previous run instead of
+# queueing behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, coverage, build
+    # Ubuntu deliberately, not Windows. Development happens on Windows with
+    # core.autocrlf=true and a case-insensitive filesystem, so this is the leg
+    # that catches case-mismatched imports and CRLF regressions before they
+    # reach anyone else.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      # ci, not install: installs exactly what package-lock.json pins and fails
+      # if the lockfile and package.json have drifted.
+      - name: Install dependencies
+        run: npm ci
+
+      # Steps are ordered cheapest and most informative first, so a run fails on
+      # the most actionable error available rather than the slowest one.
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The coverage gate. vitest.config.ts sets 100% statements/branches/
+      # functions/lines over src/core/**; vitest exits non-zero when a threshold
+      # is unmet, which fails this step and therefore the job.
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      # Production dependencies only. The repo's known advisories are all
+      # dev-only transitives, so --omit=dev keeps this gate green today and
+      # meaningful the moment a real runtime advisory appears.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # always(): the coverage report is most useful precisely when the run
+      # failed, so upload it even after a failing step.
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,77 @@
+# LEAPWare ShellUX - line-ending and diff policy.
+#
+# Development happens on Windows; CI runs on Ubuntu. This file makes the repo
+# byte-identical on both, regardless of any individual developer's
+# `core.autocrlf` setting. Do not rely on git config for this - it is per-user
+# and does not travel with the clone.
+
+# ---------------------------------------------------------------------------
+# Default: treat every file as text, normalise to LF in the repository AND in
+# the working tree. `eol=lf` is what overrides a local `core.autocrlf=true`.
+# ---------------------------------------------------------------------------
+* text=auto eol=lf
+
+# ---------------------------------------------------------------------------
+# Source and config - stated explicitly so nothing depends on git's content
+# heuristic guessing right.
+# ---------------------------------------------------------------------------
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.jsx   text eol=lf
+*.mjs   text eol=lf
+*.cjs   text eol=lf
+*.json  text eol=lf
+*.jsonc text eol=lf
+*.css   text eol=lf
+*.scss  text eol=lf
+*.html  text eol=lf
+*.svg   text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
+*.sh    text eol=lf
+*.gitignore     text eol=lf
+*.gitattributes text eol=lf
+LICENSE text eol=lf
+
+# ---------------------------------------------------------------------------
+# Windows-only scripts genuinely require CRLF - cmd.exe mis-parses LF-only
+# batch files. These are the sole intentional exception to the LF rule.
+# ---------------------------------------------------------------------------
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# ---------------------------------------------------------------------------
+# Binary - never normalise, never diff as text. (`binary` is shorthand for
+# `-text -diff`.)
+# ---------------------------------------------------------------------------
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.avif  binary
+*.bmp   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.tgz   binary
+*.7z    binary
+*.mp4   binary
+*.webm  binary
+*.mp3   binary
+*.wasm  binary
+
+# ---------------------------------------------------------------------------
+# Generated - still text and still LF, but collapsed in GitHub diffs and
+# excluded from language statistics.
+# ---------------------------------------------------------------------------
+package-lock.json text eol=lf -diff linguist-generated
