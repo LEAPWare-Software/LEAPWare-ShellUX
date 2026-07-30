@@ -505,20 +505,45 @@ function normalisePosix(fromDirectory, specifier) {
 function resolvesOnDisk(candidates) {
   for (const candidate of candidates) {
     try {
-      if (!statSync(resolve(REPO_ROOT, candidate)).isFile()) continue;
-      // stat answers case-insensitively on Windows and macOS, and a name this
-      // filesystem does not actually have would put a path into the `git add`
-      // advice that git would then record with the wrong case. The directory
-      // listing is byte-exact everywhere, so the hit is confirmed against it.
-      const slash = candidate.lastIndexOf('/');
-      const parent = slash === -1 ? REPO_ROOT : resolve(REPO_ROOT, candidate.slice(0, slash));
-      const name = slash === -1 ? candidate : candidate.slice(slash + 1);
-      if (readdirSync(parent).includes(name)) return candidate;
+      if (confirmedOnDisk(candidate)) return candidate;
     } catch {
-      // Absent, or a path this process cannot stat. Neither is a resolution.
+      // Absent, or a path this process cannot list or stat. Neither is a resolution.
     }
   }
   return undefined;
+}
+
+/**
+ * Whether `candidate` is a file on disk whose spelling is byte-exact at **every**
+ * segment, not just the last.
+ *
+ * `statSync` answers case-insensitively on Windows and macOS, so a hit proves
+ * only that something resolves — not that it is spelled the way the specifier
+ * spells it. A directory listing is byte-exact everywhere, so each segment is
+ * confirmed against a listing of its parent before the walk descends into it.
+ *
+ * Confirming the basename alone is not enough, and the gap had teeth. Given
+ * `src/components/button.ts` on disk and `import f from './Components/button'`,
+ * a basename-only check builds the parent out of the specifier's own casing;
+ * `readdirSync` opens `src/Components` happily on a case-insensitive filesystem,
+ * the basename confirms, and the advice reads ``run `git add
+ * src/Components/button.ts` ``. Following it records a mis-cased path in the
+ * index — the case-collision this checker exists to prevent, introduced by
+ * obeying the checker, on a developer's machine and never in CI. Segment-wise
+ * confirmation means the advice can only ever name a path this filesystem
+ * really has; anything less exact falls through to the generic message.
+ *
+ * The walk starts at REPO_ROOT and descends only into a name it has just seen in
+ * a listing, so it cannot address anything outside the repository whatever a
+ * candidate says, and `..` cannot survive it because no listing contains it.
+ */
+function confirmedOnDisk(candidate) {
+  let directory = REPO_ROOT;
+  for (const segment of candidate.split('/')) {
+    if (!readdirSync(directory).includes(segment)) return false;
+    directory = resolve(directory, segment);
+  }
+  return statSync(directory).isFile();
 }
 
 function lineOf(text, offset) {

@@ -145,9 +145,19 @@ described one; it does not exist. Icons are per ribbon action only.
 > no evaluation site — so declaring a chord today has no observable effect beyond
 > the registration succeeding or failing. The dispatcher is Phase 2, because it
 > needs the foreground extension and a live `RibbonContext`, neither of which the
-> registry has a view of. Pinned by "hotkeys module — does not attach anything" in
-> `src/core/__tests__/hotkeys.test.ts`, which asserts the module exports exactly
-> three pure helpers and that calling them registers no listener.
+> registry has a view of.
+>
+> Pinned by "finds no listener registration and no key-event name in any module
+> under src/" in `src/__tests__/noEventListener.test.ts`, which parses every
+> non-test module under `src/` with the TypeScript compiler and fails on
+> `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
+> name in any code position — so the sentence above stops being a promise the
+> moment it stops being true. Comments are not scanned, which is how this
+> paragraph is allowed to state the property; a listener reached through a name
+> that is not text is outside what it can see, and the test says so. That
+> `src/core/hotkeys.ts` itself exports exactly three pure helpers and attaches
+> nothing is the separate, narrower "hotkeys module — does not attach anything"
+> in `src/core/__tests__/hotkeys.test.ts`.
 >
 > Write your chords now if you want them; they will work when the ribbon lands.
 > Do not write code that assumes one has fired.

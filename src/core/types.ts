@@ -170,7 +170,17 @@ export interface RibbonAction {
    * **Declared and validated now; nothing dispatches it.** The registry checks
    * the shape, the allowlist, the modifier rule and intra-extension uniqueness,
    * then stores a frozen host-owned copy. There is no `keydown` listener
-   * anywhere in `src/` — pinned by "does not attach anything" in
+   * anywhere in `src/` — pinned by "finds no listener registration and no
+   * key-event name in any module under src/" in
+   * `src/__tests__/noEventListener.test.ts`, which parses **every** non-test
+   * module under `src/` with the TypeScript compiler and fails on
+   * `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
+   * name in any code position. Comments are trivia to the parser and are not
+   * scanned, which is what lets this sentence state the property; a listener
+   * reached through a name that is not text — `el[fromAVariable](...)` — is
+   * outside what it can see, and that limit is stated in the test. The narrower
+   * fact that `src/core/hotkeys.ts` exports only its three pure helpers is
+   * "hotkeys module — does not attach anything" in
    * `src/core/__tests__/hotkeys.test.ts`.
    */
   readonly hotkey?: Hotkey;

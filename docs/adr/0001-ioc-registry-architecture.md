@@ -1765,10 +1765,34 @@ and the deep-freezing are untouched.
 **Nothing dispatches a hotkey.** There is no `keydown` listener anywhere in
 `src/`, no `useHotkeyDispatcher`, and no evaluation site. This amendment records
 a *declaration and validation* decision, in the same present-tense-honest
-register Amendment G requires of `isVisible`. *Tests:* "hotkeys module — does not
-attach anything" in `src/core/__tests__/hotkeys.test.ts`, which asserts that the
-module's entire export surface is the three helpers and that calling all three
-registers no listener on `window` or `document`.
+register Amendment G requires of `isVisible`.
+
+*Tests:* the repository-wide half of that sentence is pinned by "finds no
+listener registration and no key-event name in any module under src/" in
+`src/__tests__/noEventListener.test.ts`. It parses every non-test `.ts`/`.tsx`
+file under `src/` with the TypeScript compiler and fails if any code position —
+identifier, property name, JSX attribute or string literal — spells
+`addEventListener`, `removeEventListener`, `keydown`, `keyup` or `keypress`.
+Comments are trivia to the parser and are not scanned, which is the distinction
+the claim needs: this paragraph and two other docblocks discuss the absence, and
+a raw text search would fail on the sentences describing it. Its limit is stated
+in the test rather than glossed — a listener reached through a name that is not
+text, or one installed by an imported third-party module, is outside what a
+parse of `src/` can see. The narrower module-level fact, that
+`src/core/hotkeys.ts` exports exactly the three helpers and that calling all
+three registers no listener on `window` or `document`, is "hotkeys module — does
+not attach anything" in `src/core/__tests__/hotkeys.test.ts`.
+
+**Why a new test rather than a narrower sentence.** Amendment G's three routes
+are name a test, narrow the claim, or delete it. This site originally cited the
+module-level test for a repository-wide claim — the ninth instance of the
+pattern, and the first where the missing evidence was cheap to produce rather
+than absent in principle. Narrowing to "`src/core/hotkeys.ts` attaches nothing"
+would have been honest and would have thrown away the property an extension
+author actually needs to know. Route 1 keeps the claim and moves the evidence up
+to meet it, which also makes the claim self-defending: a listener added to
+`App.tsx` or `RegistryContext.tsx` tomorrow turns the suite red instead of
+turning a sentence false in silence.
 
 ### Decision 1 — the field lives on `RibbonAction`, not on the blueprint
 
