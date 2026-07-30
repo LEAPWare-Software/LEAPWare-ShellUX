@@ -98,8 +98,8 @@ and fail nowhere else.
 
 The fix is `git add <path>`, before `npm run verify`, not after. The message above
 is the one that means "staging, not typing". A specifier that resolves to nothing
-on disk either still reports the generic `an import that resolves to no tracked
-file` — and that one is a real typo or a real missing file.
+on disk still reports the generic `an import that resolves to no tracked file` —
+and that one is a real typo or a real missing file.
 
 ### The rules, by id
 
