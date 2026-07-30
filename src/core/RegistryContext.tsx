@@ -15,9 +15,11 @@ import { SHELL_UX_ERROR_CODES, ShellUXError } from './types';
  *
  * Lowercase alphanumerics and internal hyphens, 1–64 characters, first
  * character alphanumeric. It is an allowlist rather than a denylist, so it
- * structurally excludes path separators (`/`, `\`, `..`), URL schemes (`:`),
- * markup (`<`, `>`, `"`), whitespace, and the leading underscores of
- * `__proto__` — without needing to enumerate what is dangerous.
+ * excludes path separators (`/`, `\`, `..`), URL schemes (`:`), markup (`<`, `>`,
+ * `"`), whitespace, and the leading underscores of `__proto__` — without needing to
+ * enumerate what is dangerous. That is **entry-point validation**: real for every id
+ * that arrives through the registry's doors, and pinned by "validateBlueprint —
+ * identifier hardening" in `src/core/__tests__/validation.test.ts`.
  */
 export const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -28,11 +30,23 @@ export const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
  * `prototype` are plain lowercase words that pass it. They are refused here so
  * that no registry key can ever collide with a well-known object-graph name —
  * belt and braces on top of the `Map`-backed store, which is what actually
- * makes prototype pollution impossible.
+ * makes prototype pollution impossible. Pinned by "register — a shifting id cannot
+ * smuggle a reserved key into the store" in
+ * `src/core/__tests__/registrySecurity.test.tsx`, which asserts both layers: the
+ * rejection, and that no live key is ever `__proto__`.
  */
 export const RESERVED_IDS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
 
-/** Hard bounds on blueprint size. A plugin cannot make the host walk forever. */
+/**
+ * Hard bounds on blueprint size. A plugin cannot make the host walk forever.
+ *
+ * **Entry-point validation**, and the bound applies to what is STORED rather than to
+ * a number the payload can revise afterwards. Pinned by "validateBlueprint — text
+ * fields", "— navigation tree" and "— ribbon actions" in
+ * `src/core/__tests__/validation.test.ts`, and by "register — a lying `length` cannot
+ * grow the payload after it is measured" in
+ * `src/core/__tests__/registryNormalization.test.tsx`.
+ */
 export const REGISTRY_LIMITS = {
   /** Max length of any display string (`name`, `label`, `icon`). */
   MAX_TEXT_LENGTH: 256,
@@ -50,16 +64,62 @@ export const REGISTRY_LIMITS = {
 /* Validation                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * How a value answers the array question — three-state, because the question can
+ * FAIL rather than answer.
+ *
+ * `Array.isArray` is the only type predicate in this file that can throw: handed
+ * a revoked `Proxy` it raises a raw `TypeError`, because every internal method on
+ * a revoked `Proxy` does. `typeof` is no defence against that — it answers
+ * `"object"` without trapping, so a revoked `Proxy` walks straight through the
+ * `typeof` checks in the validators below and reaches `describeType` on the
+ * failure path with the throw still ahead of it.
+ */
+type ArrayCheck = 'array' | 'not-array' | 'revoked';
+
+/**
+ * Total replacement for `Array.isArray`. Never throws, so no caller needs a
+ * guard of its own, and every rejection `normalizeBlueprint` can produce stays a
+ * `ShellUXError`.
+ *
+ * `'revoked'` is deliberately a third answer rather than being folded into
+ * `'not-array'`. Folding them would make `isRecord` return `true` for a revoked
+ * `Proxy` — `typeof` is `"object"`, it is not `null`, and it is not an array —
+ * which would send it on to `requireField`, whose property read throws the same
+ * raw `TypeError` one step later. Refusing it here is what closes the leak
+ * rather than moving it. Pinned by "validateBlueprint — a revoked Proxy" in
+ * `src/core/__tests__/validation.test.ts`, which walks every field position that
+ * can reach one of the five call sites.
+ */
+function checkArray(value: unknown): ArrayCheck {
+  try {
+    return Array.isArray(value) ? 'array' : 'not-array';
+  } catch {
+    return 'revoked';
+  }
+}
+
+/** Non-throwing `Array.isArray`, narrowing for the bounded walks below. */
+function isArrayValue(value: unknown): value is readonly unknown[] {
+  return checkArray(value) === 'array';
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && checkArray(value) === 'not-array';
 }
 
 function describeType(value: unknown): string {
   if (value === null) {
     return 'null';
   }
-  if (Array.isArray(value)) {
+  const kind = checkArray(value);
+  if (kind === 'array') {
     return 'an array';
+  }
+  if (kind === 'revoked') {
+    // Named exactly rather than reported by `typeof`, which would call it `a
+    // value of type "object"` and tell a plugin author nothing.
+    return 'a revoked Proxy';
   }
   return `a value of type "${typeof value}"`;
 }
@@ -174,7 +234,19 @@ function validateViewComponent(value: unknown, path: string): void {
  * a fresh array of exactly the length that was bounds-checked — is written into
  * a host-owned record. The record is frozen at every host-owned level before it
  * is stored, and it is what `getExtension` and `listExtensions` hand out. What
- * was validated is therefore, structurally, what is stored.
+ * was validated is therefore exactly what is stored.
+ *
+ * **The word "structurally" used to appear in that sentence and has been removed.**
+ * ADR-0001 Amendment F reserved *structural* for the `Map`-backed stores, where
+ * prototype pollution is impossible by construction rather than by filtering.
+ * Normalisation is an **integrity control** — real and unconditional — but it is
+ * bought by code that runs, not by a property of the data structure, and using the
+ * reserved word for it was the drift Amendment F closed everywhere else. Pinned by
+ * "register — the stored record is host-owned" and "register — a lying `length`
+ * cannot grow the payload after it is measured" in
+ * `src/core/__tests__/registryNormalization.test.tsx`, and by "register — a shifting
+ * id cannot hijack another extension" in
+ * `src/core/__tests__/registrySecurity.test.tsx`.
  *
  * TWO THINGS ARE DELIBERATELY *NOT* COPIED:
  *
@@ -283,14 +355,14 @@ function normalizeNavigationNode(
 
   const children = value['children'];
   if (children !== undefined) {
-    if (!Array.isArray(children)) {
+    if (!isArrayValue(children)) {
       throw new ShellUXError(
         'INVALID_FIELD',
         `Field "${path}.children" must be an array; received ${describeType(children)}.`,
         `${path}.children`,
       );
     }
-    // `length` is captured once. `Array.isArray` is true for a Proxy wrapping
+    // `length` is captured once. The array check is true for a Proxy wrapping
     // an array, and a Proxy `get` trap may return a different length on every
     // read; re-reading it in the loop condition would let a payload grow the
     // work the host does after the bounds were checked. The host-owned array
@@ -397,35 +469,37 @@ interface NormalizedRegistration {
 /**
  * Validate an untrusted payload and build the host-owned record for it.
  *
- * Throws `ShellUXError` for every rejection it anticipates — a missing field, a
- * field of the wrong runtime type, a bound exceeded, a duplicate action id. It
- * is **not** true that `ShellUXError` is the only thing it can throw, and this
- * comment previously claimed that it was. Two things escape untyped:
+ * Every rejection this function DECIDES ON is a `ShellUXError` — a missing
+ * field, a field of the wrong runtime type, a bound exceeded, a duplicate action
+ * id, and now a value that refuses to be classified at all.
  *
- * 1. Reading a property off an attacker-shaped object can invoke a getter, and
- *    a getter is free to throw anything at all.
- * 2. `Array.isArray` throws a raw `TypeError` when handed a revoked `Proxy`,
- *    and five call sites reach it with an unvalidated value: `isRecord`,
- *    `describeType`, the `children` check in `normalizeNavigationNode`, and the
- *    `navigationTree` and `ribbonActions` checks below. Thirteen distinct field
- *    positions can steer a revoked `Proxy` into one of them; the shortest
- *    reproduction is `validateBlueprint({ id: <revoked Proxy>, ...validRest })`,
- *    which lands in `describeType`, not in `isRecord`: `validateId`,
- *    `validateText`, `validateFunction` and `validateViewComponent` each
- *    `typeof`-check first — and `typeof` does not trap, so a revoked `Proxy`
- *    simply fails the check — then call `describeType` to build the message.
- *    `isRecord` is never consulted for those fields at all.
+ * **The revoked-`Proxy` leak is closed.** `Array.isArray` raises a raw
+ * `TypeError` when handed a revoked `Proxy`, and five call sites reached it with
+ * an unvalidated value: `isRecord`, `describeType`, the `children` check in
+ * `normalizeNavigationNode`, and the `navigationTree` and `ribbonActions` checks
+ * below. All five now go through `checkArray`, which cannot throw, so a revoked
+ * `Proxy` in any field position is an ordinary typed rejection naming the field.
+ * The path that used to bite was not the obvious one: `validateId`,
+ * `validateText`, `validateFunction` and `validateViewComponent` each
+ * `typeof`-check first — and `typeof` does not trap, so a revoked `Proxy` simply
+ * failed the check — then called `describeType` to build the message, never
+ * consulting `isRecord` at all. Pinned by "validateBlueprint — a revoked Proxy"
+ * in `src/core/__tests__/validation.test.ts`, which walks every field position
+ * that can reach one of the five sites and asserts `ShellUXError` at each.
+ *
+ * **One untyped escape remains, and is not claimed away.** Reading a property
+ * off an attacker-shaped object invokes a getter, and a getter is free to throw
+ * anything at all; that value propagates out of here unchanged. It is not a
+ * rejection this function decided on — it is plugin code throwing through it —
+ * but a caller of the exported `validateBlueprint` still sees it, so callers that
+ * accept untrusted payloads must guard the call or use `register` instead.
+ * Pinned by "validateBlueprint — a revoked Proxy > still propagates whatever a
+ * throwing property getter threw", same file.
  *
  * `register` is unaffected by either. Its `try`/`catch` spans the whole
  * operation and funnels anything thrown here through `toShellUXError`, so the
- * "never throws" contract holds and callers of `register` still only ever see a
- * `ShellUXError`. It is the exported `validateBlueprint`, which has no such
- * catch, that can surface the raw `TypeError` to its caller.
- *
- * Guarding all five `Array.isArray` sites — not just `describeType` — is filed
- * as follow-up work in `.github/ISSUES_MANIFEST.md`. It is deliberately not
- * done in this change: this file is held to a 100% branch gate, so each new
- * guard needs its own test, and that is a separate piece of work.
+ * "never throws" contract holds and callers of `register` only ever see a
+ * `ShellUXError`.
  *
  * See the normalisation banner above for why the result is a copy, which parts
  * are deliberately carried by reference, and what `source` is for.
@@ -452,7 +526,7 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
   );
 
   const navigationTree = requireField(candidate, 'navigationTree', 'navigationTree');
-  if (!Array.isArray(navigationTree)) {
+  if (!isArrayValue(navigationTree)) {
     throw new ShellUXError(
       'INVALID_FIELD',
       `Field "navigationTree" must be an array; received ${describeType(navigationTree)}.`,
@@ -472,7 +546,7 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
   }
 
   const ribbonActions = requireField(candidate, 'ribbonActions', 'ribbonActions');
-  if (!Array.isArray(ribbonActions)) {
+  if (!isArrayValue(ribbonActions)) {
     throw new ShellUXError(
       'INVALID_FIELD',
       `Field "ribbonActions" must be an array; received ${describeType(ribbonActions)}.`,
@@ -531,17 +605,22 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
  * record, or take it from `register`'s result.
  *
  * **This function throws on rejection — it has no result type and no catch.**
- * Anticipated rejections arrive as `ShellUXError`. Exotic inputs can produce
- * something else: a throwing property getter propagates whatever it threw, and
- * a revoked `Proxy` reaching one of `normalizeBlueprint`'s five unguarded
- * `Array.isArray` sites produces a raw `TypeError`. Callers must therefore
- * treat this as capable of throwing arbitrarily, not merely `ShellUXError`.
- * See `normalizeBlueprint` above for the full account and for the follow-up
- * work recorded in `.github/ISSUES_MANIFEST.md`.
+ * Every rejection it decides on is a `ShellUXError`, including the values that
+ * refuse to be classified: a revoked `Proxy` in any field position is a typed
+ * rejection naming that field, because all five `Array.isArray` sites now go
+ * through the total `checkArray`. Pinned by "validateBlueprint — a revoked Proxy"
+ * in `src/core/__tests__/validation.test.ts`.
  *
- * `register` does not share this exposure — it catches. Prefer `register` for
- * untrusted input; this export is for callers that want to validate a payload
- * without registering it, and that are prepared to guard the call.
+ * **`ShellUXError` is still not the only thing that can come out of it.** A
+ * property getter on the payload is plugin code, it is free to throw anything,
+ * and that value propagates through unchanged — pinned by "still propagates
+ * whatever a throwing property getter threw", same file. A caller handling
+ * untrusted payloads must therefore guard the call, or use `register`, which
+ * catches and only ever returns a `ShellUXError`. See `normalizeBlueprint` above
+ * for the full account.
+ *
+ * This export is for callers that want to validate a payload without registering
+ * it. Prefer `register` for input you did not author.
  */
 export function validateBlueprint(candidate: unknown): LEAPExtensionBlueprint {
   return normalizeBlueprint(candidate).record;
@@ -627,7 +706,22 @@ export interface RegistrationFailure {
  * Result of `register`. A discriminated union rather than an exception,
  * because a malformed plugin manifest is an expected condition for a host that
  * loads third-party code: throwing would let one bad plugin unmount the shell
- * through an error boundary. `register` therefore never throws.
+ * through an error boundary. `register` therefore never throws. Pinned by "register
+ * — hostile payloads never crash the host" in `src/core/__tests__/registry.test.tsx`,
+ * "register — a getter that detonates late still cannot escape" and "register —
+ * thrown values that resist inspection" in
+ * `src/core/__tests__/registrySecurity.test.tsx`, and "register — a weaponised
+ * ShellUXError cannot be relocated into the host" in
+ * `src/core/__tests__/registryNormalization.test.tsx`.
+ *
+ * The `never throws` contract is `register`'s, not `validateBlueprint`'s. The
+ * exported validator has no `catch`: its own rejections are all `ShellUXError`,
+ * including a revoked `Proxy` in any field position — the raw `TypeError` that
+ * `Array.isArray` used to leak from five sites is closed, pinned by
+ * "validateBlueprint — a revoked Proxy" in
+ * `src/core/__tests__/validation.test.ts` — but a throwing property getter on the
+ * payload still propagates out of it untyped, and that is deliberately not
+ * claimed away.
  */
 export type RegistrationResult = RegistrationSuccess | RegistrationFailure;
 
@@ -665,6 +759,11 @@ export interface ExtensionRegistry {
    *
    * If an ownership model is ever wanted it belongs in its own issue, with the
    * threat model written down first. Do not add one here by accident.
+   *
+   * The absent authorisation is pinned rather than merely stated: "does NOT sever
+   * useRegistry, so unregister stays a route to ending a sibling" in
+   * `src/core/__tests__/capability.test.tsx` performs it from inside a plug-in
+   * subtree.
    */
   unregister(id: string): boolean;
   /**
@@ -674,7 +773,15 @@ export interface ExtensionRegistry {
    * normalised copy: validated scalars copied into fresh primitives, arrays
    * rebuilt at exactly the length that was bounds-checked, and the plugin's
    * function and component references carried across unchanged. Mutating the
-   * original blueprint after registration cannot change what is returned here.
+   * original blueprint after registration cannot change what is returned here —
+   * pinned by "is unaffected by the plugin mutating its own blueprint afterwards" in
+   * `src/core/__tests__/registryNormalization.test.tsx`.
+   *
+   * **The record is host-owned; the plug-in functions inside it are not.** This hands
+   * ANY caller a sibling's unfrozen view components and callbacks, which is an
+   * accepted limit and not a defect — see the `views` note in the normalisation
+   * banner above, and "an ActiveExtension does not freeze the plug-in functions it
+   * carries" in `src/core/__tests__/capability.test.tsx`.
    */
   getExtension(id: string): LEAPExtensionBlueprint | undefined;
   /** Every registered record, in insertion order. Same guarantees as above. */
@@ -711,7 +818,9 @@ export function ExtensionRegistryProvider({
   // plugin manifests; a Map has no prototype chain, so writing a key named
   // `__proto__` or `constructor` stores a plain entry and can never reach
   // Object.prototype. This makes prototype pollution structurally impossible
-  // rather than merely filtered — the RESERVED_IDS check is a second layer.
+  // rather than merely filtered — the RESERVED_IDS check is a second layer. This is
+  // the ONE place ADR-0001 Amendment F leaves the word `structural` earned; pinned by
+  // "never stores \"__proto__\" as a live key" in `registrySecurity.test.tsx`.
   const store = useRef<Map<string, RegistryEntry>>(new Map());
   const [revision, bumpRevision] = useReducer(revisionReducer, 0);
 

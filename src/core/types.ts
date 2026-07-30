@@ -19,18 +19,57 @@ import type { ComponentType } from 'react';
  *   - If a future issue genuinely needs rich text from a plugin, sanitize at
  *     that render site with a real sanitizer, not here.
  *
- * What the registry DOES enforce, because it is structural rather than
- * presentational, is identifier hygiene: every `id` must match
- * `EXTENSION_ID_PATTERN` (see RegistryContext.tsx). That allowlist makes it
- * impossible for an id to carry a path separator, a URL scheme, angle
- * brackets, or a prototype-pollution key such as `__proto__`. Ids are the only
- * plugin-supplied strings the host uses as lookup keys, so they are the only
- * ones that need to be constrained at rest.
+ * What the registry DOES check, because ids are keys rather than display text, is
+ * identifier hygiene: every `id` must match `EXTENSION_ID_PATTERN` (see
+ * RegistryContext.tsx). No id that gets through can carry a path separator, a URL
+ * scheme, angle brackets, or a prototype-pollution key such as `__proto__`. Ids
+ * are the only plugin-supplied strings the host uses as lookup keys, so they are
+ * the only ones that need to be constrained at rest.
+ *
+ * That is **entry-point validation** in the vocabulary this repository uses (see
+ * ADR-0001 Amendment E): real for every value that arrives through the registry's
+ * doors, and not a claim about a caller who reaches host internals another way.
+ * Pinned by "validateBlueprint — identifier hardening" in
+ * `src/core/__tests__/validation.test.ts`.
+ * The `Map`-backed stores are the *integrity control* underneath it — a `Map` has
+ * no prototype chain, so prototype pollution through a plugin key is impossible by
+ * construction rather than by filtering, and that holds whatever the filter does.
+ * Pinned by "register — a shifting id cannot smuggle a reserved key into the store"
+ * in `src/core/__tests__/registrySecurity.test.tsx`.
+ *
+ * The render-boundary rule above is the one obligation on this list that **no test
+ * exercises**, and it is stated as an obligation on a future renderer rather than as
+ * a property of the code: nothing in `src/` renders plug-in content yet (ISSUE-002,
+ * ISSUE-004). Per ADR-0001 Amendment G it must not be restated anywhere as a
+ * delivered protection until there is a render site and a test at it.
  * ============================================================================
  */
 
 /** Identifier of one of the three shell panes. */
 export type PaneId = 'pane1' | 'pane2' | 'pane3';
+
+/**
+ * Exhaustiveness pin for `PANE_IDS`, in the same shape as
+ * `SHELL_UX_ERROR_CODE_MEMBERS` below: `Record<PaneId, true>` makes the compiler
+ * reject both a missing member and an invented one, so the runtime set cannot
+ * drift away from the `PaneId` union.
+ */
+const PANE_ID_MEMBERS: Readonly<Record<PaneId, true>> = Object.freeze({
+  pane1: true,
+  pane2: true,
+  pane3: true,
+});
+
+/**
+ * `PaneId` as a runtime membership test.
+ *
+ * A type union vanishes at runtime, and `RibbonContext.focusedPane` is written
+ * through `ShellStateStore.patchContext` — a member reachable from plugin code,
+ * which may be plain JavaScript that the compiler never saw. Validating that
+ * field therefore needs the union as data; see `assertValidPaneId` in
+ * `ShellAPI.ts`.
+ */
+export const PANE_IDS: ReadonlySet<string> = new Set(Object.keys(PANE_ID_MEMBERS));
 
 /**
  * The ambient host state handed to a ribbon action so it can decide whether it
@@ -75,10 +114,46 @@ export interface RibbonAction {
   readonly icon: string;
   /** When `true` the action renders greyed out but still visible. */
   readonly isDisabled?: boolean;
-  /** Pure predicate deciding whether the action appears at all. */
+  /**
+   * Pure predicate deciding whether the action appears at all.
+   *
+   * It is handed the context and NOTHING ELSE — deliberately no `IShellAPI`.
+   * This runs during render, and a capability to mutate shell state during
+   * render is a hazard, not a convenience: a predicate that writes would notify
+   * the store mid-render, re-enter the component that is rendering, and either
+   * loop or tear. An action that needs to change something has `onExecute` for it.
+   *
+   * **That makes "predicates must be pure" a guardrail, not a structural fact, and
+   * this comment used to claim the stronger of the two.** A signature constrains
+   * ARGUMENTS; it says nothing about closures. A predicate defined inside a view
+   * that called `useShellStore()` — public by design — captures a store and writes
+   * on invocation, which was reproduced. What the read-only argument list really
+   * delivers is that the direct route is closed and the honest mistake is hard to
+   * make by accident. Purity stays the author's obligation.
+   *
+   * As a guardrail it has **no test**, and per ADR-0001 Amendment G that is stated
+   * rather than glossed: nothing in `src/` calls `isVisible` yet (ISSUE-002), so
+   * there is no call site at which purity could be observed. The registry checks only
+   * that it is a function — "validateBlueprint — ribbon actions" in
+   * `src/core/__tests__/validation.test.ts`.
+   */
   isVisible(ctx: RibbonContext): boolean;
-  /** Invoked on activation. May mutate host state through `IShellAPI`. */
-  onExecute(ctx: RibbonContext): void;
+  /**
+   * Invoked on activation, with the context AND the extension's own shell
+   * handle.
+   *
+   * `shell` is the same deep-frozen, per-extension `IShellAPI` the host holds
+   * for this extension, so a ribbon action can actually change shell state.
+   * Without it the handler received four nullable strings and no capability, and
+   * therefore provably could not do anything at all.
+   *
+   * `shell` is revocable: after the extension is released or unregistered every
+   * member of it throws `ShellUXError` with code `REVOKED`. Do not stash it
+   * beyond the life of the call — use the one you are handed. Pinned by "mints a live
+   * IShellAPI on activation and revokes it on release" and "revokes when the extension
+   * is unregistered" in `src/core/__tests__/dataflow.test.tsx`.
+   */
+  onExecute(ctx: RibbonContext, shell: IShellAPI): void;
 }
 
 /** Props the host passes into an extension-supplied pane view. */
@@ -117,9 +192,29 @@ export interface LEAPExtensionBlueprint {
 /**
  * The contract the host passes DOWN to a plugin.
  *
- * Instances handed to plugin code are deep-frozen (see `createShellAPI`), so a
- * plugin cannot swap out a method to intercept another plugin's calls or to
- * escalate its own reach into the host.
+ * Instances handed to plugin code are deep-frozen (see `createShellAPI`). That is
+ * an **integrity control** in the sense this repository uses the word — real and
+ * unconditional, holding against any caller however hostile: an instance's methods
+ * cannot be swapped out. Pinned by "is deep-frozen: strict-mode reassignment throws",
+ * "is deep-frozen: sloppy-mode reassignment is a silent no-op" and "cannot have its
+ * prototype swapped" in `src/core/__tests__/shellApi.test.ts`.
+ *
+ * **That is a claim about replacement, and the sentence used to go one step further:
+ * "so one plugin cannot intercept or suppress the calls another makes through the
+ * same instance." That does not follow and is false.** Every call through this
+ * interface reaches the one host store, the store notifies synchronously, and
+ * `ShellStateStore.subscribe` is public — so a listener registered by any code in the
+ * page observes the write before this method returns, can overwrite it by re-entering
+ * the store, and can throw into this frame. Reproduced in
+ * `src/core/__tests__/subscribe.test.tsx`. The freeze is not what is bypassed:
+ * nothing is replaced.
+ *
+ * It says nothing either about what a plugin can reach by other means. Reaching the
+ * unscoped store, or another extension's handle, is not prevented — see
+ * ADR-0001 "No sandbox" and Amendment E, and "reaches the host ActivationController
+ * by reflection anyway, and steals a sibling handle" in
+ * `src/core/__tests__/reflection.test.tsx`. Freezing narrows what this object is; it
+ * is not a boundary around the plugin.
  */
 export interface IShellAPI {
   /**
@@ -131,14 +226,33 @@ export interface IShellAPI {
    * lands in `RibbonContext.selectedItemId` — a snapshot the host hands to
    * OTHER extensions' `isVisible` and `onExecute`. An unchecked argument would
    * make the declared `string | null` a runtime lie and turn the context into
-   * a cross-plugin object-injection channel.
+   * a cross-plugin object-injection channel. Pinned at both doors that reach the
+   * field: "setSelectedItem validates its argument" in
+   * `src/core/__tests__/shellApi.test.ts` and "patchContext rejects what
+   * setSelectedItem rejects" in `src/core/__tests__/contextPatch.test.ts`.
    *
    * @throws {ShellUXError} `INVALID_FIELD` when `id` is neither a string nor
    *   `null`.
    */
   setSelectedItem(id: string | null): void;
   /**
-   * Set the badge count for a navigation node.
+   * Set the badge count for one of YOUR navigation nodes.
+   *
+   * The write is scoped to the extension the instance was minted for. That scope
+   * is not a parameter and cannot be supplied: the facade closes over the id the
+   * registry validated, so two extensions that both name a node `inbox` write to
+   * two different entries and cannot collide.
+   *
+   * **That is collision-resistance, not confinement.** An earlier version of this
+   * comment ended "and neither can read or overwrite the other's", which was
+   * false. The unscoped store behind this facade is reachable through the public
+   * `useShellStore()`, and `store.getBadgeCount('other-ext', 'inbox')` reads
+   * another extension's badge while `store.setBadgeCount('other-ext', ...)` writes
+   * one. What is real here is that two vendors picking the same node id do not
+   * overwrite each other by accident, and that this method offers no parameter
+   * through which to aim elsewhere. Both pinned under "badge isolation" in
+   * `src/core/__tests__/dataflow.test.tsx`.
+   *
    * @throws {ShellUXError} when `nodeId` is malformed or `count` is not a
    *   non-negative safe integer.
    */
@@ -162,7 +276,18 @@ export type ShellUXErrorCode =
   /** An id is already registered under a different blueprint. */
   | 'DUPLICATE_ID'
   /** A collection or string exceeded its declared bound. */
-  | 'PAYLOAD_TOO_LARGE';
+  | 'PAYLOAD_TOO_LARGE'
+  /**
+   * The `IShellAPI` used has been revoked — its extension was released or
+   * unregistered — so the call reached nothing and changed nothing.
+   */
+  | 'REVOKED'
+  /**
+   * A store listener wrote back to the store, and the resulting notification
+   * cascade exceeded the depth the store will follow. Listeners are a signal to
+   * re-read, not a place to write; see `createShellStateStore`.
+   */
+  | 'REENTRANT_NOTIFY';
 
 /**
  * Exhaustiveness pin for `SHELL_UX_ERROR_CODES`.
@@ -179,6 +304,8 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
   RESERVED_ID: true,
   DUPLICATE_ID: true,
   PAYLOAD_TOO_LARGE: true,
+  REVOKED: true,
+  REENTRANT_NOTIFY: true,
 });
 
 /**

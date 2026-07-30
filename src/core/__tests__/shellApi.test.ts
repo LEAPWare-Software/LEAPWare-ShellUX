@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createShellAPI, createShellStateStore, deepFreeze } from '../ShellAPI';
+import {
+  createRevocableShellAPI,
+  createShellAPI,
+  createShellStateStore,
+  deepFreeze,
+} from '../ShellAPI';
+import type { ShellStateStore } from '../ShellAPI';
 import { ShellUXError } from '../types';
 import type { IShellAPI, RibbonContext } from '../types';
 import { makeUnclassifiableValue, makeUnstringifiableValue } from './fixtures';
@@ -191,17 +197,334 @@ describe('createShellStateStore', () => {
     expect(before.selectedItemId).toBeNull();
   });
 
+  /**
+   * ==========================================================================
+   * THE STORE OBJECT IS HANDED OUT, SO THE STORE OBJECT IS FROZEN
+   * ==========================================================================
+   * The state behind the store is unreachable — closure variables, no
+   * reflective API for a scope. That was true and it was being used to argue
+   * something it does not support: the OBJECT carrying the six methods was a
+   * plain mutable literal. `useShellStore()` is public by this repository's own
+   * admission, so a plug-in view rendering inside the provider obtains this
+   * exact object and, before this test, could assign over `setSelectedItem`,
+   * `getContext` or `patchContext` and intercept, suppress or forge every write
+   * and read the host and every other extension made through it.
+   *
+   * No reflection was needed for that. It was the documented public API.
+   * `createShellAPI`'s facade had been deep-frozen for exactly this reason for
+   * as long as it has existed; the store it sits on had not.
+   *
+   * **What these tests establish is that no member can be replaced, deleted or
+   * added, and nothing wider.** The paragraph above is history, and a later reader
+   * drew a conclusion from it that it does not support — that a frozen store cannot
+   * be intercepted at all. `subscribe` is one of the six members and intercepts
+   * without replacing anything. `subscribe.test.tsx` pins that, and ADR-0001
+   * Amendment G records why an inference from these tests to that conclusion is the
+   * defect the repository kept repeating.
+   * ==========================================================================
+   */
+  describe('the store object cannot be rewired', () => {
+    it('is frozen, so a strict-mode method swap throws and changes nothing', () => {
+      const store = createShellStateStore();
+      expect(Object.isFrozen(store)).toBe(true);
+
+      const original = store.setSelectedItem;
+      // This module is an ES module, therefore strict mode — as is any plug-in
+      // bundle, which is also a module.
+      expect(() => {
+        (store as unknown as Record<string, unknown>)['setSelectedItem'] = (): void => undefined;
+      }).toThrow(TypeError);
+      expect(store.setSelectedItem).toBe(original);
+
+      store.setSelectedItem('item-1');
+      expect(store.getContext().selectedItemId).toBe('item-1');
+    });
+
+    it('refuses replacement and deletion of every member, and refuses a new one', () => {
+      const store = createShellStateStore();
+      const target = store as unknown as Record<string, unknown>;
+      const before = { ...target };
+      expect(Object.keys(before).sort()).toEqual([
+        'getBadgeCount',
+        'getContext',
+        'patchContext',
+        'setBadgeCount',
+        'setSelectedItem',
+        'subscribe',
+      ]);
+
+      for (const key of Object.keys(before)) {
+        expect(() => {
+          target[key] = (): void => undefined;
+        }).toThrow(TypeError);
+        expect(() => {
+          delete target[key];
+        }).toThrow(TypeError);
+        expect(target[key]).toBe(before[key]);
+      }
+
+      expect(Object.isExtensible(store)).toBe(false);
+      expect(() => {
+        target['injected'] = (): void => undefined;
+      }).toThrow(TypeError);
+      expect(() => Object.setPrototypeOf(store, { evil: true })).toThrow(TypeError);
+    });
+
+    it('is a silent no-op in sloppy mode, and the members still work', () => {
+      const store = createShellStateStore();
+      const original = store.patchContext;
+
+      // A `Function` body is sloppy mode by default, so the assignment fails
+      // silently instead of throwing. The member must still be the original.
+      const sloppyMutate = new Function(
+        'target',
+        'target.patchContext = null; delete target.getContext; target.extra = 1; return target;',
+      ) as (target: unknown) => ShellStateStore;
+
+      expect(() => sloppyMutate(store)).not.toThrow();
+      expect(store.patchContext).toBe(original);
+      expect(typeof store.getContext).toBe('function');
+      expect((store as unknown as Record<string, unknown>)['extra']).toBeUndefined();
+
+      store.patchContext({ focusedPane: 'pane2' });
+      expect(store.getContext().focusedPane).toBe('pane2');
+    });
+  });
+
   it('reports undefined for a node that never had a badge', () => {
     const store = createShellStateStore();
-    expect(store.getBadgeCount('root-a')).toBeUndefined();
+    expect(store.getBadgeCount('sample-ext', 'root-a')).toBeUndefined();
   });
 
   it('stores badge counts', () => {
     const store = createShellStateStore();
-    store.setBadgeCount('root-a', 0);
-    expect(store.getBadgeCount('root-a')).toBe(0);
-    store.setBadgeCount('root-a', 12);
-    expect(store.getBadgeCount('root-a')).toBe(12);
+    store.setBadgeCount('sample-ext', 'root-a', 0);
+    expect(store.getBadgeCount('sample-ext', 'root-a')).toBe(0);
+    store.setBadgeCount('sample-ext', 'root-a', 12);
+    expect(store.getBadgeCount('sample-ext', 'root-a')).toBe(12);
+  });
+
+  it('scopes a badge to its extension, so the same node id does not collide', () => {
+    const store = createShellStateStore();
+    store.setBadgeCount('mail-ext', 'inbox', 7);
+    store.setBadgeCount('crm-ext', 'inbox', 3);
+    expect(store.getBadgeCount('mail-ext', 'inbox')).toBe(7);
+    expect(store.getBadgeCount('crm-ext', 'inbox')).toBe(3);
+  });
+
+  /**
+   * ==========================================================================
+   * THE BADGE SCOPE IS AN UNTRUSTED ARGUMENT TOO
+   * ==========================================================================
+   * `badgeKey` builds `${extensionId}:${nodeId}`. `setBadgeCount` used to
+   * validate `nodeId` and `count` and never `extensionId`, and `getBadgeCount`
+   * validated neither — so the one module whose own banner promises never to
+   * stringify an untrusted value interpolated two of them. `useShellStore()` is
+   * public by this repository's own admission, so both doors are reachable from
+   * plug-in code.
+   * ==========================================================================
+   */
+  describe('the badge scope and node id are validated at both doors', () => {
+    function expectShellUXErrorFrom(call: () => void): ShellUXError {
+      let caught: unknown;
+      try {
+        call();
+      } catch (error) {
+        caught = error;
+      }
+      // A raw Error or TypeError here means the key was built by interpolating a
+      // value nobody had proven to be a string.
+      expect(caught).toBeInstanceOf(ShellUXError);
+      return caught as ShellUXError;
+    }
+
+    it('never runs a hostile toString on the write path', () => {
+      const store = createShellStateStore();
+      let ran = false;
+      const hostile = {
+        toString(): string {
+          ran = true;
+          return 'mail-ext';
+        },
+      };
+
+      const error = expectShellUXErrorFrom(() => {
+        (store.setBadgeCount as (scope: unknown, nodeId: string, count: number) => void)(
+          hostile,
+          'root-a',
+          1,
+        );
+      });
+      expect(error.code).toBe('INVALID_ID');
+      expect(error.field).toBe('extensionId');
+      expect(error.message).toContain('"object"');
+      expect(ran).toBe(false);
+    });
+
+    it('never runs a hostile toString on the read path either', () => {
+      const store = createShellStateStore();
+      let ran = false;
+      const hostile = {
+        toString(): string {
+          ran = true;
+          return 'mail-ext';
+        },
+      };
+
+      const error = expectShellUXErrorFrom(() => {
+        (store.getBadgeCount as (scope: unknown, nodeId: string) => number | undefined)(
+          hostile,
+          'root-a',
+        );
+      });
+      expect(error.code).toBe('INVALID_ID');
+      expect(error.field).toBe('extensionId');
+      expect(ran).toBe(false);
+    });
+
+    it('reports a throwing toString as a ShellUXError rather than letting it escape', () => {
+      const store = createShellStateStore();
+      const hostile = makeUnstringifiableValue({ withToPrimitive: false });
+      expect(() => `${hostile as unknown as string}:root-a`).toThrow('stringification refused');
+
+      expect(
+        expectShellUXErrorFrom(() => {
+          (store.setBadgeCount as (scope: unknown, nodeId: string, count: number) => void)(
+            hostile,
+            'root-a',
+            1,
+          );
+        }).code,
+      ).toBe('INVALID_ID');
+    });
+
+    it('reports a Symbol scope as a ShellUXError rather than a raw TypeError', () => {
+      const store = createShellStateStore();
+      const hostile = Symbol('mail-ext');
+      // Template interpolation of a Symbol is a raw TypeError, which is exactly
+      // what a function contracted to throw `ShellUXError` may not produce.
+      expect(() => `${hostile as unknown as string}:root-a`).toThrow(TypeError);
+
+      const error = expectShellUXErrorFrom(() => {
+        (store.getBadgeCount as (scope: unknown, nodeId: string) => number | undefined)(
+          hostile,
+          'root-a',
+        );
+      });
+      expect(error.code).toBe('INVALID_ID');
+      expect(error.message).toContain('"symbol"');
+    });
+
+    it('refuses a re-entrant toString before it can write to the store mid-call', () => {
+      const store = createShellStateStore();
+      let reentered = false;
+      const hostile = {
+        toString(): string {
+          reentered = true;
+          store.setSelectedItem('written-from-inside-a-key-build');
+          return 'mail-ext';
+        },
+      };
+
+      expectShellUXErrorFrom(() => {
+        (store.setBadgeCount as (scope: unknown, nodeId: string, count: number) => void)(
+          hostile,
+          'root-a',
+          1,
+        );
+      });
+      expect(reentered).toBe(false);
+      expect(store.getContext().selectedItemId).toBeNull();
+    });
+
+    it.each([
+      ['a path', '../escape'],
+      ['markup', '<script>'],
+      ['uppercase', 'MailExt'],
+      ['a reserved word', 'constructor'],
+      ['an empty string', ''],
+      ['a scope with the separator in it', 'mail:ext'],
+    ])('refuses %s as a badge scope', (_label, scope) => {
+      const store = createShellStateStore();
+      const error = expectShellUXErrorFrom(() => {
+        (store.setBadgeCount as (scope: unknown, nodeId: string, count: number) => void)(
+          scope,
+          'root-a',
+          1,
+        );
+      });
+      expect(error.code).toBe('INVALID_ID');
+      expect(error.field).toBe('extensionId');
+    });
+
+    it('validates the node id on the read path, which used to check nothing at all', () => {
+      const store = createShellStateStore();
+      const error = expectShellUXErrorFrom(() => {
+        (store.getBadgeCount as (scope: string, nodeId: unknown) => number | undefined)(
+          'mail-ext',
+          { self: 'referential' },
+        );
+      });
+      expect(error.code).toBe('INVALID_ID');
+      expect(error.field).toBe('nodeId');
+      expect(error.message).toContain('getBadgeCount');
+    });
+
+    it('still accepts the host scope, which no extension id can spell', () => {
+      const store = createShellStateStore();
+      // `createShellAPI` writes here, so it has to remain a legal scope even
+      // though `EXTENSION_ID_PATTERN` rejects it.
+      const api = createShellAPI(store);
+      api.setBadgeCount('root-a', 5);
+      expect(store.getBadgeCount('__host__', 'root-a')).toBe(5);
+    });
+
+    it('refuses to mint a scoped facade for an extensionId that was never validated', () => {
+      const store = createShellStateStore();
+      let ran = false;
+      const hostile = {
+        toString(): string {
+          ran = true;
+          return 'mail-ext';
+        },
+      };
+
+      // The REVOKED message names the extension, so the name has to be proven to
+      // be a primitive string before the facade exists at all.
+      const error = expectShellUXErrorFrom(() => {
+        (
+          createRevocableShellAPI as unknown as (
+            store: ShellStateStore,
+            extensionId: unknown,
+          ) => unknown
+        )(store, hostile);
+      });
+      expect(error.code).toBe('INVALID_ID');
+      expect(error.field).toBe('extensionId');
+      expect(ran).toBe(false);
+    });
+  });
+
+  it('notifies subscribers on a real change and not on a no-op', () => {
+    const store = createShellStateStore();
+    let notifications = 0;
+    const unsubscribe = store.subscribe(() => {
+      notifications += 1;
+    });
+
+    store.patchContext({ activeNavNodeId: 'root-a' });
+    expect(notifications).toBe(1);
+
+    // Same value: no allocation, so the snapshot keeps its identity, so nobody
+    // is told anything.
+    const snapshot = store.getContext();
+    store.patchContext({ activeNavNodeId: 'root-a' });
+    expect(notifications).toBe(1);
+    expect(store.getContext()).toBe(snapshot);
+
+    unsubscribe();
+    store.patchContext({ activeNavNodeId: 'root-b' });
+    expect(notifications).toBe(1);
   });
 });
 
@@ -449,7 +772,10 @@ describe('IShellAPI', () => {
       expect(api.getContext().selectedItemId).toBe('item-9');
     });
 
-    it('is validated at the store, so patchContext stays the unvalidated host path', () => {
+    // The store, not just the facade, is where the check lives — which is what
+    // lets `patchContext` reuse it. See `contextPatch.test.ts` for the patch path;
+    // it is NOT an unvalidated host path and this test's name used to say it was.
+    it('is validated at the store, not only at the facade in front of it', () => {
       const store = createShellStateStore();
       expect(() => {
         (store.setSelectedItem as (id: unknown) => void)(7);

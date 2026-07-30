@@ -34,18 +34,50 @@ claim is checkable rather than decorative:
   `src/core/types.ts`, `src/core/RegistryContext.tsx` and `src/core/ShellAPI.ts`
   exist and hold a 100% statement/branch/function/line gate over `src/core/**`.
 - Reproduced eight attack classes against the built registry and confirmed all
-  eight are closed: registration hijack via a mutating `id` getter, reserved-id
-  bypass, `register` throwing rather than returning a failure, a hostile
-  `setBadgeCount`, a hostile `setSelectedItem`, `Proxy` `length` mutation
-  between the bounds check and the walk, post-registration mutation of the
-  stored record, and a weaponised `ShellUXError` relocated into the host.
+  eight are closed. Each is a standing test in the suite, not a one-off session
+  transcript — per ADR-0001 Amendment G the class is only listed here if it can
+  name the test that holds it:
+  1. Registration hijack via a mutating `id` getter — `registrySecurity.test.tsx`,
+     "register — a shifting id cannot hijack another extension > registers under
+     the id that was validated, leaving the victim untouched".
+  2. Reserved-id bypass — `registrySecurity.test.tsx`, "register — a shifting id
+     cannot smuggle a reserved key into the store > never stores \"__proto__\" as
+     a live key".
+  3. `register` throwing rather than returning a failure — `registry.test.tsx`,
+     "register — hostile payloads never crash the host > rejects a payload whose
+     getter throws an Error, without propagating it".
+  4. A hostile `setBadgeCount` — `shellApi.test.ts`, "setBadgeCount rejects an
+     unstringifiable nodeId with a ShellUXError > never runs a plugin-supplied
+     toJSON".
+  5. A hostile `setSelectedItem` — `shellApi.test.ts`, "setSelectedItem validates
+     its argument > does not stringify the rejected value".
+  6. `Proxy` `length` mutation between the bounds check and the walk —
+     `registryNormalization.test.tsx`, "register — a lying `length` cannot grow
+     the payload after it is measured > stores exactly the ribbon actions it
+     bounds-checked, and nothing past them".
+  7. Post-registration mutation of the stored record —
+     `registryNormalization.test.tsx`, "register — the stored record is
+     host-owned > is unaffected by the plugin mutating its own blueprint
+     afterwards".
+  8. A weaponised `ShellUXError` relocated into the host —
+     `registryNormalization.test.tsx`, "register — a weaponised ShellUXError
+     cannot be relocated into the host > rejects an attacker-chosen code and
+     defuses a detonating message getter".
 - Measured, through a logging `Proxy`, that every untrusted property is read
-  exactly once — not asserted from reading the source.
+  exactly once — not asserted from reading the source. *Test:*
+  `registrySecurity.test.tsx` — "reads the id exactly once, so no later read can
+  differ from the checked one", plus the duplicate-id and StrictMode variants
+  beside it.
 
-**Caveat, and it is open.** The same verification found that
-`validateBlueprint` can escape a raw `TypeError` rather than a `ShellUXError`
-on exotic input. It is recorded under "Follow-up defects" below and is not
-closed by this landing. It is not reachable through `register`.
+**The caveat that stood here is closed.** The same verification found that
+`validateBlueprint` could escape a raw `TypeError` rather than a `ShellUXError`
+on exotic input. That was fixed in Phase 1 — all five `Array.isArray` sites are
+now guarded — and is pinned by "validateBlueprint — a revoked Proxy" in
+`src/core/__tests__/validation.test.ts`. The history is kept under "Follow-up
+defects" below rather than deleted. One narrower exposure remains open and is
+recorded there: a throwing property getter on the payload still propagates out of
+`validateBlueprint` untyped, which is why callers of that export must guard it.
+Neither was ever reachable through `register`.
 
 Its unblocking of ISSUE-002 is why that row now reads `NOT STARTED` rather than
 `BLOCKED`. **No other issue has been verified against running code**, and every
@@ -88,7 +120,10 @@ The work has three parts:
    handed out must be **deeply frozen** before it crosses the boundary, so that
    a plugin cannot monkey-patch shell services for other plugins. Frozen means
    recursively frozen — a shallow `Object.freeze` on the root is not sufficient
-   and will not pass review.
+   and will not pass review. As landed this holds for every container the **host**
+   owns, and deliberately not for the plug-in functions carried inside them — see
+   ADR-0001 Amendments D and E, and the accepted limit in `README.md`. *Tests:* the
+   deep-freeze gate in the Definition of Done below names them.
 
 The precise TypeScript signatures are settled *by this issue*. Downstream
 documents must not assume signatures ahead of this issue landing.
@@ -132,9 +167,22 @@ None. This is the root of the dependency graph.
   public contract surface and no `@ts-ignore`.
 - Deep freeze is verified by test: a nested property of a handed-out
   `IShellAPI` cannot be reassigned, and the attempt is observable in a test.
+  *Tests:* `src/core/__tests__/shellApi.test.ts` — "is deep-frozen: strict-mode
+  reassignment throws" and "is deep-frozen: sloppy-mode reassignment is a silent
+  no-op"; the `deepFreeze` walk itself in "freezes nested objects and arrays",
+  "freezes function-valued properties", "freezes symbol-keyed properties too" and
+  "terminates on a cyclic graph".
 - Duplicate-id registration is covered by a test asserting the deterministic
-  failure behaviour.
-- Prototype-pollution-shaped ids are covered by a test.
+  failure behaviour. *Tests:* `src/core/__tests__/registry.test.tsx` — "register —
+  duplicate ids > rejects a different blueprint claiming an id that is already
+  taken" and "treats re-registering the identical blueprint object as an
+  idempotent no-op".
+- Prototype-pollution-shaped ids are covered by a test. *Tests:*
+  `src/core/__tests__/validation.test.ts` — "validateBlueprint — identifier
+  hardening > rejects the prototype-pollution identifier \"%s\" as RESERVED_ID"
+  and "leaves Object.prototype untouched after a __proto__ registration attempt";
+  `src/core/__tests__/registrySecurity.test.tsx` — "never stores \"__proto__\" as
+  a live key", which asserts the `Map` store as well as the filter.
 - ~~A throwing visibility predicate is covered by a test asserting the action is
   hidden and the ribbon still renders.~~ **Carried to ISSUE-002.** This gate
   cannot be met by ISSUE-001: containing a throwing predicate requires a call
@@ -144,6 +192,22 @@ None. This is the root of the dependency graph.
 - The Vitest coverage gate passes for `src/core/**`.
 - `DEVELOPER.md` is updated to replace its "signature not yet settled" notes
   with the real, as-shipped signatures.
+- **Every security claim in prose names the test that exercises it.** No sentence
+  asserting a security property may land in a `.md` file or a docblock unless it
+  names the test file and `it(...)` description that asserts it. A claim with no
+  such test is **narrowed** until an existing test does assert it, or **deleted**;
+  deleting it is a correct outcome, not a failure. A claim that genuinely cannot be
+  tested yet — because the call site it would need does not exist — is kept only if
+  it is explicitly labelled as untested and attributed to the issue that will
+  provide the call site.
+
+  This is a **review-time convention. No script checks it**, and ADR-0001
+  **Amendment G** says so plainly rather than implying enforcement. Amendment G also
+  records the seven consecutive review rounds that produced the rule: in every one of
+  them the code was sound and the sentence was wider than the premise licensing it,
+  so six correct code fixes in a row did nothing to stop the seventh. The reviewer's
+  question is mechanical — *which test?* — and a sentence that cannot answer it is a
+  finding.
 
 ### As landed — decisions taken during implementation
 
@@ -157,46 +221,81 @@ None. This is the root of the dependency graph.
   across unchanged — they must stay callable and keep their identity — and the
   plugin's original object is retained privately for the StrictMode
   reference-identity check and nothing else.
+  *Tests:* `src/core/__tests__/registryNormalization.test.tsx` — "register — the
+  stored record is host-owned > is frozen at every host-owned level", "is
+  unaffected by the plugin mutating its own blueprint afterwards", "carries
+  functions and components across by reference, unfrozen and callable", and "keeps
+  StrictMode idempotency keyed on the plugin object, not on the copy".
 - **`unregister` has no authorisation, deliberately.** See ADR-0001 and the
   declaration comment in `src/core/RegistryContext.tsx`. This issue never
-  specified an ownership model and one was not invented here.
+  specified an ownership model and one was not invented here. The absence is
+  pinned rather than only stated — *test:*
+  `src/core/__tests__/capability.test.tsx` — "does NOT sever useRegistry, so
+  unregister stays a route to ending a sibling", which performs the removal from
+  inside a plug-in subtree.
 
-### Follow-up defects — confirmed, open, non-blocking
+### Follow-up defects — one closed, two open, none blocking
 
 Found by the 2026-07-29 adversarial verification. Each was reproduced, not
-inferred. None of them blocks ISSUE-001 from landing, and none is a reason to
-weaken its status — but they are real, they are open, and they are recorded
-here rather than quietly dropped, in the same spirit as the struck-through
-carried-forward gate above.
+inferred. None of them blocked ISSUE-001 from landing, and none was a reason to
+weaken its status — but they were real, and they are recorded here rather than
+quietly dropped, in the same spirit as the struck-through carried-forward gate
+above. The history stays even once an entry is closed.
 
-- **`validateBlueprint` can throw a raw `TypeError`.** `Array.isArray` throws
-  when handed a revoked `Proxy`, and five call sites in
-  `src/core/RegistryContext.tsx` reach it with an unvalidated value: `isRecord`,
+- **~~`validateBlueprint` can throw a raw `TypeError`.~~ CLOSED in Phase 1.**
+  `Array.isArray` throws when handed a revoked `Proxy`, and five call sites in
+  `src/core/RegistryContext.tsx` reached it with an unvalidated value: `isRecord`,
   `describeType`, the `children` check in `normalizeNavigationNode`, and the
-  `navigationTree` and `ribbonActions` checks in `normalizeBlueprint`. Thirteen
-  distinct field positions can steer a revoked `Proxy` into one of them.
-  **Not reachable through `register`** — its `try`/`catch` absorbs the throw and
-  returns a `ShellUXError`, so the "never throws" contract is intact. Only the
-  exported `validateBlueprint`, which has no catch, leaks it. The fix is to
-  guard **all five** sites, not just `describeType`; guarding one leaves the
-  other four live. Deferred because this file is held to a 100% branch gate and
-  each new guard needs its own test.
+  `navigationTree` and `ribbonActions` checks in `normalizeBlueprint`. Every field
+  position in the blueprint could steer a revoked `Proxy` into one of them, and the
+  path that actually bit was `describeType` rather than `isRecord`: `validateId`,
+  `validateText`, `validateFunction` and `validateViewComponent` `typeof`-check
+  first, `typeof` does not trap, and the failure path then builds its message.
+  **Never reachable through `register`** — its `try`/`catch` absorbed the throw and
+  returned a `ShellUXError`, so the "never throws" contract was intact throughout;
+  only the exported `validateBlueprint`, which has no catch, leaked it.
+  **Fixed:** all five sites now go through a total `checkArray` helper that cannot
+  throw, and a revoked `Proxy` is an ordinary typed rejection naming the field.
+  *Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — a revoked
+  Proxy", which walks every field position that can reach one of the five sites,
+  asserts `ShellUXError` at each, and asserts the message names the value rather
+  than guessing its type. It was written failing first: 21 of its 23 cases failed
+  against the unguarded code with *"expected TypeError: Cannot perform 'IsArray' on
+  a … to be an instance of ShellUXError"*.
+- **`validateBlueprint` still propagates a throwing property getter untyped.**
+  OPEN, and narrower than the entry above. Reading a field off the payload is a
+  call into plugin code, a getter may throw anything, and the exported
+  `validateBlueprint` has no catch, so that value reaches its caller unchanged. It
+  is not a rejection the validator decided on, but a consumer catching only
+  `ShellUXError` is still surprised by it. **Not reachable through `register`.**
+  Not closed here because the fix is a contract decision — wrap every field read,
+  or give the export a result type — and not a guard. *Test:* pinned as a
+  known-current behaviour by `src/core/__tests__/validation.test.ts` —
+  "validateBlueprint — a revoked Proxy > still propagates whatever a throwing
+  property getter threw", so a future fix has to change that test deliberately.
 - **A revoked `Proxy` over a function passes `validateFunction` and
-  `validateViewComponent`.** Its `typeof` is `'function'`, so it satisfies the
-  check and is stored by reference like any other handler; calling it later
+  `validateViewComponent`.** OPEN. Its `typeof` is `'function'`, so it satisfies
+  the check and is stored by reference like any other handler; calling it later
   throws. This sits within ADR-0001's stated limit — the host validates shape at
   registration and does not vouch for what a handler does when invoked — but the
   host has **no invocation guard**, so the first caller wears the throw. Worth
   closing when a call site exists (ISSUE-002 for `isVisible`/`onExecute`,
-  ISSUE-004 for the view components).
-- **Untrusted fields are read through the prototype chain.** Field reads use
+  ISSUE-004 for the view components). **Untested, and untestable from here:** there
+  is no invocation site in `src/` to assert against, only the registration-time
+  acceptance, which is the current behaviour rather than the defect.
+- **Untrusted fields are read through the prototype chain.** OPEN. Field reads use
   plain property access with no `Object.hasOwn` guard, so a polluted
   `Object.prototype.badgeCount` is inherited by a navigation node that declares
   none. **No unvalidated value can be smuggled in this way** — an inherited
   value goes through exactly the same checks as an own value, so the type and
-  bound guarantees hold either way. This is a robustness and
-  least-surprise defect, **not a validation bypass**, and it is stated that way
-  deliberately rather than inflated.
+  bound guarantees hold either way. *Test:* the guarantee those checks provide is
+  pinned by `src/core/__tests__/validation.test.ts` — "validateBlueprint —
+  navigation tree > rejects %s as badgeCount" and the bound tests beside it, which
+  hold irrespective of where the value came from. **The inheritance itself has no
+  test** — nothing asserts that an inherited field is read at all — so the
+  "robustness and least-surprise" framing below is reasoning about the code, not a
+  measured property. It is a robustness defect, **not a validation bypass**, and it
+  is stated that way deliberately rather than inflated.
 
 ---
 
@@ -213,8 +312,9 @@ three horizontally resizable panes.
 Global host actions are left-aligned. Plugin-injected contextual actions are
 right-aligned and are sourced from the active extension's `ribbonActions`, each
 filtered through its visibility predicate against current shell state. The
-ribbon renders plugin-supplied labels as **text nodes only** — no HTML
-injection path may exist in this component.
+ribbon **must** render plugin-supplied labels as **text nodes only** — no HTML
+injection path may exist in this component. Nothing renders plug-in content today,
+so this is a gate on this issue, not a description of the host.
 
 **Panes (`src/components/layout/ShellLayout.tsx`,
 `src/components/layout/PaneWrapper.tsx`).** Three panes using
@@ -298,8 +398,15 @@ active extension id, and per-extension scoped UI state. Requirements:
   older version must migrate or discard, never blindly spread into live state.
 - Every read is **validated**, not trusted. Persisted data is user-writable via
   devtools and must be treated as untrusted input.
-- Per-extension state is **namespaced by extension id** so one extension cannot
-  read or clobber another's persisted state.
+- Per-extension state is **namespaced by extension id**, so two extensions cannot
+  collide on a key.
+  > **Read ADR-0001 Amendment E before writing this.** Namespacing delivers
+  > collision-resistance, not confinement, and this line previously specified
+  > "so one extension cannot read or clobber another's persisted state" — a
+  > requirement that **cannot be met in-page** by namespacing, exactly as badge
+  > scoping does not meet it today. Either this issue records the same limit
+  > honestly, or it depends on the real-isolation work Amendment E's trigger calls
+  > for. It must not ship with the stronger sentence and the weaker mechanism.
 - Writes are debounced. Dragging a divider must not produce a write per frame.
 
 **`src/hooks/useLocalStorageState.ts`.** The React binding: a state hook backed
@@ -360,8 +467,10 @@ Only rows intersecting the viewport (plus a small overscan) are mounted. The
 component is generic over the row item type and takes a row renderer from the
 extension; it does not know what a row means. Selection, keyboard navigation
 (arrow keys, Home/End, Page Up/Down) and scroll-into-view for the selected row
-are the virtualizer's responsibility. Row content supplied by an extension is
-rendered as text nodes; the virtualizer offers no HTML-injection path.
+are the virtualizer's responsibility. Row content supplied by an extension **must** be
+rendered as text nodes, and the virtualizer **must** offer no HTML-injection path.
+Nothing renders plug-in content today, so this is a gate on this issue, not a
+description of the host.
 
 **`src/components/error/FaultBoundary.tsx`.** A React error boundary placed
 around each pane and around each extension-supplied subtree. A plugin that
@@ -549,8 +658,15 @@ These apply to every issue above and are not restated per ticket.
 - **Accessibility.** WCAG 2.2 **AA** is the target. See `README.md` for the
   known conflicts that keep AAA out of scope.
 - **Untrusted plugin content.** Any surface that renders extension-supplied
-  strings renders them as text nodes. `dangerouslySetInnerHTML` is prohibited in
-  extension-content paths.
+  strings **must** render them as text nodes, and `dangerouslySetInnerHTML` is
+  prohibited in extension-content paths. **This is a requirement on future work,
+  explicitly untested, and must not be read as a protection the host delivers:**
+  no component in `src/` renders plug-in content today, so there is no render site
+  to test at. It becomes testable with the ribbon and pane chrome (ISSUE-002) and
+  the row virtualizer (ISSUE-004), and the gate for each of those is that the rule
+  arrives with a test at the render site. See `README.md`, "Stated as intent, with
+  no test — do not read as a control", which holds the same label and forbids
+  restating this as delivered until such a test exists.
 - **Performance.** Targets are stated in `README.md` and are explicitly
   unmeasured. No ticket may be closed on a performance claim that has not been
   benchmarked.

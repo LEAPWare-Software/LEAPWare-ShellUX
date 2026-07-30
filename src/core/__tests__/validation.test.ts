@@ -7,7 +7,9 @@ import {
   Pane3View,
   makeBlueprint,
   makeDeepTree,
+  makeExplodingPayload,
   makeManyActions,
+  makeRevokedProxy,
   makeWideTree,
 } from './fixtures';
 
@@ -469,6 +471,218 @@ describe('validateBlueprint — views', () => {
       makeBlueprint({ views: { pane2: Pane2View, pane3: true } }),
       'INVALID_FIELD',
       'views.pane3',
+    );
+  });
+});
+
+/**
+ * ============================================================================
+ * A REVOKED PROXY IS REFUSED AS A ShellUXError, NOT AS A RAW TypeError
+ * ============================================================================
+ * `Array.isArray` is the only type predicate in the validator that can THROW
+ * instead of answering: handed a revoked `Proxy` it raises a raw `TypeError`,
+ * because every internal method on a revoked `Proxy` does. Five call sites
+ * reached it with a value the validator had not yet classified — `isRecord`,
+ * `describeType`, the `children` check in `normalizeNavigationNode`, and the
+ * `navigationTree` and `ribbonActions` checks in `normalizeBlueprint` — and the
+ * exported `validateBlueprint` has no `catch` of its own, so that `TypeError`
+ * escaped to a caller that had been told to expect `ShellUXError`. A consumer
+ * catching only `ShellUXError` crashed.
+ *
+ * `expectRejection` asserts `toBeInstanceOf(ShellUXError)`, and a raw
+ * `TypeError` is not one, so every case here fails against an unguarded
+ * `Array.isArray`. The table walks every field position that can steer a revoked
+ * `Proxy` into one of the five sites, and the tests after it name the site each
+ * group lands in — so guarding only some of the five leaves this suite red.
+ *
+ * `typeof` is not a guard against this. It answers `"object"` for a revoked
+ * `Proxy` without trapping, which is why `id`, `name`, `version` and the
+ * function/component fields reach `describeType` on their failure path with the
+ * throw still ahead of them: `isRecord` is never consulted for them at all.
+ * ============================================================================
+ */
+describe('validateBlueprint — a revoked Proxy', () => {
+  /** A valid navigation node with one field replaced by a hostile value. */
+  function nodeWith(overrides: Record<string, unknown>): Record<string, unknown> {
+    return { id: 'root-a', label: 'Root A', ...overrides };
+  }
+
+  /** A valid ribbon action with one field replaced by a hostile value. */
+  function actionWith(overrides: Record<string, unknown>): Record<string, unknown> {
+    return {
+      id: 'act-one',
+      label: 'Act One',
+      icon: 'save',
+      isVisible: () => true,
+      onExecute: () => undefined,
+      ...overrides,
+    };
+  }
+
+  it.each<[string, unknown, ShellUXErrorCode, string | null]>([
+    // ---- reaches `isRecord` -------------------------------------------------
+    ['the whole payload', makeRevokedProxy(), 'INVALID_PAYLOAD', null],
+    [
+      'a navigation node',
+      makeBlueprint({ navigationTree: [makeRevokedProxy()] }),
+      'INVALID_FIELD',
+      'navigationTree[0]',
+    ],
+    [
+      'a ribbon action',
+      makeBlueprint({ ribbonActions: [makeRevokedProxy()] }),
+      'INVALID_FIELD',
+      'ribbonActions[0]',
+    ],
+    ['views', makeBlueprint({ views: makeRevokedProxy() }), 'INVALID_FIELD', 'views'],
+    [
+      'views.pane2',
+      makeBlueprint({ views: { pane2: makeRevokedProxy(), pane3: Pane3View } }),
+      'INVALID_FIELD',
+      'views.pane2',
+    ],
+    [
+      'views.pane3',
+      makeBlueprint({ views: { pane2: Pane2View, pane3: makeRevokedProxy() } }),
+      'INVALID_FIELD',
+      'views.pane3',
+    ],
+
+    // ---- reaches `describeType` on a failed `typeof` check ------------------
+    ['id', makeBlueprint({ id: makeRevokedProxy() }), 'INVALID_FIELD', 'id'],
+    ['name', makeBlueprint({ name: makeRevokedProxy() }), 'INVALID_FIELD', 'name'],
+    ['version', makeBlueprint({ version: makeRevokedProxy() }), 'INVALID_FIELD', 'version'],
+    [
+      'a navigation node id',
+      makeBlueprint({ navigationTree: [nodeWith({ id: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'navigationTree[0].id',
+    ],
+    [
+      'a navigation node label',
+      makeBlueprint({ navigationTree: [nodeWith({ label: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'navigationTree[0].label',
+    ],
+    [
+      'a ribbon action id',
+      makeBlueprint({ ribbonActions: [actionWith({ id: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].id',
+    ],
+    [
+      'a ribbon action label',
+      makeBlueprint({ ribbonActions: [actionWith({ label: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].label',
+    ],
+    [
+      'a ribbon action icon',
+      makeBlueprint({ ribbonActions: [actionWith({ icon: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].icon',
+    ],
+    [
+      'isVisible',
+      makeBlueprint({ ribbonActions: [actionWith({ isVisible: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].isVisible',
+    ],
+    [
+      'onExecute',
+      makeBlueprint({ ribbonActions: [actionWith({ onExecute: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].onExecute',
+    ],
+
+    // ---- reaches an `Array.isArray` check directly --------------------------
+    [
+      'navigationTree',
+      makeBlueprint({ navigationTree: makeRevokedProxy() }),
+      'INVALID_FIELD',
+      'navigationTree',
+    ],
+    [
+      'children',
+      makeBlueprint({ navigationTree: [nodeWith({ children: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'navigationTree[0].children',
+    ],
+    [
+      'ribbonActions',
+      makeBlueprint({ ribbonActions: makeRevokedProxy() }),
+      'INVALID_FIELD',
+      'ribbonActions',
+    ],
+
+    // ---- never reached an `Array.isArray` site, asserted anyway -------------
+    // These two are refused by a `typeof` check whose message does not consult
+    // `describeType`, so they were already `ShellUXError` before the guards
+    // landed. Pinned so that a later edit cannot route them into one.
+    [
+      'badgeCount',
+      makeBlueprint({ navigationTree: [nodeWith({ badgeCount: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'navigationTree[0].badgeCount',
+    ],
+    [
+      'isDisabled',
+      makeBlueprint({ ribbonActions: [actionWith({ isDisabled: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].isDisabled',
+    ],
+  ])('refuses %s as a ShellUXError', (_label, payload, code, field) => {
+    expectRejection(payload, code, field);
+  });
+
+  it('names a revoked Proxy in the message rather than guessing its type', () => {
+    // `typeof` a revoked Proxy is `"object"`, so the pre-guard fallback would
+    // have described it as `a value of type "object"` had it ever got that far.
+    // Naming it exactly is what tells a plugin author what was wrong.
+    expect(expectRejection(makeRevokedProxy(), 'INVALID_PAYLOAD', null).message).toContain(
+      'a revoked Proxy',
+    );
+    expect(
+      expectRejection(makeBlueprint({ id: makeRevokedProxy() }), 'INVALID_FIELD', 'id').message,
+    ).toContain('a revoked Proxy');
+    expect(
+      expectRejection(
+        makeBlueprint({ navigationTree: makeRevokedProxy() }),
+        'INVALID_FIELD',
+        'navigationTree',
+      ).message,
+    ).toContain('a revoked Proxy');
+  });
+
+  it('still propagates whatever a throwing property getter threw', () => {
+    // The one untyped escape the guards do NOT close, asserted rather than only
+    // documented. Reading a field off the payload is a call into plugin code and
+    // `validateBlueprint` has no catch, so this is NOT a ShellUXError — which is
+    // exactly why the docblock tells callers of the export to guard the call.
+    // `register` does catch: see "register — hostile payloads never crash the
+    // host" in `registry.test.tsx`.
+    const thrown = new Error('getter refused');
+    let caught: unknown;
+    try {
+      validateBlueprint(makeExplodingPayload(thrown));
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBe(thrown);
+    expect(caught).not.toBeInstanceOf(ShellUXError);
+  });
+
+  it('still refuses a revoked Proxy nested below a valid level', () => {
+    // The `children` guard sits inside the recursive walk, so it has to hold at
+    // depth and not only at the root.
+    expectRejection(
+      makeBlueprint({
+        navigationTree: [
+          nodeWith({ children: [nodeWith({ id: 'child-a', children: makeRevokedProxy() })] }),
+        ],
+      }),
+      'INVALID_FIELD',
+      'navigationTree[0].children[0].children',
     );
   });
 });

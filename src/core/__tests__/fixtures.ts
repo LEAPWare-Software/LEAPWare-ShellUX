@@ -183,6 +183,21 @@ export function makeUnclassifiableValue(): unknown {
 }
 
 /**
+ * A `Proxy` that has already been revoked.
+ *
+ * Every internal method on a revoked `Proxy` throws a raw `TypeError`, including
+ * the `IsArray` check that `Array.isArray` performs — which is what makes this
+ * the value that finds an unguarded `Array.isArray`. `typeof` is the one
+ * operation it answers honestly and without trapping (`"object"`), so it walks
+ * straight through a `typeof` check and detonates at the next real inspection.
+ */
+export function makeRevokedProxy(): unknown {
+  const { proxy, revoke } = Proxy.revocable<Record<string, unknown>>({}, {});
+  revoke();
+  return proxy;
+}
+
+/**
  * An array of `items` wrapped in a Proxy whose `length` returns each entry of
  * `lengths` in turn, then repeats the last.
  *
