@@ -103,6 +103,45 @@ export interface NavigationNode {
   readonly children?: readonly NavigationNode[];
 }
 
+/**
+ * A keyboard chord an extension asks the host to associate with one of its
+ * ribbon actions.
+ *
+ * **Structured, not a string.** A string such as `"Ctrl+Shift+K"` would need a
+ * parser at the trust boundary, and that parser would have to decide — for
+ * untrusted input — what `Cmd` means, whether `Esc` and `Escape` are the same
+ * token, how casing and interior whitespace are treated, and what a duplicated
+ * or unknown modifier does. Separate fields need none of those decisions: `key`
+ * is checked against a set and each modifier is checked with the same
+ * boolean-when-present rule `RibbonAction.isDisabled` already uses.
+ *
+ * **This binds `event.key`, not `event.code`** — a layout-dependent character
+ * rather than a physical switch. See ADR-0001 Amendment H for the decision and
+ * its consequence: on a German layout the physical Z key produces `event.key`
+ * `"y"`, so an extension declaring `key: 'z'` is bound to whichever physical key
+ * the user's layout puts `z` on. That is the right default for a *mnemonic*
+ * shortcut (`z` for undo reads as `z` to the user) and the wrong one for a
+ * *positional* shortcut; only mnemonics are offered.
+ *
+ * Nothing dispatches a hotkey today. It is declared and validated at
+ * registration — see `normalizeRibbonAction` in `RegistryContext.tsx` — and the
+ * dispatcher is Phase 2, because it needs the foreground extension and a live
+ * `RibbonContext`. Validation is pinned by "validateBlueprint — ribbon action
+ * hotkeys" in `src/core/__tests__/validation.test.ts`.
+ */
+export interface Hotkey {
+  /**
+   * A key name drawn from the host allowlist (`HOTKEY_KEYS` in
+   * `RegistryContext.tsx`), compared lowercased. The registry stores the
+   * lowercased form.
+   */
+  readonly key: string;
+  readonly ctrl?: boolean;
+  readonly alt?: boolean;
+  readonly shift?: boolean;
+  readonly meta?: boolean;
+}
+
 /** A single command contributed to the shell ribbon by an extension. */
 export interface RibbonAction {
   /** Must match `EXTENSION_ID_PATTERN`; unique within the owning extension. */
@@ -114,6 +153,27 @@ export interface RibbonAction {
   readonly icon: string;
   /** When `true` the action renders greyed out but still visible. */
   readonly isDisabled?: boolean;
+  /**
+   * Optional keyboard chord for this action.
+   *
+   * **It lives here rather than in a blueprint-level collection**, and that
+   * placement is the decision — see ADR-0001 Amendment H. Hanging the chord off
+   * the action means it inherits `MAX_RIBBON_ACTIONS`, inherits the duplicate
+   * walk that already visits every action, and inherits the containment story:
+   * a hotkey is a second way to fire *this* `onExecute`, gated by the same
+   * `isVisible` and the same `isDisabled`, so it adds no capability the ribbon
+   * did not already grant. It also gives a ribbon renderer something to emit as
+   * `aria-keyshortcuts`. The accepted cost is that a shortcut with no ribbon
+   * action cannot be declared; that is additively fixable later, and the reverse
+   * is not.
+   *
+   * **Declared and validated now; nothing dispatches it.** The registry checks
+   * the shape, the allowlist, the modifier rule and intra-extension uniqueness,
+   * then stores a frozen host-owned copy. There is no `keydown` listener
+   * anywhere in `src/` — pinned by "does not attach anything" in
+   * `src/core/__tests__/hotkeys.test.ts`.
+   */
+  readonly hotkey?: Hotkey;
   /**
    * Pure predicate deciding whether the action appears at all.
    *
@@ -275,6 +335,13 @@ export type ShellUXErrorCode =
   | 'RESERVED_ID'
   /** An id is already registered under a different blueprint. */
   | 'DUPLICATE_ID'
+  /**
+   * Two ribbon actions in one blueprint declared the same chord. Scoped to the
+   * blueprint on purpose: hotkeys are live only for the foreground extension, so
+   * two *different* extensions claiming the same chord is not a conflict and is
+   * not rejected. See ADR-0001 Amendment H.
+   */
+  | 'DUPLICATE_HOTKEY'
   /** A collection or string exceeded its declared bound. */
   | 'PAYLOAD_TOO_LARGE'
   /**
@@ -303,6 +370,7 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
   INVALID_ID: true,
   RESERVED_ID: true,
   DUPLICATE_ID: true,
+  DUPLICATE_HOTKEY: true,
   PAYLOAD_TOO_LARGE: true,
   REVOKED: true,
   REENTRANT_NOTIFY: true,

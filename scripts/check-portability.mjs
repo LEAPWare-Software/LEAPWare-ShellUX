@@ -43,6 +43,9 @@
  *                                 tracked filename resolves on Windows and
  *                                 macOS and fails on Linux.
  *   import-unresolved             An import that resolves to nothing tracked.
+ *                                 A target sitting untracked in the working tree
+ *                                 is the same violation and is reported with its
+ *                                 own message, because the fix is `git add`.
  *   unreadable-tracked-file       A path the index lists that the working tree
  *                                 does not have, which means a fresh clone and
  *                                 this tree would not agree.
@@ -69,7 +72,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
@@ -486,6 +489,38 @@ function normalisePosix(fromDirectory, specifier) {
   return segments.join('/');
 }
 
+/**
+ * Where a specifier would resolve on this working tree, ignoring the index.
+ *
+ * Consulted only after resolution against the index has already failed, and it
+ * changes nothing about whether that is a violation: an untracked file is absent
+ * from a clone, so the import genuinely breaks for whoever clones. What it changes
+ * is the sentence. "Resolves to no tracked file" reads as a typo when the target
+ * is plainly sitting on disk, and the one thing a reader needs — that it is
+ * untracked and that `git add` is the fix — is exactly what the generic message
+ * does not say.
+ *
+ * Returns the candidate that exists, or undefined when none does.
+ */
+function resolvesOnDisk(candidates) {
+  for (const candidate of candidates) {
+    try {
+      if (!statSync(resolve(REPO_ROOT, candidate)).isFile()) continue;
+      // stat answers case-insensitively on Windows and macOS, and a name this
+      // filesystem does not actually have would put a path into the `git add`
+      // advice that git would then record with the wrong case. The directory
+      // listing is byte-exact everywhere, so the hit is confirmed against it.
+      const slash = candidate.lastIndexOf('/');
+      const parent = slash === -1 ? REPO_ROOT : resolve(REPO_ROOT, candidate.slice(0, slash));
+      const name = slash === -1 ? candidate : candidate.slice(slash + 1);
+      if (readdirSync(parent).includes(name)) return candidate;
+    } catch {
+      // Absent, or a path this process cannot stat. Neither is a resolution.
+    }
+  }
+  return undefined;
+}
+
 function lineOf(text, offset) {
   let line = 1;
   for (let index = 0; index < offset && index < text.length; index += 1) {
@@ -550,7 +585,20 @@ function checkImports(files) {
             specifier,
           );
         } else {
-          report(file, line, 1, 'import-unresolved', 'an import that resolves to no tracked file', specifier);
+          const onDisk = resolvesOnDisk(candidates);
+          if (onDisk !== undefined) {
+            report(
+              file,
+              line,
+              1,
+              'import-unresolved',
+              `an import whose target "${onDisk}" exists in this working tree but is not tracked by git, ` +
+                `so a fresh clone would not have it and this import would fail there — run \`git add ${onDisk}\``,
+              specifier,
+            );
+          } else {
+            report(file, line, 1, 'import-unresolved', 'an import that resolves to no tracked file', specifier);
+          }
         }
       }
     }

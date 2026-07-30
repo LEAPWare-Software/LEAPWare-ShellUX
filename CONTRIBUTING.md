@@ -70,6 +70,37 @@ are exactly two acceptable responses:
 
 Weakening the acceptance test is not one of the options.
 
+### Stage a new file before you run `verify`
+
+The checker scans what git tracks, and `import-case` and `import-unresolved`
+resolve import specifiers against the **git index**, not against your working
+tree. So the first `npm run verify` after you add a new source file and import it
+fails at the very first gate, on an import whose target is sitting right there on
+disk:
+
+```
+src/core/RegistryContext.tsx:12:1  import-unresolved
+  found an import whose target "src/core/hotkeys.ts" exists in this working tree
+  but is not tracked by git, so a fresh clone would not have it and this import
+  would fail there — run `git add src/core/hotkeys.ts`
+```
+
+(The `found` line is wrapped above to fit this page; the checker emits it on one
+line.)
+
+**This is deliberate, and it is not a bug in the checker.** An untracked file is
+not in a clone. Whoever clones this repository gets the index, so an import
+pointing at a file you never staged is a genuinely broken import for everybody but
+you — which is the exact class of "works on my machine" failure ADR-0002 exists to
+catch, and it is worth more caught here than in CI on Linux. Resolving against the
+filesystem instead would make the check pass on the machine that made the mistake
+and fail nowhere else.
+
+The fix is `git add <path>`, before `npm run verify`, not after. The message above
+is the one that means "staging, not typing". A specifier that resolves to nothing
+on disk either still reports the generic `an import that resolves to no tracked
+file` — and that one is a real typo or a real missing file.
+
 ### The rules, by id
 
 | Rule id | What it reports |
@@ -91,7 +122,7 @@ Weakening the acceptance test is not one of the options.
 | `byte-order-mark` | A UTF-8 byte-order mark. |
 | `case-collision` | Two tracked paths differing only in case. |
 | `import-case` | An import whose case does not match the tracked filename. |
-| `import-unresolved` | An import that resolves to no tracked file. |
+| `import-unresolved` | An import that resolves to no tracked file. A target that exists in the working tree but was never staged is the same violation and reports its own message naming the `git add` that fixes it; see "Stage a new file before you run `verify`" above. |
 | `unreadable-tracked-file` | A path the index lists that the working tree does not have — a fresh clone and this tree would not agree. |
 
 ---

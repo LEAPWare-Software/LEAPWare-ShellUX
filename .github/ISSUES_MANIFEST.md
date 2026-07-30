@@ -592,6 +592,17 @@ plugin fault to confirm containment.
   selection. The `J`/`K` bindings must not fire while focus is in a text input
   or any editable surface, and must not conflict with the host's own shortcuts.
   Focus must remain visible and the selected row scrolled into view.
+
+  > **Constraint — see ADR-0001 Amendment H, Decision 8.** `J` and `K` must be
+  > implemented as key handling **local to the Pane 2 list view**, live only while
+  > that list holds focus, and must never be declared as a `RibbonAction.hotkey`
+  > or otherwise registered as a global shortcut — bare single-character keys
+  > fail WCAG 2.2 §2.1.4 Character Key Shortcuts at Level A. This constraint is a
+  > requirement on Phase 5 work and **has no test**, because no hotkey dispatcher
+  > exists. What *is* tested today is the narrower thing: `normalizeRibbonAction`
+  > rejects a modifier-less character-key `hotkey` at registration, per
+  > "validateBlueprint — the WCAG 2.1.4 modifier rule for character keys" in
+  > `src/core/__tests__/validation.test.ts`.
 - **Cross-pane event ordering.** Events emitted by one pane and consumed by
   another must arrive in a defined order, with no case where Pane 3 renders
   detail for a Pane 2 row that a later-arriving event has already replaced.

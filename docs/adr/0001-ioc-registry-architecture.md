@@ -14,8 +14,9 @@
 > are **still decision only** — nothing in `src/` evaluates a predicate or
 > catches a render error yet.
 >
-> Six amendments have been made and are recorded at the end of this document —
-> the header previously named only the first two, which was itself out of date:
+> Eight amendments have been made and are recorded at the end of this document —
+> the header previously named only the first two, and then only the first six,
+> each time going out of date as the next one landed:
 >
 > - **A** — normalisation at the trust boundary.
 > - **B** — `unregister` carries no authorisation.
@@ -32,6 +33,12 @@
 >   freeze that did not exist, and E's claim to have left no false security claim
 >   standing was itself false. F also removes provider-teardown revocation after two
 >   failed implementations, and reclassifies `isVisible` purity as a guardrail.
+> - **G** — **no security claim without a named test.** The review-time rule that
+>   governs how every sentence in A–F may be written, and the seven rounds of
+>   evidence for why it was needed.
+> - **H** — **plug-in-registered keyboard shortcuts.** `RibbonAction.hotkey`:
+>   where the field lives and why, the `event.key` binding, the WCAG 2.1.4
+>   modifier rule, and why cross-extension conflict rejection was refused.
 
 ---
 
@@ -1719,6 +1726,287 @@ only `unregister`. D7 now activates two extensions and pins `release` on one and
   a genuinely new property needing its own analysis first.
 - **Neutral.** No behaviour changed except the one nested `try` in the sweep effect.
   Findings 1 through 6 in the table above were all prose.
+
+---
+
+## Amendment H — Plug-in-registered keyboard shortcuts
+
+**Date:** 2026-07-30 · **Status:** Accepted · **Amends:** Amendment A (the
+normalisation rules now cover a nested optional object), Amendment C (the
+`onExecute` capability, which a hotkey is a second route to), and the original
+Decision §1 (the blueprint contract, which gains one optional field)
+
+### What changed
+
+`RibbonAction` gains one optional field:
+
+```ts
+export interface Hotkey {
+  readonly key: string;      // a key name from the host allowlist, compared lowercased
+  readonly ctrl?: boolean;
+  readonly alt?: boolean;
+  readonly shift?: boolean;
+  readonly meta?: boolean;
+}
+
+export interface RibbonAction {
+  // ...existing fields unchanged...
+  readonly hotkey?: Hotkey;  // declared and validated now; dispatched in Phase 2
+}
+```
+
+`ShellUXErrorCode` gains `DUPLICATE_HOTKEY`. `RegistryContext.tsx` gains the
+`HOTKEY_KEYS` allowlist beside `REGISTRY_LIMITS`, and `normalizeHotkey`.
+`src/core/hotkeys.ts` is new and holds three pure functions — `hotkeyToken`,
+`describeHotkey`, `matchesHotkey`. Nothing else changed: the `Map` store,
+`RESERVED_IDS`, `EXTENSION_ID_PATTERN`, the single-read discipline, normalisation
+and the deep-freezing are untouched.
+
+**Nothing dispatches a hotkey.** There is no `keydown` listener anywhere in
+`src/`, no `useHotkeyDispatcher`, and no evaluation site. This amendment records
+a *declaration and validation* decision, in the same present-tense-honest
+register Amendment G requires of `isVisible`. *Tests:* "hotkeys module — does not
+attach anything" in `src/core/__tests__/hotkeys.test.ts`, which asserts that the
+module's entire export surface is the three helpers and that calling all three
+registers no listener on `window` or `document`.
+
+### Decision 1 — the field lives on `RibbonAction`, not on the blueprint
+
+A blueprint-level `hotkeys` collection was the obvious alternative and was
+rejected. Hanging the chord off the action means it **inherits four properties
+that already exist and are already tested**, rather than needing four new ones:
+
+1. **The bound.** `MAX_RIBBON_ACTIONS` is 128, and it is applied to the count the
+   host actually walks rather than to a `length` a Proxy can revise afterwards.
+   A hotkey cannot exist without an action, so the number of chords one extension
+   can declare is bounded by that same check, with no second limit to keep in
+   sync. *Tests:* "register — a lying `length` cannot grow the payload after it is
+   measured" in `src/core/__tests__/registryNormalization.test.tsx`.
+2. **The uniqueness walk.** `normalizeBlueprint` already threads a `seenIds` set
+   through every action to reject a repeated action id. Chord uniqueness is
+   decided in that same single pass by threading a second `Set<string>` keyed on
+   the canonical token — no second traversal, and no possibility of the two walks
+   disagreeing about how many actions there are. *Tests:* "validateBlueprint —
+   duplicate hotkeys within one extension" in
+   `src/core/__tests__/validation.test.ts`.
+3. **The containment story.** A hotkey is a *second way to fire an `onExecute`
+   the ribbon could already fire*, gated by the same `isVisible` and the same
+   `isDisabled`. It therefore grants an extension no capability the ribbon did
+   not already grant it, and Phase 2's dispatcher inherits whatever containment
+   Phase 2 builds for the ribbon rather than needing its own. A blueprint-level
+   collection would have needed its own handler field, and that handler would
+   have been a new call site with a new argument list to design.
+4. **The rendering story.** A ribbon button and its shortcut are the same
+   affordance to a user. With the chord on the action, the Phase-2 renderer has
+   what it needs for `aria-keyshortcuts` and for a tooltip **in the object it is
+   already rendering**; `describeHotkey` exists for exactly that.
+
+**The cost, stated rather than glossed:** a shortcut that is not also a ribbon
+action cannot be declared. That is accepted for v1. It is additively fixable — a
+blueprint-level collection can be added later without changing the meaning of
+anything written against this contract — and the reverse is not: having shipped a
+collection, moving chords onto actions would break every extension that used it.
+
+### Decision 2 — structured fields, not a string
+
+`"Ctrl+Shift+K"` would need a parser, and that parser would sit **at the trust
+boundary**, deciding for untrusted input what `Cmd` means versus `Meta` versus
+`Super`, whether `Esc` and `Escape` are one token, what `ctrl + shift + k` with
+interior spaces means, what `Ctrl+Ctrl+K` means, and what a chord with no key at
+all means. Every one of those is a decision that can be got wrong, and none of
+them buys anything: the structured form validates with helpers that already
+exist — a `Set` membership test for the key, and the same
+boolean-when-present rule `isDisabled` already uses for each modifier. There is
+no parser and therefore no parser bugs. *Tests:* "validateBlueprint — ribbon
+action hotkeys" in `src/core/__tests__/validation.test.ts`.
+
+### Decision 3 — this binds `event.key`, not `event.code`
+
+**This is a real decision with a real consequence, and it is recorded before
+Phase 2 builds a dispatcher on it.**
+
+`event.key` is the character the layout produces; `event.code` is the physical
+switch. Binding `key` means a chord declared `{ key: 'z', ctrl: true }` fires on
+whichever physical key the user's layout puts `z` on. On a German QWERTZ layout
+the key in the position a US keyboard calls Z produces `event.key` `"y"`, so that
+chord fires on the physically-different key that says Z on its cap — which is the
+*correct* behaviour for a mnemonic shortcut, and the wrong one for a positional
+one.
+
+The choice is deliberate because the shortcuts this contract offers are
+mnemonics: an extension author writes `k` because the command is *Kill* or
+*Compose*, not because of where that key sits. `event.code` would give a stable
+physical position and a shortcut whose printed name is wrong for most of the
+world. Positional binding is not offered at all rather than offered as a second
+mode, because a contract with both needs the author to understand the difference,
+and getting it wrong is invisible on the author's own keyboard.
+
+`matchesHotkey` therefore compares `event.key.toLowerCase()` against the stored
+lowercased key, and reads no other field of the event. *Tests:* "matchesHotkey"
+in `src/core/__tests__/hotkeys.test.ts`.
+
+### Decision 4 — the allowlist, and what is deliberately absent
+
+`HOTKEY_KEYS` is 61 `event.key` names: the 26 Latin letters, the 10 digits, `f1`
+through `f12`, the four arrows, and `home`, `end`, `pageup`, `pagedown`, `enter`,
+`escape`, `delete`, `insert`, `backspace`. An allowlist rather than "any string",
+for the same reason ids get one: the value arrives from an untrusted manifest and
+the set of keys a shell can safely let a plugin claim is small and closed.
+
+Three groups are absent on purpose, and the omissions are the part of the list
+worth reviewing:
+
+- **`tab`.** Tab is how a keyboard user moves between controls. An extension that
+  owned it would break focus order for every user of the shell — WCAG 2.1
+  Success Criteria **2.1.1 Keyboard** and **2.4.3 Focus Order**. No chord
+  involving Tab is worth that, so it is not offered at all rather than offered
+  with a warning nobody reads.
+- **`space`.** Space activates the focused control: a button, a checkbox, a row.
+  Claiming it globally means the focused control stops responding to the key that
+  operates it.
+- **Every modifier as a key** — `control`, `alt`, `shift`, `meta`, `capslock`,
+  `altgraph`. A modifier is a *field* on `Hotkey`. Naming one as the `key` would
+  describe a chord that fires on the modifier's own keydown, before the user has
+  pressed the key they were reaching for.
+
+*Tests:* the rejection table in "validateBlueprint — ribbon action hotkeys" walks
+all three groups explicitly, and "accepts every key in the host allowlist" pins
+the size at 61 so that a key joining or leaving the list is a failing test rather
+than a silent widening.
+
+### Decision 5 — a single-character key must carry ctrl, alt or meta
+
+**This is the WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts, Level A
+conformance route.** It is not a style preference and it is not negotiable
+downward.
+
+2.1.4 says that if a keyboard shortcut is implemented using only letter,
+punctuation, number or symbol characters, then at least one of three things must
+be true: the shortcut can be turned off, it can be remapped to include a
+non-printable key, or it is active only when the relevant component has focus.
+This shell offers none of those three in Phase 1 — there is no settings surface
+to turn a chord off, no remapping UI, and the Phase-2 dispatcher is specified to
+be extension-scoped rather than component-scoped. So the criterion is met the
+fourth way: **the declaration is refused.** A chord whose key is one character
+must carry `ctrl`, `alt` or `meta`.
+
+**`shift` does not count**, and that is the part most likely to be argued with.
+Shift+K is still a character key; it produces `K`. A speech-input user's dictation
+emits characters, and a user typing into any surface the shortcut is live over
+produces them too. Shift changes which character, not whether one is produced.
+
+Function keys and the named navigation and editing keys are exempt, because they
+are not characters: no dictation and no typing produces `F5` or `ArrowDown`.
+
+The rejection message names the criterion, so an author who hits it learns why
+rather than working around it. *Tests:* "validateBlueprint — the WCAG 2.1.4
+modifier rule for character keys" in `src/core/__tests__/validation.test.ts`,
+which asserts the message contains `2.1.4`, `Character Key Shortcuts` and
+`Level A`, pins shift-alone as a rejection, and derives the exempt set from
+`HOTKEY_KEYS` itself so a new named key is covered the moment it lands.
+
+### Decision 6 — cross-extension conflicts are impossible, and REJECTING them was refused
+
+**Hotkeys are scoped to the foreground extension.** Only the foreground
+extension's chords are live, exactly as only its `ribbonActions` appear on the
+ribbon. Two extensions declaring `Ctrl+K` is therefore not a conflict, and both
+registrations succeed. *Tests:* "lets two DIFFERENT extensions declare the same
+chord" in `src/core/__tests__/validation.test.ts`.
+
+Rejecting a chord at registration because another extension already claimed it
+was considered and **refused, on three independent grounds**:
+
+1. **It would make registration order semantically load-bearing.** In a lazily
+   loaded local-first shell, registration order is whichever module's import
+   graph resolves first. That is a function of bundler chunking, network timing
+   and cache state — so the same two extensions could produce different winners
+   across two boots of the same machine. This registry's headline property is
+   that duplicates fail **deterministically**; a rule whose outcome depends on
+   load order would be the only non-deterministic rejection in it.
+2. **It would hand any extension a squatting attack.** Register first, declare
+   128 chords — the `MAX_RIBBON_ACTIONS` ceiling — and every one of them is
+   denied to everybody else for the life of the session. The shell has no
+   ownership model and deliberately no authorisation on `unregister`
+   (Amendment B), so there would be nothing to appeal to and no way to unstick
+   it. Amendment E's threat model concedes that extensions are same-origin
+   JavaScript in one page; adding a first-come land grab to that would be adding
+   a new denial-of-service surface in exchange for a conflict that scoping
+   already prevents.
+3. **`normalizeBlueprint` has no view of the store, and giving it one would be
+   the larger change.** It is a pure function of one candidate payload, which is
+   what makes `validateBlueprint` exportable and testable without a provider.
+   Threading the registry into it would couple validation to registry state and
+   make the same blueprint validate or fail depending on what else happens to be
+   registered — the time-of-check/time-of-use shape Amendment A exists to close.
+
+What *is* rejected is a chord repeated **inside one blueprint**, because that is
+an unambiguous author error with a deterministic answer: the second declaration
+loses, with `DUPLICATE_HOTKEY` naming `ribbonActions[n].hotkey`. Uniqueness is
+decided on the canonical token, so a chord spelled with its fields in a different
+order, with an absent modifier where another wrote `false`, or with a different
+key casing, is the same chord. *Tests:* "validateBlueprint — duplicate hotkeys
+within one extension".
+
+### Decision 7 — the stored chord is a fresh, frozen, fully-materialised object
+
+The normalised `Hotkey` is a host-owned object with **all four modifiers present
+as explicit booleans**, frozen before it is assigned into the action, which is
+itself frozen — the same rule Amendment A set for every other validated field.
+Two things follow, and the second is the reason the first is worth the lines:
+
+- The plugin's own object is never stored, so editing it after registration
+  changes nothing. *Tests:* "is unaffected by the plugin mutating its own hotkey
+  afterwards" and "freezes the stored hotkey" in
+  `src/core/__tests__/registryNormalization.test.tsx`.
+- **`hotkeyToken` becomes a total function with no `undefined` branch.** The
+  canonical token is what deduplicates today and what a dispatcher will look up
+  by later; if it had to ask "absent or `false`?" on four fields, that is four
+  `??` operators, and the 100% branch gate over `src/core/**` charges for every
+  one of them. Materialising the four at the boundary means the token function is
+  four unconditional reads.
+
+### Decision 8 — ISSUE-005's J/K list navigation stays view-local
+
+Recorded here so Phase 5 does not relitigate it. `.github/ISSUES_MANIFEST.md`
+specifies that Arrow keys plus `J`/`K` move the Pane 2 selection. **Those are not
+hotkeys in the sense of this amendment and must not be reimplemented as one.**
+
+`J` and `K` are bare single-character keys. Declared as global shortcuts they
+would fail WCAG 2.2 §2.1.4 at Level A for exactly the reason Decision 5 gives —
+and `normalizeRibbonAction` would refuse the declaration, which is the rule doing
+its job rather than an obstacle to route around. They are legitimate as **key
+handling local to the Pane 2 list view**, active only while that list has focus,
+which is 2.1.4's third conformance route ("active only on focus") and is also
+what the manifest's own edge case requires when it says the bindings "must not
+fire while focus is in a text input or any editable surface". That belongs in the
+Pane 2 view with ISSUE-004's virtualizer, not in this contract.
+
+### Consequences
+
+- **Positive.** An extension can declare a shortcut today, in a shape a
+  dispatcher can consume unchanged, and get the allowlist, the accessibility rule
+  and the uniqueness check enforced at registration rather than discovering them
+  when the ribbon lands.
+- **Positive.** The accessibility rule is enforced by the *host*, at the one door
+  every extension must pass through, rather than being a line in `DEVELOPER.md`
+  asking authors to be careful. It is **entry-point validation** in this
+  document's vocabulary — real at the documented door, and bypassable by a caller
+  who reaches host internals another way, exactly like every other blueprint
+  check.
+- **Negative — accepted.** A shortcut with no ribbon action cannot be declared.
+  See Decision 1.
+- **Negative — accepted.** `event.key` binding means a chord's physical position
+  moves with the user's layout. See Decision 3.
+- **Negative — accepted.** Two extensions may claim the same chord, so what a
+  chord does depends on which extension is in front. That is the same rule the
+  ribbon already follows and it is the alternative to Decision 6's three
+  failures, but it does mean a user's muscle memory is per-extension.
+- **Neutral.** No existing behaviour changed. Every one of the 384 tests that
+  existed before this amendment still passes untouched, because `hotkey` is
+  optional and absent from every fixture that does not name it.
+- **Neutral.** `src/core/hotkeys.ts` is a new file under the 100% coverage gate,
+  and it is deliberately trivial: three pure functions, no DOM, no React, no
+  state. The interesting code is the dispatcher, and the dispatcher is Phase 2.
 
 ---
 
