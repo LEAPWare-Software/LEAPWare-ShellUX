@@ -6,10 +6,25 @@ coverage/
 
 # Editor / OS
 .vscode/*
-!.vscode/extensions.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Agent / assistant local state.
+#
+# These are per-machine files, not project configuration. They were previously
+# ignored only by the author's *global* gitignore, which does not travel with a
+# clone - so on a second laptop they showed up untracked and one `git add .` away
+# from being committed. Listed here so the repository ignores them itself.
+#
+# `.claude/` is deliberately NOT ignored wholesale: project-shared agent config
+# can legitimately live there and must stay committable.
+.claude/settings.local.json
+.claude/*.local.json
+.claude/shell-snapshots/
+.claude/todos/
+.claude/statsig/
+.claude/history.jsonl
 
 # Logs
 *.log
@@ -19,6 +34,9 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Env
+#
+# Nothing in this repository reads an environment variable, so there is nothing to
+# configure and no `.env.example` to un-ignore. These patterns stay as a guard
+# against a secret file arriving later, not as a hint that one is expected.
 .env
 .env.*
-!.env.example

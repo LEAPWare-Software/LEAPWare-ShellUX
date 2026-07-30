@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ExtensionRegistryProvider, useRegistry } from '../RegistryContext';
@@ -32,7 +32,7 @@ import { makeBlueprint, Pane2View, Pane3View } from './fixtures';
  * ============================================================================
  */
 
-function Providers({ children }: { children: ReactNode }): JSX.Element {
+function Providers({ children }: { children: ReactNode }): ReactElement {
   return (
     <ExtensionRegistryProvider>
       <ShellHostProvider>{children}</ShellHostProvider>
@@ -107,7 +107,7 @@ function expectShellUXError(call: () => void): ShellUXError {
 
 describe('cross-pane reactivity', () => {
   it('re-renders a sibling pane when another pane sets the selected item', () => {
-    function WritingPane(): JSX.Element {
+    function WritingPane(): ReactElement {
       const store = useShellStore();
       const shell = useMemo(() => createShellAPI(store), [store]);
       return (
@@ -122,7 +122,7 @@ describe('cross-pane reactivity', () => {
       );
     }
 
-    function ObservingPane(): JSX.Element {
+    function ObservingPane(): ReactElement {
       const context = useShellContext();
       return <span data-testid="observer">{context.selectedItemId ?? 'nothing'}</span>;
     }
@@ -147,7 +147,7 @@ describe('cross-pane reactivity', () => {
   it('gives every subscriber the same snapshot, so panes cannot tear', () => {
     const seen: Array<Readonly<RibbonContext>> = [];
 
-    function Recorder(): JSX.Element {
+    function Recorder(): ReactElement {
       const context = useShellContext();
       seen.push(context);
       return <span />;
@@ -182,7 +182,7 @@ describe('cross-pane reactivity', () => {
   it('stops subscribing when a pane unmounts', () => {
     let renders = 0;
 
-    function Counter(): JSX.Element {
+    function Counter(): ReactElement {
       useShellContext();
       renders += 1;
       return <span />;
@@ -212,7 +212,7 @@ describe('cross-pane reactivity', () => {
   it('does not re-render when a field is set to the value it already holds', () => {
     let renders = 0;
 
-    function Counter(): JSX.Element {
+    function Counter(): ReactElement {
       useShellContext();
       renders += 1;
       return <span />;
@@ -511,7 +511,7 @@ describe('provider discipline', () => {
   it('there is exactly one host-owned store behind every facade', () => {
     const seen = new Set<ShellStateStore>();
 
-    function Probe(): JSX.Element {
+    function Probe(): ReactElement {
       const store = useShellStore();
       const stable = useRef(store);
       seen.add(store);

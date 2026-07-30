@@ -1,5 +1,5 @@
 import { StrictMode, useEffect } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { act, render, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ExtensionRegistryProvider, useRegistry, useRegistryRevision } from '../RegistryContext';
@@ -12,7 +12,7 @@ interface Probe {
   readonly revision: number;
 }
 
-function Wrapper({ children }: { children: ReactNode }): JSX.Element {
+function Wrapper({ children }: { children: ReactNode }): ReactElement {
   return <ExtensionRegistryProvider>{children}</ExtensionRegistryProvider>;
 }
 

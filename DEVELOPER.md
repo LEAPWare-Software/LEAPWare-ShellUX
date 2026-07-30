@@ -1079,13 +1079,23 @@ drift and give you passing tests against an API that no longer exists.
 
 The member list has landed, so here is the whole stub. Keep it typed as
 `IShellAPI` rather than as a structural literal — that is what makes the
-compiler tell you when the contract grows:
+compiler tell you when the contract grows.
+
+**The imports below are relative, and deliberately so.** This repository declares
+no path alias — there is no `paths` entry in `tsconfig.json` and no
+`resolve.alias` in either Vite config — so a bare `src/core/...` specifier does
+not resolve, and every one of the host's own imports is relative. An alias would
+have to be declared in three separate files that nothing forces to agree, and it
+would not exist at all in *your* build, which is where this snippet actually
+runs. So the paths are relative, and the depth below assumes this file lives at
+`src/extensions/my-ext/__tests__/shellStub.ts`. Count the `../` from wherever
+you put yours.
 
 ```ts
 import { vi } from 'vitest';
-// Adjust the relative depth to your own file's location.
-import { deepFreeze } from 'src/core/ShellAPI';
-import type { IShellAPI, RibbonContext } from 'src/core/types';
+// Relative to src/extensions/my-ext/__tests__/ — three levels up is src/.
+import { deepFreeze } from '../../../core/ShellAPI';
+import type { IShellAPI, RibbonContext } from '../../../core/types';
 
 const context: Readonly<RibbonContext> = Object.freeze({
   activeExtensionId: 'my-ext',

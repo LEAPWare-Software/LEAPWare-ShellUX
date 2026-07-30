@@ -1,6 +1,6 @@
 import { StrictMode, useEffect } from 'react';
 import { act, render, renderHook, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { ExtensionRegistryProvider, useRegistry } from '../RegistryContext';
 import type { ExtensionRegistry } from '../RegistryContext';
@@ -41,7 +41,7 @@ import { makeBlueprint } from './fixtures';
  * ============================================================================
  */
 
-function Providers({ children }: { children: ReactNode }): JSX.Element {
+function Providers({ children }: { children: ReactNode }): ReactElement {
   return (
     <ExtensionRegistryProvider>
       <ShellHostProvider>{children}</ShellHostProvider>
@@ -130,7 +130,7 @@ function unregisterWithoutCommitting(registry: ExtensionRegistry, id: string): v
  * React logs the error it re-throws from a failed render. That is expected in
  * these cases, so the console is silenced rather than left to imply a fault.
  */
-function expectRenderToThrow(element: JSX.Element, message: string): void {
+function expectRenderToThrow(element: ReactElement, message: string): void {
   const consoleError = console.error;
   console.error = (): void => undefined;
   try {
@@ -146,7 +146,7 @@ function expectRenderToThrow(element: JSX.Element, message: string): void {
 
 describe('ExtensionHostBoundary severs the host activation controller', () => {
   it('refuses useActivation inside the boundary, so no plug-in can release a sibling', () => {
-    function HostileView(): JSX.Element {
+    function HostileView(): ReactElement {
       // The exploit: the controller carries `release`, and `release` revokes
       // whoever is named. This must not resolve at all.
       useActivation();
@@ -164,7 +164,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
   });
 
   it('keeps the boundary sticky, so a nested provider does not restore the controller', () => {
-    function HostileView(): JSX.Element {
+    function HostileView(): ReactElement {
       useActivation();
       return <span />;
     }
@@ -186,7 +186,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
   });
 
   it('refuses a boundary whose extensionId is not a string, which would clear the scope', () => {
-    function HostileView(): JSX.Element {
+    function HostileView(): ReactElement {
       useActivation();
       return <span />;
     }
@@ -220,7 +220,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
   it('gives a plug-in subtree facts and no capability', () => {
     let view: Record<string, unknown> | undefined;
 
-    function PluginView(): JSX.Element {
+    function PluginView(): ReactElement {
       view = useExtensionActivation() as unknown as Record<string, unknown>;
       return <span />;
     }
@@ -249,7 +249,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
   it('reports its own id and tracks the foreground', () => {
     const seen: Array<{ own: string; foreground: string | null; isForeground: boolean }> = [];
 
-    function PluginView(): JSX.Element {
+    function PluginView(): ReactElement {
       const activation = useExtensionActivation();
       seen.push({
         own: activation.extensionId,
@@ -304,7 +304,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
       return null;
     }
 
-    function PluginView(): JSX.Element {
+    function PluginView(): ReactElement {
       const registry = useRegistry();
       return (
         <button
@@ -355,7 +355,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
   });
 
   it('refuses useExtensionActivation outside a boundary', () => {
-    function HostComponent(): JSX.Element {
+    function HostComponent(): ReactElement {
       useExtensionActivation();
       return <span />;
     }
@@ -368,7 +368,7 @@ describe('ExtensionHostBoundary severs the host activation controller', () => {
   });
 
   it('refuses useActivation outside ShellHostProvider, as before', () => {
-    function Consumer(): JSX.Element {
+    function Consumer(): ReactElement {
       useActivation();
       return <span />;
     }
@@ -385,7 +385,7 @@ describe('revocation on unregister is synchronous', () => {
     let caught: unknown;
     let landed: string | null | undefined;
 
-    function HostButton(): JSX.Element {
+    function HostButton(): ReactElement {
       const registry = useRegistry();
       const activation = useActivation();
       const store = useShellStore();
@@ -548,7 +548,7 @@ describe('re-registering an id does not resurrect the previous handle', () => {
     let secondName: string | undefined;
     let secondShell!: IShellAPI;
 
-    function HostButton(): JSX.Element {
+    function HostButton(): ReactElement {
       const registry = useRegistry();
       const activation = useActivation();
       return (
@@ -898,7 +898,7 @@ describe('an ActiveExtension does not freeze the plug-in functions it carries', 
       return null;
     }
 
-    function PluginView(): JSX.Element {
+    function PluginView(): ReactElement {
       // `useRegistry` from inside a boundary. Documented as not severed, and it
       // is the whole counter-example.
       const registry = useRegistry();

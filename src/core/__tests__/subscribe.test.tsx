@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { act, render, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ExtensionRegistryProvider, useRegistry } from '../RegistryContext';
@@ -60,7 +60,7 @@ import { makeBlueprint } from './fixtures';
 
 const REFUSED = 'listener refused';
 
-function Providers({ children }: { children: ReactNode }): JSX.Element {
+function Providers({ children }: { children: ReactNode }): ReactElement {
   return (
     <ExtensionRegistryProvider>
       <ShellHostProvider>{children}</ShellHostProvider>
@@ -212,7 +212,7 @@ describe('a throwing listener suppresses the notification for every listener aft
       return null;
     }
 
-    function VictimPane(): JSX.Element {
+    function VictimPane(): ReactElement {
       const context = useShellContext();
       victimLog.push(context.selectedItemId);
       return <span />;

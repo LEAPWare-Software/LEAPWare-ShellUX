@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import {
@@ -34,7 +34,7 @@ interface Probe {
   readonly revision: number;
 }
 
-function Wrapper({ children }: { children: ReactNode }): JSX.Element {
+function Wrapper({ children }: { children: ReactNode }): ReactElement {
   return <ExtensionRegistryProvider>{children}</ExtensionRegistryProvider>;
 }
 

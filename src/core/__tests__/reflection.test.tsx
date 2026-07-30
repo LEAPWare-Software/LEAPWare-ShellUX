@@ -1,3 +1,4 @@
+import type { ReactElement } from 'react';
 import { act, render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ExtensionRegistryProvider, useRegistry } from '../RegistryContext';
@@ -226,7 +227,7 @@ function mountShellWithPlugin(): {
     return null;
   }
 
-  function PluginView(): JSX.Element {
+  function PluginView(): ReactElement {
     pluginView = useExtensionActivation() as unknown as Record<string, unknown>;
     return <span />;
   }

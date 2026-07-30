@@ -1,0 +1,73 @@
+name: Audit dependencies
+
+# Blocking production-dependency audit, gated on the dependency graph actually
+# changing.
+#
+# The problem this shape solves. `npm audit` compares a fixed lockfile against an
+# advisory database that is updated daily. So the result can change with no commit
+# at all, and an audit wired into every push means an advisory published overnight
+# turns `main` red on the next unrelated commit - a failure with no defect, no
+# author and no fix in the change that triggered it. That is how a real gate gets
+# reclassified as noise and then ignored.
+#
+# The split. Two things have to be true at once: a new advisory must be noticed,
+# and an unrelated push must not be blocked by advisory drift alone.
+#
+#   This workflow      Blocking. Runs only when package.json or package-lock.json
+#                      changed, which is the only kind of commit that can
+#                      *introduce* a vulnerable dependency. The person who changed
+#                      the dependency graph is the person who can act on the
+#                      result, and they are looking at the PR when it arrives.
+#   audit-schedule.yml Blocking, weekly, on a timer. This is what notices drift.
+#                      A newly published advisory fails a scheduled run, which
+#                      names the advisory and blames nobody's commit.
+#
+# The `paths` filter is what makes the distinction, and it is declarative on
+# purpose: a scripted `git diff` comparison would need its own base-ref handling
+# for pushes, PRs and first pushes to a new branch, and each of those is a way for
+# the gate to silently skip itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit production dependencies
+    # One platform. The advisory database and the lockfile are both
+    # platform-independent, so running this on the matrix would triple the cost
+    # for three identical answers.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      # No `npm ci`. `npm audit` resolves the tree from package-lock.json and
+      # queries the registry; it does not need node_modules, so installing would
+      # only add a minute.
+      #
+      # Production dependencies only. Dev-only advisories describe code that never
+      # reaches a user, and letting them fail this gate is what trains people to
+      # ignore it. --audit-level=high is the same threshold `npm run audit:prod`
+      # uses locally, so a laptop and CI give the same answer.
+      - name: Audit production dependencies
+        run: npm run audit:prod

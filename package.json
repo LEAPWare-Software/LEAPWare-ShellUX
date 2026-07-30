@@ -5,14 +5,20 @@
   "description": "LEAPWare ShellUX — a pluggable UI shell host.",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "packageManager": "npm@11.16.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "verify": "npm run lint && npm run typecheck && npm run test:coverage && npm run build"
+    "lint": "eslint . --max-warnings 0",
+    "check:portability": "node scripts/check-portability.mjs",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "verify": "npm run check:portability && npm run lint && npm run typecheck && npm run test:coverage && npm run build && npm run audit:prod"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

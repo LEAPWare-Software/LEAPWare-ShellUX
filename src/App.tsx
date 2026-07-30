@@ -1,7 +1,9 @@
+import type { ReactElement } from 'react';
+
 /**
  * Placeholder host surface. The three-pane layout, ribbon and navigation tree
  * arrive in ISSUE-002; ISSUE-001 only lands the extension registry.
  */
-export default function App(): JSX.Element {
+export default function App(): ReactElement {
   return <div className="p-4">ShellUX host</div>;
 }

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import type {
   ExtensionView,
   LEAPExtensionBlueprint,
@@ -813,7 +813,7 @@ export interface ExtensionRegistryProviderProps {
 
 export function ExtensionRegistryProvider({
   children,
-}: ExtensionRegistryProviderProps): JSX.Element {
+}: ExtensionRegistryProviderProps): ReactElement {
   // A Map, deliberately, not an object literal. Keys come from untrusted
   // plugin manifests; a Map has no prototype chain, so writing a key named
   // `__proto__` or `constructor` stores a plain entry and can never reach

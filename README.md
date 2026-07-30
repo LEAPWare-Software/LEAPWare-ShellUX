@@ -67,6 +67,96 @@ measured on a codebase this young.
 
 ---
 
+## Getting Started
+
+### Prerequisites
+
+| Tool | Requirement | Why this floor |
+|---|---|---|
+| **Node.js** | `^20.19.0 \|\| ^22.13.0 \|\| >=24` | Declared as `engines` in `package.json`. This is not a preference — it is the intersection of the `engines` constraints the dependency tree already carries. `package-lock.json` contains `^20.19.0 \|\| ^22.13.0 \|\| >=24` (via `@typescript-eslint`), `20 \|\| >=22` (via `test-exclude`, which rules out 21.x), and `^18.18.0 \|\| ^20.9.0 \|\| >=21.1.0` (ESLint). Nothing in the tree needs more. |
+| **npm** | 10 or newer; 11.16.0 is what the lockfile was written with | Pinned as `packageManager` so a laptop reaching for yarn or pnpm errors instead of silently resolving a different tree from the version ranges in `package.json`. |
+| **git** | any recent version | The portability check below enumerates tracked files with `git ls-files`. |
+
+`.nvmrc` tracks the major version CI uses, so `nvm use` (or `fnm use`) picks the
+right one without being told. CI reads the same file rather than duplicating the
+number.
+
+**The floor is enforced, not suggested.** The tracked `.npmrc` sets
+`engine-strict=true`, so a Node below the floor fails `npm ci` immediately with a
+readable message. Without it npm's default is to print `EBADENGINE`, carry on, and
+hand you a tree that breaks later somewhere unrelated.
+
+No other setup exists. There is nothing to configure, no environment variable to
+set, and no `.env` file — nothing in this repository reads one.
+
+### Install and run
+
+```bash
+git clone <repository-url>
+cd leapware-shellux
+npm ci
+npm run dev
+```
+
+`npm run dev` starts the Vite dev server on its default port, 5173, and prints the
+URL. What renders today is a placeholder — see Project Status above.
+
+### Scripts
+
+| Script | What it does |
+|---|---|
+| `npm run dev` | Vite dev server with hot module replacement, on port 5173. |
+| `npm run build` | Typechecks, then produces a production bundle in `dist/`. |
+| `npm test` | Runs the Vitest suite once. |
+| `npm run test:coverage` | Runs the suite and enforces the coverage gate in `vitest.config.ts` — 100% statements, branches, functions and lines over `src/core/**`. Exits non-zero if a threshold is unmet. |
+| `npm run typecheck` | `tsc --noEmit`. Emits nothing; only checks. |
+| `npm run lint` | ESLint at `--max-warnings 0`. There is no warning tier; a warning fails. |
+| `npm run check:portability` | Enforces ADR-0002 — see below. |
+| `npm run audit:prod` | `npm audit` over production dependencies at `--audit-level=high`. Needs network access. |
+| `npm run verify` | **The gate.** Runs all of the above in order: portability, lint, typecheck, coverage, build, audit. This is exactly what CI applies. |
+
+### The acceptance test
+
+> **A fresh clone on a different operating system runs `npm ci && npm run verify`
+> with no local setup and no edits.**
+
+That is the definition of done for every change in this repository, and it is
+mechanically enforced rather than merely stated. `npm run check:portability` runs
+`scripts/check-portability.mjs`, which scans every tracked file for absolute paths,
+home and scratch directories, developer login names, hardcoded hosts, ports and
+addresses, platform-only build commands, case-colliding filenames, committed
+carriage returns and byte-order marks, and any relative import in `src/` whose case
+does not match the tracked filename. It is a plain Node script with no
+dependencies, and it fails the build.
+
+The mandate itself is in [`CONTRIBUTING.md`](CONTRIBUTING.md); the reasoning, the
+rejected alternatives and the honest limits of what a checker can decide are in
+[`docs/adr/0002-no-local-environment-dependencies.md`](docs/adr/0002-no-local-environment-dependencies.md).
+
+`verify` needs network access, for `npm ci` and for the audit's advisory-database
+query. It is not an offline operation, and that is a declared property rather than
+a surprise.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same steps on
+`ubuntu-latest`, `macos-latest` and `windows-latest`. Three legs rather than one
+because this project is developed on more than one laptop, and because macOS
+support used to be *inferred* from the platform-specific optional dependencies in
+`package-lock.json` rather than observed. It is now observed.
+
+The production-dependency audit is a separate workflow on purpose. An advisory
+database that updates daily and a lockfile that does not means the audit result can
+change with no commit at all, so a per-push blocking audit would turn `main` red
+for a defect nobody introduced. Instead it blocks when `package.json` or
+`package-lock.json` changes — the only kind of commit that can introduce a
+vulnerable dependency — and blocks weekly on a timer, which is what notices a newly
+published advisory without blaming an unrelated commit. See
+[`.github/workflows/audit-dependencies.yml`](.github/workflows/audit-dependencies.yml)
+and [`.github/workflows/audit-schedule.yml`](.github/workflows/audit-schedule.yml).
+
+---
+
 ## What this is
 
 LEAPWare-ShellUX is the container. You bring the product.
@@ -591,20 +681,24 @@ Extension authors: see the security section of
 
 | Document | Purpose |
 |---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | The rules for anything written into this repository, including the no-local-environment-dependencies mandate and what to do when its checker fails. |
 | [`DEVELOPER.md`](DEVELOPER.md) | Onboarding guide for third-party extension authors. |
 | [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) | The five-issue work breakdown, with specs, edge cases and definitions of done. |
 | [`docs/adr/0001-ioc-registry-architecture.md`](docs/adr/0001-ioc-registry-architecture.md) | Why a registry-based IoC contract, and what was rejected. Read **Amendment E** for why there is no boundary between extensions, **Amendment F** for the store freeze, and **Amendment G** for the rule that no security claim may be written without naming its test. |
+| [`docs/adr/0002-no-local-environment-dependencies.md`](docs/adr/0002-no-local-environment-dependencies.md) | Why no tracked file may depend on one developer's machine, why the rule is enforced by a script rather than by review, and what the script cannot decide. |
 
 ---
 
 ## Contributing
+
+The full rules are in [`CONTRIBUTING.md`](CONTRIBUTING.md). The short version:
 
 The project is pre-alpha and the core contract is still being written. The most
 useful contribution right now is review of the specification in
 `.github/ISSUES_MANIFEST.md` and of the architecture decision in
 `docs/adr/0001-ioc-registry-architecture.md`.
 
-Two standing rules for anything written into this repository, including
+Standing rules for anything written into this repository, including
 documentation:
 
 1. **Do not assert unmeasured results.** If it has not been benchmarked,
@@ -615,3 +709,15 @@ documentation:
    `.md` file or a docblock without naming the test that exercises it. See "The rule
    that governs how those words may be used" under Security posture, and ADR-0001
    Amendment G for the seven rounds of evidence behind it.
+4. **Nothing tracked may depend on one developer's machine.** No absolute path, no
+   home or scratch directory, no login or machine name, no hardcoded host, address
+   or undocumented port, no undeclared environment assumption, no platform-only
+   script or path separator, no case-colliding filename, no committed line ending
+   that contradicts `.gitattributes`. The acceptance test for any change is that a
+   **fresh clone on a different operating system runs `npm ci && npm run verify`
+   with no local setup and no edits.**
+
+   Unlike rule 3, this one is not a convention: `npm run check:portability` decides
+   every clause of it, it is the first step of `npm run verify`, and it is a CI step
+   on all three operating systems. See
+   [`docs/adr/0002-no-local-environment-dependencies.md`](docs/adr/0002-no-local-environment-dependencies.md).

@@ -1,0 +1,46 @@
+name: Scheduled dependency audit
+
+# The channel that notices advisory drift.
+#
+# audit-dependencies.yml only runs when the dependency graph changes, so it cannot
+# see an advisory published against a lockfile nobody touched. This workflow can:
+# it audits the same production tree against the current advisory database once a
+# week, on a timer, so a new advisory surfaces as a failing scheduled run rather
+# than as a red mark on whichever unrelated commit happened to land next.
+#
+# A failure here is real and needs a dependency bump. It just is not anybody's
+# commit's fault, and separating the two is the whole point.
+on:
+  schedule:
+    # 07:00 UTC every Monday. A fixed weekday start-of-week slot rather than a
+    # daily run: the advisory database moves daily, but a weekly cadence on a
+    # pre-alpha project with nine production dependencies is enough to notice
+    # something without generating a queue of runs nobody reads. UTC, and not a
+    # local timezone, because the runner has no opinion about where anyone lives.
+    - cron: '0 7 * * 1'
+  # So the audit can be re-run on demand after a fix, without waiting a week and
+  # without pushing a commit to trigger it.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit production dependencies (scheduled)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      # Identical to the blocking gate in audit-dependencies.yml and to
+      # `npm run audit:prod` on a laptop, deliberately: three places that must
+      # agree, all calling the one npm script that defines the threshold.
+      - name: Audit production dependencies
+        run: npm run audit:prod

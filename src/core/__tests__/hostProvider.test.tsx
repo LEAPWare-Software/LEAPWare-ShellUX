@@ -1,5 +1,5 @@
 import { act, render, renderHook } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { ExtensionRegistryProvider, useRegistry } from '../RegistryContext';
 import { useShellContext, useShellStore } from '../ShellAPI';
@@ -19,7 +19,7 @@ import { makeBlueprint } from './fixtures';
  * ============================================================================
  */
 
-function Providers({ children }: { children: ReactNode }): JSX.Element {
+function Providers({ children }: { children: ReactNode }): ReactElement {
   return (
     <ExtensionRegistryProvider>
       <ShellHostProvider>{children}</ShellHostProvider>
@@ -33,7 +33,7 @@ describe('hooks used outside ShellHostProvider', () => {
    * here, so the console is silenced for the duration rather than left to imply
    * something went wrong.
    */
-  function expectRenderToThrow(element: JSX.Element, message: string): void {
+  function expectRenderToThrow(element: ReactElement, message: string): void {
     const consoleError = console.error;
     console.error = (): void => undefined;
     try {
@@ -44,7 +44,7 @@ describe('hooks used outside ShellHostProvider', () => {
   }
 
   it('useShellStore refuses to invent a second store', () => {
-    function Consumer(): JSX.Element {
+    function Consumer(): ReactElement {
       useShellStore();
       return <span />;
     }
@@ -52,7 +52,7 @@ describe('hooks used outside ShellHostProvider', () => {
   });
 
   it('useShellContext refuses to read a store that is not there', () => {
-    function Consumer(): JSX.Element {
+    function Consumer(): ReactElement {
       useShellContext();
       return <span />;
     }
@@ -60,7 +60,7 @@ describe('hooks used outside ShellHostProvider', () => {
   });
 
   it('useActivation refuses to hand out a controller that owns nothing', () => {
-    function Consumer(): JSX.Element {
+    function Consumer(): ReactElement {
       useActivation();
       return <span />;
     }

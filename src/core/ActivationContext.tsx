@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useRegistry, useRegistryRevision } from './RegistryContext';
 import {
   ShellStoreContext,
@@ -274,7 +274,7 @@ export interface ShellHostProviderProps {
  * blueprint through the registry, and it watches the registry's revision so that
  * unregistering an extension revokes its handle.
  */
-export function ShellHostProvider({ children }: ShellHostProviderProps): JSX.Element {
+export function ShellHostProvider({ children }: ShellHostProviderProps): ReactElement {
   const registry = useRegistry();
   const revision = useRegistryRevision();
 
@@ -650,7 +650,7 @@ export interface ExtensionHostBoundaryProps {
 export function ExtensionHostBoundary({
   extensionId,
   children,
-}: ExtensionHostBoundaryProps): JSX.Element {
+}: ExtensionHostBoundaryProps): ReactElement {
   const scope: unknown = extensionId;
   if (typeof scope !== 'string') {
     throw new Error(

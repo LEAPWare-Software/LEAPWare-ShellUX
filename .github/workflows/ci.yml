@@ -18,30 +18,63 @@ concurrency:
 
 jobs:
   verify:
-    name: Lint, typecheck, coverage, build
-    # Ubuntu deliberately, not Windows. Development happens on Windows with
-    # core.autocrlf=true and a case-insensitive filesystem, so this is the leg
-    # that catches case-mismatched imports and CRLF regressions before they
-    # reach anyone else.
-    runs-on: ubuntu-latest
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    # Three operating systems, because this project is developed on more than one
+    # laptop and cross-platform support was previously *inferred* from the
+    # platform-specific optional dependencies in package-lock.json rather than
+    # observed. Each leg earns its place by catching something the others cannot:
+    #
+    #   ubuntu-latest   Case-sensitive filesystem. The only leg that fails on an
+    #                   import whose case does not match the file on disk, and the
+    #                   reference platform for CRLF regressions.
+    #   macos-latest    The darwin-arm64 leg of the lockfile's optional
+    #                   dependencies, and the only place a native rollup/esbuild
+    #                   binary for that platform is actually executed rather than
+    #                   assumed to exist.
+    #   windows-latest  Case-insensitive filesystem, a different path separator and
+    #                   a different default shell - the primary development
+    #                   platform, so a failure here breaks the person most likely
+    #                   to be working.
+    #
+    # fail-fast is off on purpose: when a change is platform-specific, the useful
+    # information is *which* platforms disagree, and cancelling the others throws
+    # exactly that away.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # node-version-file, not a literal: .nvmrc is tracked so that a laptop and
+      # CI agree by construction instead of by someone remembering to edit both.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       # ci, not install: installs exactly what package-lock.json pins and fails
-      # if the lockfile and package.json have drifted.
+      # if the lockfile and package.json have drifted. The tracked .npmrc sets
+      # engine-strict, so this also fails outright on a Node below the floor
+      # declared in package.json rather than warning and continuing.
       - name: Install dependencies
         run: npm ci
 
       # Steps are ordered cheapest and most informative first, so a run fails on
       # the most actionable error available rather than the slowest one.
+
+      # The mechanical half of ADR-0002. First because it is the fastest step in
+      # the job and because a portability violation invalidates every result after
+      # it: there is no point knowing the tests pass on one machine if the tree
+      # cannot be cloned onto another.
+      - name: Check portability
+        run: npm run check:portability
+
       - name: Lint
         run: npm run lint
 
@@ -57,16 +90,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      # Production dependencies only. The repo's known advisories are all
-      # dev-only transitives, so --omit=dev keeps this gate green today and
-      # meaningful the moment a real runtime advisory appears.
-      - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
-
       # always(): the coverage report is most useful precisely when the run
       # failed, so upload it even after a failing step.
+      #
+      # One leg only. The report is platform-independent, and upload-artifact@v4
+      # rejects a second upload under the same name, so three legs uploading
+      # "coverage" would turn a green matrix red.
       - name: Upload coverage report
-        if: always()
+        if: always() && matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: coverage
