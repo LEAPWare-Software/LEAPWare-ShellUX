@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { REGISTRY_LIMITS, validateBlueprint } from '../RegistryContext';
+import { HOTKEY_KEYS, REGISTRY_LIMITS, validateBlueprint } from '../RegistryContext';
 import { ShellUXError } from '../types';
-import type { ShellUXErrorCode } from '../types';
+import type { Hotkey, ShellUXErrorCode } from '../types';
 import {
   Pane2View,
   Pane3View,
+  makeAction,
   makeBlueprint,
   makeDeepTree,
   makeExplodingPayload,
@@ -435,6 +436,322 @@ describe('validateBlueprint — ribbon actions', () => {
   it('rejects one ribbon action beyond the maximum', () => {
     const ribbonActions = makeManyActions(REGISTRY_LIMITS.MAX_RIBBON_ACTIONS + 1);
     expectRejection(makeBlueprint({ ribbonActions }), 'PAYLOAD_TOO_LARGE', 'ribbonActions');
+  });
+});
+
+/**
+ * ============================================================================
+ * RIBBON ACTION HOTKEYS — DECLARED AND VALIDATED, NOT DISPATCHED
+ * ============================================================================
+ * `RibbonAction.hotkey` is optional, structured, and checked at the same door
+ * every other blueprint field is checked at. Nothing dispatches it — see
+ * `src/core/__tests__/hotkeys.test.ts`, "does not attach anything".
+ *
+ * Four rules carry weight here and each has its own group below:
+ *
+ *   1. The key must be in the host allowlist, compared lowercased. `tab` and
+ *      `space` are absent on purpose and are pinned as rejections, because an
+ *      allowlist's omissions are the part a later edit is most likely to undo.
+ *   2. Each modifier is a boolean when present, on the `isDisabled` pattern.
+ *   3. A single-character key must carry ctrl, alt or meta. This is the WCAG 2.2
+ *      §2.1.4 Character Key Shortcuts (Level A) conformance route, not a style
+ *      preference — shift alone does not satisfy it, because Shift produces a
+ *      character too.
+ *   4. A chord may not repeat inside one blueprint. It MAY repeat across
+ *      blueprints; hotkeys are scoped to the foreground extension, and rejecting
+ *      across extensions would make load order semantically load-bearing.
+ *      ADR-0001 Amendment H.
+ * ============================================================================
+ */
+describe('validateBlueprint — ribbon action hotkeys', () => {
+  /** Read the single stored action back out of a validated blueprint. */
+  function storedHotkey(hotkey: unknown): Hotkey | undefined {
+    const validated = validateBlueprint(makeBlueprint({ ribbonActions: [makeAction({ hotkey })] }));
+    return validated.ribbonActions[0]?.hotkey;
+  }
+
+  it('accepts an action with no hotkey at all, which is the common case', () => {
+    const validated = validateBlueprint(makeBlueprint());
+    expect(validated.ribbonActions[0]?.hotkey).toBeUndefined();
+    expect('hotkey' in (validated.ribbonActions[0] as object)).toBe(false);
+  });
+
+  it('treats an explicitly undefined hotkey as absent', () => {
+    expect(storedHotkey(undefined)).toBeUndefined();
+  });
+
+  it('stores a normalised chord with all four modifiers materialised', () => {
+    // The plugin declared two of the four. The stored record carries all four as
+    // explicit booleans, which is what makes `hotkeyToken` total.
+    expect(storedHotkey({ key: 'k', ctrl: true, shift: true })).toEqual({
+      key: 'k',
+      ctrl: true,
+      alt: false,
+      shift: true,
+      meta: false,
+    });
+  });
+
+  it('stores the lowercased key, whatever case the plugin used', () => {
+    expect(storedHotkey({ key: 'ArrowUp' })?.key).toBe('arrowup');
+    expect(storedHotkey({ key: 'K', ctrl: true })?.key).toBe('k');
+  });
+
+  it.each([
+    ['a string', 'ctrl+k'],
+    ['null', null],
+    ['an array', [{ key: 'k' }]],
+    ['a number', 7],
+    ['a boolean', true],
+  ])('rejects %s as a hotkey', (_label, hotkey) => {
+    expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey',
+    );
+  });
+
+  it('rejects a hotkey with no key', () => {
+    const error = expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey: { ctrl: true } })] }),
+      'MISSING_FIELD',
+      'ribbonActions[0].hotkey.key',
+    );
+    expect(error.message).toContain('ribbonActions[0].hotkey.key');
+  });
+
+  it.each([
+    ['a number', 75],
+    ['null', null],
+    ['an object', {}],
+    ['an array', ['k']],
+  ])('rejects %s as a hotkey key', (_label, key) => {
+    expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey: { key, ctrl: true } })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey.key',
+    );
+  });
+
+  it('accepts every key in the host allowlist', () => {
+    // Ctrl is added so that the single-character members clear the WCAG rule;
+    // that rule has its own group below.
+    for (const key of HOTKEY_KEYS) {
+      expect(storedHotkey({ key, ctrl: true })?.key).toBe(key);
+    }
+    // 26 letters + 10 digits + 12 function keys + 4 arrows + 9 named navigation
+    // and editing keys. Pinned so that a key quietly joining or leaving the
+    // allowlist is a failing test rather than a silent widening.
+    expect(HOTKEY_KEYS.size).toBe(61);
+  });
+
+  it.each([
+    ['tab, which owns focus order (WCAG 2.1.1, 2.4.3)', 'tab'],
+    ['space, which activates the focused control', 'space'],
+    ['a literal space character', ' '],
+    ['control as a key', 'control'],
+    ['alt as a key', 'alt'],
+    ['shift as a key', 'shift'],
+    ['meta as a key', 'meta'],
+    ['capslock', 'capslock'],
+    ['altgraph', 'altgraph'],
+    ['a function key past f12', 'f13'],
+    ['a multi-character letter run', 'kk'],
+    ['an empty string', ''],
+    ['a key with surrounding whitespace', ' k '],
+    ['a punctuation key', '/'],
+  ])('rejects %s as a hotkey key', (_label, key) => {
+    expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey: { key, ctrl: true } })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey.key',
+    );
+  });
+
+  it.each(['ctrl', 'alt', 'shift', 'meta'])('rejects a non-boolean "%s"', (modifier) => {
+    expectRejection(
+      makeBlueprint({
+        ribbonActions: [makeAction({ hotkey: { key: 'f5', [modifier]: 'yes' } })],
+      }),
+      'INVALID_FIELD',
+      `ribbonActions[0].hotkey.${modifier}`,
+    );
+  });
+
+  it.each(['ctrl', 'alt', 'shift', 'meta'])('treats an explicitly undefined "%s" as absent', (modifier) => {
+    expect(storedHotkey({ key: 'f5', [modifier]: undefined })).toEqual({
+      key: 'f5',
+      ctrl: false,
+      alt: false,
+      shift: false,
+      meta: false,
+    });
+  });
+
+  it('rejects a revoked Proxy as the hotkey, and as the key, as a ShellUXError', () => {
+    expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey: makeRevokedProxy() })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey',
+    );
+    expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey: { key: makeRevokedProxy() } })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey.key',
+    );
+    expectRejection(
+      makeBlueprint({
+        ribbonActions: [makeAction({ hotkey: { key: 'f5', ctrl: makeRevokedProxy() } })],
+      }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey.ctrl',
+    );
+  });
+});
+
+/**
+ * WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts, Level A.
+ *
+ * A shortcut that is a single printable character and nothing else is unusable
+ * for a speech-input user, whose dictation emits characters, and hostile to
+ * anyone typing into a surface the shortcut is live over. The criterion is met
+ * by turning the shortcut off, remapping it, or scoping it to focus — or by
+ * never creating one, which is the route taken: the registry refuses the
+ * declaration.
+ *
+ * This group is the reason the rule is testable at all in Phase 1. There is no
+ * dispatcher, so nothing observes a shortcut firing; what IS observable is that
+ * the host will not accept the declaration.
+ */
+describe('validateBlueprint — the WCAG 2.1.4 modifier rule for character keys', () => {
+  function expectHotkeyRejected(hotkey: Record<string, unknown>): ShellUXError {
+    return expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey',
+    );
+  }
+
+  function expectHotkeyAccepted(hotkey: Record<string, unknown>): void {
+    expect(() =>
+      validateBlueprint(makeBlueprint({ ribbonActions: [makeAction({ hotkey })] })),
+    ).not.toThrow();
+  }
+
+  it('rejects a bare single-character key and names the criterion', () => {
+    const error = expectHotkeyRejected({ key: 'k' });
+    expect(error.message).toContain('2.1.4');
+    expect(error.message).toContain('Character Key Shortcuts');
+    expect(error.message).toContain('Level A');
+  });
+
+  it('rejects a bare digit — a digit is a character key too', () => {
+    expectHotkeyRejected({ key: '7' });
+  });
+
+  it('rejects shift alone, because Shift produces a character', () => {
+    const error = expectHotkeyRejected({ key: 'k', shift: true });
+    expect(error.message).toContain('shift');
+  });
+
+  it('rejects all four modifiers explicitly false', () => {
+    expectHotkeyRejected({ key: 'k', ctrl: false, alt: false, shift: false, meta: false });
+  });
+
+  it.each([
+    ['ctrl', { key: 'k', ctrl: true }],
+    ['alt', { key: 'k', alt: true }],
+    ['meta', { key: 'k', meta: true }],
+    ['ctrl and shift', { key: 'k', ctrl: true, shift: true }],
+    ['alt and shift', { key: 'k', alt: true, shift: true }],
+    ['meta and shift', { key: 'k', meta: true, shift: true }],
+  ])('accepts a single-character key carrying %s', (_label, hotkey) => {
+    expectHotkeyAccepted(hotkey);
+  });
+
+  it('exempts every non-character key in the allowlist, which may be bare', () => {
+    // Derived from the allowlist rather than transcribed from it, so a key added
+    // to `HOTKEY_KEYS` is covered here the moment it lands. Every member longer
+    // than one character is a function key or a named navigation/editing key:
+    // none can be produced by dictation or by typing into a field, so 2.1.4 does
+    // not reach them.
+    const exempt = [...HOTKEY_KEYS].filter((key) => key.length > 1);
+    expect(exempt).toHaveLength(HOTKEY_KEYS.size - 36);
+    for (const key of exempt) {
+      expectHotkeyAccepted({ key });
+    }
+  });
+
+  it('exempts a bare named key carrying shift only', () => {
+    expectHotkeyAccepted({ key: 'arrowdown', shift: true });
+  });
+});
+
+describe('validateBlueprint — duplicate hotkeys within one extension', () => {
+  /** Two valid actions, each with the chord it is given. */
+  function twoActions(first: unknown, second: unknown): Record<string, unknown> {
+    return makeBlueprint({
+      ribbonActions: [
+        makeAction({ id: 'act-one', hotkey: first }),
+        makeAction({ id: 'act-two', hotkey: second }),
+      ],
+    });
+  }
+
+  it('rejects the same chord twice, with DUPLICATE_HOTKEY on the second action', () => {
+    const error = expectRejection(
+      twoActions({ key: 'k', ctrl: true }, { key: 'k', ctrl: true }),
+      'DUPLICATE_HOTKEY',
+      'ribbonActions[1].hotkey',
+    );
+    expect(error.message).toContain('ctrl+k');
+  });
+
+  it('sees through a different spelling of the same chord', () => {
+    // Absent and explicitly false are one chord, and so are two field orders.
+    expectRejection(
+      twoActions(
+        { key: 'k', ctrl: true },
+        { shift: false, ctrl: true, key: 'k', alt: false, meta: false },
+      ),
+      'DUPLICATE_HOTKEY',
+      'ribbonActions[1].hotkey',
+    );
+  });
+
+  it('sees through a different key casing', () => {
+    expectRejection(
+      twoActions({ key: 'arrowup' }, { key: 'ARROWUP' }),
+      'DUPLICATE_HOTKEY',
+      'ribbonActions[1].hotkey',
+    );
+  });
+
+  it('accepts two chords that differ only by one modifier', () => {
+    expect(() =>
+      validateBlueprint(twoActions({ key: 'k', ctrl: true }, { key: 'k', ctrl: true, shift: true })),
+    ).not.toThrow();
+  });
+
+  it('accepts two chords that differ only by key', () => {
+    expect(() =>
+      validateBlueprint(twoActions({ key: 'k', ctrl: true }, { key: 'j', ctrl: true })),
+    ).not.toThrow();
+  });
+
+  it('does not confuse an action with no hotkey for a duplicate of another', () => {
+    expect(() => validateBlueprint(twoActions(undefined, undefined))).not.toThrow();
+  });
+
+  it('lets two DIFFERENT extensions declare the same chord', () => {
+    // Deliberate: hotkeys are scoped to the foreground extension, so this is not
+    // a conflict. Rejecting it at registration would make load order
+    // semantically load-bearing. ADR-0001 Amendment H.
+    const chord = { key: 'k', ctrl: true };
+    const first = makeBlueprint({ id: 'ext-one', ribbonActions: [makeAction({ hotkey: chord })] });
+    const second = makeBlueprint({ id: 'ext-two', ribbonActions: [makeAction({ hotkey: chord })] });
+    expect(validateBlueprint(first).ribbonActions[0]?.hotkey?.key).toBe('k');
+    expect(validateBlueprint(second).ribbonActions[0]?.hotkey?.key).toBe('k');
   });
 });
 

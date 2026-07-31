@@ -13,6 +13,7 @@ import type { LEAPExtensionBlueprint, RibbonContext } from '../types';
 import {
   Pane2View,
   Pane3View,
+  makeAction,
   makeBlueprint,
   makeExplodingPayload,
   makeManyActions,
@@ -345,6 +346,96 @@ describe('register — the stored record is host-owned', () => {
 
     // A structurally identical but DIFFERENT object is still a collision.
     expect(expectFailure(callRegister(probe, makeBlueprint())).code).toBe('DUPLICATE_ID');
+  });
+
+  /* ------------------------------------------------------------------------ */
+  /* Hotkeys get the same treatment as every other validated field            */
+  /* ------------------------------------------------------------------------ */
+
+  /** The sample blueprint with one hotkey-bearing action, sharing `hotkey`. */
+  function blueprintWithHotkey(hotkey: Record<string, unknown>): Record<string, unknown> {
+    return makeBlueprint({ ribbonActions: [makeAction({ hotkey })] });
+  }
+
+  it('freezes the stored hotkey', () => {
+    const probe = setup();
+    const stored = registerAndRead(probe, blueprintWithHotkey({ key: 'k', ctrl: true }));
+    const hotkey = stored.ribbonActions[0]?.hotkey;
+
+    expect(hotkey).toBeDefined();
+    expect(Object.isFrozen(hotkey)).toBe(true);
+    expect(() => {
+      (hotkey as unknown as Record<string, unknown>)['key'] = 'tab';
+    }).toThrow(TypeError);
+    expect(() => {
+      (hotkey as unknown as Record<string, unknown>)['ctrl'] = false;
+    }).toThrow(TypeError);
+    expect(() => Object.setPrototypeOf(hotkey as object, { evil: true })).toThrow(TypeError);
+    expect(hotkey?.key).toBe('k');
+  });
+
+  it('materialises all four modifiers, so the canonical token has no undefined branch', () => {
+    const probe = setup();
+    const stored = registerAndRead(probe, blueprintWithHotkey({ key: 'k', alt: true }));
+
+    expect(stored.ribbonActions[0]?.hotkey).toEqual({
+      key: 'k',
+      ctrl: false,
+      alt: true,
+      shift: false,
+      meta: false,
+    });
+  });
+
+  it('is unaffected by the plugin mutating its own hotkey afterwards', () => {
+    const probe = setup();
+    // The plugin keeps a live handle on the very object it declared the chord
+    // with. Against a registry that stored it, every edit below would land.
+    const hotkey: Record<string, unknown> = { key: 'k', ctrl: true };
+    const blueprint = blueprintWithHotkey(hotkey);
+    const stored = registerAndRead(probe, blueprint);
+
+    hotkey['key'] = 'tab';
+    hotkey['ctrl'] = false;
+    hotkey['shift'] = true;
+    hotkey['meta'] = 'not-even-a-boolean';
+
+    expect(stored.ribbonActions[0]?.hotkey).toEqual({
+      key: 'k',
+      ctrl: true,
+      alt: false,
+      shift: false,
+      meta: false,
+    });
+    // And the stored chord is not the plugin's object in the first place.
+    expect(stored.ribbonActions[0]?.hotkey).not.toBe(hotkey);
+    expect(probe.current.registry.getExtension('sample-ext')).toBe(stored);
+  });
+
+  it('omits hotkey entirely from an action that declared none', () => {
+    const probe = setup();
+    const stored = registerAndRead(probe, makeBlueprint());
+    expect(stored.ribbonActions[0]).not.toHaveProperty('hotkey');
+    expect(stored.ribbonActions[1]).not.toHaveProperty('hotkey');
+  });
+
+  it('reports a duplicate chord through register rather than by throwing', () => {
+    const probe = setup();
+    const error = expectFailure(
+      callRegister(
+        probe,
+        makeBlueprint({
+          ribbonActions: [
+            makeAction({ id: 'act-one', hotkey: { key: 'k', ctrl: true } }),
+            makeAction({ id: 'act-two', hotkey: { key: 'k', ctrl: true } }),
+          ],
+        }),
+      ),
+    );
+    expect(error.code).toBe('DUPLICATE_HOTKEY');
+    expect(error.field).toBe('ribbonActions[1].hotkey');
+    expect(SHELL_UX_ERROR_CODES.has(error.code)).toBe(true);
+    expect(probe.current.registry.getExtension('sample-ext')).toBeUndefined();
   });
 });
 

@@ -8,8 +8,11 @@ import {
   validateBlueprint,
 } from '../RegistryContext';
 import type { ExtensionRegistry, RegistrationResult } from '../RegistryContext';
+import type { Hotkey } from '../types';
 import { ShellUXError } from '../types';
+import type { CountingPayload } from './fixtures';
 import {
+  makeAction,
   makeBlueprint,
   makeDelayedExplodingPayload,
   makeExplodingPayload,
@@ -175,6 +178,142 @@ describe('register — a shifting id cannot smuggle a reserved key into the stor
       expect(attacker.reads()).toBe(1);
     },
   );
+});
+
+/**
+ * A chord whose every field is honest and whose every field is load-bearing:
+ * all four modifiers are declared, so substituting a shifting getter for any one
+ * of them leaves the other four measuring nothing but themselves.
+ */
+const HONEST_CHORD: Readonly<Record<string, unknown>> = Object.freeze({
+  key: 'k',
+  ctrl: true,
+  alt: true,
+  shift: true,
+  meta: true,
+});
+
+/**
+ * `makeShiftingIdPayload` aimed at a chord: a structurally valid blueprint whose
+ * single ribbon action carries a hotkey with ONE shifting field.
+ *
+ * `values` is consumed in order and the last entry repeats, exactly as the id
+ * fixture does, so a validator that reads the field twice sees the second value
+ * and one that reads it once cannot. `chord` supplies the other, honest fields.
+ */
+function makeShiftingHotkeyPayload(
+  field: string,
+  values: readonly unknown[],
+  chord: Readonly<Record<string, unknown>> = HONEST_CHORD,
+): CountingPayload {
+  const hotkey: Record<string, unknown> = { ...chord };
+  let reads = 0;
+  Object.defineProperty(hotkey, field, {
+    enumerable: true,
+    configurable: true,
+    get(): unknown {
+      const value = values[Math.min(reads, values.length - 1)];
+      reads += 1;
+      return value;
+    },
+  });
+  return {
+    payload: makeBlueprint({ ribbonActions: [makeAction({ hotkey })] }),
+    reads: () => reads,
+  };
+}
+
+/** The chord the registry actually stored — host-owned, so reading it counts nothing. */
+function storedChord(probe: { current: Probe }): Hotkey | undefined {
+  return probe.current.registry.getExtension('sample-ext')?.ribbonActions[0]?.hotkey;
+}
+
+describe('register — a shifting hotkey field cannot hijack the stored chord', () => {
+  it.each<[string, unknown]>([
+    ['key', 'j'],
+    ['ctrl', false],
+    ['alt', false],
+    ['shift', false],
+    ['meta', false],
+  ])(
+    'reads hotkey.%s exactly once, so no later read can differ from the checked one',
+    (field, later) => {
+      const probe = setup();
+      const shifting = makeShiftingHotkeyPayload(field, [HONEST_CHORD[field], later, later]);
+
+      expect(callRegister(probe, shifting.payload).ok).toBe(true);
+
+      expect(shifting.reads()).toBe(1);
+      // Asserted against the honest chord as a whole: a second read of ANY field
+      // would show up here as a stored value the validator never saw.
+      expect(storedChord(probe)).toEqual(HONEST_CHORD);
+    },
+  );
+
+  it('cannot smuggle a key past the HOTKEY_KEYS allowlist on a later read', () => {
+    const probe = setup();
+    // `tab` is refused by name — it is the first of the three deliberate
+    // absences from HOTKEY_KEYS — so storing it would be a visible breach of the
+    // allowlist rather than a mere mismatch.
+    const attacker = makeShiftingHotkeyPayload('key', ['k', 'tab', 'tab']);
+
+    expect(callRegister(probe, attacker.payload).ok).toBe(true);
+
+    expect(attacker.reads()).toBe(1);
+    expect(storedChord(probe)?.key).toBe('k');
+  });
+
+  it('cannot rescue a disallowed key by turning honest on a later read', () => {
+    const probe = setup();
+    const attacker = makeShiftingHotkeyPayload('key', ['tab', 'k', 'k']);
+
+    const error = expectFailure(callRegister(probe, attacker.payload));
+
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('ribbonActions[0].hotkey.key');
+    expect(error.message).toContain('tab');
+    expect(attacker.reads()).toBe(1);
+    expect(probe.current.registry.listExtensions()).toEqual([]);
+  });
+
+  /**
+   * The WCAG 2.2 §2.1.4 refusal is decided from the four modifier locals. If any
+   * of them were re-read, the chord that was judged and the chord that is stored
+   * could disagree in either direction — a character-key-only shortcut smuggled
+   * into the store, or a legal chord refused.
+   */
+  const BARE_K: Readonly<Record<string, unknown>> = Object.freeze({
+    key: 'k',
+    ctrl: false,
+    alt: false,
+    shift: false,
+    meta: false,
+  });
+
+  it('cannot defeat the WCAG 2.1.4 single-character refusal on a later read', () => {
+    const probe = setup();
+    // Modified while the refusal is decided, bare afterwards: a second read
+    // would store `Ctrl+K` as the plain `K` the criterion forbids.
+    const attacker = makeShiftingHotkeyPayload('ctrl', [true, false, false], BARE_K);
+
+    expect(callRegister(probe, attacker.payload).ok).toBe(true);
+
+    expect(attacker.reads()).toBe(1);
+    expect(storedChord(probe)).toEqual({ ...BARE_K, ctrl: true });
+  });
+
+  it('cannot escape the WCAG 2.1.4 refusal by supplying the modifier on a later read', () => {
+    const probe = setup();
+    const attacker = makeShiftingHotkeyPayload('ctrl', [false, true, true], BARE_K);
+
+    const error = expectFailure(callRegister(probe, attacker.payload));
+
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('ribbonActions[0].hotkey');
+    expect(error.message).toContain('2.1.4');
+    expect(attacker.reads()).toBe(1);
+    expect(probe.current.registry.listExtensions()).toEqual([]);
+  });
 });
 
 describe('register — a getter that detonates late still cannot escape', () => {

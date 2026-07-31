@@ -80,8 +80,9 @@ behaviour: the host reads it during registration, before anything of yours
 renders.
 
 Every field below is required. There are no optional fields on the blueprint
-itself — the only optional fields in the contract are `NavigationNode.badgeCount`,
-`NavigationNode.children` and `RibbonAction.isDisabled`.
+itself — the optional fields in the contract are `NavigationNode.badgeCount`,
+`NavigationNode.children`, `RibbonAction.isDisabled`, `RibbonAction.hotkey`, and
+the four modifier flags on `Hotkey`.
 
 | Field | Type | Responsibility and rules |
 |---|---|---|
@@ -112,6 +113,7 @@ described one; it does not exist. Icons are per ribbon action only.
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
 | `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim and **nothing renders it today.** When a ribbon renderer exists (ISSUE-002) it **must** resolve the key through the host's own lookup table and **must not** interpolate it into a URL or into markup — a requirement on that renderer, **explicitly untested**, not a protection in place. See "Security: plugin-supplied strings are untrusted" below. |
 | `isDisabled?` | `boolean` | Optional. When present it must be a boolean. Renders the action greyed out but still visible. |
+| `hotkey?` | `Hotkey` | Optional keyboard chord for this action. Validated at registration — allowlisted key, boolean modifiers, the WCAG 2.1.4 rule, unique within your own `ribbonActions`. **Nothing dispatches it yet**; the dispatcher is Phase 2. See the `Hotkey` section below. |
 | `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** Also see the caveat there: the registry checks that this is a function, and nothing calls it yet. |
 | `onExecute` | `(ctx: RibbonContext, shell: IShellAPI) => void` | Required. Invoked on activation, with **your own shell handle** as the second argument — that is what lets an action actually change shell state. The host ribbon does not call it yet; the renderer is ISSUE-002. |
 
@@ -133,6 +135,146 @@ described one; it does not exist. Icons are per ribbon action only.
 > `shell` is the same deep-frozen, per-extension instance the host holds for you,
 > and it is revocable — see "What a released `IShellAPI` does" below. Use the one
 > you are handed; do not stash it beyond the life of the call.
+
+### `Hotkey` — a keyboard chord on a ribbon action
+
+> ### ⚠ Declared and validated today. Nothing dispatches it.
+>
+> The host checks a `hotkey` at registration and stores a normalised, frozen copy
+> of it. **There is no `keydown` listener anywhere in `src/`**, no dispatcher, and
+> no evaluation site — so declaring a chord today has no observable effect beyond
+> the registration succeeding or failing. The dispatcher is Phase 2, because it
+> needs the foreground extension and a live `RibbonContext`, neither of which the
+> registry has a view of.
+>
+> Pinned by "finds no listener registration and no key-event name in any module
+> under src/" in `src/__tests__/noEventListener.test.ts`, which parses every
+> non-test module under `src/` with the TypeScript compiler and fails on
+> `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
+> name in any code position — so the sentence above stops being a promise the
+> moment it stops being true. Comments are not scanned, which is how this
+> paragraph is allowed to state the property; a listener reached through a name
+> that is not text is outside what it can see, and the test says so. That
+> `src/core/hotkeys.ts` itself exports exactly three pure helpers and attaches
+> nothing is the separate, narrower "hotkeys module — does not attach anything"
+> in `src/core/__tests__/hotkeys.test.ts`.
+>
+> Write your chords now if you want them; they will work when the ribbon lands.
+> Do not write code that assumes one has fired.
+
+```ts
+interface Hotkey {
+  readonly key: string;      // from the host allowlist, compared lowercased
+  readonly ctrl?: boolean;
+  readonly alt?: boolean;
+  readonly shift?: boolean;
+  readonly meta?: boolean;
+}
+```
+
+It is a **structured object, not a string.** `"Ctrl+Shift+K"` would need a parser
+at the trust boundary, and that parser would have to decide — for untrusted input
+— what `Cmd` means, whether `Esc` and `Escape` are one token, and what casing and
+interior whitespace mean. Separate fields need none of those decisions. ADR-0001
+Amendment H.
+
+**The chord hangs off the action, not off the blueprint.** There is no
+blueprint-level `hotkeys` collection, and that is deliberate: a hotkey is a second
+way to fire *that action's* `onExecute`, gated by the same `isVisible` and the
+same `isDisabled`, and it inherits the 128-action bound and the duplicate walk
+that already visit every action. The accepted cost is that you cannot declare a
+shortcut that is not also a ribbon action. Amendment H, Decision 1.
+
+| Field | Rules |
+|---|---|
+| `key` | Required. Must be one of the allowlisted names below, compared lowercased; the registry stores the lowercased form. Anything else is `INVALID_FIELD` on `ribbonActions[n].hotkey.key`. |
+| `ctrl?` `alt?` `shift?` `meta?` | Optional. Each must be a `boolean` when present; an explicit `undefined` is treated as absent, as everywhere else in this contract. The stored record materialises all four as explicit booleans. |
+
+**The allowlist** is 61 names: `a`–`z`, `0`–`9`, `f1`–`f12`, `arrowup`,
+`arrowdown`, `arrowleft`, `arrowright`, `home`, `end`, `pageup`, `pagedown`,
+`enter`, `escape`, `delete`, `insert`, `backspace`.
+
+**Three things are deliberately not on it**, and you should not read the omissions
+as oversights:
+
+- **`tab`** — Tab is how a keyboard user moves between controls. Owning it breaks
+  focus order for everyone: WCAG 2.1 Success Criteria 2.1.1 Keyboard and 2.4.3
+  Focus Order.
+- **`space`** — Space activates the focused control. Claiming it globally means
+  the focused button stops responding to the key that presses it.
+- **Every modifier as a key** — `control`, `alt`, `shift`, `meta`, `capslock`,
+  `altgraph`. A modifier is a *field* here; naming one as the `key` describes a
+  chord that fires before you have pressed the key you were reaching for.
+
+#### The rule that will surprise you: a single-character key needs Ctrl, Alt or Meta
+
+```ts
+{ key: 'k' }                          // REJECTED
+{ key: 'k', shift: true }             // REJECTED — Shift produces a character too
+{ key: 'k', ctrl: true }              // fine
+{ key: 'k', alt: true, shift: true }  // fine
+{ key: 'f5' }                         // fine — a function key is not a character
+{ key: 'arrowdown' }                  // fine — nor is a navigation key
+```
+
+**This is WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts, Level A**, not
+a house style. A shortcut that is a single printable character and nothing else is
+unusable for a speech-input user — dictation emits characters — and hostile to
+anyone typing into a surface the shortcut is live over. The criterion is met by
+letting the user turn the shortcut off, letting them remap it, or scoping it to
+focus; this shell offers none of those three today, so it is met the fourth way:
+the host refuses the declaration, with `INVALID_FIELD` on
+`ribbonActions[n].hotkey` and a message naming the criterion.
+
+`shift` does not satisfy the rule because Shift changes *which* character is
+produced, not *whether* one is. Pinned by "validateBlueprint — the WCAG 2.1.4
+modifier rule for character keys" in `src/core/__tests__/validation.test.ts`.
+
+#### Chords bind `event.key`, not `event.code`
+
+The key you name is the **character your layout produces**, not a physical switch
+position. On a German QWERTZ keyboard the key where a US keyboard has Z reports
+`event.key` as `"y"`, so `{ key: 'z', ctrl: true }` fires on the key that *says*
+Z there rather than on the same physical switch. That is the right behaviour for a
+mnemonic shortcut and the wrong one for a positional one, and only mnemonics are
+offered. ADR-0001 Amendment H, Decision 3.
+
+#### Uniqueness: within your blueprint, not across the shell
+
+A chord may not repeat inside your own `ribbonActions`. The second declaration is
+rejected with the code **`DUPLICATE_HOTKEY`** on `ribbonActions[n].hotkey`, and
+the comparison is on a canonical form — so a different field order, an absent
+modifier where you wrote `false` elsewhere, or a different key casing is the *same*
+chord.
+
+**Two different extensions may declare the same chord, and this is not a
+conflict.** Hotkeys are scoped to the foreground extension, exactly as ribbon
+actions are: only the extension that owns panes 2 and 3 has live chords.
+Registration-time cross-extension rejection was considered and refused — it would
+make load order semantically load-bearing in a lazily loaded shell, and it would
+let the first extension to register squat 128 chords and deny them to everyone
+else. The reasoning is in ADR-0001 Amendment H, Decision 6; the behaviour is
+pinned by "lets two DIFFERENT extensions declare the same chord" in
+`src/core/__tests__/validation.test.ts`.
+
+The practical consequence for you: **do not assume your chord is yours alone.**
+It is yours while you are in the foreground, and that is the whole promise.
+
+#### `src/core/hotkeys.ts` — three helpers you may use today
+
+```ts
+hotkeyToken({ key: 'k', ctrl: true, shift: true })      // 'ctrl+shift+k'
+describeHotkey({ key: 'k', ctrl: true, shift: true })   // 'Ctrl+Shift+K'
+matchesHotkey(hotkey, event)                            // boolean, pure
+```
+
+`describeHotkey` is what a Phase-2 ribbon will put in a tooltip and in
+`aria-keyshortcuts`; `matchesHotkey` takes only the five fields of a keyboard
+event it reads (`key`, `ctrlKey`, `altKey`, `shiftKey`, `metaKey`), so a plain
+record is enough and it holds no reference to anything live. It matches
+**exactly**: a modifier your chord does not declare must also not be held, so
+`Ctrl+K` does not fire on `Ctrl+Shift+K`. `Meta` is spelled `Meta` rather than
+`Cmd` or `Win`, because the module cannot see the platform.
 
 ### `ExtensionView` and its props
 
@@ -206,6 +348,7 @@ is field-specific, the dotted `field` path that caused it — for example
 | `INVALID_ID` | An id failed the allowlist pattern. |
 | `RESERVED_ID` | An id was `__proto__`, `constructor` or `prototype`. |
 | `DUPLICATE_ID` | The id is already registered by a different blueprint, or an id repeats inside your own tree or action list. |
+| `DUPLICATE_HOTKEY` | Two of **your own** ribbon actions declared the same chord. Scoped to your blueprint on purpose — two *different* extensions claiming one chord is not a conflict, because only the foreground extension's chords are live. See the `Hotkey` section above and ADR-0001 Amendment H. |
 | `PAYLOAD_TOO_LARGE` | A string or a collection exceeded its declared bound. |
 | `REVOKED` | The `IShellAPI` you called has been revoked — your extension was released, unregistered, or **re-registered under the same id with a different blueprint** — so the call reached nothing and changed nothing. Never produced by `register`. **Provider teardown is not on that list**, and an earlier version of this row said it was; ADR-0001 Amendment F removed teardown revocation, and a write through a handle retained past its provider's unmount now succeeds against an orphaned store nothing can read. Do not park a handle that long. Pinned by "does not revoke, and the write it lets through cannot reach a live shell" in `src/core/__tests__/capability.test.tsx`. |
 | `REENTRANT_NOTIFY` | A shell-store listener wrote back to the store and the notification cascade hit its depth limit. A listener is a signal to *re-read* the context, never a place to write to it. Never produced by `register`. |
@@ -845,9 +988,10 @@ on the right.** Contextual means the set changes with context — and *you* defi
 what context means, because the host cannot.
 
 Each ribbon action carries an **id**, a **label**, an **icon**, an optional
-**disabled** flag, an **`onExecute` handler**, and an **`isVisible` predicate**.
-All six are validated at registration; the two functions are checked for type
-and then stored.
+**disabled** flag, an optional **hotkey**, an **`onExecute` handler**, and an
+**`isVisible` predicate**. All seven are validated at registration; the two
+functions are checked for type and then stored, and the hotkey — which nothing
+dispatches yet — is normalised and frozen. See the `Hotkey` section above.
 
 The predicate is the interesting one. Once ISSUE-002 lands, on each relevant
 render the host will evaluate your predicate against the current
@@ -1208,6 +1352,10 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
 - [ ] No side effects, network calls or heavy imports at module scope in
       `index.ts`.
 - [ ] Ribbon action ids are namespaced; no collisions.
+- [ ] Every `hotkey` uses an allowlisted key, carries Ctrl/Alt/Meta if the key is
+      a single character (WCAG 2.2 §2.1.4 — Shift does not count), and is unique
+      within your own `ribbonActions`. No code assumes a chord has fired: nothing
+      dispatches one yet.
 - [ ] The `RegistrationResult` from `register` is checked, and the `id` it
       returns is used rather than re-reading `blueprint.id`.
 - [ ] Every visibility predicate is pure, cheap, and returns false on states it
@@ -1226,8 +1374,8 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
       page can write your scope through `useShellStore()`. If a badge holds a value
       you never wrote, that is possible, and it is a limit of the architecture
       rather than a bug in your extension. See "collision-resistance, not
-      confinement" above, and `src/core/__tests__/dataflow.test.tsx` (badge isolation)
-      for what *is* pinned.
+      confinement" above, and `src/core/__tests__/dataflow.test.tsx` (badge
+      collision-resistance) for what *is* pinned.
 - [ ] No assumption that a write you make is private, atomic, or exception-free.
       A store listener registered by anyone in the page runs inside your write: it
       sees the value, may overwrite it, and may throw into your call. See "Where that
@@ -1262,6 +1410,7 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
 | `src/core/RegistryContext.tsx` | The registry, its validation rules and its limits. Landed. |
 | `src/core/ShellAPI.ts` | `createShellAPI`, `createRevocableShellAPI`, `createShellStateStore`, `useShellContext`, `useShellStore`, `ShellStoreContext`, `deepFreeze`. Landed. |
 | `src/core/ActivationContext.tsx` | `ShellHostProvider`, `ExtensionHostBoundary`, `useActivation` (host-only *by guardrail* — read the second banner in that file), `useExtensionActivation`, the two-state activation model and revocation. Landed. |
+| `src/core/hotkeys.ts` | `hotkeyToken`, `describeHotkey`, `matchesHotkey`. Three pure functions over a chord — no DOM, no listener, no dispatcher. Landed. |
 
 `useShellStore` and `ShellStoreContext` are in that list deliberately, and their
 omission from an earlier version of it was a documentation defect rather than a

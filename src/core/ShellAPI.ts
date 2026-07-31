@@ -204,6 +204,15 @@ export interface ShellStateStore {
    *
    * A field written with the value it already holds is not a change: no object is
    * allocated, the snapshot keeps its identity, and no listener is notified.
+   *
+   * @throws {ShellUXError} `INVALID_PAYLOAD` when `patch` is not an object, or
+   *   refuses to be inspected or read; `INVALID_ID` when `activeExtensionId` or
+   *   `activeNavNodeId` is not a registry-valid identifier or `null`;
+   *   `INVALID_FIELD` when `selectedItemId` is neither a string nor `null`, or
+   *   `focusedPane` is not a member of `PANE_IDS` or `null`; `REENTRANT_NOTIFY`
+   *   from the notification cascade, after the fields are committed. The first
+   *   three leave the context exactly as it was; the fourth does not, and the
+   *   paragraphs above say why.
    */
   patchContext(patch: Partial<RibbonContext>): void;
   /**
@@ -233,14 +242,39 @@ export interface ShellStateStore {
    * this frame — see `subscribe`, and "delivers a raw TypeError out of
    * setBadgeCount" in `src/core/__tests__/subscribe.test.tsx`.
    *
+   * **`REENTRANT_NOTIFY` is the asymmetric one, and this list used to omit it.**
+   * `badgeCounts.set(...)` runs BEFORE `notify()`, so a cascade that reaches
+   * `MAX_NOTIFY_DEPTH` raises out of here with the badge ALREADY COMMITTED — a
+   * caller that reads a `@throws` list and concludes rejection-means-nothing-
+   * happened is wrong for this code specifically. It is the same asymmetry
+   * `patchContext` spells out above, and for the same reason: rolling the write
+   * back would mean telling subscribers about a state that no longer exists.
+   * Pinned by "raises REENTRANT_NOTIFY from setBadgeCount, with the badge already
+   * committed" in `src/core/__tests__/shellApi.test.ts`.
+   *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
-   *   `INVALID_FIELD` when `count` is not a non-negative safe integer.
+   *   `INVALID_FIELD` when `count` is not a non-negative safe integer;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the badge is
+   *   committed.
    */
   setBadgeCount(extensionId: string, nodeId: string, count: number): void;
   /**
    * Set or clear the selected item. Validates its argument, pinned by
    * "setSelectedItem validates its argument" in
    * `src/core/__tests__/shellApi.test.ts`.
+   *
+   * It routes through `applyPatch` with a host-built one-field literal, so the
+   * `INVALID_PAYLOAD` and `INVALID_ID` outcomes that door can produce are not
+   * reachable from here: the patch is always an object, it never traps a read,
+   * and `selectedItemId` is the only key on it.
+   *
+   * @throws {ShellUXError} `INVALID_FIELD` when `id` is neither a string nor
+   *   `null`; `REENTRANT_NOTIFY` from the notification cascade, after the field
+   *   is committed — the cascade itself pinned by "refuses a runaway write
+   *   cascade with a typed error, not a RangeError", and the committed half by
+   *   "raises REENTRANT_NOTIFY from setSelectedItem, with the field already
+   *   committed", both in `src/core/__tests__/contextPatch.test.ts` and both
+   *   driving the cascade through this member.
    */
   setSelectedItem(id: string | null): void;
 }
@@ -576,6 +610,12 @@ const MAX_NOTIFY_DEPTH = 16;
  *
  * @param initial Optional seed for the context. Anything omitted starts `null`.
  *   It is validated exactly as a `patchContext` call would be.
+ * @throws {ShellUXError} `INVALID_PAYLOAD`, `INVALID_ID` or `INVALID_FIELD` when
+ *   `initial` is rejected — the same three `patchContext` decides on, because it
+ *   is the same door. `REENTRANT_NOTIFY` is deliberately NOT on this list and is
+ *   not reachable here: the seed is applied before this function returns, so
+ *   nothing has been handed a store to `subscribe` to yet and the notification
+ *   pass has no listener to cascade through.
  */
 export function createShellStateStore(initial?: Partial<RibbonContext>): ShellStateStore {
   let context: Readonly<RibbonContext> = EMPTY_CONTEXT;
@@ -721,7 +761,10 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
       } catch {
         throw new ShellUXError(
           'INVALID_PAYLOAD',
-          `${method}: the patch refused to say whether it has a "${key}" of its own. Nothing was applied.`,
+          // Worded to avoid the article: `key` ranges over `CONTEXT_KEYS`, and
+          // `activeExtensionId` and `activeNavNodeId` both need "an". Branching
+          // on a vowel would be more code than the problem is worth.
+          `${method}: the patch refused to say whether "${key}" is its own property. Nothing was applied.`,
           key,
         );
       }
@@ -928,6 +971,13 @@ export interface RevocableShellAPI {
  *
  * The default — for `createShellAPI`, the unscoped host facade, whose liveness is
  * its store's — is a predicate that is always true.
+ *
+ * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
+ *   registry-valid identifier nor `HOST_BADGE_SCOPE`. That is the only outcome
+ *   THIS function decides on; what the returned `api`'s three members can raise
+ *   is documented on `IShellAPI` in `types.ts`. Pinned by "refuses to mint a
+ *   scoped facade for an extensionId that was never validated" in
+ *   `src/core/__tests__/shellApi.test.ts`.
  */
 export function createRevocableShellAPI(
   store: ShellStateStore,

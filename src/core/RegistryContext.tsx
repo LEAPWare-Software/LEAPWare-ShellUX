@@ -2,12 +2,14 @@ import { createContext, useCallback, useContext, useMemo, useReducer, useRef } f
 import type { ReactElement, ReactNode } from 'react';
 import type {
   ExtensionView,
+  Hotkey,
   LEAPExtensionBlueprint,
   NavigationNode,
   RibbonAction,
   ShellUXErrorCode,
 } from './types';
 import { SHELL_UX_ERROR_CODES, ShellUXError } from './types';
+import { hotkeyToken } from './hotkeys';
 
 /**
  * Strict allowlist for every identifier the host uses as a lookup key:
@@ -59,6 +61,63 @@ export const REGISTRY_LIMITS = {
   /** Max ribbon actions contributed by a single extension. */
   MAX_RIBBON_ACTIONS: 128,
 } as const;
+
+/**
+ * The key names a `RibbonAction.hotkey` may bind, compared lowercased.
+ *
+ * An allowlist rather than "any string", for the same reason ids get one: this
+ * value arrives from an untrusted manifest, and the set of keys a shell can
+ * safely let a plugin claim is small, closed and worth writing down. It names
+ * `event.key` values, not `event.code` values — ADR-0001 Amendment H.
+ *
+ * **Three groups are deliberately absent, and the absences are the interesting
+ * part of the list:**
+ *
+ *  - **`tab`.** Tab is how a keyboard user moves between controls. An extension
+ *    that owned it would break focus order for everyone, which is WCAG 2.1
+ *    Success Criterion 2.1.1 Keyboard and 2.4.3 Focus Order. There is no chord
+ *    involving Tab that is worth that, so Tab is not offered at all rather than
+ *    offered with a warning.
+ *  - **`space`.** Space activates the focused control — a button, a checkbox, a
+ *    row. Claiming it globally means the focused control stops responding to the
+ *    key that operates it.
+ *  - **Every modifier as a key**: `control`, `alt`, `shift`, `meta`, `capslock`,
+ *    `altgraph`. A modifier is a field on `Hotkey`; naming one as the `key` would
+ *    describe a chord that fires on the modifier's own keydown, before the user
+ *    has pressed anything.
+ *
+ * Nothing dispatches these yet — validation only. Pinned by "validateBlueprint —
+ * ribbon action hotkeys" in `src/core/__tests__/validation.test.ts`.
+ */
+export const HOTKEY_KEYS: ReadonlySet<string> = new Set([
+  ...'abcdefghijklmnopqrstuvwxyz',
+  ...'0123456789',
+  'f1',
+  'f2',
+  'f3',
+  'f4',
+  'f5',
+  'f6',
+  'f7',
+  'f8',
+  'f9',
+  'f10',
+  'f11',
+  'f12',
+  'arrowup',
+  'arrowdown',
+  'arrowleft',
+  'arrowright',
+  'home',
+  'end',
+  'pageup',
+  'pagedown',
+  'enter',
+  'escape',
+  'delete',
+  'insert',
+  'backspace',
+]);
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                  */
@@ -285,8 +344,136 @@ interface MutableRibbonAction {
   label: string;
   icon: string;
   isDisabled?: boolean;
+  hotkey?: Hotkey;
   isVisible: RibbonAction['isVisible'];
   onExecute: RibbonAction['onExecute'];
+}
+
+/**
+ * One `Hotkey` modifier: a boolean when present, `false` when absent.
+ *
+ * An explicit `undefined` counts as absent, matching `badgeCount`, `children`
+ * and `isDisabled` — a hand-written JS plugin is likely to spell "no value" that
+ * way, and `exactOptionalPropertyTypes` means the compiler cannot have spelled
+ * it that way on purpose.
+ *
+ * It returns `false` rather than `undefined` for an absent modifier because the
+ * normalised `Hotkey` materialises all four. See `normalizeHotkey`.
+ */
+function validateOptionalModifier(
+  source: Record<string, unknown>,
+  field: string,
+  path: string,
+): boolean {
+  const value = source[field];
+  if (value === undefined) {
+    return false;
+  }
+  if (typeof value !== 'boolean') {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be a boolean when present; received ${describeType(value)}.`,
+      path,
+    );
+  }
+  return value;
+}
+
+/**
+ * Validate a `hotkey` payload and build the host-owned chord for it.
+ *
+ * **The stored object materialises all four modifiers as explicit booleans**,
+ * even though `Hotkey` declares them optional. That is not tidiness: it makes
+ * `hotkeyToken` a total function with no `??` and no `undefined` branch, so the
+ * canonical token that deduplicates today and will look up a dispatch target
+ * later cannot depend on how the plugin chose to spell an absent modifier. It is
+ * frozen before it is assigned into the action, which is itself frozen — so the
+ * chord the registry checked is the chord the registry hands out. Pinned by
+ * "freezes the stored hotkey" and "is unaffected by the plugin mutating its own
+ * hotkey afterwards" in `src/core/__tests__/registryNormalization.test.tsx`.
+ *
+ * `seenChords` is threaded alongside `seenIds` for the same reason and at the
+ * same cost: the walk over `ribbonActions` already visits every action once, so
+ * intra-extension chord uniqueness is decided in that walk rather than in a
+ * second pass. Cross-extension conflicts are NOT rejected — see ADR-0001
+ * Amendment H, and the `DUPLICATE_HOTKEY` docblock in `types.ts`.
+ */
+function normalizeHotkey(value: unknown, path: string, seenChords: Set<string>): Hotkey {
+  if (!isRecord(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be an object; received ${describeType(value)}.`,
+      path,
+    );
+  }
+
+  const keyPath = `${path}.key`;
+  const rawKey = requireField(value, 'key', keyPath);
+  if (typeof rawKey !== 'string') {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${keyPath}" must be a string; received ${describeType(rawKey)}.`,
+      keyPath,
+    );
+  }
+  // Read once, lowercased once, and it is the lowercased local that is both
+  // checked and stored — the same single-read discipline the ids get. Pinned by
+  // "reads hotkey.key exactly once, so no later read can differ from the checked
+  // one" and "cannot smuggle a key past the HOTKEY_KEYS allowlist on a later
+  // read", both under "register — a shifting hotkey field cannot hijack the
+  // stored chord" in `src/core/__tests__/registrySecurity.test.tsx`, which counts
+  // the reads through a shifting getter on `key` and on each of the four
+  // modifiers.
+  const key = rawKey.toLowerCase();
+  if (!HOTKEY_KEYS.has(key)) {
+    // Safe to stringify: `rawKey` is a proven primitive string. See `validateId`.
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${keyPath}" must name a key from the host allowlist; received ${JSON.stringify(rawKey)}.`,
+      keyPath,
+    );
+  }
+
+  const ctrl = validateOptionalModifier(value, 'ctrl', `${path}.ctrl`);
+  const alt = validateOptionalModifier(value, 'alt', `${path}.alt`);
+  const shift = validateOptionalModifier(value, 'shift', `${path}.shift`);
+  const meta = validateOptionalModifier(value, 'meta', `${path}.meta`);
+
+  // ---- WCAG 2.2 §2.1.4 Character Key Shortcuts (Level A) -------------------
+  // A shortcut that is a single printable character and nothing else is
+  // unusable for speech-input users, whose dictation emits characters, and for
+  // anyone who types into a surface the shortcut is live over. The criterion is
+  // met by one of three routes — turn it off, remap it, or make it active only
+  // on focus — or by not creating one, which is the route taken here: the chord
+  // must carry Ctrl, Alt or Meta.
+  //
+  // Shift does NOT count. Shift+K is still a character key; it produces "K".
+  // Function keys and the named navigation keys are exempt because they are not
+  // characters and cannot be produced by dictation or by typing into a field.
+  if (key.length === 1 && !ctrl && !alt && !meta) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" binds the single-character key "${key}" with no "ctrl", "alt" or "meta" ` +
+        `modifier. WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts (Level A) forbids a ` +
+        `character-key-only shortcut; "shift" does not satisfy it, because Shift produces a ` +
+        `character too. Function keys and named navigation keys are exempt.`,
+      path,
+    );
+  }
+
+  const hotkey: Hotkey = Object.freeze({ key, ctrl, alt, shift, meta });
+
+  const token = hotkeyToken(hotkey);
+  if (seenChords.has(token)) {
+    throw new ShellUXError(
+      'DUPLICATE_HOTKEY',
+      `Field "${path}" repeats the hotkey "${token}" within the same extension.`,
+      path,
+    );
+  }
+  seenChords.add(token);
+
+  return hotkey;
 }
 
 function normalizeNavigationNode(
@@ -381,7 +568,12 @@ function normalizeNavigationNode(
   return Object.freeze(node);
 }
 
-function normalizeRibbonAction(value: unknown, path: string, seenIds: Set<string>): RibbonAction {
+function normalizeRibbonAction(
+  value: unknown,
+  path: string,
+  seenIds: Set<string>,
+  seenChords: Set<string>,
+): RibbonAction {
   if (!isRecord(value)) {
     throw new ShellUXError(
       'INVALID_FIELD',
@@ -443,6 +635,11 @@ function normalizeRibbonAction(value: unknown, path: string, seenIds: Set<string
       );
     }
     action.isDisabled = isDisabled;
+  }
+
+  const hotkey = value['hotkey'];
+  if (hotkey !== undefined) {
+    action.hotkey = normalizeHotkey(hotkey, `${path}.hotkey`, seenChords);
   }
 
   return Object.freeze(action);
@@ -564,9 +761,22 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
     );
   }
   const actionIds = new Set<string>();
+  // Chord uniqueness is decided in the SAME walk as id uniqueness, and is scoped
+  // to this blueprint. Cross-extension conflicts are deliberately not rejected:
+  // only the foreground extension's chords are live, and rejecting at
+  // registration would make load order semantically load-bearing in a lazily
+  // loaded shell. ADR-0001 Amendment H.
+  const actionChords = new Set<string>();
   const actions: RibbonAction[] = [];
   for (let index = 0; index < actionCount; index += 1) {
-    actions.push(normalizeRibbonAction(ribbonActions[index], `ribbonActions[${index}]`, actionIds));
+    actions.push(
+      normalizeRibbonAction(
+        ribbonActions[index],
+        `ribbonActions[${index}]`,
+        actionIds,
+        actionChords,
+      ),
+    );
   }
 
   const views = requireField(candidate, 'views', 'views');
@@ -821,7 +1031,17 @@ export function ExtensionRegistryProvider({
   // rather than merely filtered — the RESERVED_IDS check is a second layer. This is
   // the ONE place ADR-0001 Amendment F leaves the word `structural` earned; pinned by
   // "never stores \"__proto__\" as a live key" in `registrySecurity.test.tsx`.
-  const store = useRef<Map<string, RegistryEntry>>(new Map());
+  //
+  // Guarded rather than passed straight to `useRef`, exactly as the host guards
+  // its store and its `live` map in `ActivationContext.tsx` and for the same
+  // reason: `useRef(new Map())` evaluates its argument on every render and uses
+  // it only on the first, so the unguarded form builds and discards a Map per
+  // render. Never reassigned after this, so `store` is ONE Map for the
+  // provider's whole lifetime — which is load-bearing, because every callback
+  // below closes over it and lists it as a stable dependency.
+  const storeRef = useRef<Map<string, RegistryEntry> | null>(null);
+  storeRef.current ??= new Map<string, RegistryEntry>();
+  const store: Map<string, RegistryEntry> = storeRef.current;
   const [revision, bumpRevision] = useReducer(revisionReducer, 0);
 
   const register = useCallback((blueprint: unknown): RegistrationResult => {
@@ -842,7 +1062,7 @@ export function ExtensionRegistryProvider({
       // reaches the store.
       const { record, id, source } = normalizeBlueprint(blueprint);
 
-      const existing = store.current.get(id);
+      const existing = store.get(id);
       if (existing !== undefined) {
         // ---- React StrictMode double-invocation --------------------------
         // In development StrictMode mounts, unmounts and remounts every
@@ -871,31 +1091,33 @@ export function ExtensionRegistryProvider({
         };
       }
 
-      store.current.set(id, Object.freeze({ record, source }));
+      store.set(id, Object.freeze({ record, source }));
       bumpRevision();
       return { ok: true, id, alreadyRegistered: false };
     } catch (error) {
       return { ok: false, error: toShellUXError(error) };
     }
-  }, []);
+  }, [store]);
 
-  const unregister = useCallback((id: string): boolean => {
-    const removed = store.current.delete(id);
-    if (removed) {
-      bumpRevision();
-    }
-    return removed;
-  }, []);
+  const unregister = useCallback(
+    (id: string): boolean => {
+      const removed = store.delete(id);
+      if (removed) {
+        bumpRevision();
+      }
+      return removed;
+    },
+    [store],
+  );
 
   const getExtension = useCallback(
-    (id: string): LEAPExtensionBlueprint | undefined => store.current.get(id)?.record,
-    [],
+    (id: string): LEAPExtensionBlueprint | undefined => store.get(id)?.record,
+    [store],
   );
 
   const listExtensions = useCallback(
-    (): readonly LEAPExtensionBlueprint[] =>
-      Array.from(store.current.values(), (entry) => entry.record),
-    [],
+    (): readonly LEAPExtensionBlueprint[] => Array.from(store.values(), (entry) => entry.record),
+    [store],
   );
 
   const api = useMemo<ExtensionRegistry>(

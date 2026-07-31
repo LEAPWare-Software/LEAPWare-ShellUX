@@ -103,6 +103,45 @@ export interface NavigationNode {
   readonly children?: readonly NavigationNode[];
 }
 
+/**
+ * A keyboard chord an extension asks the host to associate with one of its
+ * ribbon actions.
+ *
+ * **Structured, not a string.** A string such as `"Ctrl+Shift+K"` would need a
+ * parser at the trust boundary, and that parser would have to decide — for
+ * untrusted input — what `Cmd` means, whether `Esc` and `Escape` are the same
+ * token, how casing and interior whitespace are treated, and what a duplicated
+ * or unknown modifier does. Separate fields need none of those decisions: `key`
+ * is checked against a set and each modifier is checked with the same
+ * boolean-when-present rule `RibbonAction.isDisabled` already uses.
+ *
+ * **This binds `event.key`, not `event.code`** — a layout-dependent character
+ * rather than a physical switch. See ADR-0001 Amendment H for the decision and
+ * its consequence: on a German layout the physical Z key produces `event.key`
+ * `"y"`, so an extension declaring `key: 'z'` is bound to whichever physical key
+ * the user's layout puts `z` on. That is the right default for a *mnemonic*
+ * shortcut (`z` for undo reads as `z` to the user) and the wrong one for a
+ * *positional* shortcut; only mnemonics are offered.
+ *
+ * Nothing dispatches a hotkey today. It is declared and validated at
+ * registration — see `normalizeRibbonAction` in `RegistryContext.tsx` — and the
+ * dispatcher is Phase 2, because it needs the foreground extension and a live
+ * `RibbonContext`. Validation is pinned by "validateBlueprint — ribbon action
+ * hotkeys" in `src/core/__tests__/validation.test.ts`.
+ */
+export interface Hotkey {
+  /**
+   * A key name drawn from the host allowlist (`HOTKEY_KEYS` in
+   * `RegistryContext.tsx`), compared lowercased. The registry stores the
+   * lowercased form.
+   */
+  readonly key: string;
+  readonly ctrl?: boolean;
+  readonly alt?: boolean;
+  readonly shift?: boolean;
+  readonly meta?: boolean;
+}
+
 /** A single command contributed to the shell ribbon by an extension. */
 export interface RibbonAction {
   /** Must match `EXTENSION_ID_PATTERN`; unique within the owning extension. */
@@ -114,6 +153,37 @@ export interface RibbonAction {
   readonly icon: string;
   /** When `true` the action renders greyed out but still visible. */
   readonly isDisabled?: boolean;
+  /**
+   * Optional keyboard chord for this action.
+   *
+   * **It lives here rather than in a blueprint-level collection**, and that
+   * placement is the decision — see ADR-0001 Amendment H. Hanging the chord off
+   * the action means it inherits `MAX_RIBBON_ACTIONS`, inherits the duplicate
+   * walk that already visits every action, and inherits the containment story:
+   * a hotkey is a second way to fire *this* `onExecute`, gated by the same
+   * `isVisible` and the same `isDisabled`, so it adds no capability the ribbon
+   * did not already grant. It also gives a ribbon renderer something to emit as
+   * `aria-keyshortcuts`. The accepted cost is that a shortcut with no ribbon
+   * action cannot be declared; that is additively fixable later, and the reverse
+   * is not.
+   *
+   * **Declared and validated now; nothing dispatches it.** The registry checks
+   * the shape, the allowlist, the modifier rule and intra-extension uniqueness,
+   * then stores a frozen host-owned copy. There is no `keydown` listener
+   * anywhere in `src/` — pinned by "finds no listener registration and no
+   * key-event name in any module under src/" in
+   * `src/__tests__/noEventListener.test.ts`, which parses **every** non-test
+   * module under `src/` with the TypeScript compiler and fails on
+   * `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
+   * name in any code position. Comments are trivia to the parser and are not
+   * scanned, which is what lets this sentence state the property; a listener
+   * reached through a name that is not text — `el[fromAVariable](...)` — is
+   * outside what it can see, and that limit is stated in the test. The narrower
+   * fact that `src/core/hotkeys.ts` exports only its three pure helpers is
+   * "hotkeys module — does not attach anything" in
+   * `src/core/__tests__/hotkeys.test.ts`.
+   */
+  readonly hotkey?: Hotkey;
   /**
    * Pure predicate deciding whether the action appears at all.
    *
@@ -231,8 +301,21 @@ export interface IShellAPI {
    * `src/core/__tests__/shellApi.test.ts` and "patchContext rejects what
    * setSelectedItem rejects" in `src/core/__tests__/contextPatch.test.ts`.
    *
-   * @throws {ShellUXError} `INVALID_FIELD` when `id` is neither a string nor
-   *   `null`.
+   * **A store listener runs inside this call**, for the same reason as
+   * `setBadgeCount` below: `useShellStore().subscribe` is public and the store
+   * notifies synchronously, so a listener you did not write runs before this
+   * method returns and may throw something that is not a `ShellUXError` into your
+   * frame. Pinned by "delivers a raw TypeError out of patchContext" in
+   * `src/core/__tests__/subscribe.test.tsx`, which is the same notification pass.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written;
+   *   `INVALID_FIELD` when `id` is neither a string nor `null`;
+   *   `REENTRANT_NOTIFY` when a listener writes back to the store hard enough to
+   *   run the notification cascade into its limit — raised after the field is
+   *   committed, which is pinned by "raises REENTRANT_NOTIFY from
+   *   setSelectedItem, with the field already committed" in
+   *   `src/core/__tests__/contextPatch.test.ts`.
    */
   setSelectedItem(id: string | null): void;
   /**
@@ -250,14 +333,36 @@ export interface IShellAPI {
    * another extension's badge while `store.setBadgeCount('other-ext', ...)` writes
    * one. What is real here is that two vendors picking the same node id do not
    * overwrite each other by accident, and that this method offers no parameter
-   * through which to aim elsewhere. Both pinned under "badge isolation" in
-   * `src/core/__tests__/dataflow.test.tsx`.
+   * through which to aim elsewhere. Both pinned under "badge collision-resistance"
+   * in `src/core/__tests__/dataflow.test.tsx`.
    *
-   * @throws {ShellUXError} when `nodeId` is malformed or `count` is not a
-   *   non-negative safe integer.
+   * **A store listener runs inside this call.** The write reaches the one host
+   * store and the store notifies synchronously, and `useShellStore().subscribe`
+   * is public — so code you did not write runs before this method returns and may
+   * throw into your frame. What comes back then is whatever that listener chose
+   * and is not necessarily a `ShellUXError`, so the list below is what this method
+   * DECIDES rather than everything that can come out of it. Pinned by "delivers a
+   * raw TypeError out of setBadgeCount" in
+   * `src/core/__tests__/subscribe.test.tsx`.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written; `INVALID_ID`
+   *   when `nodeId` is not a registry-valid identifier; `INVALID_FIELD` when
+   *   `count` is not a non-negative safe integer; `REENTRANT_NOTIFY` when a
+   *   listener writes back to the store hard enough to run the notification
+   *   cascade into its limit — raised AFTER the badge is committed, so this one
+   *   rejection does not mean nothing happened. Pinned by "raises
+   *   REENTRANT_NOTIFY from setBadgeCount, with the badge already committed" in
+   *   `src/core/__tests__/shellApi.test.ts`.
    */
   setBadgeCount(nodeId: string, count: number): void;
-  /** Immutable snapshot of the current host context. */
+  /**
+   * Immutable snapshot of the current host context.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered. This member reads and writes nothing else, so
+   *   `REVOKED` is the only outcome it decides on.
+   */
   getContext(): Readonly<RibbonContext>;
 }
 
@@ -275,6 +380,13 @@ export type ShellUXErrorCode =
   | 'RESERVED_ID'
   /** An id is already registered under a different blueprint. */
   | 'DUPLICATE_ID'
+  /**
+   * Two ribbon actions in one blueprint declared the same chord. Scoped to the
+   * blueprint on purpose: hotkeys are live only for the foreground extension, so
+   * two *different* extensions claiming the same chord is not a conflict and is
+   * not rejected. See ADR-0001 Amendment H.
+   */
+  | 'DUPLICATE_HOTKEY'
   /** A collection or string exceeded its declared bound. */
   | 'PAYLOAD_TOO_LARGE'
   /**
@@ -303,6 +415,7 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
   INVALID_ID: true,
   RESERVED_ID: true,
   DUPLICATE_ID: true,
+  DUPLICATE_HOTKEY: true,
   PAYLOAD_TOO_LARGE: true,
   REVOKED: true,
   REENTRANT_NOTIFY: true,

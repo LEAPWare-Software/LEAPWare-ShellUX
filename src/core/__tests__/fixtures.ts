@@ -45,6 +45,22 @@ export function makeBlueprint(overrides: Record<string, unknown> = {}): Record<s
   };
 }
 
+/**
+ * A structurally valid ribbon action with `overrides` applied, expressed as a
+ * loose record for the same reason `makeBlueprint` is: the point is to hand the
+ * RUNTIME validator values `RibbonAction` would reject at compile time.
+ */
+export function makeAction(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'act-one',
+    label: 'Act One',
+    icon: 'save',
+    isVisible: () => true,
+    onExecute: () => undefined,
+    ...overrides,
+  };
+}
+
 /** A navigation tree `depth` levels deep, for the depth-limit tests. */
 export function makeDeepTree(depth: number): Record<string, unknown>[] {
   let node: Record<string, unknown> = { id: `d${depth}`, label: `Level ${depth}` };
