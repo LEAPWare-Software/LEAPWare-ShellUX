@@ -497,6 +497,30 @@ describe('notify', () => {
     expect(writes).toBeLessThan(64);
   });
 
+  it('raises REENTRANT_NOTIFY from setSelectedItem, with the field already committed', () => {
+    const store = createShellStateStore();
+    let writes = 0;
+    store.subscribe(() => {
+      writes += 1;
+      store.setSelectedItem(`msg-${String(writes)}`);
+    });
+
+    const error = expectShellUXError(() => {
+      store.setSelectedItem('msg-0');
+    });
+    expect(error.code).toBe('REENTRANT_NOTIFY');
+
+    // The commit runs BEFORE the notify at every level, so the rejection did not
+    // undo the write: the deepest listener's value is the one left standing. A
+    // caller that unwound a selection on a thrown `ShellUXError` would be undoing
+    // a commit the subscribers have already been told about — the same asymmetry
+    // `setBadgeCount` has, and what the `setSelectedItem` docblocks assert.
+    // `writes` is checked first so this cannot pass vacuously on 'msg-0', the
+    // value the OUTER call committed before any listener ran.
+    expect(writes).toBeGreaterThan(0);
+    expect(store.getContext().selectedItemId).toBe(`msg-${String(writes)}`);
+  });
+
   it('recovers after a cascade is refused, rather than staying convinced it is mid-notify', () => {
     const store = createShellStateStore();
     let depth = 0;

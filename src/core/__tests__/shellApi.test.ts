@@ -526,6 +526,41 @@ describe('createShellStateStore', () => {
     store.patchContext({ activeNavNodeId: 'root-b' });
     expect(notifications).toBe(1);
   });
+
+  /**
+   * `setBadgeCount`'s `@throws` list omitted `REENTRANT_NOTIFY` entirely, and the
+   * omission mattered for a reason a code name alone does not carry: the write
+   * lands BEFORE the notify, so this is the one rejection out of this member that
+   * does not mean "nothing happened". A caller that unwinds a badge on a thrown
+   * `ShellUXError` would be undoing a commit the subscribers have already been
+   * told about. Both halves are asserted here — the code, and the badge still
+   * being readable afterwards — because the docblock now states both.
+   */
+  it('raises REENTRANT_NOTIFY from setBadgeCount, with the badge already committed', () => {
+    const store = createShellStateStore();
+    let writes = 0;
+    // Every badge write notifies unconditionally — badges are not compared the
+    // way context fields are — so this listener cascades on its own.
+    store.subscribe(() => {
+      writes += 1;
+      store.setBadgeCount('sample-ext', 'nested', writes);
+    });
+
+    let caught: unknown;
+    try {
+      store.setBadgeCount('sample-ext', 'root-a', 5);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ShellUXError);
+    expect((caught as ShellUXError).code).toBe('REENTRANT_NOTIFY');
+    expect((caught as ShellUXError).field).toBeNull();
+    // Bounded well short of a stack limit, like the context cascade.
+    expect(writes).toBeLessThan(64);
+
+    // The point of the docblock sentence: the rejection did not undo the write.
+    expect(store.getBadgeCount('sample-ext', 'root-a')).toBe(5);
+  });
 });
 
 describe('IShellAPI', () => {

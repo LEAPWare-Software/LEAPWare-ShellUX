@@ -417,7 +417,13 @@ function normalizeHotkey(value: unknown, path: string, seenChords: Set<string>):
     );
   }
   // Read once, lowercased once, and it is the lowercased local that is both
-  // checked and stored — the same single-read discipline the ids get.
+  // checked and stored — the same single-read discipline the ids get. Pinned by
+  // "reads hotkey.key exactly once, so no later read can differ from the checked
+  // one" and "cannot smuggle a key past the HOTKEY_KEYS allowlist on a later
+  // read", both under "register — a shifting hotkey field cannot hijack the
+  // stored chord" in `src/core/__tests__/registrySecurity.test.tsx`, which counts
+  // the reads through a shifting getter on `key` and on each of the four
+  // modifiers.
   const key = rawKey.toLowerCase();
   if (!HOTKEY_KEYS.has(key)) {
     // Safe to stringify: `rawKey` is a proven primitive string. See `validateId`.
@@ -1025,7 +1031,17 @@ export function ExtensionRegistryProvider({
   // rather than merely filtered — the RESERVED_IDS check is a second layer. This is
   // the ONE place ADR-0001 Amendment F leaves the word `structural` earned; pinned by
   // "never stores \"__proto__\" as a live key" in `registrySecurity.test.tsx`.
-  const store = useRef<Map<string, RegistryEntry>>(new Map());
+  //
+  // Guarded rather than passed straight to `useRef`, exactly as the host guards
+  // its store and its `live` map in `ActivationContext.tsx` and for the same
+  // reason: `useRef(new Map())` evaluates its argument on every render and uses
+  // it only on the first, so the unguarded form builds and discards a Map per
+  // render. Never reassigned after this, so `store` is ONE Map for the
+  // provider's whole lifetime — which is load-bearing, because every callback
+  // below closes over it and lists it as a stable dependency.
+  const storeRef = useRef<Map<string, RegistryEntry> | null>(null);
+  storeRef.current ??= new Map<string, RegistryEntry>();
+  const store: Map<string, RegistryEntry> = storeRef.current;
   const [revision, bumpRevision] = useReducer(revisionReducer, 0);
 
   const register = useCallback((blueprint: unknown): RegistrationResult => {
@@ -1046,7 +1062,7 @@ export function ExtensionRegistryProvider({
       // reaches the store.
       const { record, id, source } = normalizeBlueprint(blueprint);
 
-      const existing = store.current.get(id);
+      const existing = store.get(id);
       if (existing !== undefined) {
         // ---- React StrictMode double-invocation --------------------------
         // In development StrictMode mounts, unmounts and remounts every
@@ -1075,31 +1091,33 @@ export function ExtensionRegistryProvider({
         };
       }
 
-      store.current.set(id, Object.freeze({ record, source }));
+      store.set(id, Object.freeze({ record, source }));
       bumpRevision();
       return { ok: true, id, alreadyRegistered: false };
     } catch (error) {
       return { ok: false, error: toShellUXError(error) };
     }
-  }, []);
+  }, [store]);
 
-  const unregister = useCallback((id: string): boolean => {
-    const removed = store.current.delete(id);
-    if (removed) {
-      bumpRevision();
-    }
-    return removed;
-  }, []);
+  const unregister = useCallback(
+    (id: string): boolean => {
+      const removed = store.delete(id);
+      if (removed) {
+        bumpRevision();
+      }
+      return removed;
+    },
+    [store],
+  );
 
   const getExtension = useCallback(
-    (id: string): LEAPExtensionBlueprint | undefined => store.current.get(id)?.record,
-    [],
+    (id: string): LEAPExtensionBlueprint | undefined => store.get(id)?.record,
+    [store],
   );
 
   const listExtensions = useCallback(
-    (): readonly LEAPExtensionBlueprint[] =>
-      Array.from(store.current.values(), (entry) => entry.record),
-    [],
+    (): readonly LEAPExtensionBlueprint[] => Array.from(store.values(), (entry) => entry.record),
+    [store],
   );
 
   const api = useMemo<ExtensionRegistry>(

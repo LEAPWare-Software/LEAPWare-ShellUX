@@ -217,8 +217,14 @@ export interface ActivationController {
    * happens first and unconditionally; the throw, if any, comes from re-publishing
    * the foreground afterwards.
    *
+   * Like `activate`, it reports an unusable `id` rather than throwing for it: a
+   * non-string is `false`, which is already the answer a `Map` lookup gave and is
+   * already what this method means by "there was nothing to release". Pinned by
+   * "reports false for a non-string id, without coercing it" in
+   * `src/core/__tests__/dataflow.test.tsx`.
+   *
    * @returns `true` when an extension was live under `id`, `false` when there
-   *   was nothing to release.
+   *   was nothing to release — including when `id` is not a string.
    */
   release(id: string): boolean;
   /**
@@ -286,8 +292,15 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
   const store: ShellStateStore = storeRef.current;
 
   // A Map, deliberately, for the same reason the registry uses one: the keys are
-  // extension ids that originate in plugin manifests.
-  const live = useRef<Map<string, LiveEntry>>(new Map());
+  // extension ids that originate in plugin manifests. Guarded exactly like the
+  // store above and for the same reason: `useRef(new Map())` evaluates its
+  // argument on every render and uses it only on the first, so the unguarded form
+  // builds and discards a Map per render. Never reassigned after this, so `live`
+  // is one object for the provider's whole lifetime and is stable in the
+  // dependency arrays below.
+  const liveRef = useRef<Map<string, LiveEntry> | null>(null);
+  liveRef.current ??= new Map<string, LiveEntry>();
+  const live: Map<string, LiveEntry> = liveRef.current;
   // The host's authoritative foreground handle. The store's `activeExtensionId`
   // is the published, renderable view of the same fact, kept in step below.
   const foreground = useRef<ActiveExtension | null>(null);
@@ -345,9 +358,9 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
    */
   const reconcileForeground = useCallback((): void => {
     const current = foreground.current;
-    const held = current === null ? undefined : live.current.get(current.id);
+    const held = current === null ? undefined : live.get(current.id);
     publishForeground(held !== undefined && held.active === current ? current : null);
-  }, [publishForeground]);
+  }, [live, publishForeground]);
 
   const activate = useCallback(
     (id: string): ActivationResult => {
@@ -374,7 +387,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         };
       }
 
-      let entry = live.current.get(requested);
+      let entry = live.get(requested);
       if (entry !== undefined && entry.active.blueprint !== blueprint) {
         // The registry holds a DIFFERENT record under this id than the one this
         // entry was minted against: the extension was unregistered and something
@@ -385,7 +398,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         // run yet. Without this the cached entry was returned and the host would
         // render the OLD version's view components after a successful upgrade.
         entry.revoke();
-        live.current.delete(requested);
+        live.delete(requested);
         entry = undefined;
       }
       if (entry === undefined) {
@@ -432,7 +445,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
           active: Object.freeze({ id: requested, blueprint, shell: revocable.api }),
           revoke: revocable.revoke,
         });
-        live.current.set(requested, entry);
+        live.set(requested, entry);
       }
       // Re-activation reuses the entry, so an extension that is brought back to
       // the foreground gets the SAME handle it had before. A new one would
@@ -440,7 +453,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
       publishForeground(entry.active);
       return { ok: true, active: entry.active };
     },
-    [isLive, publishForeground, registry, store],
+    [isLive, live, publishForeground, registry, store],
   );
 
   const blur = useCallback((): void => {
@@ -450,16 +463,40 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
 
   const release = useCallback(
     (id: string): boolean => {
-      const entry = live.current.get(id);
+      // This was the one door in the module that took its `string` parameter on
+      // trust, and the rule the rest of it follows is that a declared type binds
+      // no plain-JavaScript caller: `activate` proves `id` before using it and
+      // `ExtensionHostBoundary` proves `extensionId` before using it.
+      //
+      // **The check is redundant, and the reasoning is written down rather than
+      // deleted**, because a later reader who removes it should have to argue
+      // with it first. `id` reaches exactly one operation, `Map.prototype.get`.
+      // That is a `SameValueZero` key comparison: it invokes no `toString`, no
+      // `valueOf`, no `Symbol.toPrimitive` and no Proxy trap, and it cannot
+      // throw. A non-string therefore already missed every key and already
+      // returned `false`. The value is never interpolated into a message and
+      // never stored.
+      //
+      // `false`, not a thrown `ShellUXError`, and that is the deliberate half.
+      // `false` is already this method's documented answer for "there was nothing
+      // to release", and it keeps this member consistent with `activate`, which
+      // reports an unusable id rather than throwing for it. Pinned by "reports
+      // false for a non-string id, without coercing it" in
+      // `src/core/__tests__/dataflow.test.tsx`.
+      const requested: unknown = id;
+      if (typeof requested !== 'string') {
+        return false;
+      }
+      const entry = live.get(requested);
       if (entry === undefined) {
         return false;
       }
       entry.revoke();
-      live.current.delete(id);
+      live.delete(requested);
       reconcileForeground();
       return true;
     },
-    [reconcileForeground],
+    [live, reconcileForeground],
   );
 
   const getActive = useCallback((): ActiveExtension | null => {
@@ -547,7 +584,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
     // DO NOT remove it from the dependencies because it looks unused — that
     // silently turns this sweep into a mount-only effect and an unregistered
     // extension keeps a live handle.
-    for (const [id, entry] of live.current) {
+    for (const [id, entry] of live) {
       // `isLive` itself, so the sweep's question and the facade's question cannot
       // drift apart. They used to differ because `isLive` also consulted a
       // `mounted` flag this body had to avoid; that flag is gone.
@@ -555,7 +592,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         continue;
       }
       entry.revoke();
-      live.current.delete(id);
+      live.delete(id);
     }
     // **Guarded, and this is the one call site a host cannot guard for itself.**
     // `reconcileForeground` publishes through the store, the store notifies
@@ -598,7 +635,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         // Reporting is best-effort. Staying mounted is not.
       }
     }
-  }, [isLive, reconcileForeground, revision]);
+  }, [isLive, live, reconcileForeground, revision]);
 
   const controller = useMemo<ActivationController>(
     () => ({ activate, blur, release, getActive }),

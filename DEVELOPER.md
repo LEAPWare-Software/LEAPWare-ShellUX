@@ -1374,8 +1374,8 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
       page can write your scope through `useShellStore()`. If a badge holds a value
       you never wrote, that is possible, and it is a limit of the architecture
       rather than a bug in your extension. See "collision-resistance, not
-      confinement" above, and `src/core/__tests__/dataflow.test.tsx` (badge isolation)
-      for what *is* pinned.
+      confinement" above, and `src/core/__tests__/dataflow.test.tsx` (badge
+      collision-resistance) for what *is* pinned.
 - [ ] No assumption that a write you make is private, atomic, or exception-free.
       A store listener registered by anyone in the page runs inside your write: it
       sees the value, may overwrite it, and may throw into your call. See "Where that

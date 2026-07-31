@@ -69,6 +69,18 @@ claim is checkable rather than decorative:
   differ from the checked one", plus the duplicate-id and StrictMode variants
   beside it.
 
+**What that attestation does not reach, stated so its date is not over-read.** It
+ran on **2026-07-29** and names three files. `src/core/hotkeys.ts` did not exist
+then: it landed on **2026-07-30**, the day after, in commit `7fb0649`, which also
+added the `HOTKEY_KEYS` allowlist and `normalizeHotkey` to
+`src/core/RegistryContext.tsx`. `src/core/ActivationContext.tsx` is likewise not
+among the three files enumerated above. **Nothing in the attestation is a claim
+about either file, or about `RegistryContext.tsx` as it stands after `7fb0649`.**
+The hotkey work carries its own tests — named in "As landed" below — but it has
+not been through an independent adversarial verification, and this note exists so
+that a reader cannot borrow the 2026-07-29 date to cover it. The attestation
+itself is unchanged and remains true of what it enumerates.
+
 **The caveat that stood here is closed.** The same verification found that
 `validateBlueprint` could escape a raw `TypeError` rather than a `ShellUXError`
 on exotic input. That was fixed in Phase 1 — all five `Array.isArray` sites are
@@ -133,6 +145,15 @@ documents must not assume signatures ahead of this issue landing.
 - `src/core/types.ts`
 - `src/core/RegistryContext.tsx`
 - `src/core/ShellAPI.ts`
+- `src/core/ActivationContext.tsx`
+- `src/core/hotkeys.ts`
+
+The last two were not named by the original specification and were added as the
+issue landed, so they are recorded here rather than left to be discovered in the
+tree: `ActivationContext.tsx` holds the activation lifecycle that mints the
+per-extension `IShellAPI`, and `hotkeys.ts` holds the three pure chord helpers
+`RegistryContext.tsx` deduplicates hotkeys with. Both sit under `src/core/**` and
+therefore under the same coverage gate as the other three.
 
 ### Adversarial Edge-Cases to Handle
 
@@ -233,6 +254,102 @@ None. This is the root of the dependency graph.
   `src/core/__tests__/capability.test.tsx` — "does NOT sever useRegistry, so
   unregister stays a route to ending a sibling", which performs the removal from
   inside a plug-in subtree.
+- **A ribbon action may declare a keyboard chord. Declaration and validation
+  exist; dispatch does not.** `RibbonAction` gained one optional field, `hotkey`,
+  typed by the new `Hotkey` interface in `src/core/types.ts` — a structured record
+  of `key` plus the four optional modifiers `ctrl`, `alt`, `shift` and `meta`,
+  rather than a string such as `"Ctrl+Shift+K"`, so no parser sits at the trust
+  boundary deciding for untrusted input what `Cmd` means or whether `Esc` and
+  `Escape` are one token. `normalizeHotkey` in `src/core/RegistryContext.tsx`
+  checks the shape, the allowlist, the accessibility rule and intra-extension
+  uniqueness, then stores a fresh host-owned chord with all four modifiers
+  materialised as explicit booleans and frozen before it is assigned into the
+  action. `src/core/hotkeys.ts` is new and exports exactly three pure functions
+  over a chord — `hotkeyToken` (the canonical token, the deduplication key today
+  and a dispatch lookup key later), `describeHotkey` (a display spelling for a
+  tooltip or `aria-keyshortcuts`) and `matchesHotkey` (an exact match, in both
+  directions, so no chord swallows the supersets of itself). **Nothing dispatches
+  any of it.** There is no `keydown` listener, no dispatcher and no evaluation
+  site anywhere in `src/`; a dispatcher needs the foreground extension and a live
+  `RibbonContext`, and both arrive with the ribbon renderer, which is ISSUE-002.
+  Declaring a chord today therefore has no observable effect beyond the
+  registration succeeding or failing. Design and rejected alternatives: ADR-0001
+  Amendment H.
+  *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no listener
+  registration and no key-event name in any module under src/", which parses every
+  non-test module under `src/` with the TypeScript compiler and fails on
+  `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress` name
+  in any code position, with "visits every module under src/, so an empty scan
+  cannot pass vacuously" and "reports a planted listener, however it is spelled"
+  beside it so the scan cannot pass by scanning nothing; `hotkeys.test.ts` —
+  "hotkeys module — does not attach anything > exports exactly the three pure
+  helpers and no dispatcher" and "registers no keyboard listener when its
+  functions are called", plus "hotkeyToken", "describeHotkey" and "matchesHotkey";
+  `registryNormalization.test.tsx` — "register — the stored record is host-owned >
+  freezes the stored hotkey", "materialises all four modifiers, so the canonical
+  token has no undefined branch", "is unaffected by the plugin mutating its own
+  hotkey afterwards" and "omits hotkey entirely from an action that declared
+  none".
+- **`key` is drawn from a 61-name host allowlist, and a bare single-character
+  chord is refused on WCAG grounds.** `HOTKEY_KEYS`, exported from
+  `src/core/RegistryContext.tsx`, holds 61 `event.key` names: the 26 Latin
+  letters, the 10 digits, `f1` through `f12`, the four arrows, and `home`, `end`,
+  `pageup`, `pagedown`, `enter`, `escape`, `delete`, `insert`, `backspace`. An
+  allowlist rather than "any string", for the same reason ids get one — the value
+  arrives from an untrusted manifest. Three groups are absent on purpose: `tab`,
+  because an extension that owned it would break focus order for every user;
+  `space`, because it activates the focused control; and every modifier named as a
+  key, because a modifier is a *field* on `Hotkey`. Separately, a chord whose key
+  is a single character **must** carry `ctrl`, `alt` or `meta`, or registration is
+  refused with a message naming **WCAG 2.2 Success Criterion 2.1.4 Character Key
+  Shortcuts (Level A)**. `shift` does not satisfy it, because Shift produces a
+  character too. 2.1.4's three conformance routes — turn the shortcut off, remap
+  it, or make it active only on focus — are all unavailable in Phase 1, so the
+  criterion is met the fourth way: the declaration does not happen. Function keys
+  and the named navigation and editing keys are exempt, because no dictation and
+  no typing produces them.
+  *Tests:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — ribbon
+  action hotkeys > accepts every key in the host allowlist", which also asserts
+  `HOTKEY_KEYS.size` is 61 so a key joining or leaving the list is a failing test
+  rather than a silent widening, and "rejects %s as a hotkey key" beside it, whose
+  table walks `tab`, `space`, a literal space, each modifier named as a key,
+  `capslock`, `altgraph` and `f13` case by case; and "validateBlueprint — the
+  WCAG 2.1.4 modifier rule for character keys > rejects a bare single-character
+  key and names the criterion", "rejects a bare digit — a digit is a character key
+  too", "rejects shift alone, because Shift produces a character", "rejects all
+  four modifiers explicitly false" and "exempts every non-character key in the
+  allowlist, which may be bare".
+- **Chord uniqueness is intra-extension, not shell-wide, and rejecting
+  cross-extension collisions was refused.** `ShellUXErrorCode` gained
+  `DUPLICATE_HOTKEY`. The same chord declared twice **inside one blueprint** is an
+  unambiguous author error with a deterministic answer, so the second declaration
+  loses, with the error naming `ribbonActions[n].hotkey`. Uniqueness is decided on
+  the canonical token from `hotkeyToken`, so a chord spelled with its fields in a
+  different order, with an absent modifier where another wrote `false`, or with a
+  different key casing, is the same chord. The check is threaded through the walk
+  over `ribbonActions` that already runs for duplicate action ids, so there is no
+  second traversal and the chord count inherits `MAX_RIBBON_ACTIONS` rather than
+  needing a bound of its own. Two **different** extensions declaring the same
+  chord is not a conflict and is not rejected: chords are live only for the
+  foreground extension, exactly as only its `ribbonActions` appear on the ribbon.
+  Rejecting them was considered and refused on three grounds recorded in ADR-0001
+  Amendment H — it would make registration order semantically load-bearing in a
+  lazily loaded shell, it would hand any extension a 128-chord squatting attack
+  against a registry with no ownership model, and it would couple validation to
+  registry state, which is the time-of-check/time-of-use shape normalisation
+  exists to close.
+  *Tests:* `src/core/__tests__/validation.test.ts` — "validateBlueprint —
+  duplicate hotkeys within one extension > rejects the same chord twice, with
+  DUPLICATE_HOTKEY on the second action", "sees through a different spelling of
+  the same chord", "sees through a different key casing", "accepts two chords that
+  differ only by one modifier", "does not confuse an action with no hotkey for a
+  duplicate of another" and "lets two DIFFERENT extensions declare the same
+  chord"; `registryNormalization.test.tsx` — "reports a duplicate chord through
+  register rather than by throwing", which asserts `register` returns the failure
+  and leaves the registry empty rather than throwing it; and, for the inherited
+  bound, "register — a lying `length` cannot grow the payload after it is
+  measured > applies MAX_RIBBON_ACTIONS to the stored count, not to a revocable
+  one".
 
 ### Follow-up defects — one closed, two open, none blocking
 

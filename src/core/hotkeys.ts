@@ -6,7 +6,7 @@ import type { Hotkey } from './types';
  * ============================================================================
  * This module attaches nothing. It has no `addEventListener`, no `window`, no
  * `document` and no React import; every export is a total function of its
- * arguments. `matchesHotkey` takes the four fields of a keyboard event it
+ * arguments. `matchesHotkey` takes the five fields of a keyboard event it
  * actually needs rather than an event object, so it can be called on a plain
  * record and holds no reference to anything live.
  *

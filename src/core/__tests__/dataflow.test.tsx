@@ -314,10 +314,10 @@ describe('RibbonAction.onExecute', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* 3. Badge isolation                                                          */
+/* 3. Badge collision-resistance                                               */
 /* -------------------------------------------------------------------------- */
 
-describe('badge isolation', () => {
+describe('badge collision-resistance', () => {
   function makeNavExtension(id: string): Record<string, unknown> {
     return makeBlueprint({
       id,
@@ -425,6 +425,37 @@ describe('activation and revocation', () => {
       released = host.current.activation.release('mail-ext');
     });
     expect(released).toBe(false);
+  });
+
+  it('reports false for a non-string id, without coercing it', () => {
+    const host = mountHost();
+    const active = activate(host, MAIL);
+
+    let coerced = false;
+    // The declared `string` binds no plain-JavaScript caller. This value would
+    // release `mail-ext` if anything on the path stringified it — nothing does:
+    // the parameter is type-checked, and `Map.prototype.get` compares with
+    // `SameValueZero`, which invokes no conversion at all.
+    const impostor = {
+      toString: (): string => {
+        coerced = true;
+        return 'mail-ext';
+      },
+    };
+
+    let released!: boolean;
+    act(() => {
+      released = (host.current.activation.release as (id: unknown) => boolean)(impostor);
+    });
+
+    expect(released).toBe(false);
+    expect(coerced).toBe(false);
+    // ...and the live extension kept both its liveness and its foreground.
+    expect(host.current.activation.getActive()).toBe(active);
+    act(() => {
+      active.shell.setSelectedItem('msg-1');
+    });
+    expect(host.current.store.getContext().selectedItemId).toBe('msg-1');
   });
 
   it('losing the foreground revokes nothing', () => {

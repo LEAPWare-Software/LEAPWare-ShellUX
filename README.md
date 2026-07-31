@@ -28,15 +28,16 @@ What that means for a reader:
 
 | Area | State |
 |---|---|
-| IoC extension registry (ISSUE-001) | **Landed.** `src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`, `src/core/ActivationContext.tsx`, under a 100% coverage gate |
+| IoC extension registry (ISSUE-001) | **Landed.** `src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`, `src/core/ActivationContext.tsx`, `src/core/hotkeys.ts`, under a 100% coverage gate |
 | Three-pane resizable layout (ISSUE-002) | Specified, not started |
 | State hydration and persistence (ISSUE-003) | Specified, not started |
 | Row virtualizer and fault boundaries (ISSUE-004) | Specified, not started |
 | Verification remotes and integration suite (ISSUE-005) | Specified, not started |
 
 Consequences worth stating plainly, because they are easy to assume away:
-ribbon action `isVisible` predicates are **validated but never evaluated**, and
-`onExecute` handlers are **never invoked by the host** — the ribbon renderer is
+ribbon action `isVisible` predicates are **validated but never evaluated**,
+`onExecute` handlers are **never invoked by the host**, and a ribbon action's
+optional `hotkey` is **validated but never dispatched** — the ribbon renderer is
 ISSUE-002; and the pane fault boundaries described below are ISSUE-004.
 
 Registration and activation are complete. Registration validates, rejects
@@ -179,6 +180,56 @@ An extension supplies a navigation entry, a Pane 2 list view, a Pane 3 detail
 view, and a set of ribbon actions. The host renders them. The host never knows
 whether it is showing email, inventory records, or something else entirely.
 
+### Keyboard shortcuts on ribbon actions
+
+A ribbon action may carry an optional `hotkey`: a **structured chord**, `key`
+plus the optional `ctrl`, `alt`, `shift` and `meta` booleans, rather than a string
+like `"Ctrl+Shift+K"` that would need a parser at the trust boundary.
+
+> **⚠ Declared and validated today. Nothing dispatches it.**
+>
+> There is no `keydown` listener, no dispatcher and no evaluation site anywhere
+> in `src/`. Declaring a chord has no observable effect beyond the registration
+> succeeding or failing. A dispatcher needs the foreground extension and a live
+> `RibbonContext`, and both arrive with the ribbon — ISSUE-002.
+> *Test:* `src/__tests__/noEventListener.test.ts` — "finds no listener
+> registration and no key-event name in any module under src/", which parses
+> every non-test module under `src/` with the TypeScript compiler, so this
+> paragraph turns the suite red rather than turning quietly false the day a
+> listener lands.
+
+What the host does enforce, at registration:
+
+- **`key` must name one of 61 keys on the `HOTKEY_KEYS` allowlist** — the 26
+  letters, the 10 digits, `f1`–`f12`, the four arrows and nine named navigation
+  and editing keys. `tab` (it owns focus order), `space` (it activates the focused
+  control) and every modifier named as a key are deliberately absent.
+  *Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — ribbon
+  action hotkeys > accepts every key in the host allowlist", which also pins the
+  size at 61, and "rejects %s as a hotkey key" beside it.
+- **A single-character key must carry `ctrl`, `alt` or `meta`**, or the
+  registration is refused. See Accessibility below.
+- **The same chord twice inside one extension is refused**, with the
+  `ShellUXError` code `DUPLICATE_HOTKEY`. Scoped to one extension on purpose:
+  chords are live only for the foreground extension, so two *different*
+  extensions both claiming `Ctrl+K` is not a conflict and is not rejected.
+  *Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint —
+  duplicate hotkeys within one extension > rejects the same chord twice, with
+  DUPLICATE_HOTKEY on the second action" and "lets two DIFFERENT extensions
+  declare the same chord".
+
+`src/core/hotkeys.ts` exports three pure functions over a chord and nothing else:
+`hotkeyToken` (the canonical token that deduplicates today and will look up a
+dispatch target later), `describeHotkey` (`"Ctrl+Shift+K"`, for a tooltip or an
+`aria-keyshortcuts` attribute nothing emits yet) and `matchesHotkey` (an exact
+match against the five keyboard-event fields it declares).
+*Test:* `src/core/__tests__/hotkeys.test.ts` — "hotkeys module — does not attach
+anything > exports exactly the three pure helpers and no dispatcher".
+
+The author-facing contract in full is in [`DEVELOPER.md`](DEVELOPER.md) under
+"`Hotkey` — a keyboard chord on a ribbon action"; the decisions and what was
+rejected are ADR-0001 Amendment H.
+
 ### Architectural influences
 
 - **Eclipse RCP / OSGi** — the extension registry model. Capabilities are
@@ -266,6 +317,26 @@ Level AA work in scope:
 - Visible focus indication that survives the high-density styling.
 - Accessible names preserved when Pane 1 collapses to its 48px icon track.
 - Correct landmark and region structure across ribbon and three panes.
+
+**One criterion is already enforced by the host rather than being scoped work.**
+A plugin-declared `hotkey` whose `key` is a single character and which carries no
+`ctrl`, `alt` or `meta` modifier is **refused at registration**, with a message
+naming WCAG 2.2 Success Criterion **2.1.4 Character Key Shortcuts (Level A)**.
+`shift` does not satisfy the rule, because Shift produces a character too.
+2.1.4's three conformance routes — turn the shortcut off, remap it, or make it
+active only on focus — need a settings surface, a remapping UI or a
+component-scoped dispatcher, and Phase 1 has none of the three, so the criterion
+is met the fourth way: the declaration does not happen. Function keys and the
+named navigation keys are exempt, because no dictation and no typing produces
+them.
+*Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — the WCAG
+2.1.4 modifier rule for character keys > rejects a bare single-character key and
+names the criterion", with "rejects shift alone, because Shift produces a
+character" and "exempts every non-character key in the allowlist, which may be
+bare" beside it.
+This is one rule at one door, not an audit: it is **entry-point validation** in
+the vocabulary of "Security posture" below, and nothing dispatches a chord yet in
+any case — see "Keyboard shortcuts on ribbon actions" above.
 
 **This commitment constrains the architecture, and the constraint is recorded
 rather than discovered later.** ARIA IDREF attributes — `aria-labelledby`,

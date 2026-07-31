@@ -301,8 +301,21 @@ export interface IShellAPI {
    * `src/core/__tests__/shellApi.test.ts` and "patchContext rejects what
    * setSelectedItem rejects" in `src/core/__tests__/contextPatch.test.ts`.
    *
-   * @throws {ShellUXError} `INVALID_FIELD` when `id` is neither a string nor
-   *   `null`.
+   * **A store listener runs inside this call**, for the same reason as
+   * `setBadgeCount` below: `useShellStore().subscribe` is public and the store
+   * notifies synchronously, so a listener you did not write runs before this
+   * method returns and may throw something that is not a `ShellUXError` into your
+   * frame. Pinned by "delivers a raw TypeError out of patchContext" in
+   * `src/core/__tests__/subscribe.test.tsx`, which is the same notification pass.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written;
+   *   `INVALID_FIELD` when `id` is neither a string nor `null`;
+   *   `REENTRANT_NOTIFY` when a listener writes back to the store hard enough to
+   *   run the notification cascade into its limit — raised after the field is
+   *   committed, which is pinned by "raises REENTRANT_NOTIFY from
+   *   setSelectedItem, with the field already committed" in
+   *   `src/core/__tests__/contextPatch.test.ts`.
    */
   setSelectedItem(id: string | null): void;
   /**
@@ -320,14 +333,36 @@ export interface IShellAPI {
    * another extension's badge while `store.setBadgeCount('other-ext', ...)` writes
    * one. What is real here is that two vendors picking the same node id do not
    * overwrite each other by accident, and that this method offers no parameter
-   * through which to aim elsewhere. Both pinned under "badge isolation" in
-   * `src/core/__tests__/dataflow.test.tsx`.
+   * through which to aim elsewhere. Both pinned under "badge collision-resistance"
+   * in `src/core/__tests__/dataflow.test.tsx`.
    *
-   * @throws {ShellUXError} when `nodeId` is malformed or `count` is not a
-   *   non-negative safe integer.
+   * **A store listener runs inside this call.** The write reaches the one host
+   * store and the store notifies synchronously, and `useShellStore().subscribe`
+   * is public — so code you did not write runs before this method returns and may
+   * throw into your frame. What comes back then is whatever that listener chose
+   * and is not necessarily a `ShellUXError`, so the list below is what this method
+   * DECIDES rather than everything that can come out of it. Pinned by "delivers a
+   * raw TypeError out of setBadgeCount" in
+   * `src/core/__tests__/subscribe.test.tsx`.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written; `INVALID_ID`
+   *   when `nodeId` is not a registry-valid identifier; `INVALID_FIELD` when
+   *   `count` is not a non-negative safe integer; `REENTRANT_NOTIFY` when a
+   *   listener writes back to the store hard enough to run the notification
+   *   cascade into its limit — raised AFTER the badge is committed, so this one
+   *   rejection does not mean nothing happened. Pinned by "raises
+   *   REENTRANT_NOTIFY from setBadgeCount, with the badge already committed" in
+   *   `src/core/__tests__/shellApi.test.ts`.
    */
   setBadgeCount(nodeId: string, count: number): void;
-  /** Immutable snapshot of the current host context. */
+  /**
+   * Immutable snapshot of the current host context.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered. This member reads and writes nothing else, so
+   *   `REVOKED` is the only outcome it decides on.
+   */
   getContext(): Readonly<RibbonContext>;
 }
 
