@@ -37,11 +37,24 @@ import type { ComponentType } from 'react';
  * Pinned by "register — a shifting id cannot smuggle a reserved key into the store"
  * in `src/core/__tests__/registrySecurity.test.tsx`.
  *
- * The render-boundary rule above is the one obligation on this list that **no test
- * exercises**, and it is stated as an obligation on a future renderer rather than as
- * a property of the code: nothing in `src/` renders plug-in content yet (ISSUE-002,
- * ISSUE-004). Per ADR-0001 Amendment G it must not be restated anywhere as a
- * delivered protection until there is a render site and a test at it.
+ * The render-boundary rule above now has a render site, and it is no longer stated
+ * only as an obligation on future work. `src/components/ui/RibbonToolbar.tsx` is the
+ * first place in `src/` where an untrusted plug-in string reaches the DOM, and it
+ * renders `RibbonAction.label` as a JSX text node and resolves `RibbonAction.icon`
+ * through a host-owned `Map` rather than into markup or a URL. Two tests hold the
+ * rule, and they hold deliberately different things: *tests:*
+ * `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
+ * plug-in label as a text node, not as markup", which is a statement about one
+ * hostile input, and "the module source contains no HTML-injection sink at all",
+ * which parses the component with the TypeScript compiler and is a statement about
+ * the module, so it still holds if someone adds a second render path tomorrow.
+ *
+ * **That is one render site, not a host-wide property, and this paragraph must not
+ * be read as the wider claim.** The row virtualizer that will render plug-in row
+ * content is ISSUE-004 and does not exist, so for that surface the rule remains an
+ * untested obligation on future work — exactly what it was for the ribbon until
+ * ISSUE-002. Per ADR-0001 Amendment G, the ribbon's tests license a sentence about
+ * the ribbon and nothing beyond it.
  * ============================================================================
  */
 
@@ -125,9 +138,15 @@ export interface NavigationNode {
  *
  * Nothing dispatches a hotkey today. It is declared and validated at
  * registration — see `normalizeRibbonAction` in `RegistryContext.tsx` — and the
- * dispatcher is Phase 2, because it needs the foreground extension and a live
- * `RibbonContext`. Validation is pinned by "validateBlueprint — ribbon action
- * hotkeys" in `src/core/__tests__/validation.test.ts`.
+ * dispatcher is Phase 2. **That is a scope decision, not a blocked one**, and
+ * this comment used to say otherwise: it justified the absence by the dispatcher
+ * needing the foreground extension and a live `RibbonContext`, and since
+ * ISSUE-002 the ribbon renderer is handed both — the foreground extension's
+ * normalised actions with its live handle, and the context every predicate is
+ * evaluated against. So the infrastructure is no longer what is missing; the
+ * dispatcher has simply not been built, and nothing evaluates a chord.
+ * Validation is pinned by "validateBlueprint — ribbon action hotkeys" in
+ * `src/core/__tests__/validation.test.ts`.
  */
 export interface Hotkey {
   /**
@@ -201,10 +220,24 @@ export interface RibbonAction {
    * delivers is that the direct route is closed and the honest mistake is hard to
    * make by accident. Purity stays the author's obligation.
    *
-   * As a guardrail it has **no test**, and per ADR-0001 Amendment G that is stated
-   * rather than glossed: nothing in `src/` calls `isVisible` yet (ISSUE-002), so
-   * there is no call site at which purity could be observed. The registry checks only
-   * that it is a function — "validateBlueprint — ribbon actions" in
+   * As a guardrail it still has **no test**, and per ADR-0001 Amendment G that is
+   * stated rather than glossed. The reason is no longer "no call site": since
+   * ISSUE-002, `src/components/ui/RibbonToolbar.tsx` calls `isVisible` on every
+   * render, inside a guard. What that guard contains is MISBEHAVIOUR, not impurity.
+   * A predicate that throws is treated as not visible and reported, and the
+   * remaining actions still render; the report itself is wrapped, so a plug-in that
+   * replaced `console.error` with a throwing function cannot turn containment into
+   * an escape. A non-boolean return is treated as not visible too, because the call
+   * site compares `=== true` rather than testing truthiness. *Tests:*
+   * `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
+   * isVisible predicate throws and still renders the rest", "treats a non-boolean
+   * isVisible result as not visible" and "survives a console.error that itself
+   * throws while reporting a bad predicate".
+   *
+   * **None of that is a purity test.** A predicate that writes through a captured
+   * store rather than throwing returns cleanly, so the guard never sees it and no
+   * test asserts against it. Purity stays the author's obligation. The registry
+   * checks only that it is a function — "validateBlueprint — ribbon actions" in
    * `src/core/__tests__/validation.test.ts`.
    */
   isVisible(ctx: RibbonContext): boolean;

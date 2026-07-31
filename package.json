@@ -14,11 +14,13 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:scripts": "node --test scripts/__tests__/check-portability.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "check:portability": "node scripts/check-portability.mjs",
+    "check:citations": "node scripts/check-citations.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "verify": "npm run check:portability && npm run lint && npm run typecheck && npm run test:coverage && npm run build && npm run audit:prod"
+    "verify": "npm run check:portability && npm run check:citations && npm run lint && npm run typecheck && npm run test:coverage && npm run test:scripts && npm run build && npm run audit:prod"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

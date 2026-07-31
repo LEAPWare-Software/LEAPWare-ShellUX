@@ -1,9 +1,27 @@
 import type { ReactElement } from 'react';
+import { ShellLayout } from './components/layout/ShellLayout';
+import { ShellHostProvider } from './core/ActivationContext';
+import { ExtensionRegistryProvider } from './core/RegistryContext';
 
 /**
- * Placeholder host surface. The three-pane layout, ribbon and navigation tree
- * arrive in ISSUE-002; ISSUE-001 only lands the extension registry.
+ * The host surface: the two providers, then the shell.
+ *
+ * Order is not a preference. `ShellHostProvider` resolves blueprints through the
+ * registry and watches the registry's revision so that unregistering an
+ * extension revokes its handle, so it must sit INSIDE
+ * `ExtensionRegistryProvider`. Inverting the two throws
+ * "useRegistry must be called inside an <ExtensionRegistryProvider>" at mount.
+ *
+ * Nothing is registered here. The shell renders with an empty registry — no
+ * extensions, no active extension, an empty ribbon on the trailing side and
+ * three valid panes — and the mock extensions that fill it are ISSUE-005.
  */
 export default function App(): ReactElement {
-  return <div className="p-4">ShellUX host</div>;
+  return (
+    <ExtensionRegistryProvider>
+      <ShellHostProvider>
+        <ShellLayout />
+      </ShellHostProvider>
+    </ExtensionRegistryProvider>
+  );
 }

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { HOTKEY_KEYS, REGISTRY_LIMITS, validateBlueprint } from '../RegistryContext';
+import {
+  HOTKEY_KEYS,
+  HOTKEY_MODIFIER_REQUIRED_KEYS,
+  REGISTRY_LIMITS,
+  validateBlueprint,
+} from '../RegistryContext';
 import { ShellUXError } from '../types';
 import type { Hotkey, ShellUXErrorCode } from '../types';
 import {
@@ -447,17 +452,22 @@ describe('validateBlueprint — ribbon actions', () => {
  * every other blueprint field is checked at. Nothing dispatches it — see
  * `src/core/__tests__/hotkeys.test.ts`, "does not attach anything".
  *
- * Four rules carry weight here and each has its own group below:
+ * Five rules carry weight here and each has its own group below:
  *
- *   1. The key must be in the host allowlist, compared lowercased. `tab` and
- *      `space` are absent on purpose and are pinned as rejections, because an
+ *   1. The key must be in the host allowlist, compared lowercased. `tab`, `space`
+ *      and `escape` are absent on purpose and are pinned as rejections, because an
  *      allowlist's omissions are the part a later edit is most likely to undo.
  *   2. Each modifier is a boolean when present, on the `isDisabled` pattern.
  *   3. A single-character key must carry ctrl, alt or meta. This is the WCAG 2.2
  *      §2.1.4 Character Key Shortcuts (Level A) conformance route, not a style
  *      preference — shift alone does not satisfy it, because Shift produces a
  *      character too.
- *   4. A chord may not repeat inside one blueprint. It MAY repeat across
+ *   4. A key on `HOTKEY_MODIFIER_REQUIRED_KEYS` — today `enter` — must carry
+ *      ctrl, alt or meta as well, on ACTIVATION grounds rather than 2.1.4
+ *      grounds. It is a separate rule with a separate message, and the two are
+ *      kept apart on purpose: 2.1.4 reaches character keys only, so citing it for
+ *      Enter would be an inaccurate citation. ADR-0001 Amendment I.
+ *   5. A chord may not repeat inside one blueprint. It MAY repeat across
  *      blueprints; hotkeys are scoped to the foreground extension, and rejecting
  *      across extensions would make load order semantically load-bearing.
  *      ADR-0001 Amendment H.
@@ -534,20 +544,23 @@ describe('validateBlueprint — ribbon action hotkeys', () => {
   });
 
   it('accepts every key in the host allowlist', () => {
-    // Ctrl is added so that the single-character members clear the WCAG rule;
-    // that rule has its own group below.
+    // Ctrl is added so that the single-character members clear the WCAG rule and
+    // `enter` clears the activation rule; both have their own group below.
     for (const key of HOTKEY_KEYS) {
       expect(storedHotkey({ key, ctrl: true })?.key).toBe(key);
     }
-    // 26 letters + 10 digits + 12 function keys + 4 arrows + 9 named navigation
+    // 26 letters + 10 digits + 12 function keys + 4 arrows + 8 named navigation
     // and editing keys. Pinned so that a key quietly joining or leaving the
-    // allowlist is a failing test rather than a silent widening.
-    expect(HOTKEY_KEYS.size).toBe(61);
+    // allowlist is a failing test rather than a silent widening. It was 61 until
+    // `escape` was removed — ADR-0001 Amendment I.
+    expect(HOTKEY_KEYS.size).toBe(60);
+    expect(HOTKEY_KEYS.has('escape')).toBe(false);
   });
 
   it.each([
     ['tab, which owns focus order (WCAG 2.1.1, 2.4.3)', 'tab'],
     ['space, which activates the focused control', 'space'],
+    ['escape, which is the shell dismissal key', 'escape'],
     ['a literal space character', ' '],
     ['control as a key', 'control'],
     ['alt as a key', 'alt'],
@@ -675,8 +688,17 @@ describe('validateBlueprint — the WCAG 2.1.4 modifier rule for character keys'
     // than one character is a function key or a named navigation/editing key:
     // none can be produced by dictation or by typing into a field, so 2.1.4 does
     // not reach them.
-    const exempt = [...HOTKEY_KEYS].filter((key) => key.length > 1);
-    expect(exempt).toHaveLength(HOTKEY_KEYS.size - 36);
+    //
+    // `HOTKEY_MODIFIER_REQUIRED_KEYS` is subtracted rather than named, so this
+    // derivation keeps auto-covering the list instead of hard-coding what is on
+    // it. Those keys are exempt from 2.1.4 too — Enter is not a character key —
+    // but they are refused bare on the separate ACTIVATION rule, which has its
+    // own group below. The 36 is still the single-character count: 26 letters
+    // plus 10 digits.
+    const exempt = [...HOTKEY_KEYS].filter(
+      (key) => key.length > 1 && !HOTKEY_MODIFIER_REQUIRED_KEYS.has(key),
+    );
+    expect(exempt).toHaveLength(HOTKEY_KEYS.size - 36 - HOTKEY_MODIFIER_REQUIRED_KEYS.size);
     for (const key of exempt) {
       expectHotkeyAccepted({ key });
     }
@@ -684,6 +706,92 @@ describe('validateBlueprint — the WCAG 2.1.4 modifier rule for character keys'
 
   it('exempts a bare named key carrying shift only', () => {
     expectHotkeyAccepted({ key: 'arrowdown', shift: true });
+  });
+});
+
+/**
+ * THE ACTIVATION RULE, WHICH IS NOT THE WCAG 2.1.4 RULE.
+ *
+ * `enter` is on the allowlist and `Ctrl+Enter` is a legitimate chord — it is the
+ * one genuinely wanted member of the family — but a BARE Enter is refused. Enter
+ * activates the focused control and submits a form, so a bare Enter chord would
+ * fire on top of the activation the user asked for. That is the same failure mode
+ * `space` is excluded from the allowlist for.
+ *
+ * **The two rules are kept apart deliberately, and this group is what holds them
+ * apart.** WCAG 2.2 §2.1.4 is about single printable *character* keys and does
+ * not reach Enter; a message citing it here would be an inaccurate citation, the
+ * failure mode ADR-0001 Amendment G exists to stop. So the case below asserts
+ * what the Enter message must NOT contain as firmly as the 2.1.4 group asserts
+ * what its message must. ADR-0001 Amendment I.
+ */
+describe('validateBlueprint — the activation rule for keys that must carry a modifier', () => {
+  function expectHotkeyRejected(hotkey: Record<string, unknown>): ShellUXError {
+    return expectRejection(
+      makeBlueprint({ ribbonActions: [makeAction({ hotkey })] }),
+      'INVALID_FIELD',
+      'ribbonActions[0].hotkey',
+    );
+  }
+
+  function expectHotkeyAccepted(hotkey: Record<string, unknown>): void {
+    expect(() =>
+      validateBlueprint(makeBlueprint({ ribbonActions: [makeAction({ hotkey })] })),
+    ).not.toThrow();
+  }
+
+  it('holds exactly the keys that activate the focused control', () => {
+    expect([...HOTKEY_MODIFIER_REQUIRED_KEYS]).toEqual(['enter']);
+    // Every member must be a real allowlist key, or the rule would guard a chord
+    // that is already rejected one check earlier and mean nothing.
+    for (const key of HOTKEY_MODIFIER_REQUIRED_KEYS) {
+      expect(HOTKEY_KEYS.has(key)).toBe(true);
+    }
+  });
+
+  it('rejects a bare enter, which activates the focused control', () => {
+    expectHotkeyRejected({ key: 'enter' });
+  });
+
+  it('does NOT cite WCAG 2.1.4 for enter, which is not a character key', () => {
+    const error = expectHotkeyRejected({ key: 'enter' });
+    expect(error.message).toContain('activates the focused control');
+    expect(error.message).toContain('Amendment I');
+    expect(error.message).not.toContain('2.1.4');
+    expect(error.message).not.toContain('Character Key Shortcuts');
+    expect(error.message).not.toContain('Level A');
+  });
+
+  it('rejects enter with shift only, because Shift does not stop the activation', () => {
+    expectHotkeyRejected({ key: 'enter', shift: true });
+  });
+
+  it('rejects every key on the modifier-required list when bare', () => {
+    // Derived from the set rather than transcribed, so a key added to it is
+    // covered the moment it lands.
+    for (const key of HOTKEY_MODIFIER_REQUIRED_KEYS) {
+      expectHotkeyRejected({ key });
+    }
+  });
+
+  it('accepts ctrl+enter, the one genuinely wanted chord in this family', () => {
+    expectHotkeyAccepted({ key: 'enter', ctrl: true });
+  });
+
+  it.each([
+    ['alt', { key: 'enter', alt: true }],
+    ['meta', { key: 'enter', meta: true }],
+    ['ctrl and shift', { key: 'enter', ctrl: true, shift: true }],
+  ])('accepts enter carrying %s', (_label, hotkey) => {
+    expectHotkeyAccepted(hotkey);
+  });
+
+  it('leaves the 2.1.4 message alone for a genuine character key', () => {
+    // The two branches must not have been merged into one message. A bare 'k' is
+    // still refused by the criterion, by name.
+    const error = expectHotkeyRejected({ key: 'k' });
+    expect(error.message).toContain('2.1.4');
+    expect(error.message).not.toContain('Amendment I');
   });
 });
 

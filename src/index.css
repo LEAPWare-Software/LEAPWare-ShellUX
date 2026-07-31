@@ -1,3 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /*
+   * The shell is a full-viewport desktop surface: it sizes itself with `h-full`,
+   * which resolves to nothing unless every ancestor up to the root has a height.
+   * Setting it here rather than with `h-screen` on the shell keeps `100vh` — and
+   * its well-known disagreement with mobile browser chrome — out of the layout.
+   */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    overflow: hidden;
+  }
+}

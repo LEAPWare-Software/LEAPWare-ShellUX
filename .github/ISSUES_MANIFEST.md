@@ -20,10 +20,49 @@ currently exists.
 | Issue | Title | Status |
 |---|---|---|
 | ISSUE-001 | Type-Safe IoC Extension Registry & Primitives | `LANDED` |
-| ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `NOT STARTED` |
-| ISSUE-003 | UI State Hydration & Serialization Engine | `NOT STARTED` |
+| ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
+| ISSUE-003 | UI State Hydration & Serialization Engine | `IN PROGRESS` — engine implemented and green, **not merged and not wired to anything**; see the note below |
 | ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `BLOCKED` (on 002) |
 | ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `BLOCKED` (on 002–004) |
+
+**No marker in the legend fits ISSUE-002 exactly, and it is being recorded that way
+rather than rounded up.** `LANDED` is defined as four things: *merged*, the source
+files exist, they are tested, and they pass the coverage gate. The last three are
+true — `src/components/layout/ShellLayout.tsx`,
+`src/components/layout/PaneWrapper.tsx` and `src/components/ui/RibbonToolbar.tsx`
+exist, carry 82 tests across three files in `src/components/__tests__/`, and the
+full suite runs 757 tests green at 100% statements, branches, functions and lines
+with `src/components/**` inside the `vitest.config.ts` coverage include list. **The
+first is false.** At the time of writing the work is uncommitted on branch
+`phase-1-hotkeys` — `src/components/` is still untracked — and has not been through
+review or merge. `IN PROGRESS` is therefore the closest true marker, and the row
+carries the qualification inline so that nobody reads it as either "not written" or
+"merged". This row must be changed to `LANDED` when, and only when, the merge
+happens; the tests and the gate are already satisfied and will not need re-checking
+for that transition.
+
+**No marker fits ISSUE-003 either, and it misses `LANDED` by two things rather than
+one.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`
+exist, carry 146 tests across
+`src/core/services/__tests__/hydrationEngine.test.ts` and
+`src/hooks/__tests__/useLocalStorageState.test.tsx`, and sit inside the same 100%
+statements/branches/functions/lines gate. So "the source files exist", "they are
+tested" and "they pass the coverage gate" are all true, and *merged* is false for the
+same reason it is false for ISSUE-002: the work is uncommitted on branch
+`phase-1-hotkeys`.
+
+**The second miss is the one that matters more, because no legend marker expresses it
+at all: nothing in the shell is wired to the engine.** `src/components/layout/ShellLayout.tsx`
+and `src/App.tsx` neither read nor write persisted state — they do not import
+`useLocalStorageState`, and they do not construct or consume a hydration engine. Pane
+sizes, the pane-1 collapsed flag and the drawer flag remain plain React state and
+still reset on every reload. What exists is a tested engine with no consumer. `IN
+PROGRESS` is the closest true marker and the row carries both qualifications inline,
+because "implemented and tested" read alone would imply a shell that restores your
+layout, and it does not. This row becomes `LANDED` when the work is merged **and** the
+shell actually consumes it; the Definition of Done items "No flash of default layout
+on reload" and the ISSUE-002 dependency ("consumes pane sizes and collapse state") are
+the two that remain unmet, and neither can be met by the engine alone.
 
 ISSUE-001 was verified against running code by an independent adversarial
 verification on **2026-07-29**. What that verification actually did, so the
@@ -91,9 +130,11 @@ recorded there: a throwing property getter on the payload still propagates out o
 `validateBlueprint` untyped, which is why callers of that export must guard it.
 Neither was ever reachable through `register`.
 
-Its unblocking of ISSUE-002 is why that row now reads `NOT STARTED` rather than
-`BLOCKED`. **No other issue has been verified against running code**, and every
-remaining "Definition of Done" is a gate that still has to be passed.
+Its unblocking of ISSUE-002 is why that row stopped reading `BLOCKED`; ISSUE-002
+has since been written and is recorded above. **No issue other than ISSUE-001 has
+been verified against running code by an independent adversarial verification** —
+ISSUE-002 passing its own suite is not that, and the two must not be conflated.
+Every remaining "Definition of Done" is a gate that still has to be passed.
 
 ---
 
@@ -205,11 +246,25 @@ None. This is the root of the dependency graph.
   `src/core/__tests__/registrySecurity.test.tsx` — "never stores \"__proto__\" as
   a live key", which asserts the `Map` store as well as the filter.
 - ~~A throwing visibility predicate is covered by a test asserting the action is
-  hidden and the ribbon still renders.~~ **Carried to ISSUE-002.** This gate
-  cannot be met by ISSUE-001: containing a throwing predicate requires a call
-  site, and the ribbon renderer that would evaluate predicates is ISSUE-002.
-  What ISSUE-001 does enforce is that `isVisible` and `onExecute` are functions
-  at registration. Recorded here rather than quietly dropped.
+  hidden and the ribbon still renders.~~ **Carried to ISSUE-002 — and NOW MET
+  there.** This gate could not be met by ISSUE-001: containing a throwing
+  predicate requires a call site, and the ribbon renderer that evaluates
+  predicates is ISSUE-002. That call site now exists, in
+  `src/components/ui/RibbonToolbar.tsx`, which calls `isVisible` inside a guard and
+  treats a throw as "not visible". *Test:*
+  `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
+  isVisible predicate throws and still renders the rest", which asserts all three
+  halves of the gate: the throwing action is absent, the sibling contextual action
+  and the host action are both still in the document, and the failure is reported
+  once with the offending action id in the message. Beside it, "survives a
+  console.error that itself throws while reporting a bad predicate" closes the
+  report path, so a tampered `console` cannot convert the containment into an
+  escape. What ISSUE-001 enforces on its own remains the narrower thing: that
+  `isVisible` and `onExecute` are functions at registration.
+
+  **The gate is met but the entry is kept struck-through and in place**, because
+  it is ISSUE-001's Definition of Done and ISSUE-001 did not meet it. The history
+  of a carried gate is worth more than a tidy list.
 - The Vitest coverage gate passes for `src/core/**`.
 - `DEVELOPER.md` is updated to replace its "signature not yet settled" notes
   with the real, as-shipped signatures.
@@ -290,35 +345,74 @@ None. This is the root of the dependency graph.
   token has no undefined branch", "is unaffected by the plugin mutating its own
   hotkey afterwards" and "omits hotkey entirely from an action that declared
   none".
-- **`key` is drawn from a 61-name host allowlist, and a bare single-character
-  chord is refused on WCAG grounds.** `HOTKEY_KEYS`, exported from
-  `src/core/RegistryContext.tsx`, holds 61 `event.key` names: the 26 Latin
+- **`key` is drawn from a 60-name host allowlist, and a bare chord is refused
+  under two separate rules.** `HOTKEY_KEYS`, exported from
+  `src/core/RegistryContext.tsx`, holds 60 `event.key` names: the 26 Latin
   letters, the 10 digits, `f1` through `f12`, the four arrows, and `home`, `end`,
-  `pageup`, `pagedown`, `enter`, `escape`, `delete`, `insert`, `backspace`. An
-  allowlist rather than "any string", for the same reason ids get one — the value
-  arrives from an untrusted manifest. Three groups are absent on purpose: `tab`,
-  because an extension that owned it would break focus order for every user;
-  `space`, because it activates the focused control; and every modifier named as a
-  key, because a modifier is a *field* on `Hotkey`. Separately, a chord whose key
-  is a single character **must** carry `ctrl`, `alt` or `meta`, or registration is
-  refused with a message naming **WCAG 2.2 Success Criterion 2.1.4 Character Key
-  Shortcuts (Level A)**. `shift` does not satisfy it, because Shift produces a
-  character too. 2.1.4's three conformance routes — turn the shortcut off, remap
-  it, or make it active only on focus — are all unavailable in Phase 1, so the
-  criterion is met the fourth way: the declaration does not happen. Function keys
-  and the named navigation and editing keys are exempt, because no dictation and
-  no typing produces them.
+  `pageup`, `pagedown`, `enter`, `delete`, `insert`, `backspace` — 26 + 10 + 12 +
+  4 + 8. An allowlist rather than "any string", for the same reason ids get one —
+  the value arrives from an untrusted manifest. Four groups are absent on purpose:
+  `tab`, because an extension that owned it would break focus order for every
+  user; `space`, because it activates the focused control; `escape`, because it is
+  the shell's dismissal key — it closes the ribbon's overflow menu, cancels a
+  drag, leaves fullscreen and dismisses a Radix dialog, and this project ships
+  `@radix-ui/react-dialog` — so an extension owning it would break dismissal for
+  the whole shell; and every modifier named as a key, because a modifier is a
+  *field* on `Hotkey`. `escape` was removed outright rather than made
+  modifier-only, because the modified forms are claimed by the OS and the window
+  manager and would be dead surface. ADR-0001 Amendment I.
+  Separately, a chord whose key is a single character **must** carry `ctrl`, `alt`
+  or `meta`, or registration is refused with a message naming **WCAG 2.2 Success
+  Criterion 2.1.4 Character Key Shortcuts (Level A)**. `shift` does not satisfy
+  it, because Shift produces a character too. 2.1.4's three conformance routes —
+  turn the shortcut off, remap it, or make it active only on focus — are all
+  unavailable in Phase 1, so the criterion is met the fourth way: the declaration
+  does not happen. Function keys and the named navigation and editing keys are
+  exempt **from that criterion**, because no dictation and no typing produces
+  them.
   *Tests:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — ribbon
   action hotkeys > accepts every key in the host allowlist", which also asserts
-  `HOTKEY_KEYS.size` is 61 so a key joining or leaving the list is a failing test
-  rather than a silent widening, and "rejects %s as a hotkey key" beside it, whose
-  table walks `tab`, `space`, a literal space, each modifier named as a key,
-  `capslock`, `altgraph` and `f13` case by case; and "validateBlueprint — the
+  `HOTKEY_KEYS.size` is 60 and that `escape` is absent, so a key joining or
+  leaving the list is a failing test rather than a silent widening, and the
+  `it.each` table "rejects %s as a hotkey key" beside it, which walks `tab`,
+  `space`, `escape`, a literal space, each modifier named as a key, `capslock`,
+  `altgraph` and `f13` case by case; and "validateBlueprint — the
   WCAG 2.1.4 modifier rule for character keys > rejects a bare single-character
   key and names the criterion", "rejects a bare digit — a digit is a character key
   too", "rejects shift alone, because Shift produces a character", "rejects all
   four modifiers explicitly false" and "exempts every non-character key in the
   allowlist, which may be bare".
+- **`enter` is on the allowlist but may never be declared bare, and that rule is
+  NOT WCAG 2.1.4.** A second export beside the allowlist,
+  `HOTKEY_MODIFIER_REQUIRED_KEYS`, holds the keys that may not go bare whatever
+  their length; today it holds `enter` alone. Enter is refused bare on
+  **activation** grounds — it presses the default button, follows a focused link,
+  opens a focused table row and submits a form, so a bare Enter chord fires on top
+  of the activation the user asked for. That is the same failure mode `space` is
+  excluded outright for. `shift` does not satisfy this rule either, because
+  Shift+Enter still activates the focused control. The key stays on the list
+  because **`Ctrl+Enter`** — "send", "commit", "run" — is the one genuinely wanted
+  chord in the family and collides with nothing; removing `enter` would have taken
+  that with the rest. The two rules meet at one check in `normalizeHotkey`, so
+  there is one door and no second suppression at dispatch time, but they carry
+  **separate messages**: 2.1.4 governs single printable *character* keys and
+  genuinely does not reach `enter`, `escape`, `backspace`, `delete` or `insert`,
+  so citing it for Enter would state something false about the criterion and teach
+  an author a wrong rule. The Enter message names the activation and ADR-0001
+  Amendment I — no criterion, no level.
+  *Tests:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — the
+  activation rule for keys that must carry a modifier > does NOT cite WCAG 2.1.4
+  for enter, which is not a character key", which asserts the Enter message
+  contains neither 2.1.4, nor Character Key Shortcuts, nor Level A, and "leaves
+  the 2.1.4 message alone for a genuine character key", which asserts the
+  character-key message still names the criterion — the pair pins the separation
+  in both directions, so an edit merging the two messages fails one of them
+  whichever way it merges; with "rejects a bare enter, which activates the focused
+  control", "rejects enter with shift only, because Shift does not stop the
+  activation", "rejects every key on the modifier-required list when bare",
+  "accepts ctrl+enter, the one genuinely wanted chord in this family" and "holds
+  exactly the keys that activate the focused control", which pins the exported
+  set's contents and that every member of it is a real allowlist key.
 - **Chord uniqueness is intra-extension, not shell-wide, and rejecting
   cross-extension collisions was refused.** `ShellUXErrorCode` gained
   `DUPLICATE_HOTKEY`. The same chord declared twice **inside one blueprint** is an
@@ -418,7 +512,10 @@ above. The history stays even once an entry is closed.
 
 ## ISSUE-002 — Compact Desktop 3-Pane Resizable Layout Matrix
 
-**Status:** `NOT STARTED` (unblocked — ISSUE-001 has landed)
+**Status:** `IN PROGRESS` — all three files exist, 57 tests pass across
+`src/components/__tests__/`, and the coverage gate is green at 100%. **Not merged**,
+which is the one clause of `LANDED` it fails; see the note under "Current state"
+above for why that marker was not used.
 
 ### Technical Specification
 
@@ -430,8 +527,15 @@ Global host actions are left-aligned. Plugin-injected contextual actions are
 right-aligned and are sourced from the active extension's `ribbonActions`, each
 filtered through its visibility predicate against current shell state. The
 ribbon **must** render plugin-supplied labels as **text nodes only** — no HTML
-injection path may exist in this component. Nothing renders plug-in content today,
-so this is a gate on this issue, not a description of the host.
+injection path may exist in this component.
+
+**As implemented, that gate is met at this component.** *Tests:*
+`src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
+plug-in label as a text node, not as markup" and "the module source contains no
+HTML-injection sink at all", the latter parsing the module with the TypeScript
+compiler so the absence is asserted against the source rather than trusted to
+review, with "reports a planted sink, so the scan above cannot pass vacuously"
+beside it so the scan cannot pass by scanning nothing.
 
 **Panes (`src/components/layout/ShellLayout.tsx`,
 `src/components/layout/PaneWrapper.tsx`).** Three panes using
@@ -496,11 +600,182 @@ in dark.
 - Overflow, zero-width and no-extension cases are covered by tests.
 - The Vitest coverage gate passes for the files in scope.
 
+**Every gate above is met by the implementation described below**, with the
+exception of nothing — the coverage gate runs at 100% across `src/components/**`
+and the named cases each have a test. What is *not* met is the merge, which is why
+the status is `IN PROGRESS`. The gates were checked by running
+`npm run test:coverage`, not by reading the source.
+
+### As landed — decisions taken during implementation
+
+- **The ribbon icon table is a `Map`, not an object literal, because the key is
+  untrusted.** `RibbonAction.icon` arrives from a plug-in manifest and is used as a
+  lookup key. An object literal answers `icons['__proto__']` with
+  `Object.prototype` — an inherited value reached from a key that matches no own
+  property, and an object React then refuses to render. `RIBBON_ICONS` is therefore
+  a `ReadonlyMap` of host-authored inline SVGs, for the same reason the registry's
+  stores are `Map`s: no prototype chain means no inherited answer, by construction
+  rather than by filtering. An unrecognised key renders `FALLBACK_ICON`. Nothing a
+  plug-in supplies ever reaches an SVG `d` attribute, an `href` or a `src`.
+  *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "does not resolve a
+  prototype-shaped icon key to anything inherited", "resolves an unknown icon key
+  through the host fallback rather than through the key", "resolves a known icon
+  key through the host table", and "the module source names no URL-bearing
+  attribute a plug-in value could reach".
+- **Ribbon overflow splits on a fixed inline count, not on measured width.** The
+  edge case the specification names is that overflow "must not wrap into a second
+  row that shifts the panes downward". A fixed limit of four inline actions
+  (`INLINE_ACTION_LIMIT`) guarantees a fixed row height on every viewport without
+  measuring anything; measuring available width would mean observing the element on
+  every layout change, which is a live subscription this issue does not need. **The
+  accepted cost is stated rather than hidden:** a wide monitor could have shown a
+  fifth action inline and does not. The split runs on the *visible* set, after
+  predicate filtering, so a hidden action cannot occupy an inline slot and push a
+  visible one into the menu.
+  *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "moves actions past
+  the inline limit into an overflow menu rather than a second row", "never wraps:
+  the ribbon row is a single no-wrap line that scrolls on x only", "does not render an overflow
+  trigger when everything fits", "counts only visible actions toward the inline
+  limit", "closes the overflow menu and executes the action when a menu item is
+  chosen", and "closes the overflow menu when the trigger is toggled again".
+- **Pane sizes are percentages, and the group width is measured exactly once.**
+  `react-resizable-panels` v2 has no pixel unit, and percentages are the right
+  primitive for the narrow-viewport case. **The reason they cannot overflow is not
+  that they sum to 100, and that distinction had to be corrected here:** the sizes
+  are emitted as `flex-grow` factors on panels with `flex-basis: 0` inside a group
+  the library styles `width: 100%; overflow: hidden`, so they are *ratios that
+  divide* the group's width rather than widths that add up to it. A set of factors
+  summing to 187.8 divides 360px exactly as one summing to 100 divides 1000px;
+  neither has a pixel in it to spill. **Summing to 100 is in fact FALSE below about
+  700px** — `PANE_PX`'s minimums are 176 + 240 + 260 = 676px plus the dividers, so
+  from there down the library clamps each panel to its own floor and the total runs
+  away from 100. What summing to 100 does buy, where it holds, is that a separator's
+  `aria-valuenow` is a percentage of the whole. Both halves are pinned by test so
+  that neither can be widened back by accident. But "240px default" is a pixel
+  statement, so the group element is
+  measured once on mount through a callback ref — during commit, so the second
+  render lands before paint and there is no flash — and `PANE_PX` is converted
+  against that width. **There is deliberately no `ResizeObserver`.** A later
+  viewport change rescales the panes proportionally and leaves the percentage
+  minimums where they were, which is predictable and cannot overflow; re-deriving
+  pixel minimums live belongs with ISSUE-003, which has to answer the same question
+  for restored sizes. When the width is unmeasurable — 0, as it is in jsdom —
+  `percentOf` falls back to a declared percentage band rather than dividing by zero.
+  *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "converts the pixel
+  pane constants against a measured group width", "falls back to the declared
+  percentage band when the group cannot be measured", "sizes every pane as a flex
+  ratio of the measured group, so the group width is divided and never exceeded"
+  (rendered at 1000, 800, 700, 600, 480 and 360 CSS px rather than at jsdom's
+  unmeasurable 0), "keeps the sizes summing to 100 only while the pixel minimums fit,
+  which is 800px and wider" for where that weaker property holds and where it stops,
+  "leaves no 0px void when a divider is driven fully to either edge", and "reports a
+  non-zero minimum on every divider, which is the floor above".
+- **`role="toolbar"` with every button individually tabbable, and NOT the roving
+  tabindex the ARIA toolbar pattern recommends.** This is a real deviation and it is
+  recorded as one. The roving pattern requires an arrow-key handler, and an
+  `onKeyDown` prop anywhere under `src/` turns
+  `src/__tests__/noEventListener.test.ts` red — its forbidden-spelling regex is
+  `/(?:add|remove)EventListener|key(?:down|up|press)/i`, matched case-insensitively
+  against every identifier, property name, JSX attribute name and string literal in
+  every non-test module, so `onKeyDown` is caught by the `KeyDown` alternative. That
+  test is the evidence for a repo-wide claim made in three other places, and
+  ISSUE-002 was not willing to weaken it to gain a keyboard pattern that keyboard
+  dispatch (Phase 2) will have to revisit anyway. Tab-through is the honest
+  description of what the ribbon does. **Divider keyboard operation was not lost to
+  this decision**, because it is the library's own: `PanelResizeHandle` renders
+  `role="separator"` with `tabIndex={0}` and implements the window-splitter pattern
+  internally, so the host attaches nothing.
+  *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no listener registration
+  and no key-event name in any module under src/", with "reports a planted listener,
+  however it is spelled" beside it, whose planted cases include a JSX `onKeyDown`
+  attribute specifically; `src/components/__tests__/ShellLayout.test.tsx` — "makes
+  every divider keyboard-reachable and actually resizes with the arrow keys", and
+  "renders the ribbon and three panes in ribbon → pane 1 → pane 2 → pane 3 order"
+  for the required focus order.
+- **`RibbonContext.focusedPane` is left `null`, and nothing in the shell writes
+  it.** Populating it needs focus tracking — which pane holds focus, updated as
+  focus moves — and that is a listener, or a `focusin` handler, which is the same
+  invariant as above. It is a validated field of the declared contract and remains
+  one; it simply never changes value under host control. Recorded here because a
+  predicate author reading `RibbonContext` would otherwise reasonably assume the
+  host populates every field it declares. `DEVELOPER.md` states the same thing where
+  predicates are described.
+- **No `aria-keyshortcuts` is emitted on any ribbon button, deliberately.**
+  `RibbonAction.hotkey` is validated and stored, and `describeHotkey` in
+  `src/core/hotkeys.ts` exists precisely to produce a display spelling for this
+  attribute — but nothing dispatches a chord, so advertising one to assistive
+  technology would promise a shortcut that does not fire. That is a worse failure
+  than the absent attribute: a screen-reader user would be told a key works and find
+  that it does not. The attribute arrives with the dispatcher in Phase 2.
+  *Test:* the absence of any dispatcher is pinned by
+  `src/__tests__/noEventListener.test.ts` — "finds no listener registration and no
+  key-event name in any module under src/", which now covers `src/components/**`
+  along with everything else.
+- **A plug-in view is never rendered as a host sibling.** `views.pane2` and
+  `views.pane3` mount only inside `ExtensionHostBoundary`. `ActivationContext.tsx`'s
+  banner flagged host-rendered siblings as an outstanding hole in that guardrail
+  while pane rendering did not exist; ISSUE-002 is the code that could have opened
+  it and does not. **This is a guardrail, not isolation** — ADR-0001 Amendment E is
+  unchanged, and reflection over the fiber tree still reaches the controller.
+  *Test:* `src/components/__tests__/ShellLayout.test.tsx` — "renders both plug-in
+  views inside an ExtensionHostBoundary once activated".
+- **Collapse is a different component tree, not a small width.** The specification
+  says the 48px icon track is "a distinct state, not merely a small width", so a
+  collapsed pane 1 renders outside the panel group as a fixed `w-12` track — 48px in
+  CSS on every viewport — and its `Panel` and adjacent divider leave the group
+  entirely. This also answers "collapse toggled while a drag is in flight": the drag
+  is owned by the library's handle, and collapsing unmounts that handle, which ends
+  the drag with no half-applied layout, because the library re-normalises the
+  remaining panels to 100%. Accessible names survive the transition — the label stays
+  in the tree as an `sr-only` text node rather than being dropped — so the same
+  `getByRole('button', { name })` query finds the same button in both states.
+  *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "collapses to a 48px
+  icon track and expands back", "keeps the accessible name of every pane-1 entry in
+  both states", "shows a monogram in place of the label in the icon track", and
+  "survives a collapse toggled while a divider drag is in flight".
+
+### Not built by this issue — do not read them in
+
+Stated because the three files exist and a reader could reasonably assume the shell
+is more finished than it is:
+
+- **No fault boundary.** A plug-in view that throws during render unmounts the whole
+  shell. Before ISSUE-002 the host never rendered plug-in components, so this was
+  theoretical; it is now live and is the single largest gap in the shell. ISSUE-004.
+- **No virtualization.** Pane 2 is a scroll container that mounts whatever the
+  extension renders. Every row is in the DOM. ISSUE-004.
+- **No persistence.** Pane sizes and the collapse state are React state and reset on
+  reload. ISSUE-003's engine now exists and is tested, but `ShellLayout.tsx` does not
+  import it, so this gap is unchanged from the user's side. ISSUE-003.
+- **No hotkey dispatch.** Chords are validated at registration and evaluated by
+  nothing. Phase 2.
+
 ---
 
 ## ISSUE-003 — UI State Hydration & Serialization Engine
 
-**Status:** `NOT STARTED`
+**Status:** `IN PROGRESS` — both specified files now exist, are tested and pass the
+coverage gate; the work is unmerged, and **nothing in the shell consumes it.** See
+the note under "Current state" above for why no legend marker fits, and "As landed"
+below for the decisions taken.
+
+**It was never marked `BLOCKED`**, so ISSUE-002's arrival did not clear a marker
+here; what it did was give ISSUE-003's dependency a concrete shape to consume. The
+pane state to be persisted is real and can be named: the panel-group
+percentages `ShellLayout` derives through `percentOf`, the `isNavCollapsed` flag,
+and the `isDrawerOpen` flag — all three still React state that resets on
+reload, because the engine that could persist them is not wired to them. Note that
+ISSUE-002 measures the group width **once** and does not observe
+it, so the "restored sizes that are no longer legal" edge case below is genuinely
+ISSUE-003's to answer, and the engine as built answers only the static half of it: a
+restored pane size is checked against a fixed percentage band (`MIN_PANE_PERCENT` 2,
+`MAX_PANE_PERCENT` 90 — ISSUE-002's own clamp restated rather than imported, so the
+host never depends on the layout), and a size outside it discards the whole record.
+Nothing checks a restored size against the width the group actually has on this
+viewport, because the engine never sees that width. `HydrationEngine.ts` names the
+consequence itself: if the two constants ever drift, "the symptom is a restored layout
+that the layout immediately re-clamps, not a broken shell". That reconciliation
+belongs with the wiring, and the wiring is not done.
 
 ### Technical Specification
 
@@ -571,11 +846,145 @@ of default layout, and must not throw when storage is unavailable.
 - No flash of default layout on reload.
 - The Vitest coverage gate passes for the files in scope.
 
+**Which of these are met.** All but one. "Both files exist and type-check", the
+schema-version path, the validation-before-state path, the storage-unavailable and
+quota paths, the debounce and the coverage gate are all met and are cited below. **"No
+flash of default layout on reload" is met by the hook in isolation and by nothing in
+the shell** — `useLocalStorageState` renders the persisted value on its first paint,
+but no shell component calls it, so on a real reload the shell still paints its
+defaults and keeps them. The ISSUE-002 dependency — "consumes pane sizes and collapse
+state" — is likewise unmet: nothing consumes anything yet.
+
+### As landed — decisions taken during implementation
+
+- **An unknown schema version is DISCARDED, never migrated.** ISSUE-003 above allows
+  "migrate or discard"; this implementation discards, and the reason is that there has
+  only ever been one schema version, so a migration would migrate from a version that
+  never shipped — untestable fiction, and dead code the 100% gate would then have to be
+  lied to about. The version field is still written, so a future version *can* migrate;
+  `loadFrom`'s `version !== SCHEMA_VERSION` branch is the single place to add it. One
+  branch covers an older payload, a newer one (the user downgraded the app), a missing
+  version and a version of the wrong type alike.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — "discards a payload
+  from an older schema version", "discards a payload from a FUTURE schema version,
+  rather than guessing at it", "discards a payload with no version at all", and
+  "discards a version of the wrong type, so \"1\" is not 1".
+- **The whole record is written with ONE `setItem` of one key, which is what makes a
+  half-written record unconstructible.** Two tabs are last-write-wins, and the unit of
+  that is the entire record rather than a field — there is no interleaving for a reader
+  to observe, because there is no second write to interleave with. This is also why the
+  engine registers no `storage` event listener and does no cross-tab reconciliation:
+  the repo-wide no-listener invariant holds, pinned by "finds no listener registration
+  and no key-event name in any module under src/" in
+  `src/__tests__/noEventListener.test.ts`.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of "two
+  tabs over one storage entry", specifically "the loser's whole record is replaced,
+  never interleaved with the winner's" and "interleaving the two tabs still produces
+  one complete record"; and "a write that fails on quota leaves the previous record
+  exactly as it was".
+- **Records handed out are frozen objects with a `null` prototype, not `Map`s.** The
+  registry answers the untrusted-key problem with a `Map`; the persistence layer cannot
+  reuse that answer wholesale, because these records are *handed out*. `Object.freeze`
+  on a `Map` leaves `map.set(...)` fully working, so a frozen `Map` handed to a consumer
+  is still host state that consumer can edit. A null-prototype object has no prototype
+  chain to pollute — the same property that made the `Map` attractive — **and** it can
+  be genuinely frozen. The engine therefore keeps its extension-id index in a private
+  `Map` and hands out frozen null-prototype records, which is the same split the
+  registry already makes.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — "hands out a frozen
+  scoped record with a null prototype", "hands out an empty scope constant that is
+  frozen and has no prototype", "stores a host-owned copy, so mutating the argument
+  afterwards changes nothing", and for the filter layered over it, "refuses a __proto__
+  key inside an extension scope" and "refuses a __proto__ extension id and leaves
+  Object.prototype untouched".
+- **Writes are debounced, and a change that changes nothing schedules no write at
+  all.** Dragging a divider coalesces into one write rather than one per frame. The
+  window is configurable, `flush` writes immediately and cancels what was pending, and
+  `dispose` flushes and releases.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of "writes
+  are debounced", specifically "coalesces a whole drag into one write", "does not
+  schedule a write for a change that changed nothing", "honours a custom window",
+  "writes immediately on flush, and cancels the pending window", "schedules nothing at
+  all when there is no storage", and "flushes and releases on dispose".
+- **No storage is a supported mode, not an error.** Safari private mode, storage
+  disabled, and a `localStorage` whose getter throws all degrade silently to in-memory:
+  the shell runs, state lives for the session, and nothing throws at the caller. A
+  quota failure mid-write leaves the previous record intact and the pending record is
+  retried on the next flush, so a transient failure recovers rather than poisoning the
+  entry.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of "storage
+  that fails", specifically "degrades to memory when reading throws, and reports it",
+  "runs with persistence degraded to memory, and nothing throws", "a write that fails on
+  quota leaves the previous record exactly as it was", and "retries the pending record
+  on the next flush, so a transient failure recovers"; plus "degrades to memory when
+  reading localStorage throws" under "the ambient localStorage";
+  `src/hooks/__tests__/useLocalStorageState.test.tsx` — "renders and updates with
+  storage unavailable, and nothing throws".
+- **Per-extension namespacing is collision-resistance, and it is NOT confinement.**
+  Recorded here in the same terms `HydrationEngine.ts` states it, because ADR-0001
+  Amendment E forbids the stronger sentence and the specification above names the exact
+  phrasing that may not ship. What the namespace buys is that two extensions which both
+  persist a key named `selection` write to two different scopes and cannot overwrite
+  each other by accident. It confines nothing, for two independent reasons. **The scope
+  is an argument, not a closure:** `setExtensionState(id, state)` takes the scope from
+  its caller, and there is no per-extension facade closing over a validated id the way
+  `createRevocableShellAPI` does for badges, because `IShellAPI` has no persistence
+  member and this engine is host-side. Any holder of the engine can name any scope —
+  weaker than badge scoping, not equal to it. **And the store is one `localStorage`
+  entry under one origin:** any script on the page reads and rewrites it without going
+  through the engine at all, the same shape as `useShellStore()` being public. Both
+  halves of the absence are reproduced by test rather than asserted in prose. **Nothing
+  confidential belongs in persisted UI state.**
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of "the
+  namespace — collision-resistance, and the confinement it does not deliver": "keeps two
+  extensions that both use the key \"selection\" apart" for what it does buy, and "lets
+  any caller name any scope, so the namespace confines nothing" and "reads and rewrites
+  another extension's scope straight through the storage entry" for what it does not.
+- **Orphaned scopes are retained, never pruned.** Persisted state for an extension the
+  registry does not currently know is kept, because a lazily loaded extension that has
+  not registered yet is indistinguishable from one that is gone, and dropping it would
+  lose the layout of every extension the user has not opened this session. The host
+  decides what to do about an orphan instead: `selectActiveExtensionId` refuses to hand
+  back an active id the registry does not know, and `forgetExtension` exists for a host
+  that really wants a scope gone.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — "retains the scope of
+  an extension that is not registered, so a lazily loaded one gets its state back" and
+  "refuses an active extension id the registry no longer knows".
+
+### Not built by this issue — do not read it in
+
+- **No shell component is wired to any of this.** `src/components/layout/ShellLayout.tsx`
+  and `src/App.tsx` do not import `useLocalStorageState` and do not construct or consume
+  a hydration engine. Pane sizes, the pane-1 collapsed flag and the drawer flag are
+  still plain React state and still reset on every reload. **A reader who sees "ISSUE-003
+  implemented" and expects a shell that restores their layout will be wrong.**
+- **No reconciliation of a restored size against the live group width**, for the reason
+  given under Status above: the engine checks a fixed percentage band and never sees the
+  measured width.
+- **No `IShellAPI` persistence member.** The interface is unchanged — extensions cannot
+  reach this engine, and the scoped-persistence surface described in `DEVELOPER.md`
+  remains design intent.
+
 ---
 
 ## ISSUE-004 — High-Throughput Row Virtualizer & Fault Boundaries
 
-**Status:** `BLOCKED` on ISSUE-002
+**Status:** `BLOCKED` on ISSUE-002 — **unchanged, and here is what that is based
+on.** The legend defines `BLOCKED` as "cannot start until a listed dependency
+lands", and ISSUE-002 has not landed: it is implemented and green but unmerged, so
+the marker still applies on the legend's own wording. In substance the blocker is
+now only the merge. Both things ISSUE-004 needs from ISSUE-002 exist in the tree
+today — `PaneWrapper` provides the Pane 2 scroll container the virtualizer must
+size against, and `ShellLayout` provides the wrapped extension subtree the fault
+boundary must sit around. **This row should be cleared the moment ISSUE-002 is
+merged, with no further work required of ISSUE-002 to unblock it.** It was not
+cleared pre-emptively because a `BLOCKED` row that is wrong in the optimistic
+direction is how work gets started against code that then changes in review.
+
+**ISSUE-004 also became more urgent than it was.** Until ISSUE-002 the host never
+rendered plug-in components, so the absent fault boundary was a theoretical gap.
+`ShellLayout` mounts `views.pane2` and `views.pane3` today, so a plug-in that throws
+during render now unmounts the entire shell.
 
 ### Technical Specification
 
@@ -586,8 +995,10 @@ extension; it does not know what a row means. Selection, keyboard navigation
 (arrow keys, Home/End, Page Up/Down) and scroll-into-view for the selected row
 are the virtualizer's responsibility. Row content supplied by an extension **must** be
 rendered as text nodes, and the virtualizer **must** offer no HTML-injection path.
-Nothing renders plug-in content today, so this is a gate on this issue, not a
-description of the host.
+This is a gate on **this** issue, not a description of the host: ISSUE-002 met the
+equivalent gate at the ribbon, and that says nothing about a component that does not
+exist. `RibbonToolbar.test.tsx`'s pair — one hostile-input case plus one
+compiler-driven source scan — is the shape this issue should copy.
 
 **`src/components/error/FaultBoundary.tsx`.** A React error boundary placed
 around each pane and around each extension-supplied subtree. A plugin that
@@ -787,14 +1198,25 @@ These apply to every issue above and are not restated per ticket.
   known conflicts that keep AAA out of scope.
 - **Untrusted plugin content.** Any surface that renders extension-supplied
   strings **must** render them as text nodes, and `dangerouslySetInnerHTML` is
-  prohibited in extension-content paths. **This is a requirement on future work,
-  explicitly untested, and must not be read as a protection the host delivers:**
-  no component in `src/` renders plug-in content today, so there is no render site
-  to test at. It becomes testable with the ribbon and pane chrome (ISSUE-002) and
-  the row virtualizer (ISSUE-004), and the gate for each of those is that the rule
-  arrives with a test at the render site. See `README.md`, "Stated as intent, with
-  no test — do not read as a control", which holds the same label and forbids
-  restating this as delivered until such a test exists.
+  prohibited in extension-content paths. The gate for each render site is that the
+  rule arrives **with a test at that site**.
+
+  **Met at one site.** `src/components/ui/RibbonToolbar.tsx` renders
+  `RibbonAction.label` as a text node and resolves `RibbonAction.icon` through a
+  host-owned `Map`. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` —
+  "renders a markup-shaped plug-in label as a text node, not as markup" and "the
+  module source contains no HTML-injection sink at all", the latter parsing the
+  module with the TypeScript compiler, with "reports a planted sink, so the scan
+  above cannot pass vacuously" beside it.
+
+  **Not met at the others, and this must not be generalised into a host-wide
+  claim.** `src/components/layout/ShellLayout.tsx` renders `NavigationNode.label`
+  and the extension `name` with ordinary JSX interpolation, which is the correct
+  pattern, but `ShellLayout.test.tsx` carries no injection case and no source scan —
+  so that site is an **untested obligation**, not a control, and closing it is
+  outstanding work. The row virtualizer (ISSUE-004) does not exist at all. See
+  `README.md`, "Stated as intent, with no test — do not read as a control", which
+  holds the same label for what remains untested.
 - **Performance.** Targets are stated in `README.md` and are explicitly
   unmeasured. No ticket may be closed on a performance claim that has not been
   benchmarked.

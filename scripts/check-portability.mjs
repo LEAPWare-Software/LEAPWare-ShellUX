@@ -46,6 +46,16 @@
  *                                 A target sitting untracked in the working tree
  *                                 is the same violation and is reported with its
  *                                 own message, because the fix is `git add`.
+ *   symlinked-path                A tracked path that is, or that reaches through,
+ *                                 a symbolic link. Git records a link as a blob
+ *                                 whose content is the target, and a checkout
+ *                                 materialises a real link only where the platform
+ *                                 and the local configuration allow one — so the
+ *                                 same tracked path is a link on one machine and a
+ *                                 one-line text file on another. A link is also the
+ *                                 one way a tracked path can name a location
+ *                                 outside the repository, which is the dependency
+ *                                 this whole check exists to forbid.
  *   unreadable-tracked-file       A path the index lists that the working tree
  *                                 does not have, which means a fresh clone and
  *                                 this tree would not agree.
@@ -72,7 +82,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
@@ -356,10 +366,31 @@ function extensionOf(file) {
   return dot <= 0 ? '' : base.slice(dot).toLowerCase();
 }
 
-function trackedFiles() {
+/** The mode git records for a symbolic link: a blob whose content is the target path. */
+const GIT_SYMLINK_MODE = '120000';
+
+/**
+ * Every path the index lists, each with the mode the index records for it.
+ *
+ * `-s` rather than a bare listing, because the mode is how a tracked symbolic
+ * link is identified without touching the filesystem at all — git stores a link
+ * as a `120000` blob whose content is the target. That answer is the same on a
+ * machine that materialised the link and on one whose platform or configuration
+ * checked it out as an ordinary text file instead, which is exactly the
+ * divergence the symlinked-path rule exists to report.
+ *
+ * `-z` keeps paths unquoted and NUL-terminated, so a path containing a space, a
+ * quote or a non-ASCII byte survives intact. Within a record the metadata is
+ * separated from the path by a single tab, and the metadata itself never
+ * contains one, so splitting at the first tab is exact even for a path that
+ * contains tabs of its own.
+ *
+ * @returns {{path: string, mode: string}[]}
+ */
+function trackedEntries() {
   let raw;
   try {
-    raw = execFileSync('git', ['-C', REPO_ROOT, 'ls-files', '-z'], {
+    raw = execFileSync('git', ['-C', REPO_ROOT, 'ls-files', '-s', '-z'], {
       encoding: 'utf8',
       maxBuffer: 1 << 26,
     });
@@ -371,7 +402,64 @@ function trackedFiles() {
     );
     process.exit(2);
   }
-  return raw.split('\0').filter((entry) => entry !== '');
+  const entries = [];
+  for (const record of raw.split('\0')) {
+    if (record === '') continue;
+    const tab = record.indexOf('\t');
+    const space = record.indexOf(' ');
+    // Unparseable output means this check is reading something other than what
+    // it thinks it is. Dropping the record would silently stop scanning a
+    // tracked file, so this is a could-not-run rather than a clean result.
+    if (tab === -1 || space === -1 || space > tab) {
+      process.stderr.write(
+        `check-portability: cannot parse the output of \`git ls-files -s -z\`. Expected "<mode> <object>\n` +
+          `<stage>\\t<path>", and this record is not that:\n  ${JSON.stringify(record.slice(0, 200))}\n`,
+      );
+      process.exit(2);
+    }
+    entries.push({ path: record.slice(tab + 1), mode: record.slice(0, space) });
+  }
+  return entries;
+}
+
+/**
+ * The repository-relative prefix of `file` that is a symbolic link, or undefined
+ * when no part of it is one.
+ *
+ * `lstatSync`, never `statSync`: lstat describes the link itself, so a link is
+ * detected rather than traversed, and this check never opens whatever is on the
+ * far side. On Windows that covers junctions as well — lstat reports a reparse
+ * point as a symbolic link, which is what makes a junction detectable here
+ * without any Windows-specific code.
+ *
+ * The answer per prefix is memoised, so a tree of N tracked files costs one lstat
+ * per distinct directory rather than one per segment per file — the cost is
+ * proportional to the size of the tree, not to its depth times its size.
+ *
+ * The repository root itself is not tested. If the root were reached through a
+ * link then every path under it would be, including the one this script was
+ * invoked by and the one `git -C` was handed, so there would be nothing to
+ * compare against and nothing meaningful to report.
+ */
+const linkedPrefixCache = new Map();
+function linkedPrefixOf(file) {
+  let prefix = '';
+  for (const segment of file.split('/')) {
+    prefix = prefix === '' ? segment : `${prefix}/${segment}`;
+    let linked = linkedPrefixCache.get(prefix);
+    if (linked === undefined) {
+      try {
+        linked = lstatSync(resolve(REPO_ROOT, prefix)).isSymbolicLink();
+      } catch {
+        // Absent, or a path this process cannot stat. That is
+        // unreadable-tracked-file's finding to report, not this rule's.
+        linked = false;
+      }
+      linkedPrefixCache.set(prefix, linked);
+    }
+    if (linked) return prefix;
+  }
+  return undefined;
 }
 
 /** Two tracked paths that differ only in case cannot survive a clone onto one filesystem. */
@@ -536,14 +624,31 @@ function resolvesOnDisk(candidates) {
  * The walk starts at REPO_ROOT and descends only into a name it has just seen in
  * a listing, so it cannot address anything outside the repository whatever a
  * candidate says, and `..` cannot survive it because no listing contains it.
+ *
+ * A listing is not enough on its own, though, because a symbolic link or a
+ * Windows junction appears in its parent's listing under its own byte-exact name
+ * and then leads somewhere else entirely. Every segment is therefore lstat'd —
+ * lstat, so the link is described rather than followed — and a link ends the walk
+ * unconfirmed. That is what stops this function confirming, and the caller
+ * advising ``git add`` for, a path that only resolves because of a link on one
+ * machine: recommending that a machine-local link be recorded in the index is the
+ * dependency ADR-0002 forbids, arriving from the tool that enforces ADR-0002. A
+ * refused link is not reported here — the import is already a violation, and the
+ * link itself is untracked, which is outside what this check speaks about — so it
+ * falls through to the generic "resolves to no tracked file" message.
+ *
+ * The final test is lstat too, and for the same reason: for a path with no link
+ * in it lstat and stat agree, and where they disagree the honest answer is that
+ * the last segment is a link and not a file.
  */
 function confirmedOnDisk(candidate) {
   let directory = REPO_ROOT;
   for (const segment of candidate.split('/')) {
     if (!readdirSync(directory).includes(segment)) return false;
     directory = resolve(directory, segment);
+    if (lstatSync(directory).isSymbolicLink()) return false;
   }
-  return statSync(directory).isFile();
+  return lstatSync(directory).isFile();
 }
 
 function lineOf(text, offset) {
@@ -554,7 +659,16 @@ function lineOf(text, offset) {
   return line;
 }
 
-function checkImports(files) {
+/**
+ * @param files every tracked path, which is what an import must resolve *to*.
+ * @param linked the subset already reported as symlinked-path, which is what an
+ *   import must not be read *from*. Reading one would mean reading a file the
+ *   repository does not contain, so the file is skipped here exactly as the main
+ *   scan skipped it; its own violation is already recorded. It stays in `files`,
+ *   because a link is still a name the index carries, and dropping it would turn
+ *   one honest violation into a second, misleading import-unresolved elsewhere.
+ */
+function checkImports(files, linked) {
   const tracked = new Set(files);
   /** @type {Map<string, string>} */
   const trackedLowercase = new Map();
@@ -563,6 +677,7 @@ function checkImports(files) {
   for (const file of files) {
     if (!file.startsWith('src/')) continue;
     if (!SOURCE_EXTENSIONS.includes(extensionOf(file))) continue;
+    if (linked.has(file)) continue;
 
     // Already reported as unreadable-tracked-file by the main scan; skip rather
     // than throw a second time on the same cause.
@@ -634,13 +749,59 @@ function checkImports(files) {
 // Run
 // ---------------------------------------------------------------------------
 
-const files = trackedFiles();
+const entries = trackedEntries();
+const files = entries.map((entry) => entry.path);
 
 checkCaseCollisions(files);
 
+/**
+ * Tracked paths reported as symlinked-path, so the import pass skips reading them
+ * for the same reason the scan below does.
+ * @type {Set<string>}
+ */
+const linkedFiles = new Set();
+
 let scanned = 0;
 let skippedBinary = 0;
-for (const file of files) {
+for (const { path: file, mode } of entries) {
+  // Two independent questions, and both have to be asked. The index knows whether
+  // git *records* a link, which is the durable fact and travels with the clone.
+  // The working tree knows whether this checkout *has* one — a tracked directory
+  // replaced locally by a link is invisible to the index, and it is the case that
+  // lets a scan of "tracked files" read a file the repository does not contain.
+  if (mode === GIT_SYMLINK_MODE) {
+    linkedFiles.add(file);
+    report(
+      file,
+      1,
+      1,
+      'symlinked-path',
+      'a tracked symbolic link — git stores it as its target path, and a clone turns that back into a ' +
+        'real link only where the platform and the local git configuration allow one, so this path is a ' +
+        'link on some machines and a one-line text file on others',
+      file,
+    );
+    continue;
+  }
+  const linkedPrefix = linkedPrefixOf(file);
+  if (linkedPrefix !== undefined) {
+    linkedFiles.add(file);
+    report(
+      file,
+      1,
+      1,
+      'symlinked-path',
+      linkedPrefix === file
+        ? 'a tracked file that this working tree holds as a symbolic link, so its contents come from ' +
+            'wherever the link points rather than from the repository'
+        : `a tracked path reached through the symbolic link "${linkedPrefix}", so its contents come from ` +
+            `wherever that link points rather than from the repository`,
+      linkedPrefix,
+    );
+    // Deliberately not read. Reading would follow the link and scan a file outside
+    // this repository — reporting, or clearing, content that no clone contains.
+    continue;
+  }
   let buffer;
   try {
     buffer = readFileSync(resolve(REPO_ROOT, file));
@@ -661,7 +822,7 @@ for (const file of files) {
   checkContent(file, buffer.toString('utf8'));
 }
 
-checkImports(files);
+checkImports(files, linkedFiles);
 
 /** Rules decided structurally rather than by a content pattern. Listed, not counted, so the total below is exact. */
 const STRUCTURAL_RULES = [
@@ -670,13 +831,14 @@ const STRUCTURAL_RULES = [
   'case-collision',
   'import-case',
   'import-unresolved',
+  'symlinked-path',
   'unreadable-tracked-file',
 ];
 const ruleCount = CONTENT_RULES.length + STRUCTURAL_RULES.length;
 
 if (violations.length === 0) {
   // The username rule is the one rule whose patterns depend on the machine. Saying
-  // so on a clean run keeps that visible rather than implying all 19 rules found
+  // so on a clean run keeps that visible rather than implying all 20 rules found
   // nothing when one of them had nothing to look for. See ADR-0002.
   const usernameRule = CONTENT_RULES.find((rule) => rule.id === 'developer-username');
   const inert = usernameRule !== undefined && usernameRule.patterns.length === 0 ? ' (developer-username inert: no login name to match)' : '';

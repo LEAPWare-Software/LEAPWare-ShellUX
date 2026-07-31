@@ -403,6 +403,17 @@ describe('activation and revocation', () => {
     expect(released).toBe(true);
     expect(host.current.activation.getActive()).toBeNull();
 
+    // Losing the foreground took mail-ext's selection with it — a handover clears
+    // the outgoing extension's own state, which is what
+    // `activationHandover.test.tsx` is about. A fresh sentinel is planted here so
+    // that "the revoked write changed nothing" is still asserted against a value
+    // that can be distinguished from the cleared one; `null` would be satisfied by
+    // a write that really did land and really did clear the field.
+    expect(host.current.store.getContext().selectedItemId).toBeNull();
+    act(() => {
+      host.current.store.setSelectedItem('msg-sentinel');
+    });
+
     // The retained reference is now a typed failure, not a silent no-op.
     const error = expectShellUXError(() => {
       retained.setSelectedItem('msg-2');
@@ -411,7 +422,7 @@ describe('activation and revocation', () => {
     expect(error.code).toBe('REVOKED');
 
     // ...and it changed nothing.
-    expect(host.current.store.getContext().selectedItemId).toBe('msg-1');
+    expect(host.current.store.getContext().selectedItemId).toBe('msg-sentinel');
 
     expect(expectShellUXError(() => retained.setBadgeCount('inbox', 1)).code).toBe('REVOKED');
     expect(expectShellUXError(() => retained.getContext()).code).toBe('REVOKED');

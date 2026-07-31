@@ -165,12 +165,37 @@ is a silent no-op", "cannot have its prototype swapped".
 > extension's unfrozen view components. Amendment E states what is and is not
 > delivered, in three terms used consistently across the repository.
 
-**Intent, not current behaviour:** per-extension persisted state *is to be*
-namespaced by extension id for the same reason. **No persistence exists.** There is no persistence member on
-`IShellAPI` and no storage layer in `src/`. This is ISSUE-003, and until it
-lands nothing here should be read as a guarantee. `README.md` lists it under
-"Specified but not yet enforced"; this paragraph previously asserted it in the
-present tense and was wrong to.
+**Landed as code, not reached by the shell:** per-extension persisted state *is*
+namespaced by extension id, in `src/core/services/HydrationEngine.ts` and the
+`src/hooks/useLocalStorageState.ts` bindings over it. **That namespace is
+collision-resistance, not confinement** — Amendment E's vocabulary, and Amendment
+E is what forbids the stronger sentence being written here. Two extensions that
+both persist a key named `selection` keep their own copies, and that is the whole
+of what it buys. It confines nothing, for two independent reasons. The scope is an
+**argument, not a closure**, so any holder of the engine can name any scope: there
+is no per-extension facade over persistence the way `createRevocableShellAPI` is
+one over badges, and `IShellAPI` still has **no persistence member**. And the store
+is one `localStorage` entry under one origin, which any script on the page reads
+and rewrites without going through the engine at all. Nothing confidential belongs
+in persisted UI state. *Tests:*
+`src/core/services/__tests__/hydrationEngine.test.ts` — "keeps two extensions that
+both use the key \"selection\" apart" for what the namespace does buy; "lets any
+caller name any scope, so the namespace confines nothing" and "reads and rewrites
+another extension's scope straight through the storage entry" for what it does
+not, each reproduced as behaviour rather than asserted in prose.
+
+Nothing in the shell is wired to any of it yet. Neither
+`src/components/layout/ShellLayout.tsx` nor `src/App.tsx` reads or writes persisted
+state, so no pane divider and no collapse toggle survives a reload today: the
+engine and the hook exist and are tested, and the shell does not use them.
+
+> **Superseded 2026-07-31, when ISSUE-003 landed the engine.** This paragraph
+> previously declared the whole subject absent — nothing written anywhere, no
+> module under `src/` owning a storage entry — and sent the reader to ISSUE-003 and
+> to the README's "Specified but not yet enforced" list. That was accurate when it
+> was written and is not now. What survives of it is the `IShellAPI` half, which is
+> unchanged, and its warning, which the paragraph above keeps: what has landed is a
+> store, not a boundary.
 
 ### 4. Contextual behaviour through visibility predicates
 
@@ -218,8 +243,11 @@ handling and are documented as extension-author responsibility in
   designed out.** Deep freezing means an `IShellAPI` instance cannot be patched;
   the closure-held state store means `RibbonContext`'s declared types hold for
   every caller; validated ids and scoped badge keys mean two vendors cannot
-  silently overwrite each other. Deep freezing has landed; the persistence half is
-  ISSUE-003 intent and is not in effect yet — see §3.
+  silently overwrite each other. Deep freezing has landed, and so has the
+  persistence half: the hydration engine namespaces persisted state by extension id
+  and two vendors picking the same state key do not collide. Like the badge scoping
+  beside it, that is collision-resistance and not confinement, and nothing in the
+  shell reads or writes it yet — see §3.
 
   > **Corrected by Amendment E.** This entry was headed "**Vendor isolation is
   > real, within the limits of a shared page**" and concluded that "one extension
@@ -1898,6 +1926,13 @@ all three groups explicitly, and "accepts every key in the host allowlist" pins
 the size at 61 so that a key joining or leaving the list is a failing test rather
 than a silent widening.
 
+> **Amended by Amendment I.** The list is **60** keys, not 61, and there are
+> **four** absent groups, not three: `escape` was removed, on the same reasoning
+> given here for `space`. `enter` stays on the list but may no longer be declared
+> bare. The three exclusions above stand exactly as written; what was wrong was
+> that the reasoning was not applied to two keys it plainly reached — GitHub issue
+> #8. See Amendment I.
+
 ### Decision 5 — a single-character key must carry ctrl, alt or meta
 
 **This is the WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts, Level A
@@ -1928,6 +1963,17 @@ modifier rule for character keys" in `src/core/__tests__/validation.test.ts`,
 which asserts the message contains `2.1.4`, `Character Key Shortcuts` and
 `Level A`, pins shift-alone as a rejection, and derives the exempt set from
 `HOTKEY_KEYS` itself so a new named key is covered the moment it lands.
+
+> **Amended by Amendment I.** This decision is unchanged and its message is
+> unchanged. What changed is that it is no longer the *only* reason a chord may be
+> refused for carrying no modifier: `enter` is now refused bare as well, on
+> **activation** grounds, with its own message that names no criterion. The
+> sentence above — "Function keys and the named navigation and editing keys are
+> exempt" — remains true of 2.1.4 and is true of `enter` too; `enter` is refused by
+> a different rule, and conflating the two would have made this citation
+> inaccurate. The exempt set in the test now subtracts
+> `HOTKEY_MODIFIER_REQUIRED_KEYS`, so it still derives rather than transcribes. See
+> Amendment I.
 
 ### Decision 6 — cross-extension conflicts are impossible, and REJECTING them was refused
 
@@ -2031,6 +2077,186 @@ Pane 2 view with ISSUE-004's virtualizer, not in this contract.
 - **Neutral.** `src/core/hotkeys.ts` is a new file under the 100% coverage gate,
   and it is deliberately trivial: three pure functions, no DOM, no React, no
   state. The interesting code is the dispatcher, and the dispatcher is Phase 2.
+
+---
+
+## Amendment I — `enter` and `escape`: the allowlist now applies its own rule to itself
+
+**Date:** 2026-07-31 · **Status:** Accepted · **Amends:** Amendment H Decision 4
+(the allowlist and its absences) and Amendment H Decision 5 (the modifier rule,
+which is now one of two rules rather than the only one)
+
+### The finding
+
+GitHub issue #8. `HOTKEY_KEYS` admitted `enter` and `escape` as chords with **zero
+modifiers**, because the guard in `normalizeHotkey` refused a bare chord only when
+`key.length === 1`. Decision 4 excludes `space` in these words:
+
+> **`space`.** Space activates the focused control: a button, a checkbox, a row.
+> Claiming it globally means the focused control stops responding to the key that
+> operates it.
+
+That reason reaches `enter` exactly. Enter activates the focused control — the
+default button, a focused link, a table row — and submits a form, in every browser
+and every assistive technology. Two keys with one failure mode sat on opposite
+sides of the list, and the list explained only one of them.
+
+`escape` has a second, concrete collision. It is the shell's dismissal key: it
+closes the ribbon's overflow menu, cancels a drag, leaves fullscreen, and dismisses
+a `@radix-ui/react-dialog` dialog — and this project ships that dependency. Once a
+dispatcher exists, an extension holding bare `escape` and an open dialog are in a
+fight neither side declared.
+
+**What was *not* wrong, and is not being fixed here.** WCAG 2.2 §2.1.4 Character
+Key Shortcuts is about single printable **character** keys. It genuinely does not
+reach `enter`, `escape`, `backspace`, `delete` or `insert`, so the rule as shipped
+was conformant and no accessibility claim in this repository was false. This
+amendment is about the allowlist applying its own stated rationale uniformly.
+
+### Why now, and why the cost only rises
+
+Nothing dispatches a chord yet — pinned by "finds no listener registration and no
+key-event name in any module under src/" in
+`src/__tests__/noEventListener.test.ts`. **No extension exists**, and ISSUE-005 has
+not landed. So today this change breaks nothing at all.
+
+That is the entire argument for doing it now rather than with the Phase 2
+dispatcher. The moment chords actually fire, removing a key from the allowlist or
+adding a modifier requirement to one is a **breaking change for every extension
+that declared it** — it turns a working registration into a rejected one, and a
+rejected registration takes the whole blueprint with it. The cost of this decision
+therefore rises with every release after this one, and it never falls. It is
+recorded here so that a later reader who finds the change disruptive can see that
+the alternative was to make it more disruptive later.
+
+### Decision 1 — `escape` is removed from the allowlist outright
+
+`HOTKEY_KEYS` is **60** keys: 26 Latin letters, 10 digits, `f1`–`f12`, the four
+arrows, and `home`, `end`, `pageup`, `pagedown`, `enter`, `delete`, `insert`,
+`backspace`. Decision 4's list of absences gains a fourth group.
+
+**A modifier-gated Escape was considered and refused as dead surface rather than
+accepted as a compromise.** The obvious symmetric move — keep `escape`, require a
+modifier, as with `enter` below — buys nothing, because the modified forms are all
+claimed by something outside this shell: `Ctrl+Escape` opens the Start menu on
+Windows, and `Alt+Escape` and `Meta+Escape` belong to the window manager on the
+major desktops. Offering a family of chords the host cannot deliver would be worse
+than offering none, because the failure is invisible at registration and shows up
+only as a shortcut that silently never fires.
+
+Escape belongs to the focused component, exactly as `tab` and `space` do. That is
+the whole rule and it needs no exception. *Tests:* "rejects %s as a hotkey key" in
+`src/core/__tests__/validation.test.ts` now carries `escape` alongside `tab` and
+`space`, and "accepts every key in the host allowlist" pins `HOTKEY_KEYS.size` at
+60 and asserts `HOTKEY_KEYS.has('escape')` is `false`.
+
+### Decision 2 — `enter` stays on the allowlist and becomes modifier-required
+
+`enter` is not removed, because `Ctrl+Enter` — "send", "commit", "run" — is the one
+genuinely wanted chord in this family, and it collides with nothing. Removing the
+key would have taken that with the rest.
+
+A new export sits beside the allowlist:
+
+```ts
+/** Keys that may never be bound bare, whatever their length. */
+export const HOTKEY_MODIFIER_REQUIRED_KEYS: ReadonlySet<string> = new Set(['enter']);
+```
+
+and Decision 5's guard widens by exactly one clause:
+
+```ts
+if ((key.length === 1 || HOTKEY_MODIFIER_REQUIRED_KEYS.has(key)) && !ctrl && !alt && !meta) {
+```
+
+`shift` satisfies neither half, for two different reasons that happen to agree:
+Shift+K still produces a character, and Shift+Enter still activates the focused
+control. *Tests:* "validateBlueprint — the activation rule for keys that must carry
+a modifier" in `src/core/__tests__/validation.test.ts`, which pins the bare
+rejection, shift-alone as a rejection, `Ctrl+Enter` as accepted, and derives its
+coverage from `HOTKEY_MODIFIER_REQUIRED_KEYS` itself so a key added to that set is
+covered the moment it lands.
+
+### Decision 3 — one rule at one door, and no second suppression at dispatch time
+
+Suppressing bare Enter a second time inside the Phase 2 dispatcher was considered
+and **refused**. Two copies of one rule drift, and the drift is silent: whichever
+copy is edited, the other keeps enforcing the old rule and the system as a whole
+enforces neither predictably. The declaration door is where every chord already
+passes, it is where `HOTKEY_KEYS`, the 2.1.4 rule and the uniqueness check already
+live, and the check is a `Set` membership test that costs nothing.
+
+This is the same reasoning Amendment A used for validating and storing in one pass,
+and Amendment H Decision 6 used for refusing to give `normalizeBlueprint` a view of
+the store: a rule evaluated twice is a rule that can disagree with itself.
+
+### Decision 4 — the Enter refusal gets its own message and does NOT cite 2.1.4
+
+**This is the load-bearing part of the amendment, and it is the reason the change
+is not two lines.**
+
+Extending the existing 2.1.4 message to cover Enter would have been the smallest
+diff and would have been wrong. 2.1.4 is about *character* keys. Enter is not one.
+A message telling an author that WCAG 2.2 Success Criterion 2.1.4 forbids their
+bare Enter shortcut states something false about the criterion, and it teaches the
+author a wrong rule they will carry into their next project.
+
+That is precisely the failure mode Amendment G exists to stop — a citation written
+one step wider than what licenses it — and the tenth instance of the pattern would
+have been introduced by the fix for issue #8 itself. So the two rules meet at one
+`if` and then part company:
+
+| | Refused because | Message names |
+|---|---|---|
+| `k`, `7` — one character, no modifier | WCAG 2.2 §2.1.4 Character Key Shortcuts, Level A | the criterion, its title and its level |
+| `enter` — on the modifier-required list | it **activates the focused control** | the activation, and ADR-0001 Amendment I. **No criterion, no level.** |
+
+`bareChordMessage` in `RegistryContext.tsx` is the branch point, and the split is
+asserted in both directions rather than merely written down. *Tests:* "does NOT
+cite WCAG 2.1.4 for enter, which is not a character key" asserts the Enter message
+contains neither `2.1.4`, nor `Character Key Shortcuts`, nor `Level A`; "leaves the
+2.1.4 message alone for a genuine character key" asserts the character-key message
+still names `2.1.4` and does *not* name this amendment. A future edit that merges
+the two messages fails one of those two cases whichever direction it merges in.
+
+### Consequences
+
+- **Positive.** The allowlist's docblock no longer implies a rule it does not
+  apply. `space` and `enter` are now on the same side of the same reasoning, and
+  `escape` is absent for a reason stated at the list rather than discovered by a
+  user whose dialog stopped closing.
+- **Positive.** The change is free today and expensive later, and it was made
+  today. No extension exists to break, and ISSUE-005 has not landed.
+- **Positive.** `Ctrl+Enter` survives, which is the chord anybody actually wanted
+  out of this family.
+- **Negative — accepted.** `HOTKEY_MODIFIER_REQUIRED_KEYS` is a second list to keep
+  in step with `HOTKEY_KEYS`. It is a `Set` with one member, it is exported so it
+  can be asserted rather than trusted, and "holds exactly the keys that activate
+  the focused control" pins both its contents and the fact that every member of it
+  is a real allowlist key — a member that was not would guard a chord already
+  rejected one check earlier and would mean nothing.
+- **Negative — accepted.** An extension that wants a bare Escape or a bare Enter
+  cannot have one, and there is no escape hatch. That is the same trade Decision 4
+  already made for `tab` and `space`.
+- **Neutral.** Nothing was dispatched before this amendment and nothing is
+  dispatched after it. The Phase 2 dispatcher inherits a smaller and more
+  defensible set of chords to route.
+- **Housekeeping owed, stated rather than left to be found — and since paid.** The
+  count `61` stood in `README.md`, `DEVELOPER.md` and `.github/ISSUES_MANIFEST.md`
+  when this amendment was written, and `escape` was named in the allowlist prose of
+  the latter two. Those three files were **not** edited here — they were outside
+  the change's remit and in other hands at the time — so each carried a stale count
+  and a stale key, and the debt was recorded instead of being left for a reader to
+  discover. It has since been swept, in all three: no allowlist-context `61`
+  survives anywhere, `escape` is gone from every enumeration and appears instead in
+  each file's list of deliberately absent keys with the dismissal-key reason
+  attached, and the two bare-chord rules are documented apart, with the Enter rule
+  citing no criterion as Decision 4 requires. The entry is kept rather than deleted
+  because what it records is not the count but the shape: an amendment that changes
+  a number owes a sweep of every file repeating it, and the way to make that owed
+  work visible is to name the files. The authority was never the prose in any case
+  — it is the test: "accepts every key in the host allowlist" in
+  `src/core/__tests__/validation.test.ts` pins `HOTKEY_KEYS.size` at 60.
 
 ---
 

@@ -70,7 +70,7 @@ export const REGISTRY_LIMITS = {
  * safely let a plugin claim is small, closed and worth writing down. It names
  * `event.key` values, not `event.code` values — ADR-0001 Amendment H.
  *
- * **Three groups are deliberately absent, and the absences are the interesting
+ * **Four groups are deliberately absent, and the absences are the interesting
  * part of the list:**
  *
  *  - **`tab`.** Tab is how a keyboard user moves between controls. An extension
@@ -81,13 +81,26 @@ export const REGISTRY_LIMITS = {
  *  - **`space`.** Space activates the focused control — a button, a checkbox, a
  *    row. Claiming it globally means the focused control stops responding to the
  *    key that operates it.
+ *  - **`escape`.** Escape is the shell's dismissal key: it closes the ribbon's
+ *    overflow menu, cancels a drag, leaves fullscreen, and dismisses a
+ *    `@radix-ui/react-dialog` dialog. An extension owning it globally would break
+ *    dismissal for the whole shell at once. It is removed outright rather than
+ *    made modifier-only, because a modifier-gated Escape is dead surface and not
+ *    a compromise — `Ctrl+Escape` opens the Windows Start menu, and `Alt+Escape`
+ *    and `Meta+Escape` are claimed by the window manager. Escape belongs to the
+ *    focused component, exactly as `tab` and `space` do. ADR-0001 Amendment I.
  *  - **Every modifier as a key**: `control`, `alt`, `shift`, `meta`, `capslock`,
  *    `altgraph`. A modifier is a field on `Hotkey`; naming one as the `key` would
  *    describe a chord that fires on the modifier's own keydown, before the user
  *    has pressed anything.
  *
+ * `enter` IS on the list, but may never be bound bare — see
+ * `HOTKEY_MODIFIER_REQUIRED_KEYS` below for why that is a different rule from the
+ * WCAG 2.1.4 one and carries a different citation.
+ *
  * Nothing dispatches these yet — validation only. Pinned by "validateBlueprint —
- * ribbon action hotkeys" in `src/core/__tests__/validation.test.ts`.
+ * ribbon action hotkeys" in `src/core/__tests__/validation.test.ts`, whose
+ * rejection table walks all four absent groups by name.
  */
 export const HOTKEY_KEYS: ReadonlySet<string> = new Set([
   ...'abcdefghijklmnopqrstuvwxyz',
@@ -113,11 +126,38 @@ export const HOTKEY_KEYS: ReadonlySet<string> = new Set([
   'pageup',
   'pagedown',
   'enter',
-  'escape',
   'delete',
   'insert',
   'backspace',
 ]);
+
+/**
+ * Keys that may never be bound bare, whatever their length.
+ *
+ * `enter` is on `HOTKEY_KEYS` above and is a good chord *with* a modifier —
+ * `Ctrl+Enter` is the one genuinely wanted member of the family, and removing the
+ * key outright would have taken it with the rest. What is refused is the BARE
+ * declaration, on **activation** grounds: Enter activates the focused control —
+ * the default button, a focused link, a table row — and submits a form, so a bare
+ * Enter chord fires on top of the activation the user actually asked for. That is
+ * the same failure mode `space` is excluded outright for, and it is why the two
+ * keys no longer sit on opposite sides of the list explaining only one of them.
+ *
+ * **This is NOT the WCAG 2.2 §2.1.4 rule and deliberately does not cite it.**
+ * 2.1.4 Character Key Shortcuts is about single printable *character* keys, and it
+ * genuinely does not reach Enter; borrowing the citation would make the citation
+ * inaccurate, which is exactly the drift ADR-0001 Amendment G exists to stop. The
+ * two rules meet at one check in `normalizeHotkey` — one door — but they carry
+ * separate messages, and the Enter message names neither the criterion nor its
+ * level. ADR-0001 Amendment I.
+ *
+ * Pinned by "validateBlueprint — the activation rule for keys that must carry a
+ * modifier" in `src/core/__tests__/validation.test.ts`, which asserts the bare
+ * rejection, that the message does NOT cite 2.1.4, that `Ctrl+Enter` is accepted,
+ * and that every member of this set is refused bare — so a key added here is
+ * covered the moment it lands.
+ */
+export const HOTKEY_MODIFIER_REQUIRED_KEYS: ReadonlySet<string> = new Set(['enter']);
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                  */
@@ -380,6 +420,41 @@ function validateOptionalModifier(
 }
 
 /**
+ * Why a bare chord was refused. Two grounds, two messages, one shared check.
+ *
+ * The grounds are genuinely different and the messages do not borrow each other's
+ * citation:
+ *
+ *  - A **single-character** key with no modifier is refused for WCAG 2.2 Success
+ *    Criterion 2.1.4 Character Key Shortcuts (Level A). That message names the
+ *    criterion, because an author who hits it should be able to look it up.
+ *  - A key on `HOTKEY_MODIFIER_REQUIRED_KEYS` is refused because it **activates
+ *    the focused control**. 2.1.4 does not reach it — it is not a character key —
+ *    so that message names no criterion at all. Citing 2.1.4 here would be an
+ *    inaccurate citation, which ADR-0001 Amendment G treats as the defect it is.
+ *
+ * The two sets are disjoint today (`enter` is five characters long), so exactly
+ * one branch answers for any given key.
+ */
+function bareChordMessage(key: string, path: string): string {
+  if (HOTKEY_MODIFIER_REQUIRED_KEYS.has(key)) {
+    return (
+      `Field "${path}" binds "${key}" with no "ctrl", "alt" or "meta" modifier. "${key}" ` +
+      `activates the focused control — the default button, a focused link, a table row — so a ` +
+      `bare shortcut on it would fire on top of the activation the user asked for. It must ` +
+      `carry "ctrl", "alt" or "meta"; "shift" does not satisfy this rule, because Shift does ` +
+      `not stop the activation. ADR-0001 Amendment I.`
+    );
+  }
+  return (
+    `Field "${path}" binds the single-character key "${key}" with no "ctrl", "alt" or "meta" ` +
+    `modifier. WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts (Level A) forbids a ` +
+    `character-key-only shortcut; "shift" does not satisfy it, because Shift produces a ` +
+    `character too. Function keys and named navigation keys are exempt.`
+  );
+}
+
+/**
  * Validate a `hotkey` payload and build the host-owned chord for it.
  *
  * **The stored object materialises all four modifiers as explicit booleans**,
@@ -439,26 +514,30 @@ function normalizeHotkey(value: unknown, path: string, seenChords: Set<string>):
   const shift = validateOptionalModifier(value, 'shift', `${path}.shift`);
   const meta = validateOptionalModifier(value, 'meta', `${path}.meta`);
 
-  // ---- WCAG 2.2 §2.1.4 Character Key Shortcuts (Level A) -------------------
-  // A shortcut that is a single printable character and nothing else is
-  // unusable for speech-input users, whose dictation emits characters, and for
-  // anyone who types into a surface the shortcut is live over. The criterion is
-  // met by one of three routes — turn it off, remap it, or make it active only
-  // on focus — or by not creating one, which is the route taken here: the chord
-  // must carry Ctrl, Alt or Meta.
+  // ---- No bare chord: two rules, one door ----------------------------------
+  // ONE check, deliberately, rather than a second suppression later at dispatch
+  // time. Two copies of a rule drift, and the door a declaration must pass
+  // through is here.
   //
-  // Shift does NOT count. Shift+K is still a character key; it produces "K".
-  // Function keys and the named navigation keys are exempt because they are not
-  // characters and cannot be produced by dictation or by typing into a field.
-  if (key.length === 1 && !ctrl && !alt && !meta) {
-    throw new ShellUXError(
-      'INVALID_FIELD',
-      `Field "${path}" binds the single-character key "${key}" with no "ctrl", "alt" or "meta" ` +
-        `modifier. WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts (Level A) forbids a ` +
-        `character-key-only shortcut; "shift" does not satisfy it, because Shift produces a ` +
-        `character too. Function keys and named navigation keys are exempt.`,
-      path,
-    );
+  // 1. WCAG 2.2 §2.1.4 Character Key Shortcuts (Level A). A shortcut that is a
+  //    single printable character and nothing else is unusable for speech-input
+  //    users, whose dictation emits characters, and for anyone who types into a
+  //    surface the shortcut is live over. The criterion is met by one of three
+  //    routes — turn it off, remap it, or make it active only on focus — or by
+  //    not creating one, which is the route taken here: the chord must carry
+  //    Ctrl, Alt or Meta.
+  //
+  // 2. `HOTKEY_MODIFIER_REQUIRED_KEYS` — today, `enter`. Refused on ACTIVATION
+  //    grounds, not on 2.1.4 grounds: Enter is not a character key, so the
+  //    criterion does not reach it, and the message for it names no criterion.
+  //    See `bareChordMessage`.
+  //
+  // Shift does NOT count for either. Shift+K is still a character key; it
+  // produces "K". Shift+Enter still activates the focused control. Function keys
+  // and the named navigation keys stay exempt: they are not characters, and
+  // nothing about them activates what has focus.
+  if ((key.length === 1 || HOTKEY_MODIFIER_REQUIRED_KEYS.has(key)) && !ctrl && !alt && !meta) {
+    throw new ShellUXError('INVALID_FIELD', bareChordMessage(key, path), path);
   }
 
   const hotkey: Hotkey = Object.freeze({ key, ctrl, alt, shift, meta });
