@@ -33,33 +33,59 @@ The rules:
 
 Verified directly against the repository and the worktrees at the time of writing.
 
-### Browser test lane — `browser-test-lane` — **committed and pushed, not merged**
+### Quality-first working agreement — PR **#71**, `quality-first-agreement` — **OPEN, CI green**
 
-- Commit `da7d89e`, pushed to `origin/browser-test-lane`. **No PR open for it yet.**
-- Adds `playwright.config.ts`, an `e2e/` suite, `dev.html`, `.github/workflows/browser.yml`,
-  and **`src/dev/DevShell.tsx` + `src/dev/main.dev.tsx` — now tracked for the first time**.
-- `src/dev/DevShell.tsx` is the file that makes `npm run dev` render a working shell. It
-  was the CPO review's single highest-value, lowest-effort item. **Merging this branch is
-  what unblocks anyone evaluating the product at all.**
-- Adds `@playwright/test` and a `test:browser` script that is **deliberately outside
-  `verify`**, so the `npm ci && npm run verify` fresh-clone promise stays literally true.
-  Confirmed: `verify` does not chain `test:browser`.
-- **It is based on `868fe88`, not on current `origin/main`.** It therefore does not
-  contain this file. Merge main into it, or rebase, before opening the PR.
+- Commit `c82bfe1`. All three `Verify` legs pass. **Ready to merge.**
+- Creates **`docs/adr/0003-quality-over-velocity.md`** and repo-root **`CLAUDE.md`**;
+  edits `CONTRIBUTING.md` and `.github/PULL_REQUEST_TEMPLATE.md`. Filed issue **#58**.
+- **One checkbox is deliberately unticked** — "parallel work is disjoint" — with the
+  reason written beside it, because disjointness could not be verified from inside the
+  branch. That is the doctrine working, not a defect in the PR.
+- **Until this merges, the quality doctrine lives only in §9 of this file.** Neither file
+  exists on `origin/main` — re-checked.
 
-### Quality-first working agreement — `quality-first-agreement` — **NOT committed**
+### Route the working demo to `/` — **not started, no issue, highest value-to-effort**
 
-- Worktree at branch `quality-first-agreement`, HEAD `edc29db` (behind `origin/main`).
-- Staged but uncommitted: **`CLAUDE.md` (new)** and
-  **`docs/adr/0003-quality-over-velocity.md` (new)**, plus modified `CONTRIBUTING.md` and
-  `.github/PULL_REQUEST_TEMPLATE.md`.
-- `npm run verify` has passed end to end on it, exit 0.
-- Held by its author to substantiate or remove one unevidenced sentence about a
-  whole-suite shuffle.
-- **Until this lands, the quality doctrine lives only in §9 of this file.** Neither file
-  exists on any pushed branch — re-checked across every remote ref.
+See §6.3. `src/dev/DevShell.tsx` is now committed but wired to `dev.html`, so
+`npm run dev` still renders an empty shell. **The CPO's top recommendation is half done.**
 
-### Working-tree discipline
+---
+
+## 1a. Recently landed
+
+### Browser test lane — PR **#70**, merged as **`3ebf86d`**
+
+Commit `da7d89e`; branch `browser-test-lane` preserved. **17 files, +1,389 / −4.**
+**[reproduced — commit inspected]**
+
+- Adds `playwright.config.ts` (`testDir: './e2e'`, 2 workers, chromium),
+  `e2e/shell.ts` plus five specs — `ribbon-overflow`, `pane-dividers`, `shell-layout`,
+  `hotkeys`, `focus-visibility` — `.github/workflows/browser.yml`, `dev.html`,
+  `src/dev/DevShell.tsx`, `src/dev/main.dev.tsx`. Modifies `package.json`,
+  `package-lock.json`, `tsconfig.json`, `.gitignore`, `README.md`, `CONTRIBUTING.md`.
+- **24 browser tests** (8 + 5 + 5 + 4 + 2). **[reproduced — counted]** All CI legs green.
+- **`verify` is unchanged and the lane sits deliberately outside it**, so the
+  `npm ci && npm run verify` fresh-clone promise stays literally true. **[reproduced]**
+  `@playwright/test` is a devDependency.
+- `e2e/` is isolated from vitest — vitest's `include` is `src/**` only — and from the
+  no-listener scan. **[reproduced — confirmed, not assumed]**
+- **`check:citations` now reaches `e2e/`.** Corpus grew from 32 to **37 test files** and
+  by nine prose files. **[reproduced — re-measured]** The author verified it bites by
+  corrupting a cited title and watching it fail.
+
+**This is the first thing in the repository that can see a defect jsdom cannot.** Both
+regressions it targets were proven to bite by breaking them and reverting: removing the
+Radix portal turned 4/4 overflow cases red (`visible.width` 1px against `own.width` 34px),
+and disabling the resize handle turned 4/5 divider cases red.
+
+> **Record the limit the author volunteered.** A third deliberate break — `w-0` plus
+> zeroed `hitAreaMargins` — left **all five divider tests passing**. So those tests prove
+> *that a drag occurred*, not that the hit area is any particular size. It is written up
+> in PR #70's Limits section. Do not cite them as evidence about hit-target sizing.
+
+---
+
+## 1b. Working-tree discipline
 
 The shared working tree has been held by different agents on different branches through
 the session. **One working tree, one git writer.** A commit already landed on the wrong
@@ -83,14 +109,14 @@ Verified 2026-08-01 after `git fetch --all --prune`.
 
 | Ref | SHA | Note |
 |---|---|---|
-| `origin/main` | `03615e1` | Head. |
-| `origin/browser-test-lane` | `da7d89e` | **In flight — see §1.** Based on `868fe88`. |
+| `origin/main` | `3ebf86d` | Head. Merge of PR #70. |
 | local `main` | `e504fd3` | **STALE — well behind `origin/main`.** |
+| `origin/browser-test-lane` | `da7d89e` | **Merged** via PR #70. Branch preserved. |
+| `origin/quality-first-agreement` | `c82bfe1` | **PR #71 open, CI green — see §1.** |
 | `origin/phase-1-hotkeys` | `a1df19d` | Merged content; branch not deleted. |
 | `origin/phase-2-shell` | `b80cad0` | Merged via PR #33. |
-| `origin/docs-security-sweep` | `4509c38` | Merged via PR #56. |
-| `quality-first-agreement` | `edc29db` | **Local only, uncommitted work — see §1.** |
-| 5 `dependabot/*` remotes | — | PRs #34–#38, all open. #35 and #38 cross a major. |
+| `origin/docs-security-sweep` | `4509c38` | Merged via PR #56. **Was fast-forwarded to `868fe88` in a local tree by an agent outside its remit — see §11.** |
+| 5 `dependabot/*` remotes | — | PRs #34–#38, all open. #35 and #38 cross a major. **#34, #35 and #38 are currently RED on CI** — triage before merging any of them. |
 
 > **FIRST ACTION for a new session:** `git checkout main && git pull --ff-only`.
 > Local `main` at `e504fd3` predates the shell merge — a tree checked out there has **no
@@ -163,10 +189,10 @@ alongside §4.
 
 ## 6. Audit findings
 
-Nine audits have now run: architecture, code correctness, security, test quality,
-production readiness, repo/CI, deferrals, CPO, plus a second wave covering enforcement
-and test integrity. Each finding is tagged **[reproduced]** where confirmed by execution,
-or **[reasoned]** / **[reported]** where it was not re-run here.
+Audits so far: architecture, code correctness, security, test quality, production
+readiness, repo/CI, deferrals, CPO, plus a second wave covering enforcement and test
+integrity. Each finding is tagged **[reproduced]** where confirmed by execution here, or
+**[reasoned]** / **[reported]** where it was not re-run.
 
 ### 6.1 Data-destroying — Blocker
 
@@ -202,6 +228,13 @@ or **[reasoned]** / **[reported]** where it was not re-run here.
 
 ### 6.3 Production readiness
 
+- **`npm run dev` still renders an empty shell. The CPO's top recommendation is only half
+  done.** **[reproduced]** `src/dev/DevShell.tsx` landed with PR #70, but it is wired to
+  `dev.html` → `src/dev/main.dev.tsx`. `npm run dev` is bare `vite`, which serves
+  `index.html` → `src/main.tsx` → `App`, and `App.tsx` says in its own docblock that
+  nothing is registered there. The recommendation was to make the working demo the
+  **default at `/`**. **Still open, still the highest value-to-effort item in the
+  repository, and it now has no issue.** Do not read PR #70 as having solved it.
 - **No runtime plug-in delivery exists at all.** Nothing on `window`, no manifest fetch,
   no dynamic import. The model is compile-time only — deploying today means deploying an
   empty frame. **[reproduced]**
@@ -311,6 +344,20 @@ risk **cannot exhibit it**, because its fixture has a long literal tail.
   Issue #64 already records that the reported order-dependence does not reproduce; keep
   it that way. **[reproduced — the non-reproduction, that is]**
 
+  **The narrow conclusion, which is the one to keep:** the manifest's claim **has lost
+  its evidence without anything replacing it**. It is not disproven. `--sequence.shuffle`
+  reorders *files*, not cases, so one file order at one seed is all anyone has ever
+  measured.
+
+  **This is the best worked example the project produced today — read it before trusting
+  any single run.** The claim passed through three states: (1) repeated as fact from the
+  manifest; (2) apparently *confirmed* — a junctioned `node_modules` produced 104 failures
+  that looked exactly like the predicted order-dependence; (3) contradicted by a clean run
+  (31 files, 1,079 tests, green under shuffle). **Stopping at state two would have written
+  a false claim into the file every future session reads, backed by evidence that was an
+  artifact of the author's own setup.** Corroboration that arrives from a broken
+  environment is not corroboration.
+
 ---
 
 ## 7. Issue tracker state
@@ -324,7 +371,7 @@ Counts verified 2026-08-01. **See §0 — re-derive these, do not trust them.**
 
 | Group | Issues |
 |---|---|
-| **BLOCKER** | **#39 — nobody has ever run the app.** Plus two blockers with no issue yet: §5 enforcement, and §6.2 vulnerability reporting. **File both.** |
+| **BLOCKER** | **#39 — nobody has ever run the app.** Plus **three items with no issue at all**: routing the demo to `/` (§6.3), the §5 enforcement gap, and §6.2 vulnerability reporting. **File all three.** |
 | RESEARCH / DECISION | #68 (versioning mechanisms conflict), #67 (theming), #65 (build a real first-party module) |
 | CORRECTNESS | #10, #16, #17, #20, #21, #22, #23, #24, #25, #26, #64 |
 | CONTRACT | #28, #29, #30, #31, #32, #57, #66 |
@@ -347,22 +394,22 @@ Cheap and high-value first; and the decisions gate everything downstream.
 |---|---|---|
 | 1 | **Answer §4: are third parties real customers in the next 12 months?** | It decides whether roughly half the open documentation and contract issues are worth doing at all. Doing them first risks polishing work the answer deletes. |
 | 2 | **Answer §5: pay for the plan tier that allows branch protection, or make the repository public?** | Until one of those, no doctrine in §9 can be *enforced* — only asked for. It also unblocks §6.2, which shares the root cause. |
-| 3 | **Merge `browser-test-lane`** (`da7d89e`) — rebase onto `origin/main` first | Lands `src/dev/DevShell.tsx`. Until then nobody can run the product, nothing can be validated by a human, and #39 — the sole tracked Blocker — cannot even be started. |
-| 4 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | The only findings that destroy user data. Both reproduced. Both small. |
-| 5 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | Two lines each. One makes a live `SECURITY.md` claim false. Add the exports-walking test in the same change so it cannot regress a third time. |
-| 6 | **Root error boundary** | One component. Turns every unhandled throw from a white screen into something diagnosable — which every later step benefits from. |
-| 7 | **Land `quality-first-agreement`** | Cheap, already verified green, and it is what §9 should point at instead of restating. |
+| 3 | **Route the working demo to `/`** — file an issue first | Roughly a one-line change to what `npm run dev` serves. Until then nobody can run the product, nothing can be validated by a human, and #39 — the sole tracked Blocker — cannot even be started. **PR #70 landed the component but not the routing.** |
+| 4 | **Merge PR #71** (`quality-first-agreement`) | Already green. It is what §9 should point at instead of restating, and everything after this benefits from having the doctrine written down. |
+| 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | The only findings that destroy user data. Both reproduced. Both small. **The browser lane can now see them.** |
+| 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | Two lines each. One makes a live `SECURITY.md` claim false. Add the exports-walking test in the same change so it cannot regress a third time. |
+| 7 | **Root error boundary** | One component. Turns every unhandled throw from a white screen into something diagnosable — which every later step benefits from. |
 | 8 | Fix the two vacuous tests and the `patternFor` hole | §6.5 and §6.6. Do it before the hole is load-bearing. |
-| 9 | Everything else, by milestone priority | — |
+| 9 | Triage the three red Dependabot PRs | #34, #35, #38 are red. #35 and #38 cross a major. |
+| 10 | Everything else, by milestone priority | — |
 
 ---
 
 ## 9. The quality doctrine
 
-**As of `03615e1`, `docs/adr/0003-quality-over-velocity.md` and the repo-root `CLAUDE.md`
-still do not exist on any pushed branch** — re-checked across every remote ref. They are
-written and staged but uncommitted on `quality-first-agreement`; see §1. **Once that
-lands, replace this section with a pointer to those two files.**
+**As of `3ebf86d`, `docs/adr/0003-quality-over-velocity.md` and the repo-root `CLAUDE.md`
+do not exist on `origin/main`.** They are the content of **PR #71**, which is open and
+green. **Once it merges, replace this section with a pointer to those two files.**
 
 Until then, the doctrine to apply:
 
@@ -408,8 +455,12 @@ One session owns delivery. Concretely, that role:
 | **Two agents doing git operations in one working tree** | Put a commit on the wrong branch. **One working tree, one git writer.** Use `git worktree add`. |
 | **`check-citations` trailing-placeholder prefix match** | See §6.6. A short citation can resolve *vacuously*. Green does not mean cited. |
 | **`ISSUE-00N` (manifest) versus `#N` (GitHub) collide** | A phantom `ISSUE-006` is cited 31 times across 12 files with no manifest section defining it. Tracked as #53. |
+| **`gh pr checks` returns NON-ZERO while checks are still pending** — not 0. Measured here: exit **1** on a PR with pending legs, and exit **1** on a PR with failed legs. An audit reported exit 8 for the pure-pending case; I could not isolate it. | Either way the rule holds: **a non-zero exit does not mean failed — it may mean pending.** Any script treating non-zero as failure will misread a run in progress. Read the status column, not the exit code. |
+| **A branch was moved by an agent outside its remit.** A `git merge origin/main` ran while another agent held the shared tree on `docs-security-sweep`, fast-forwarding it `4509c38` → `868fe88`. | Non-destructive, already-merged content, and left in place. But it reinforces the rule: **one working tree, one git writer.** |
+| **Transient probe edits alarmed two auditors.** An agent deliberately broke `ShellLayout.tsx` to prove the tests bite; two concurrent auditors read the working tree and filed it as a live defect. | Wasted two audits. **Announce a probe window before deliberately breaking a shared file — or do it in a worktree.** This update's mutation probes were all run in a throwaway worktree for that reason. |
 | **Memory exhaustion on this 8GB machine** | `test:coverage` was OOM-killed twice under concurrent load. **Limit concurrency.** |
-| **A partial `npm install` produces *fake* failures.** A truncated `ajv` file and a missing `lib.es2022.d.ts` surfaced as bogus lint crashes and **13 phantom TypeScript errors**. | A new maintainer would reasonably file those as defects. **Suspect the environment before the code when failures look structural.** Reinstall, then re-run, before believing them. |
+| **The machine is in a degraded state as of this writing.** ~620 MB free across ~572 processes, with orphaned `vitest` and `vite-node` processes from earlier agents still resident. `verify` died twice on resource exhaustion — exit 127 `fork: Resource temporarily unavailable`, and `-1073740791`. Playwright workers died with `spawn UNKNOWN`. | **Recommend a restart before the next session.** And the standing rule: structural-looking failures should be suspected as environmental **first**. |
+| **A partial `npm install` produces *fake* failures.** A truncated `ajv` file and a missing `lib.es2022.d.ts` surfaced as bogus lint crashes and **13 phantom TypeScript errors**. A junctioned `node_modules` separately produced **104 failures** that mimicked a real predicted defect. | A new maintainer would reasonably file those as defects — and one audit nearly wrote the junction artifact into this file as a confirmed finding (§6.9). **Suspect the environment before the code when failures look structural.** Reinstall, then re-run, before believing them. |
 
 ---
 
@@ -425,7 +476,12 @@ One session owns delivery. Concretely, that role:
 runs in both. **[reported]** Worth knowing, because "run verify before every commit" is
 the doctrine and its cost should be stated rather than discovered.
 
-**CI does not run all of them.** Inspected at `03615e1`:
+There is now a **second, separate lane**: `npm run test:browser` runs 24 Playwright tests
+against a real Chromium, on its own `browser.yml` workflow. It is **deliberately not part
+of `verify`** — see §1a. Run it when touching layout, the ribbon, dividers, hotkeys or
+focus, because it is the only thing here that can see what jsdom cannot.
+
+**CI does not run all of `verify`.** Inspected at `3ebf86d`:
 
 | Stage | On CI? |
 |---|---|
@@ -450,4 +506,4 @@ Two checks gate every commit and are easy to trip:
   non-Markdown file.
 - **`check:citations`** — never quote a test title you have not confirmed exists. It only
   inspects quoted strings that follow a citation marker, and see §6.6 for what it will
-  miss even then.
+  miss even then. Since PR #70 its corpus includes `e2e/` — 37 test files.
