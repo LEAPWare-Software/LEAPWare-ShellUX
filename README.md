@@ -295,8 +295,16 @@ npm run dev
 `npm run dev` starts the Vite dev server on its default port, 5173, and prints the
 URL. What renders today is the real three-pane shell with an **empty registry**:
 `src/App.tsx` registers no extensions, so you get the ribbon's host actions, a
-resizable and collapsible pane 1 with nothing in it, and two empty panes. The mock
-extensions that would fill it are ISSUE-005. See Project Status above.
+resizable and collapsible pane 1 with nothing in it, and two empty panes. See
+Project Status above.
+
+To see the shell with something in it, open **`/dev.html`** on that same dev
+server. It mounts the identical shell with ISSUE-005's two verification remotes
+from `src/mocks/` registered, and it is what the browser test lane drives. It is
+a **dev-server-only fixture**: Vite's production input is `index.html` alone, so
+`dev.html` is never emitted into `dist/`, and what the production bundle renders
+is unchanged by its existence. There is no flag to set and no environment
+variable — see `src/dev/DevShell.tsx`.
 
 ### Scripts
 
@@ -312,6 +320,8 @@ extensions that would fill it are ISSUE-005. See Project Status above.
 | `npm run check:portability` | Enforces ADR-0002 — see below. |
 | `npm run audit:prod` | `npm audit` over production dependencies at `--audit-level=high`. Needs network access. |
 | `npm run verify` | **The gate.** Runs all of the above in order: portability, citations, lint, typecheck, coverage, the randomised integration run, the script tests, build, audit. This is exactly what CI applies. |
+| `npm run test:browser:install` | Downloads Chromium for the browser lane. Once per machine, and **not** part of `npm ci` — see "The browser test lane" below. |
+| `npm run test:browser` | Runs the Playwright suite in `e2e/` against a real Chromium. Deliberately **not** part of `verify`. |
 
 ### The acceptance test
 
@@ -352,6 +362,14 @@ vulnerable dependency — and blocks weekly on a timer, which is what notices a 
 published advisory without blaming an unrelated commit. See
 [`.github/workflows/audit-dependencies.yml`](.github/workflows/audit-dependencies.yml)
 and [`.github/workflows/audit-schedule.yml`](.github/workflows/audit-schedule.yml).
+
+[`.github/workflows/browser.yml`](.github/workflows/browser.yml) is a third,
+separate workflow, and separate for a reason that is worth stating where a reader
+will meet it: it needs a Chromium download, which `npm ci` does not perform and
+`package-lock.json` does not pin. Folding it into `ci.yml` would mean the
+acceptance test above no longer described what CI runs. It is Ubuntu-only and
+Chromium-only, it caches the browser between runs, and it uploads the Playwright
+trace when it fails. See "The browser test lane" under Testing and coverage.
 
 ---
 
@@ -748,7 +766,7 @@ compliant is mistaken. This project does not make that claim.
 
 ## Testing and coverage
 
-Tests run under Vitest.
+Tests run under Vitest, in jsdom — with one lane that does not, described below.
 
 Coverage is enforced as a **build gate**, not reported as an achievement, and
 the gate is checkable rather than aspirational: `.github/workflows/ci.yml` runs
@@ -763,6 +781,37 @@ badge. A project-wide figure would be meaningless while most of the project is
 unwritten, and a badge would imply a verified state that does not exist. When
 there is a meaningful, measured, project-wide figure produced by CI, it will be
 reported with the date and commit it was measured at.
+
+### The browser test lane, and what coverage does not tell you
+
+**A 100% coverage gate over code that is never laid out is a weaker statement
+than it sounds.** jsdom has no layout engine: every `getBoundingClientRect`
+answers 0×0, no ancestor clips anything, and no pointer ever hit-tests. Two of
+the worst defects this project has had were geometric, and the suite was green
+through both — the ribbon's overflow menu **clipped to zero visible pixels** by
+two `overflow-hidden` ancestors while six tests asserted it worked, and a case
+named for surviving "a divider drag in flight" that **never started a drag**,
+because a 0×0 rect cannot intersect a 12px hit area. Both lines of code were
+covered. Neither behaviour was.
+
+`e2e/` closes that gap with Playwright against a real Chromium: measured pixels,
+real ancestor clipping, `elementFromPoint`, a real pointer drag, a real reload
+and real keyboard focus. It is run with `npm run test:browser`, after a one-time
+`npm run test:browser:install`, and
+[`.github/workflows/browser.yml`](.github/workflows/browser.yml) runs it on every
+pull request and every push to `main`.
+
+**It is not part of `npm run verify`, on purpose.** Playwright needs a browser
+download that `npm ci` does not perform and `package-lock.json` does not pin —
+which is precisely the "local setup" the acceptance test above rules out. So the
+lane gets its own script and its own workflow, and the `npm ci && npm run verify`
+promise stays true exactly as written rather than being softened to accommodate a
+test. The cost of that choice is stated rather than hidden: a fresh clone runs
+`verify` and gets no browser coverage until it runs the install step, and CI is
+where the lane is guaranteed to have run.
+
+The two defects above each have a regression case, and both were confirmed to
+fail when the fix is reverted rather than merely to pass while it is present.
 
 ---
 
