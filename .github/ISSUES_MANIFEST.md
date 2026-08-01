@@ -22,7 +22,7 @@ currently exists.
 | ISSUE-001 | Type-Safe IoC Extension Registry & Primitives | `LANDED` |
 | ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
 | ISSUE-003 | UI State Hydration & Serialization Engine | `IN PROGRESS` — engine implemented and green, **not merged and not wired to anything**; see the note below |
-| ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `BLOCKED` (on 002) |
+| ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
 | ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `BLOCKED` (on 002–004) |
 
 **No marker in the legend fits ISSUE-002 exactly, and it is being recorded that way
@@ -30,12 +30,14 @@ rather than rounded up.** `LANDED` is defined as four things: *merged*, the sour
 files exist, they are tested, and they pass the coverage gate. The last three are
 true — `src/components/layout/ShellLayout.tsx`,
 `src/components/layout/PaneWrapper.tsx` and `src/components/ui/RibbonToolbar.tsx`
-exist, carry 82 tests across three files in `src/components/__tests__/`, and the
-full suite runs 757 tests green at 100% statements, branches, functions and lines
+exist, carry 87 tests across three files in `src/components/__tests__/` — five of
+them ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx` — and the
+full suite runs 841 tests green at 100% statements, branches, functions and lines
 with `src/components/**` inside the `vitest.config.ts` coverage include list. **The
-first is false.** At the time of writing the work is uncommitted on branch
-`phase-1-hotkeys` — `src/components/` is still untracked — and has not been through
-review or merge. `IN PROGRESS` is therefore the closest true marker, and the row
+first is false.** The work is committed on branch `phase-2-shell` and has not been
+through review or merge; the older form of this paragraph said it was uncommitted on
+`phase-1-hotkeys` with `src/components/` untracked, and both of those stopped being
+true when the branch was cut. `IN PROGRESS` is therefore the closest true marker, and the row
 carries the qualification inline so that nobody reads it as either "not written" or
 "merged". This row must be changed to `LANDED` when, and only when, the merge
 happens; the tests and the gate are already satisfied and will not need re-checking
@@ -331,12 +333,14 @@ None. This is the root of the dependency graph.
   registration succeeding or failing. Design and rejected alternatives: ADR-0001
   Amendment H.
   *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no listener
-  registration and no key-event name in any module under src/", which parses every
-  non-test module under `src/` with the TypeScript compiler and fails on
-  `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress` name
-  in any code position, with "visits every module under src/, so an empty scan
-  cannot pass vacuously" and "reports a planted listener, however it is spelled"
-  beside it so the scan cannot pass by scanning nothing; `hotkeys.test.ts` —
+  registration in any module under src/, with no exceptions at all", which parses
+  every non-test module under `src/` with the TypeScript compiler and fails on
+  `addEventListener` or `removeEventListener` in any code position, with "visits
+  every module under src/, so an empty scan cannot pass vacuously" and "reports a
+  planted listener, however it is spelled" beside it so the scan cannot pass by
+  scanning nothing; the key-event half of the same file is scoped to one
+  allowlisted module since ISSUE-004 and is "finds no key-event name in any module
+  outside the keyboard-navigation allowlist"; `hotkeys.test.ts` —
   "hotkeys module — does not attach anything > exports exactly the three pure
   helpers and no dispatcher" and "registers no keyboard listener when its
   functions are called", plus "hotkeyToken", "describeHotkey" and "matchesHotkey";
@@ -672,23 +676,26 @@ the status is `IN PROGRESS`. The gates were checked by running
   non-zero minimum on every divider, which is the floor above".
 - **`role="toolbar"` with every button individually tabbable, and NOT the roving
   tabindex the ARIA toolbar pattern recommends.** This is a real deviation and it is
-  recorded as one. The roving pattern requires an arrow-key handler, and an
-  `onKeyDown` prop anywhere under `src/` turns
-  `src/__tests__/noEventListener.test.ts` red — its forbidden-spelling regex is
+  recorded as one. The roving pattern requires an arrow-key handler, and when
+  ISSUE-002 was written an `onKeyDown` prop anywhere under `src/` turned
+  `src/__tests__/noEventListener.test.ts` red: its forbidden-spelling regex was
   `/(?:add|remove)EventListener|key(?:down|up|press)/i`, matched case-insensitively
-  against every identifier, property name, JSX attribute name and string literal in
-  every non-test module, so `onKeyDown` is caught by the `KeyDown` alternative. That
-  test is the evidence for a repo-wide claim made in three other places, and
-  ISSUE-002 was not willing to weaken it to gain a keyboard pattern that keyboard
-  dispatch (Phase 2) will have to revisit anyway. Tab-through is the honest
-  description of what the ribbon does. **Divider keyboard operation was not lost to
-  this decision**, because it is the library's own: `PanelResizeHandle` renders
-  `role="separator"` with `tabIndex={0}` and implements the window-splitter pattern
-  internally, so the host attaches nothing.
-  *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no listener registration
-  and no key-event name in any module under src/", with "reports a planted listener,
-  however it is spelled" beside it, whose planted cases include a JSX `onKeyDown`
-  attribute specifically; `src/components/__tests__/ShellLayout.test.tsx` — "makes
+  against every code position in every non-test module, so `onKeyDown` was caught by
+  the `KeyDown` alternative. **ISSUE-004 has since split that regex**, because the
+  list virtualizer cannot implement arrow-key row navigation without handling a key
+  event; the listener half stayed repo-wide with no allowlist at all, and the
+  key-event half is now scoped to one named module. The ribbon's deviation therefore
+  now rests on the narrower ground it always really had — it has not needed the
+  pattern, and keyboard dispatch (Phase 2) has to revisit ribbon key handling anyway.
+  Tab-through is the honest description of what the ribbon does. **Divider keyboard
+  operation was not lost to this decision**, because it is the library's own:
+  `PanelResizeHandle` renders `role="separator"` with `tabIndex={0}` and implements
+  the window-splitter pattern internally, so the host attaches nothing.
+  *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no key-event name in any
+  module outside the keyboard-navigation allowlist" and "holds the key-event
+  allowlist to the exact spellings each listed module contains", with "reports a
+  planted listener, however it is spelled" beside them, whose planted cases include a
+  JSX `onKeyDown` attribute specifically; `src/components/__tests__/ShellLayout.test.tsx` — "makes
   every divider keyboard-reachable and actually resizes with the arrow keys", and
   "renders the ribbon and three panes in ribbon → pane 1 → pane 2 → pane 3 order"
   for the required focus order.
@@ -707,10 +714,11 @@ the status is `IN PROGRESS`. The gates were checked by running
   technology would promise a shortcut that does not fire. That is a worse failure
   than the absent attribute: a screen-reader user would be told a key works and find
   that it does not. The attribute arrives with the dispatcher in Phase 2.
-  *Test:* the absence of any dispatcher is pinned by
-  `src/__tests__/noEventListener.test.ts` — "finds no listener registration and no
-  key-event name in any module under src/", which now covers `src/components/**`
-  along with everything else.
+  *Tests:* the absence of any dispatcher is pinned by
+  `src/__tests__/noEventListener.test.ts` — "finds no listener registration in any
+  module under src/, with no exceptions at all" and "finds no key-event name in any
+  module outside the keyboard-navigation allowlist", which both cover
+  `src/components/**` along with everything else.
 - **A plug-in view is never rendered as a host sibling.** `views.pane2` and
   `views.pane3` mount only inside `ExtensionHostBoundary`. `ActivationContext.tsx`'s
   banner flagged host-rendered siblings as an outstanding hole in that guardrail
@@ -739,11 +747,15 @@ the status is `IN PROGRESS`. The gates were checked by running
 Stated because the three files exist and a reader could reasonably assume the shell
 is more finished than it is:
 
-- **No fault boundary.** A plug-in view that throws during render unmounts the whole
-  shell. Before ISSUE-002 the host never rendered plug-in components, so this was
-  theoretical; it is now live and is the single largest gap in the shell. ISSUE-004.
-- **No virtualization.** Pane 2 is a scroll container that mounts whatever the
-  extension renders. Every row is in the DOM. ISSUE-004.
+- **No fault boundary — CLOSED BY ISSUE-004, which is in this tree and unmerged.**
+  A plug-in view that throws during render used to unmount the whole shell. It now
+  degrades to a contained surface inside its own pane; `ShellLayout` composes the
+  boundaries, and `PaneWrapper` is deliberately still not one of them.
+- **No virtualization in the HOST — unchanged, and correctly so.** Pane 2 is still a
+  scroll container that mounts whatever the extension renders. ISSUE-004 added
+  `VirtualizedList` as a component an extension's own `views.pane2` renders, because
+  the host does not know what a row is; an extension that mounts a thousand rows
+  directly still has a thousand rows in the DOM.
 - **No persistence.** Pane sizes and the collapse state are React state and reset on
   reload. ISSUE-003's engine now exists and is tested, but `ShellLayout.tsx` does not
   import it, so this gap is unchanged from the user's side. ISSUE-003.
@@ -875,7 +887,7 @@ state" — is likewise unmet: nothing consumes anything yet.
   to observe, because there is no second write to interleave with. This is also why the
   engine registers no `storage` event listener and does no cross-tab reconciliation:
   the repo-wide no-listener invariant holds, pinned by "finds no listener registration
-  and no key-event name in any module under src/" in
+  in any module under src/, with no exceptions at all" in
   `src/__tests__/noEventListener.test.ts`.
   *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of "two
   tabs over one storage entry", specifically "the loser's whole record is replaced,
@@ -969,22 +981,67 @@ state" — is likewise unmet: nothing consumes anything yet.
 
 ## ISSUE-004 — High-Throughput Row Virtualizer & Fault Boundaries
 
-**Status:** `BLOCKED` on ISSUE-002 — **unchanged, and here is what that is based
-on.** The legend defines `BLOCKED` as "cannot start until a listed dependency
-lands", and ISSUE-002 has not landed: it is implemented and green but unmerged, so
-the marker still applies on the legend's own wording. In substance the blocker is
-now only the merge. Both things ISSUE-004 needs from ISSUE-002 exist in the tree
-today — `PaneWrapper` provides the Pane 2 scroll container the virtualizer must
-size against, and `ShellLayout` provides the wrapped extension subtree the fault
-boundary must sit around. **This row should be cleared the moment ISSUE-002 is
-merged, with no further work required of ISSUE-002 to unblock it.** It was not
-cleared pre-emptively because a `BLOCKED` row that is wrong in the optimistic
-direction is how work gets started against code that then changes in review.
+**Status:** `IN PROGRESS` — implemented and green, **not merged**. Both specified
+files exist, along with a third the specification did not name, and all three sit
+inside the same 100% coverage gate as everything before them. The marker is not
+`LANDED` for exactly the reason ISSUE-002's is not: `LANDED` is defined as merged
+plus three other things, and only the other three are true.
 
-**ISSUE-004 also became more urgent than it was.** Until ISSUE-002 the host never
-rendered plug-in components, so the absent fault boundary was a theoretical gap.
-`ShellLayout` mounts `views.pane2` and `views.pane3` today, so a plug-in that throws
-during render now unmounts the entire shell.
+**What exists:**
+
+- `src/components/error/FaultBoundary.tsx` — the one class component in `src/`,
+  because `getDerivedStateFromError` has no function-component form.
+- `src/components/shared/VirtualizedList.tsx` — the windowed listbox.
+- `src/components/shared/virtualWindow.ts` — **not in the specified file list, and
+  here is why it is a third file rather than a second export.** The windowing
+  arithmetic has to be assertable directly: jsdom has no layout engine, and an
+  empty list, a 0px container and a start index past the end of a shrunken list are
+  all statements about arithmetic that would otherwise be asserted against a fake
+  layout. It could not simply be a second export of `VirtualizedList.tsx`, because
+  `react-refresh/only-export-components` runs at `--max-warnings 0` and reports a
+  non-component export from a module that also exports a component. Splitting the
+  module was the option that neither disabled a lint rule nor put the arithmetic
+  out of reach of a direct test.
+
+**No dependency was added.** `@tanstack/react-virtual` was considered and rejected;
+the honest counter-argument — that it gives *measured* dynamic row heights, which
+this implementation deliberately does not — is recorded in the module's own
+docblock rather than only here, along with the condition that should trigger a
+revisit.
+
+**One existing test was narrowed, deliberately and in one direction only.**
+`src/__tests__/noEventListener.test.ts` forbade `(?:add|remove)EventListener` and
+`key(?:down|up|press)` in every non-test module under `src/`, and the virtualizer's
+`onKeyDown` turns that red. The listener half is unchanged and has no allowlist
+mechanism at all — that half is what the repo-wide "no dispatcher, no evaluation
+site" claim actually rests on. The key-event half is scoped to an allowlist naming
+exactly `components/shared/VirtualizedList.tsx` and the exact spellings it may
+contain, checked in both directions so a stale entry fails as loudly as an
+unreviewed new one. Every prose site that stated the wider claim was re-pointed in
+the same change: ADR-0001 Amendment H, `DEVELOPER.md`, `README.md`, this file, the
+`Hotkey` docblock in `src/core/types.ts`, `HydrationEngine.ts` and
+`ShellLayout.tsx`.
+
+**What ISSUE-004 does NOT do, stated so the row is not read as more than it is:**
+
+- **The host does not virtualize Pane 2 for you.** `VirtualizedList` is a component
+  an extension's own `views.pane2` renders. The host does not know what a row is,
+  how many there are, or how tall one should be, so it cannot window the pane on the
+  extension's behalf — and an extension that mounts a thousand rows directly still
+  has a thousand rows in the DOM.
+- **Row heights are declared, never measured.** A row that renders taller than it
+  declared overlaps its neighbour, and a height that changes after mount is not
+  noticed. ISSUE-004's edge-case list asks for "rows whose height changes after
+  mount"; what is delivered is the declared-height half of that, and the measured
+  half is explicitly not built.
+- **No scroll anchoring.** Items prepended above the scroll position move the
+  content under the viewport.
+- **The pane-1 and ribbon fault boundaries have no reachable failure through the
+  public contract.** Both render validated primitive strings and host-owned
+  callbacks, so nothing an extension can register makes either throw during render.
+  They are defence-in-depth. The ribbon boundary is nonetheless tested, by
+  substituting a throwing ribbon in `ShellLayout.test.tsx`; the pane-1 boundary is
+  not, and that is recorded here rather than glossed.
 
 ### Technical Specification
 
@@ -1041,17 +1098,51 @@ covered by `FaultBoundary`.
 
 ### Definition of Done
 
-- Both files exist and type-check.
-- Mounted row count is asserted by test to be bounded by viewport plus overscan,
-  not by total item count.
-- Keyboard navigation and scroll-into-view are tested.
-- A throwing row renderer is contained: test asserts the rest of the list still
-  renders.
-- A throwing extension subtree is contained to its pane: test asserts the ribbon
-  and other panes remain interactive.
-- The documented limits of `FaultBoundary` (handlers, timers, promise
-  rejections) are stated in the source doc comment and in `DEVELOPER.md`.
-- The Vitest coverage gate passes for the files in scope.
+Every line met, with the test that meets it named. All titles below live in
+`src/components/__tests__/FaultBoundary.test.tsx`,
+`src/components/__tests__/VirtualizedList.test.tsx` or
+`src/components/__tests__/ShellLayout.test.tsx`.
+
+- **Both files exist and type-check.** `npm run typecheck` and `npm run build` are
+  clean; a third module, `virtualWindow.ts`, exists for the reason given under
+  Status.
+- **Mounted row count is bounded by viewport plus overscan, not by total item
+  count.** *Tests:* "mounts a window bounded by the viewport rather than by the item
+  count" over 100,000 items, and "bounds the window by viewport plus overscan rather
+  than by item count" on the arithmetic directly.
+- **Keyboard navigation and scroll-into-view are tested.** *Tests:* "moves by row
+  with the arrow keys and clamps at both ends", "moves by a viewport at a time with
+  Page Up and Page Down", "pages a variable-height list by the rows that actually
+  fit", "scrolls the selected row into view by assigning scrollTop on its own container",
+  "leaves the scroll position alone when the new row is already visible" and "leaves
+  every other key to the page, so typing and Tab still work".
+- **A throwing row renderer is contained; the rest of the list still renders.**
+  *Tests:* "contains a row renderer that throws for one item only" and "keeps the
+  position of a failed row in the set".
+- **A throwing extension subtree is contained to its pane; the ribbon and other
+  panes remain interactive.** *Tests:* "contains a throwing pane-2 view to pane 2,
+  leaving the ribbon and pane 3 interactive" and "contains a throwing pane-3 view to
+  pane 3, leaving pane 2 interactive".
+- **The documented limits of `FaultBoundary` are stated in the source doc comment
+  and in `DEVELOPER.md`.** *Test:* "documents in both the source and DEVELOPER.md
+  what a boundary cannot catch", which fails if either copy drops a limit.
+- **The Vitest coverage gate passes for the files in scope.** 100% of statements,
+  branches, functions and lines across all three new modules, inside the existing
+  repo-wide gate.
+
+Each adversarial edge case above maps to a test as well: the empty, single-item and
+shrinking-list cases to "mounts nothing at all for an empty list", "mounts the
+single item of a one-item list" and "keeps a window over a list that shrinks while
+it is scrolled deep"; variable heights to "honours declared variable row heights";
+the 0px container to "still yields a row when the container is 0px tall, so a pane
+cannot stay blank" and "divides by the row height and never by the item count"; fast
+scroll to the overscan cases; a stale selection index to "clamps a selection left
+pointing past the end after items are removed"; a throwing fallback to "renders no
+plug-in element in the fallback"; a retry loop to "stops offering a retry after three
+consecutive failures" and "never retries on its own"; rapid extension switching to
+"clears a pane error surface when the active extension changes"; and pane resize
+mid-scroll to "re-measures through a ResizeObserver when the environment has one"
+and "still windows correctly with no ResizeObserver in the environment".
 
 ---
 
@@ -1214,9 +1305,13 @@ These apply to every issue above and are not restated per ticket.
   and the extension `name` with ordinary JSX interpolation, which is the correct
   pattern, but `ShellLayout.test.tsx` carries no injection case and no source scan —
   so that site is an **untested obligation**, not a control, and closing it is
-  outstanding work. The row virtualizer (ISSUE-004) does not exist at all. See
-  `README.md`, "Stated as intent, with no test — do not read as a control", which
-  holds the same label for what remains untested.
+  outstanding work. See `README.md`, under the heading about intent with no test,
+  which holds the same label for what remains untested. The row virtualizer added
+  by ISSUE-004 is the second site that DOES carry the pair.
+  *Tests:* `src/components/__tests__/VirtualizedList.test.tsx` — "the module source
+  contains no HTML-injection sink at all", "renders extension row content as text,
+  with no HTML-injection path" and "reports a planted sink, so the scans above
+  cannot pass vacuously".
 - **Performance.** Targets are stated in `README.md` and are explicitly
   unmeasured. No ticket may be closed on a performance claim that has not been
   benchmarked.

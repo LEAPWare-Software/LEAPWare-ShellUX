@@ -1790,19 +1790,42 @@ export interface RibbonAction {
 `RESERVED_IDS`, `EXTENSION_ID_PATTERN`, the single-read discipline, normalisation
 and the deep-freezing are untouched.
 
-**Nothing dispatches a hotkey.** There is no `keydown` listener anywhere in
-`src/`, no `useHotkeyDispatcher`, and no evaluation site. This amendment records
-a *declaration and validation* decision, in the same present-tense-honest
-register Amendment G requires of `isVisible`.
+**Nothing dispatches a hotkey.** No module under `src/` registers an event
+listener of any kind, there is no `useHotkeyDispatcher`, and there is no
+evaluation site. This amendment records a *declaration and validation* decision,
+in the same present-tense-honest register Amendment G requires of `isVisible`.
 
 *Tests:* the repository-wide half of that sentence is pinned by "finds no
-listener registration and no key-event name in any module under src/" in
+listener registration in any module under src/, with no exceptions at all" in
 `src/__tests__/noEventListener.test.ts`. It parses every non-test `.ts`/`.tsx`
 file under `src/` with the TypeScript compiler and fails if any code position —
 identifier, property name, JSX attribute or string literal — spells
-`addEventListener`, `removeEventListener`, `keydown`, `keyup` or `keypress`.
+`addEventListener` or `removeEventListener`.
+
+**AMENDED BY ISSUE-004, and amended by narrowing rather than by weakening.** That
+test used to forbid `keydown`, `keyup` and `keypress` in the same breath and with
+the same repo-wide reach. ISSUE-004's list virtualizer needs `onKeyDown` for
+arrow-key row navigation — it is the issue's own Definition of Done — so the two
+halves were split. The listener half above is unchanged and has NO allowlist
+mechanism at all, because that half is what "no dispatcher, no evaluation site"
+actually rests on. The key-event half is now scoped to a named allowlist
+containing exactly `components/shared/VirtualizedList.tsx`, and the allowlist is
+checked in both directions: a listed module that stops spelling what its entry
+claims fails as a stale exemption, and one that grows a spelling its entry does
+not name fails as an unreviewed widening. *Tests:* "finds no key-event name in any
+module outside the keyboard-navigation allowlist", "holds the key-event allowlist
+to the exact spellings each listed module contains" and "registers no listener and
+names no window or document target in the allowlisted module".
+
+Amendment G's three routes are name a test, narrow the claim, or delete it.
+Deleting the file or blanket-exempting `src/components/**` were both rejected:
+the first destroys the evidence for a claim made in five places, and the second is
+an allowlist that only ever gets longer. Narrowing is the route that keeps the
+sentence and the evidence the same width, and every prose site stating the wider
+claim was re-pointed in the same change.
+
 Comments are trivia to the parser and are not scanned, which is the distinction
-the claim needs: this paragraph and two other docblocks discuss the absence, and
+the claim needs: this paragraph and several docblocks discuss the absence, and
 a raw text search would fail on the sentences describing it. Its limit is stated
 in the test rather than glossed — a listener reached through a name that is not
 text, or one installed by an imported third-party module, is outside what a
@@ -2115,8 +2138,8 @@ amendment is about the allowlist applying its own stated rationale uniformly.
 
 ### Why now, and why the cost only rises
 
-Nothing dispatches a chord yet — pinned by "finds no listener registration and no
-key-event name in any module under src/" in
+Nothing dispatches a chord yet — pinned by "finds no listener registration in any
+module under src/, with no exceptions at all" in
 `src/__tests__/noEventListener.test.ts`. **No extension exists**, and ISSUE-005 has
 not landed. So today this change breaks nothing at all.
 

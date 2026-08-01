@@ -20,8 +20,9 @@ control registry.
 > and the ribbon) is implemented and passing but not yet merged.** The host now
 > boots to a real three-pane shell rather than a placeholder. **ISSUE-003's
 > hydration engine is implemented and tested but is not wired into the shell**, so
-> nothing you do to the layout survives a reload. Everything else described in this
-> README is specified but unbuilt — no virtualizer, no fault boundaries.
+> nothing you do to the layout survives a reload. **ISSUE-004 (the row virtualizer
+> and the fault boundaries) is implemented and passing but not yet merged.**
+> Everything else described in this README is specified but unbuilt.
 >
 > There is no published package, no demo, and no release tag. The contract in
 > `src/core/types.ts` is real and is the reference for anything written against it;
@@ -32,9 +33,9 @@ What that means for a reader:
 | Area | State |
 |---|---|
 | IoC extension registry (ISSUE-001) | **Landed.** `src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`, `src/core/ActivationContext.tsx`, `src/core/hotkeys.ts`, under a 100% coverage gate |
-| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 82 tests in `src/components/__tests__/` and inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
+| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 87 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx` and `RibbonToolbar.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx` and inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 | State hydration and persistence (ISSUE-003) | **Engine implemented and green — and nothing is wired to it.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`, with 146 tests in `src/core/services/__tests__/hydrationEngine.test.ts` and `src/hooks/__tests__/useLocalStorageState.test.tsx`, inside the same 100% coverage gate. `ShellLayout.tsx` and `App.tsx` neither read nor write it, so no pane size and no collapse toggle persists today |
-| Row virtualizer and fault boundaries (ISSUE-004) | Specified, not started |
+| Row virtualizer and fault boundaries (ISSUE-004) | **Implemented and green, not yet merged.** `src/components/error/FaultBoundary.tsx`, `src/components/shared/VirtualizedList.tsx` and its pure arithmetic in `src/components/shared/virtualWindow.ts`, with 76 tests in `src/components/__tests__/FaultBoundary.test.tsx` and `src/components/__tests__/VirtualizedList.test.tsx`, inside the same 100% coverage gate. The virtualizer is a component an extension's own Pane 2 view renders — the host does not window your pane for you |
 | Verification remotes and integration suite (ISSUE-005) | Specified, not started |
 
 **What ISSUE-002 did change:** ribbon action `isVisible` predicates are now
@@ -48,23 +49,35 @@ leaving the ribbon interactive".
 **What it did not change, stated plainly because a working-looking shell invites
 the opposite assumption:**
 
-- **There is no fault boundary.** A plug-in view that throws *during render* still
-  unmounts the entire shell — every pane and the ribbon. The guards above are
-  around two *calls*; they are not around a component's render, and no error
-  boundary exists anywhere in `src/`. Before ISSUE-002 the host never rendered
-  plug-in components, so this gap was theoretical; it is now live. ISSUE-004.
-- **There is no virtualization.** Pane 2 is a plain scroll container. Every row an
-  extension renders is in the DOM. ISSUE-004.
+- **There was no fault boundary, and ISSUE-004 added one.** The ribbon guards
+  above are around two *calls*, not around a component's render, and that gap was
+  live from the moment ISSUE-002 started mounting plug-in components. Since
+  ISSUE-004, `ShellLayout` wraps the children of every pane — pane 1 included — the
+  extension subtree inside panes 2 and 3, and the ribbon, each in its own
+  `FaultBoundary`. A view that throws during render degrades to a contained host
+  surface inside its own pane, naming the extension, with a bounded retry.
+  *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing
+  pane-2 view to pane 2, leaving the ribbon and pane 3 interactive" and "contains a
+  throwing ribbon without taking the panes down".
+- **The host does not virtualize your pane for you.** Pane 2 is still a plain
+  scroll container; `VirtualizedList` is a component an extension's `views.pane2`
+  mounts, because the host does not know what a row is or how tall one should be.
+  An extension that renders a thousand rows directly still has a thousand rows in
+  the DOM. *Tests:* `src/components/__tests__/VirtualizedList.test.tsx` — "mounts a
+  window bounded by the viewport rather than by the item count".
 - **Nothing the shell renders is persisted.** Pane sizes, the pane-1 collapsed
   state and the drawer state are React state and reset on every reload. ISSUE-003's
   engine has since landed in the tree — see below — but neither
   `src/components/layout/ShellLayout.tsx` nor `src/App.tsx` reads or writes it, so
   a divider you drag and a pane you collapse are both gone on the next load.
 - **There is no hotkey dispatch.** A ribbon action's optional `hotkey` is still
-  **validated but never dispatched**, and no chord is advertised on any button.
-  There is no `keydown` listener anywhere in `src/`, `src/components/**` included.
-  *Test:* `src/__tests__/noEventListener.test.ts` — "finds no listener registration
-  and no key-event name in any module under src/".
+  **validated but never dispatched**, and no chord is advertised on any button. No
+  module under `src/` registers an event listener of any kind, and the only module
+  that handles a key event at all is the list virtualizer, whose `onKeyDown` moves
+  the list selection and consults no chord.
+  *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no listener registration
+  in any module under src/, with no exceptions at all" and "finds no key-event name
+  in any module outside the keyboard-navigation allowlist".
 
 **What ISSUE-003 added, and what it does not yet touch:**
 `src/core/services/HydrationEngine.ts` owns the serialization and deserialization
@@ -273,18 +286,28 @@ like `"Ctrl+Shift+K"` that would need a parser at the trust boundary.
 
 > **⚠ Declared and validated today. Nothing dispatches it.**
 >
-> There is no `keydown` listener, no dispatcher and no evaluation site anywhere
-> in `src/`. Declaring a chord has no observable effect beyond the registration
-> succeeding or failing. **The ribbon has since arrived (ISSUE-002) and this did
-> not change**: a dispatcher needs the foreground extension and a live
-> `RibbonContext`, which the ribbon now supplies, but nothing was wired to them and
-> no `aria-keyshortcuts` is emitted on any button — advertising a shortcut that
-> does not fire would be a lie to assistive technology. Dispatch is Phase 2.
-> *Test:* `src/__tests__/noEventListener.test.ts` — "finds no listener
-> registration and no key-event name in any module under src/", which parses
+> There is no dispatcher and no evaluation site anywhere in `src/`, and no module
+> under `src/` registers an event listener of any kind. Declaring a chord has no
+> observable effect beyond the registration succeeding or failing. **The ribbon has
+> since arrived (ISSUE-002) and this did not change**: a dispatcher needs the
+> foreground extension and a live `RibbonContext`, which the ribbon now supplies,
+> but nothing was wired to them and no `aria-keyshortcuts` is emitted on any button
+> — advertising a shortcut that does not fire would be a lie to assistive
+> technology. Dispatch is Phase 2.
+>
+> **ISSUE-004 narrowed the evidence rather than weakening it, and the narrowing is
+> worth reading.** The list virtualizer needs `onKeyDown` for arrow-key row
+> navigation, so the scan that used to forbid every key-event spelling repo-wide is
+> now two scans: the listener half is unchanged and has no allowlist at all, and
+> the key-event half is scoped to one named module whose entry has to name the
+> exact spellings it contains. *Tests:*
+> `src/__tests__/noEventListener.test.ts` — "finds no listener registration in any
+> module under src/, with no exceptions at all", "finds no key-event name in any
+> module outside the keyboard-navigation allowlist" and "holds the key-event
+> allowlist to the exact spellings each listed module contains". All three parse
 > every non-test module under `src/` with the TypeScript compiler, so this
 > paragraph turns the suite red rather than turning quietly false the day a
-> listener lands.
+> dispatcher lands.
 
 What the host does enforce, at registration:
 
@@ -372,7 +395,7 @@ deliberate, enforced constraint, not a stylistic preference.
 | Base type | 11px – 13px. |
 | Borders | 1px. `border-neutral-200` light, `border-neutral-800` dark. |
 | Pane 1 | 240px default, collapses to a 48px icon track. |
-| Pane 2 | 360px default, virtualized. |
+| Pane 2 | 360px default. Virtualized by the extension's own view, with the host's `VirtualizedList`. |
 | Pane 3 | Flex. Own header, own scroll container, utility drawer slot. |
 
 Airy mobile-web spacing is explicitly out of scope. A user of this shell is
@@ -436,20 +459,32 @@ region carrying its pane id".
 
 **The deviation:** the ribbon uses `role="toolbar"` with every button individually
 tabbable, *not* the roving-tabindex pattern the ARIA authoring practices recommend
-for a toolbar. Roving tabindex needs an arrow-key handler, and no keyboard listener
-exists anywhere under `src/` — an invariant pinned repo-wide by
-`src/__tests__/noEventListener.test.ts`, "finds no listener registration and no
-key-event name in any module under src/". Tab-through is the honest description of
-the ribbon *bar* today, and revisiting it belongs with keyboard dispatch in Phase 2.
-It is recorded here rather than left for an auditor to find. List navigation remains
-unbuilt (ISSUE-004), so "full keyboard operability" above is still scope, not a
-delivered claim.
+for a toolbar. That was originally decided because a roving pattern needs an
+arrow-key handler and no module under `src/` was permitted to name one. ISSUE-004
+changed the second half of that: `src/components/shared/VirtualizedList.tsx` is now
+allowlisted for exactly that reason, so the ribbon's deviation stands on the
+narrower ground it always really had — the ribbon has not needed the pattern, and
+keyboard dispatch in Phase 2 has to revisit the ribbon's key handling anyway.
+Recorded here rather than left for an auditor to find. *Tests:*
+`src/__tests__/noEventListener.test.ts` — "finds no key-event name in any module
+outside the keyboard-navigation allowlist" and "holds the key-event allowlist to
+the exact spellings each listed module contains".
 
-**The ribbon's overflow menu is the exception, and it is worth being precise about
-why that is not a contradiction.** Inside the menu the arrow keys, Home/End,
+**List navigation is no longer scope.** `VirtualizedList` implements the single-tab-stop
+`aria-activedescendant` listbox pattern — arrow keys, Home/End, Page Up/Down, and
+scroll-into-view by assigning the container's own `scrollTop` rather than by
+calling `scrollIntoView`. *Tests:*
+`src/components/__tests__/VirtualizedList.test.tsx` — "keeps a single tab stop on
+the container rather than roving focus onto rows", "moves by row with the arrow
+keys and clamps at both ends", "moves by a viewport at a time with Page Up and Page
+Down" and "scrolls the selected row into view by assigning scrollTop on its
+own container".
+
+**The ribbon's overflow menu is a second exception, and it is worth being precise
+about why that is not a contradiction.** Inside the menu the arrow keys, Home/End,
 typeahead, Escape and outside-click dismissal all work, because the menu is
 `@radix-ui/react-dropdown-menu`. That handling lives in `node_modules`, not in
-`src/`, so the repo-wide no-listener invariant is untouched — that test's own
+`src/`, so the no-listener invariant is untouched — that test's own
 docblock states the limit it has always had, under "What is not asserted": "a handler
 installed by a third-party module `src/` merely imports — would pass".
 `PanelResizeHandle` in `ShellLayout.tsx` is
@@ -892,9 +927,14 @@ a caller who reaches the objects behind them another way is not bound by them.
   `src/components/layout/ShellLayout.tsx` renders `NavigationNode.label` and the
   extension `name` with ordinary JSX interpolation — the correct pattern — but
   `ShellLayout.test.tsx` contains no injection case and no source scan, so nothing
-  pins it and it must not be cited as a control. The row virtualizer (ISSUE-004) does
-  not exist. Anything an extension renders inside its own panes is the extension's
-  responsibility and the host neither inspects nor sanitizes it.
+  pins it and it must not be cited as a control. The row virtualizer added by
+  ISSUE-004 is the SECOND site that does carry the pair. *Tests:*
+  `src/components/__tests__/VirtualizedList.test.tsx` — "the module source contains
+  no HTML-injection sink at all", "the module source names no URL-bearing attribute
+  a plug-in value could reach", "renders extension row content as text, with no
+  HTML-injection path" and "reports a planted sink, so the scans above cannot pass
+  vacuously". Anything an extension renders inside its own panes is still the
+  extension's responsibility and the host neither inspects nor sanitizes it.
 
   Round 10 found this entry restated as delivered at two sites while no renderer
   existed, and corrected both. The correction is preserved as history: the risk was

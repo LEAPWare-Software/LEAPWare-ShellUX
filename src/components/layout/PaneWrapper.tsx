@@ -33,10 +33,21 @@ import type { PaneId } from '../../core/types';
  * whether the drawer is open — is `ShellLayout`'s decision, and keeping that out
  * of here is what lets ISSUE-004 reuse this box for the virtualized list.
  *
- * **It is not a fault boundary and does not contain a throwing child.** A pane
- * whose subtree throws during render still unmounts the shell; `FaultBoundary`
- * is ISSUE-004. Stated here so that nobody reads "pane shell" as "pane
- * containment".
+ * **It is not a fault boundary and does not contain a throwing child.** That
+ * sentence is unchanged by ISSUE-004 and stays literally true: nothing in this
+ * file catches anything, and a subtree handed to it as `children` that throws
+ * during render throws straight through this component.
+ *
+ * What changed is WHO wraps it. `ShellLayout` now puts a
+ * `src/components/error/FaultBoundary.tsx` around the children it hands every
+ * `PaneWrapper` — pane 1 included — and a second one inside pane 2 and pane 3
+ * around the extension subtree itself. The composition lives there rather than
+ * here deliberately: a `PaneWrapper` that quietly contained its own children
+ * would be a pane shell with a policy, and the border/overflow/slot contract
+ * above is the whole of what this component is allowed to decide. See decision 5
+ * in `ShellLayout.tsx`'s banner. *Test:*
+ * `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing pane-2
+ * view to pane 2, leaving the ribbon and pane 3 interactive".
  * ============================================================================
  */
 

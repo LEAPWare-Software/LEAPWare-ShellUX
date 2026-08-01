@@ -2,12 +2,37 @@ import { useEffect, useRef } from 'react';
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShellHostProvider, useExtensionActivation } from '../../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
 import { makeBlueprint } from '../../core/__tests__/fixtures';
 import type { ExtensionViewProps } from '../../core/types';
 import { ShellLayout } from '../layout/ShellLayout';
+
+/**
+ * The ribbon, swapped for one that can be told to throw.
+ *
+ * `RibbonToolbar` renders validated primitive strings and host-owned callbacks,
+ * so **there is no input reachable through the public contract that makes it
+ * throw during render** — which is exactly why its fault boundary needs a test
+ * of its own rather than a hopeful sentence. The real component is used
+ * everywhere in this file except the one case that flips this flag, so nothing
+ * else here is testing a double.
+ */
+const ribbon = vi.hoisted(() => ({ shouldThrow: false }));
+
+vi.mock('../ui/RibbonToolbar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ui/RibbonToolbar')>();
+  return {
+    ...actual,
+    RibbonToolbar: (props: Parameters<typeof actual.RibbonToolbar>[0]): ReactElement => {
+      if (ribbon.shouldThrow) {
+        throw new Error('the ribbon exploded');
+      }
+      return <actual.RibbonToolbar {...props} />;
+    },
+  };
+});
 
 /**
  * ============================================================================
@@ -169,6 +194,7 @@ function classTokens(root: ParentNode): string[] {
 }
 
 afterEach(() => {
+  ribbon.shouldThrow = false;
   vi.restoreAllMocks();
 });
 
@@ -219,10 +245,13 @@ describe('ShellLayout — dividers', () => {
     const { container } = render(<Harness />);
     const [first, second] = screen.getAllByRole('separator');
     // `tabIndex=0`, the `separator` role and the window-splitter key handling all
-    // come from `PanelResizeHandle`. The host attaches no listener of its own,
-    // which is pinned repo-wide by "finds no listener registration and no
-    // key-event name in any module under src/" in
-    // `src/__tests__/noEventListener.test.ts`.
+    // come from `PanelResizeHandle`. This file's own module attaches no listener
+    // and names no key event; no module under `src/` registers a listener at all,
+    // pinned by "finds no listener registration in any module under src/, with no
+    // exceptions at all" in `src/__tests__/noEventListener.test.ts`, and the only
+    // module allowlisted to handle a key event is the list virtualizer, pinned by
+    // "finds no key-event name in any module outside the keyboard-navigation
+    // allowlist" in the same file.
     expect(first).toHaveAttribute('tabindex', '0');
     expect(second).toHaveAttribute('tabindex', '0');
 
@@ -975,5 +1004,132 @@ describe('ShellLayout — contrast and target size', () => {
       // the default announced the wrong axis on every one of them.
       expect(separator).toHaveAttribute('aria-orientation', 'vertical');
     }
+  });
+});
+
+/**
+ * A pane view that throws during render, which is the one thing a plug-in can
+ * really do to the host through the documented contract.
+ */
+function makeExplodingView(pane: string) {
+  return function Exploding(_props: ExtensionViewProps): ReactElement {
+    throw new Error(`${pane} exploded`);
+  };
+}
+
+describe('ShellLayout — fault containment', () => {
+  beforeEach(() => {
+    // React writes its own "The above error occurred in…" line for every caught
+    // error. Silenced so a contained failure does not look like a test failure.
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  it('contains a throwing pane-2 view to pane 2, leaving the ribbon and pane 3 interactive', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        blueprints={[
+          sampleBlueprint({
+            views: { pane2: makeExplodingView('pane 2'), pane3: makeProbe('pane3') },
+          }),
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Sample Extension' }));
+
+    // The pane keeps its border, its accessible name and its header. Only the
+    // BODY is replaced, and what replaces it is host-authored.
+    const list = screen.getByRole('region', { name: 'List' });
+    expect(list.querySelector('[data-pane-slot="header"]')).toHaveTextContent('List');
+    const surface = within(list).getByRole('alert');
+    expect(surface).toHaveTextContent('The list view could not be displayed.');
+    expect(surface.querySelector('[data-fault-extension]')).toHaveTextContent('sample-ext');
+    expect(surface).toHaveTextContent('pane 2 exploded');
+    expect(within(list).getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+
+    // Pane 3 rendered its plug-in view, which means the sibling subtree was
+    // never unmounted...
+    expect(screen.getByTestId('probe-pane3')).toBeInTheDocument();
+    // ...and the ribbon is not merely present, it still works.
+    await user.click(screen.getByRole('button', { name: 'Show utility drawer' }));
+    expect(screen.getByRole('button', { name: 'Hide utility drawer' })).toBeInTheDocument();
+  });
+
+  it('contains a throwing pane-3 view to pane 3, leaving pane 2 interactive', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        blueprints={[
+          sampleBlueprint({
+            views: { pane2: makeProbe('pane2'), pane3: makeExplodingView('pane 3') },
+          }),
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Sample Extension' }));
+
+    expect(screen.getByTestId('probe-pane2')).toBeInTheDocument();
+    const detail = screen.getByRole('region', { name: 'Detail' });
+    expect(within(detail).getByRole('alert')).toHaveTextContent(
+      'The detail view could not be displayed.',
+    );
+  });
+
+  it('contains a throwing ribbon without taking the panes down', () => {
+    ribbon.shouldThrow = true;
+    render(<Harness blueprints={[sampleBlueprint()]} />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('The ribbon could not be displayed.');
+    // The DoD asks for the ribbon and the other panes to stay interactive when
+    // something fails. That is only guaranteed if the ribbon's own failure is
+    // contained too, which is why it has a boundary of its own.
+    expect(screen.getByRole('region', { name: 'Navigation' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'List' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Detail' })).toBeInTheDocument();
+    expect(screen.getAllByRole('separator')).toHaveLength(2);
+  });
+
+  it('clears a pane error surface when the active extension changes', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        blueprints={[
+          sampleBlueprint({
+            id: 'ext-broken',
+            name: 'Broken Extension',
+            views: { pane2: makeExplodingView('pane 2'), pane3: makeProbe('pane3') },
+          }),
+          sampleBlueprint({ id: 'ext-healthy', name: 'Healthy Extension' }),
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Broken Extension' }));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+
+    // Rapid extension switching: without `resetKey`, the broken extension's
+    // error surface would still be latched over the healthy one's fresh view.
+    await user.click(screen.getByRole('button', { name: 'Healthy Extension' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByTestId('probe-pane2')).toBeInTheDocument();
+  });
+
+  it('keeps offering a retry that re-runs the failing view', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness
+        blueprints={[
+          sampleBlueprint({
+            views: { pane2: makeExplodingView('pane 2'), pane3: makeProbe('pane3') },
+          }),
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Sample Extension' }));
+    const list = screen.getByRole('region', { name: 'List' });
+    await user.click(within(list).getByRole('button', { name: 'Retry' }));
+    // It throws again, and the failure is contained again rather than escaping
+    // on the second attempt.
+    expect(within(list).getByRole('alert')).toHaveTextContent('pane 2 exploded');
+    expect(screen.getByTestId('probe-pane3')).toBeInTheDocument();
   });
 });

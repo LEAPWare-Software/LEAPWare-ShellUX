@@ -69,9 +69,9 @@ import { ShellUXError } from '../types';
  * ---------------------------------------------------------------------------
  * WHAT THIS MODULE DOES NOT DO
  * ---------------------------------------------------------------------------
- * It registers no event listener of any kind — there is none anywhere under
- * `src/`, pinned by "finds no listener registration and no key-event name in any
- * module under src/" in `src/__tests__/noEventListener.test.ts`. In particular it
+ * It registers no event listener of any kind — no module under `src/` does,
+ * pinned by "finds no listener registration in any module under src/, with no
+ * exceptions at all" in `src/__tests__/noEventListener.test.ts`. In particular it
  * does not listen for cross-tab storage notifications: two tabs are last-write-
  * wins, and the unit of that is the WHOLE record, because it is written with one
  * `setItem` of one key. A half-written record is therefore not constructible.

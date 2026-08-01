@@ -32,9 +32,10 @@ reset on every reload, exactly as before. Treat "hydration exists" as a statemen
 about a module, not about the running shell — and note that `IShellAPI` still has
 no persistence member, so an extension cannot reach the engine at all.
 
-What is still specified and **does not exist yet** is the row virtualizer and the
-fault boundaries (ISSUE-004). This guide marks those passages explicitly as
-forthcoming behaviour.
+ISSUE-004 has since landed the row virtualizer and the fault boundaries, and both
+sections below have been rewritten out of the future tense. What is still
+specified only is the mock extensions and the integration suite (ISSUE-005), and
+hotkey dispatch (Phase 2). This guide marks such passages explicitly.
 
 > **The types in `src/core/types.ts` are the single source of truth.** Read it.
 > Where this guide and that file disagree, that file wins and this guide is a
@@ -86,10 +87,13 @@ per-extension `IShellAPI` that reaches you, and — since ISSUE-002 — a host t
 actually renders your navigation entries, mounts both your pane views, and
 evaluates and invokes your ribbon actions.
 
-Everything below it is still specified only. Note especially what that means for
-you: **there is no fault boundary**, so a view of yours that throws during render
-takes the whole shell down rather than degrading to a contained pane. That is
-ISSUE-004.
+Since ISSUE-004, the fault boundaries and the row virtualizer are there too: a
+view of yours that throws during render degrades to a contained surface inside its
+own pane instead of taking the shell down, and
+`src/components/shared/VirtualizedList.tsx` is available for your Pane 2 view to
+window its own rows with. What remains below the line is persistence being wired
+to the running shell, the mock extensions and integration suite (ISSUE-005), and
+hotkey dispatch.
 
 The host contains zero business logic. It does not know what your data means. It
 will not special-case you, and you should not need it to — if you cannot express
@@ -166,23 +170,36 @@ described one; it does not exist. Icons are per ribbon action only.
 > ### ⚠ Declared and validated today. Nothing dispatches it.
 >
 > The host checks a `hotkey` at registration and stores a normalised, frozen copy
-> of it. **There is no `keydown` listener anywhere in `src/`**, no dispatcher, and
-> no evaluation site — so declaring a chord today has no observable effect beyond
-> the registration succeeding or failing. The dispatcher is Phase 2, because it
-> needs the foreground extension and a live `RibbonContext`, neither of which the
-> registry has a view of.
+> of it. **No module under `src/` registers an event listener of any kind**, there
+> is no dispatcher, and there is no evaluation site — so declaring a chord today
+> has no observable effect beyond the registration succeeding or failing. The
+> dispatcher is Phase 2, because it needs the foreground extension and a live
+> `RibbonContext`, neither of which the registry has a view of.
 >
-> Pinned by "finds no listener registration and no key-event name in any module
-> under src/" in `src/__tests__/noEventListener.test.ts`, which parses every
+> Pinned by "finds no listener registration in any module under src/, with no
+> exceptions at all" in `src/__tests__/noEventListener.test.ts`, which parses every
 > non-test module under `src/` with the TypeScript compiler and fails on
-> `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
-> name in any code position — so the sentence above stops being a promise the
-> moment it stops being true. Comments are not scanned, which is how this
-> paragraph is allowed to state the property; a listener reached through a name
-> that is not text is outside what it can see, and the test says so. That
-> `src/core/hotkeys.ts` itself exports exactly three pure helpers and attaches
-> nothing is the separate, narrower "hotkeys module — does not attach anything"
-> in `src/core/__tests__/hotkeys.test.ts`.
+> `addEventListener` or `removeEventListener` in any code position — so the
+> sentence above stops being a promise the moment it stops being true.
+>
+> **One module in the shell handles a key event, and it is worth being exact
+> about which and why.** ISSUE-004's `src/components/shared/VirtualizedList.tsx`
+> puts an `onKeyDown` on the list's scroll container so that the arrow keys,
+> Home/End and Page Up/Down move the selection. It is not a dispatcher: it reads
+> no `hotkey`, consults no registry, and reaches no `window` or `document`. Every
+> other module under `src/` still names no `keydown`, `keyup` or `keypress` at
+> all, pinned by "finds no key-event name in any module outside the
+> keyboard-navigation allowlist", and the exemption is held to the exact spellings
+> that one module contains by "holds the key-event allowlist to the exact
+> spellings each listed module contains" — a listed file that stops needing its
+> exemption fails as a stale entry.
+>
+> Comments are not scanned, which is how these paragraphs are allowed to state the
+> property; a listener reached through a name that is not text is outside what the
+> scan can see, and the test says so. That `src/core/hotkeys.ts` itself exports
+> exactly three pure helpers and attaches nothing is the separate, narrower
+> "hotkeys module — does not attach anything" in
+> `src/core/__tests__/hotkeys.test.ts`.
 >
 > Write your chords now if you want them; they will work when the ribbon lands.
 > Do not write code that assumes one has fired.
@@ -1023,9 +1040,10 @@ The three named files are the convention the host and its tooling expect:
   calls or heavy imports at module scope — they run before your extension is
   ever activated and they slow the shell's boot for every user, including the
   ones who never open your extension.
-- **`views/Pane2View.tsx`** is your list. It renders inside the host's
-  virtualized container, so it renders *rows*, and it must not assume every item
-  is mounted. See the virtualization notes below.
+- **`views/Pane2View.tsx`** is your list. It renders inside the host's Pane 2
+  scroll container, and it is where you mount `VirtualizedList` — so it renders
+  *rows*, and it must not assume every item is in the DOM. See the virtualization
+  notes below.
 - **`views/Pane3View.tsx`** is your detail view. You own a header, a scroll
   container and a utility drawer slot. Put your own scrolling inside the
   provided scroll container — do not create a second, competing scroll context.
@@ -1059,10 +1077,9 @@ Concretely, for extension authors:
   colour reads as a rendering bug to users, not as branding.
 - **Do** support both light and dark. Both tokens above are part of the contract;
   an extension that only works in one theme is incomplete.
-- **Do** keep row heights consistent within a list. There is no virtualizer yet
-  (ISSUE-004) — every row you render is in the DOM — and when one arrives it will
-  handle variable heights; consistent heights scroll better and look correct at
-  density either way.
+- **Do** keep row heights consistent within a list. The virtualizer handles
+  DECLARED variable heights, and measures nothing; consistent heights scroll
+  better, look correct at density, and cannot disagree with what you declared.
 
 The density exists because a user of this shell is looking at a lot of rows on a
 large screen and values seeing more of them over seeing them spaciously. An
@@ -1255,64 +1272,95 @@ the handle to do it with.
 
 ## Working with the virtualized list
 
-> **Forthcoming — the virtualizer is ISSUE-004 and does not exist.** ISSUE-002
-> built the Pane 2 *container* — a resizable pane with its own scroll body, which
-> mounts your `views.pane2` — but nothing windows its contents. Every row you
-> render is in the DOM today. The rules below are the constraints you should write
-> your row renderers against so that they still work when the virtualizer lands;
-> none of them is enforced by the host today.
+> **Landed with ISSUE-004 — and it is a component YOU render, not something the
+> host wraps around you.** `src/components/shared/VirtualizedList.tsx` exists and
+> is exported for your `views.pane2` to use. The host does not window your pane
+> for you and cannot: it does not know what a row is, how many there are, or how
+> tall one should be. Pane 2 is still the resizable scroll pane ISSUE-002 built;
+> if you render a thousand `<div>`s into it directly, a thousand `<div>`s is what
+> you get.
 
-Pane 2 is to be virtualized: only rows intersecting the viewport, plus a small
-overscan, will be mounted. Consequences for your Pane 2 view:
+Only rows intersecting the viewport, plus a small overscan, are mounted.
+Consequences for your Pane 2 view:
 
 - **Never assume all your rows are in the DOM.** Do not query the document for
   rows, measure the full list by walking DOM nodes, or use `Ctrl+F`-style
   find-in-page as a supported flow. Only the visible window exists.
 - **Row renderers must be side-effect-free and fast.** They run during scroll.
-- **A row renderer that throws is contained** to that row where possible — but
-  do not rely on that as error handling. Validate your data.
-- **Keep row keys stable.** Index-based keys break under insertion and removal.
-- **Consistent row heights scroll better.** Variable heights are supported;
-  heights that change *after* mount cause visible reflow.
+- **A row renderer that throws is contained to that row.** Your `renderRow` runs
+  inside a per-row `FaultBoundary`, and the failed row keeps its place and its
+  `aria-posinset` in the set while its siblings render normally. Do not rely on
+  that as error handling: validate your data. *Tests:*
+  `src/components/__tests__/VirtualizedList.test.tsx` — "contains a row renderer
+  that throws for one item only" and "keeps the position of a failed row in the set".
+- **Keep row keys stable.** Index-based keys break under insertion and removal. A
+  `rowKey` that throws, or that answers with something other than a string, falls
+  back to a positional key for that row rather than failing the list — "survives a
+  key function that throws or answers with a non-string", same file.
+- **Row heights are DECLARED, never measured.** `rowHeight` is a number, or a
+  function of the index. Nothing observes the DOM, so a row that renders taller
+  than it declared overlaps its neighbour and a height that changes after mount is
+  not noticed at all. If you need content-measured rows, say so — that is the
+  stated trigger for revisiting the decision not to take a windowing dependency.
+- **Keyboard navigation belongs to the list, not to your rows.** Arrow keys,
+  Home/End and Page Up/Down move the selection; the container holds the only tab
+  stop and names the active row with `aria-activedescendant`. Do not put a
+  `tabIndex` on a row: a virtualizer unmounts rows as they leave the window, and
+  focus parked on one of them lands on `<body>` mid-scroll.
+- **There is no scroll anchoring.** Prepending items above the current scroll
+  position moves the content under the viewport.
 
 ---
 
 ## Fault containment — and its real limits
 
-> **Forthcoming — pane fault boundaries are ISSUE-004 and do not exist.** No
-> error boundary component is present in `src/`. `ExtensionHostBoundary`, which
-> does wrap your views, severs host context; it is **not** an error boundary and
-> catches nothing.
->
-> **This now has teeth, where before it was theoretical.** Until ISSUE-002 the
-> host never rendered your components, so a throwing view could not hurt anyone.
-> `ShellLayout` mounts them today, which means **a view of yours that throws
-> during render unmounts the entire shell** — your panes, the other extension's
-> panes, and the ribbon. Until ISSUE-004 lands, treat render as a place you are
-> not allowed to throw.
->
-> The one containment guarantee that *is* live at the boundary is narrower and
-> should not be mistaken for this one: `register` never throws, so a malformed or
-> actively hostile blueprint is a returned failure rather than an unmount; and the
-> ribbon guards `isVisible` and `onExecute`, which are calls, not renders.
+> **Landed with ISSUE-004.** `src/components/error/FaultBoundary.tsx` exists, and
+> `ShellLayout` wraps every pane's children in one — pane 1 included — plus a
+> second one around each extension subtree in panes 2 and 3, and one around the
+> ribbon. `ExtensionHostBoundary` is still **not** an error boundary and still
+> catches nothing; it severs host context, which is a different job. The fault
+> boundary sits OUTSIDE it.
 
-The host is specified to wrap each pane and each extension subtree in a fault
-boundary. Once that lands, an extension that throws during render will degrade
-to a contained error surface inside its own pane, naming your extension, while
-the rest of the shell stays interactive.
+A view of yours that throws during render now degrades to a contained error
+surface inside its own pane. The pane keeps its border, its accessible name and
+its header; the body becomes host-authored text naming the surface, your
+extension id as a text node, a guarded message read off whatever you threw, and a
+**Retry** button. Three consecutive failures and the button is replaced by host
+text — nothing retries automatically, because a component that throws
+deterministically plus an automatic retry is an unbounded render loop. Switching
+extension clears the surface, so yesterday's failure does not sit over today's
+view. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a
+throwing pane-2 view to pane 2, leaving the ribbon and pane 3 interactive",
+"contains a throwing pane-3 view to pane 3, leaving pane 2 interactive" and
+"clears a pane error surface when the active extension changes";
+`src/components/__tests__/FaultBoundary.test.tsx` — "stops offering a retry after
+three consecutive failures".
+
+**None of that is licence to throw.** A contained failure is still a pane your
+user cannot use, and the containment is a floor, not a feature you get to build
+on.
 
 **Be clear about what this does not cover.** React error boundaries catch errors
 in render, in lifecycle methods and in constructors. They do **not** catch:
 
 - errors thrown in **event handlers** (your click handler, your ribbon action's
-  invoke handler),
-- errors thrown in **`setTimeout` / `setInterval`** callbacks,
+  invoke handler — the ribbon guards its own calls to `isVisible` and
+  `onExecute`, and that guard is not this boundary),
+- errors thrown in **`setTimeout` / `setInterval` / `requestAnimationFrame`**
+  callbacks,
 - **unhandled promise rejections** from your async work,
-- errors thrown during **server-side rendering**.
+- errors thrown during **server-side rendering**,
+- anything thrown by the fallback surface itself, or by a component ABOVE the
+  boundary. A boundary never catches itself, which is why the host composes
+  several of them rather than one at the root, and why the fallback renders no
+  plug-in component and no plug-in markup at all.
 
 Those are yours to handle. Wrap your own async work and your own handlers. An
 unhandled rejection in your extension will surface as a global error, not as a
-tidy contained pane.
+tidy contained pane. The same list is in the docblock at the top of
+`src/components/error/FaultBoundary.tsx`, and the two are kept in step by
+"documents in both the source and DEVELOPER.md what a boundary cannot catch" in
+`src/components/__tests__/FaultBoundary.test.tsx`.
 
 ---
 
@@ -1383,8 +1431,12 @@ protection the host delivers.
 
 **And none of it covers what is inside your panes.** Everything `views.pane2` and
 `views.pane3` render is yours, the host does not inspect it, and there is no
-sanitizer between your JSX and the DOM. The row virtualizer that would add another
-host render site is ISSUE-004 and does not exist. So for your own content the rules
+sanitizer between your JSX and the DOM. `VirtualizedList` is a third host render
+site and it is held to the same standard as the ribbon — it offers no injection
+sink of its own, pinned by "the module source contains no HTML-injection sink at
+all" and "the module source names no URL-bearing attribute a plug-in value could
+reach" in `src/components/__tests__/VirtualizedList.test.tsx` — but what your
+`renderRow` returns is still entirely yours. So for your own content the rules
 below remain exactly what they say: obligations on your code, which nothing in the
 host enforces.
 

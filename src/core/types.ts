@@ -188,19 +188,29 @@ export interface RibbonAction {
    *
    * **Declared and validated now; nothing dispatches it.** The registry checks
    * the shape, the allowlist, the modifier rule and intra-extension uniqueness,
-   * then stores a frozen host-owned copy. There is no `keydown` listener
-   * anywhere in `src/` — pinned by "finds no listener registration and no
-   * key-event name in any module under src/" in
+   * then stores a frozen host-owned copy. No module under `src/` registers an
+   * event listener of any kind — pinned by "finds no listener registration in
+   * any module under src/, with no exceptions at all" in
    * `src/__tests__/noEventListener.test.ts`, which parses **every** non-test
    * module under `src/` with the TypeScript compiler and fails on
-   * `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
-   * name in any code position. Comments are trivia to the parser and are not
-   * scanned, which is what lets this sentence state the property; a listener
-   * reached through a name that is not text — `el[fromAVariable](...)` — is
-   * outside what it can see, and that limit is stated in the test. The narrower
-   * fact that `src/core/hotkeys.ts` exports only its three pure helpers is
-   * "hotkeys module — does not attach anything" in
-   * `src/core/__tests__/hotkeys.test.ts`.
+   * `addEventListener` or `removeEventListener` in any code position.
+   *
+   * **One module handles a key event, and it is not a dispatcher.** Since
+   * ISSUE-004, `src/components/shared/VirtualizedList.tsx` carries an
+   * `onKeyDown` on its scroll container, which moves the list selection — arrow
+   * keys, Home/End, Page Up/Down — and consults no chord, no `hotkey` field and
+   * no registry. Every OTHER module is still held to naming no
+   * `keydown`/`keyup`/`keypress` at all, by "finds no key-event name in any
+   * module outside the keyboard-navigation allowlist" in the same file, with
+   * "holds the key-event allowlist to the exact spellings each listed module
+   * contains" keeping that exemption from silently growing.
+   *
+   * Comments are trivia to the parser and are not scanned, which is what lets
+   * this docblock state the property; a listener reached through a name that is
+   * not text — `el[fromAVariable](...)` — is outside what it can see, and that
+   * limit is stated in the test. The narrower fact that `src/core/hotkeys.ts`
+   * exports only its three pure helpers is "hotkeys module — does not attach
+   * anything" in `src/core/__tests__/hotkeys.test.ts`.
    */
   readonly hotkey?: Hotkey;
   /**

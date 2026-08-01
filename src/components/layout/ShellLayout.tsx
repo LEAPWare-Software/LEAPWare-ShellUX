@@ -6,6 +6,7 @@ import type { ActiveExtension } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
 import { useShellContext, useShellStore } from '../../core/ShellAPI';
 import type { NavigationNode, RibbonContext } from '../../core/types';
+import { FaultBoundary } from '../error/FaultBoundary';
 import { RibbonToolbar } from '../ui/RibbonToolbar';
 import type { HostRibbonAction, RibbonExtensionActions } from '../ui/RibbonToolbar';
 import { PaneWrapper } from './PaneWrapper';
@@ -75,11 +76,16 @@ import { PaneWrapper } from './PaneWrapper';
  *
  * 3. DIVIDER KEYBOARD OPERATION IS THE LIBRARY'S, NOT OURS.
  *    `PanelResizeHandle` renders `role="separator"` with `tabIndex={0}` and
- *    implements the window-splitter keyboard pattern itself. The host attaches
- *    no listener of its own — there is none anywhere under `src/`, pinned by
- *    "finds no listener registration and no key-event name in any module under
- *    src/" in `src/__tests__/noEventListener.test.ts`. Hotkey DISPATCH remains
- *    Phase 2; nothing here routes a chord to an action.
+ *    implements the window-splitter keyboard pattern itself. This file attaches
+ *    no listener and handles no key event of its own; no module under `src/`
+ *    registers a listener at all, pinned by "finds no listener registration in
+ *    any module under src/, with no exceptions at all" in
+ *    `src/__tests__/noEventListener.test.ts`. The one module that handles a key
+ *    event is `src/components/shared/VirtualizedList.tsx`, whose `onKeyDown`
+ *    drives list navigation and nothing else — pinned by "finds no key-event
+ *    name in any module outside the keyboard-navigation allowlist" in the same
+ *    file. Hotkey DISPATCH remains Phase 2; nothing here routes a chord to an
+ *    action.
  *
  * 4. A PLUG-IN SUBTREE IS ALWAYS WRAPPED.
  *    `views.pane2` and `views.pane3` render inside `ExtensionHostBoundary`, which
@@ -90,10 +96,38 @@ import { PaneWrapper } from './PaneWrapper';
  *    host no longer renders a plug-in component as its own sibling — the case
  *    that banner flagged as outstanding while pane rendering did not exist.
  *
- * NOT HERE, DELIBERATELY: persistence of sizes and collapse state (ISSUE-003),
- * row virtualization and per-pane fault boundaries (ISSUE-004). A plug-in view
- * that throws during render still takes the shell down; nothing in this file
- * catches it, and `FaultBoundary` is the component that will.
+ * 5. FAULT BOUNDARIES ARE COMPOSED HERE, AND THERE ARE TWO LAYERS OF THEM.
+ *    Every set of children this file hands a `PaneWrapper` — pane 1's navigation
+ *    included, because it renders plug-in labels and badge counts — goes inside a
+ *    `FaultBoundary`, and so does the ribbon. The composition is in THIS file
+ *    rather than inside `PaneWrapper` so that `PaneWrapper` stays presentational
+ *    and its banner's "it is not a fault boundary" stays literally true.
+ *
+ *    **The pane boundary sits OUTSIDE `ExtensionHostBoundary`, and that order is
+ *    load-bearing.** `ExtensionHostBoundary` itself throws a plain `Error` when
+ *    `extensionId` is not a string — the guardrail it exists to be would
+ *    otherwise be silently switchable off by a typo — and a boundary nested
+ *    inside it could not catch a throw from its own parent. Beyond that, a host
+ *    Retry button rendered inside the extension scope would sit under a context
+ *    that declares "plug-in code lives below here", which is exactly backwards
+ *    for a host control.
+ *
+ *    The ribbon has its own boundary for the same reason the panes do: "the
+ *    ribbon and other panes stay interactive" is only guaranteed if the ribbon's
+ *    own failure is contained too. Nothing an extension can register makes the
+ *    ribbon or pane 1 throw during render — both render validated primitive
+ *    strings — so those two boundaries are defence-in-depth, and the ribbon's is
+ *    tested by substituting a throwing ribbon rather than by pretending a
+ *    plug-in could cause it. *Tests:*
+ *    `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing
+ *    pane-2 view to pane 2, leaving the ribbon and pane 3 interactive", "contains
+ *    a throwing ribbon without taking the panes down" and "clears a pane error
+ *    surface when the active extension changes".
+ *
+ * NOT HERE, DELIBERATELY: persistence of sizes and collapse state (ISSUE-003).
+ * `ShellLayout` does not itself window pane 2 either — `VirtualizedList` is a
+ * component an extension's own `views.pane2` renders, not something the host
+ * wraps around it, because the host does not know what a row is.
  * ============================================================================
  */
 
@@ -294,16 +328,26 @@ function NavigationTree({
 interface ExtensionPaneProps {
   readonly active: ActiveExtension;
   readonly pane: 'pane2' | 'pane3';
+  /** Host text naming the surface, for the fault surface. Never plug-in text. */
+  readonly label: string;
   readonly context: Readonly<RibbonContext>;
 }
 
-/** A plug-in view, inside the boundary the host is required to wrap it in. */
-function ExtensionPane({ active, pane, context }: ExtensionPaneProps): ReactElement {
+/**
+ * A plug-in view, inside both boundaries the host is required to wrap it in.
+ *
+ * ORDER: `FaultBoundary` OUTSIDE `ExtensionHostBoundary`. See decision 5 in the
+ * banner — the inner one throws for a non-string `extensionId`, and a boundary
+ * beneath it could not catch its own parent.
+ */
+function ExtensionPane({ active, pane, label, context }: ExtensionPaneProps): ReactElement {
   const View = active.blueprint.views[pane];
   return (
-    <ExtensionHostBoundary extensionId={active.id}>
-      <View shell={active.shell} context={context} />
-    </ExtensionHostBoundary>
+    <FaultBoundary boundaryLabel={label} extensionId={active.id} resetKey={active.id}>
+      <ExtensionHostBoundary extensionId={active.id}>
+        <View shell={active.shell} context={context} />
+      </ExtensionHostBoundary>
+    </FaultBoundary>
   );
 }
 
@@ -467,6 +511,10 @@ export function ShellLayout(): ReactElement {
   const ribbonExtension: RibbonExtensionActions | null =
     active === null ? null : { actions: active.blueprint.ribbonActions, shell: active.shell };
 
+  // The one id every boundary on this render resets against. Switching
+  // extension must not leave A's error surface standing over B's fresh view.
+  const activeId = active === null ? null : active.id;
+
   const navigation = (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex min-w-0 flex-col gap-1">
@@ -523,6 +571,15 @@ export function ShellLayout(): ReactElement {
     </div>
   );
 
+  // Pane 1 is inside a boundary too. Its rows render plug-in labels and badge
+  // counts, so "the navigation pane cannot fail" was never true — it was only
+  // untested. One element, used in whichever of the two pane-1 states is live.
+  const navigationPane = (
+    <FaultBoundary boundaryLabel="The Navigation pane" extensionId={activeId} resetKey={activeId}>
+      {navigation}
+    </FaultBoundary>
+  );
+
   return (
     <div
       data-shell-region="root"
@@ -531,7 +588,9 @@ export function ShellLayout(): ReactElement {
         'text-[12px] text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100'
       }
     >
-      <RibbonToolbar hostActions={hostActions} extension={ribbonExtension} context={context} />
+      <FaultBoundary boundaryLabel="The ribbon" extensionId={activeId} resetKey={activeId}>
+        <RibbonToolbar hostActions={hostActions} extension={ribbonExtension} context={context} />
+      </FaultBoundary>
       <div
         data-shell-region="panes"
         className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden"
@@ -543,7 +602,7 @@ export function ShellLayout(): ReactElement {
             style={{ width: `${PANE_PX.navCollapsed}px` }}
           >
             <PaneWrapper paneId="pane1" label="Navigation">
-              {navigation}
+              {navigationPane}
             </PaneWrapper>
           </div>
         ) : null}
@@ -565,7 +624,7 @@ export function ShellLayout(): ReactElement {
                       label="Navigation"
                       header={<span className="truncate font-semibold">Navigation</span>}
                     >
-                      {navigation}
+                      {navigationPane}
                     </PaneWrapper>
                   </Panel>
                   <ShellResizeHandle label="Resize the navigation pane" />
@@ -584,11 +643,22 @@ export function ShellLayout(): ReactElement {
                   label="List"
                   header={<span className="truncate font-semibold">List</span>}
                 >
-                  {active === null ? (
-                    <EmptyPane>Select an extension to fill this pane.</EmptyPane>
-                  ) : (
-                    <ExtensionPane active={active} pane="pane2" context={context} />
-                  )}
+                  <FaultBoundary
+                    boundaryLabel="The List pane"
+                    extensionId={activeId}
+                    resetKey={activeId}
+                  >
+                    {active === null ? (
+                      <EmptyPane>Select an extension to fill this pane.</EmptyPane>
+                    ) : (
+                      <ExtensionPane
+                        active={active}
+                        pane="pane2"
+                        label="The list view"
+                        context={context}
+                      />
+                    )}
+                  </FaultBoundary>
                 </PaneWrapper>
               </Panel>
               <ShellResizeHandle label="Resize the list pane" />
@@ -620,11 +690,22 @@ export function ShellLayout(): ReactElement {
                     ) : undefined
                   }
                 >
-                  {active === null ? (
-                    <EmptyPane>No extension is active, so there is nothing to detail.</EmptyPane>
-                  ) : (
-                    <ExtensionPane active={active} pane="pane3" context={context} />
-                  )}
+                  <FaultBoundary
+                    boundaryLabel="The Detail pane"
+                    extensionId={activeId}
+                    resetKey={activeId}
+                  >
+                    {active === null ? (
+                      <EmptyPane>No extension is active, so there is nothing to detail.</EmptyPane>
+                    ) : (
+                      <ExtensionPane
+                        active={active}
+                        pane="pane3"
+                        label="The detail view"
+                        context={context}
+                      />
+                    )}
+                  </FaultBoundary>
                 </PaneWrapper>
               </Panel>
             </PanelGroup>
