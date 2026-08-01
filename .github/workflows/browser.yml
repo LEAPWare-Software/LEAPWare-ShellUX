@@ -1,0 +1,109 @@
+name: Browser
+
+# A SEPARATE workflow from ci.yml, and the reason is the acceptance test.
+#
+# README.md promises: "A fresh clone on a different operating system runs
+# `npm ci && npm run verify` with no local setup and no edits." Playwright needs
+# `npx playwright install` - a browser download that is outside `npm ci` and
+# outside package-lock.json, and that is exactly the "local setup" the promise
+# rules out. So the browser lane is neither in `verify` nor in ci.yml: `verify`
+# keeps its promise as written, and this workflow does the one thing verify
+# cannot, having first paid for the browser explicitly in a step of its own.
+#
+# ci.yml stays the three-OS gate over `npm run verify`. This one is Ubuntu only
+# and Chromium only - see playwright.config.ts for why one engine rather than
+# three.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege, matching ci.yml: this workflow only reads the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Browser tests (chromium)
+    runs-on: ubuntu-latest
+
+    env:
+      # Browsers are downloaded into the workspace rather than into the runner's
+      # per-user cache directory. Two reasons, and the second is enforced:
+      # a workspace path is what actions/cache can address without knowing the
+      # runner's home layout, and `npm run check:portability` forbids a per-user
+      # home path in a tracked file (the environment-home-reference and
+      # home-directory-path rules are repository-wide, not scoped to source), so
+      # the usual tilde-prefixed cache path could not be written here at all.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright/browsers
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The cache key is the resolved Playwright version, read from the lockfile
+      # rather than typed here, so a dependency bump invalidates the cache by
+      # construction instead of by somebody remembering to edit this file. A
+      # stale browser build against a newer client is a confusing failure mode
+      # and this is what prevents it.
+      - name: Resolve Playwright version
+        id: playwright
+        run: |
+          version="$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: browser-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      # Explicit, and separate from `npm ci` on purpose - this is the step that
+      # represents everything `npm run verify` deliberately does not do.
+      #
+      # On a cache hit the browser binary is already restored, but the OS-level
+      # shared libraries Chromium links against are not part of the cached
+      # directory and are not preinstalled for every distribution, so
+      # `install-deps` runs either way. It is a package-manager step measured in
+      # seconds; skipping it on a cache hit is what makes a cached run fail with
+      # a missing-shared-object error instead of passing.
+      - name: Install Chromium
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: npm run test:browser:install
+
+      - name: Install Chromium system dependencies
+        if: steps.browser-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # playwright.config.ts starts `npm run dev` itself through its webServer
+      # option and waits for the port, so there is no server step here.
+      - name: Run browser tests
+        run: npm run test:browser
+
+      # failure() only: a trace is the artifact that makes a red run diagnosable
+      # without reproducing it locally, and on a green run it is a large upload
+      # nobody opens. test-results/ is where playwright.config.ts's
+      # retain-on-failure trace and only-on-failure screenshot both land.
+      - name: Upload traces and screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 14
