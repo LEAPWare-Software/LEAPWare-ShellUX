@@ -1,5 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import type { ReactElement } from 'react';
+import { ariaKeyShortcuts } from '../../core/hotkeys';
+import { execute, isVisible } from '../../core/ribbonAction';
 import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
 
 /**
@@ -32,21 +34,30 @@ import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
  *    fallback rather than through the key" and "does not resolve a
  *    prototype-shaped icon key to anything inherited".
  *
- * 3. A predicate or a handler that THROWS is contained here, and so is a report
- *    about one. `isVisible` is called inside a guard: a throw means "not
- *    visible", is reported, and the remaining actions still render. `onExecute`
- *    is called inside the same kind of guard, so a handler that throws does not
- *    reach React and does not unmount the shell. Both reports name the offending
- *    action through `actionId`, which is guarded in its own right, so an `id`
- *    getter that detonates *while the first failure is being written down*
- *    cannot escape through the message — the report used to interpolate
- *    `action.id` raw, inside the `catch`, where nothing was left to catch it.
- *    This is the gate ISSUE-001 explicitly carried forward because it had no
- *    call site. *Tests:* "hides an action whose isVisible predicate throws and
- *    still renders the rest", "survives an onExecute that throws, leaving the
- *    ribbon interactive", "contains an id getter that throws while a failing
- *    isVisible predicate is being reported", "contains an id getter that throws
- *    while a failing onExecute handler is being reported".
+ * 3. A predicate or a handler that THROWS is contained, and so is a report about
+ *    one. `isVisible` is called inside a guard: a throw means "not visible", is
+ *    reported, and the remaining actions still render. `onExecute` is called
+ *    inside the same kind of guard, so a handler that throws does not reach React
+ *    and does not unmount the shell. Both reports name the offending action
+ *    through `actionId`, which is guarded in its own right, so an `id` getter
+ *    that detonates *while the first failure is being written down* cannot escape
+ *    through the message — the report used to interpolate `action.id` raw, inside
+ *    the `catch`, where nothing was left to catch it. This is the gate ISSUE-001
+ *    explicitly carried forward because it had no call site. *Tests:* "hides an
+ *    action whose isVisible predicate throws and still renders the rest",
+ *    "survives an onExecute that throws, leaving the ribbon interactive",
+ *    "contains an id getter that throws while a failing isVisible predicate is
+ *    being reported", "contains an id getter that throws while a failing
+ *    onExecute handler is being reported".
+ *
+ *    **The two guards no longer live here.** They are `isVisible` and `execute`
+ *    in `src/core/ribbonAction.ts`, because since ISSUE-006 there are two routes
+ *    to a plug-in action — this button and the keyboard chord in
+ *    `src/core/hotkeyDispatch.ts` — and the hotkey's whole containment argument
+ *    is that it is gated by *the same* predicate call and *the same* handler
+ *    call. Two copies would drift silently. The tests named above still exercise
+ *    them through this component, which is the point: extraction moved the code,
+ *    not the obligation.
  *
  * 3a. WHAT RULE 3 DOES NOT COVER, AND THE WORD IT TURNS ON: **THROWS**.
  *    A predicate is contracted to be pure. Rule 3 contains the two ways a
@@ -88,10 +99,25 @@ import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
  *    throw. NOT contained, and named rather than left to inference: a predicate
  *    that WRITES to the shell during render — see rule 3a. (`onExecute` runs from
  *    a click, not from render, so a write there is ordinary and legal.)
- *  - It **dispatches no keyboard shortcut**. `RibbonAction.hotkey` is validated
- *    at registration and nothing evaluates it; no chord is advertised on these
- *    buttons either, because advertising a shortcut that does not fire is a lie
- *    to assistive technology. Dispatch is Phase 2.
+ *  - It **dispatches no keyboard shortcut, and it does advertise one.** Those two
+ *    halves used to be one bullet saying no chord was advertised at all, because
+ *    advertising a shortcut that does not fire is a lie to assistive technology.
+ *    Since ISSUE-006 a chord DOES fire — `useHotkeyDispatch` in
+ *    `src/core/hotkeyDispatch.ts` owns the shell's one `keydown` listener — so the
+ *    lie has gone the other way and the attribute is now emitted. It is emitted on
+ *    exactly the actions the dispatcher will actually fire: a plug-in action that
+ *    carries a `hotkey` and is not disabled, on the bar and in the overflow menu
+ *    alike, and never on a host command. See `keyShortcutsOf`. The dispatch itself
+ *    is still not here — this module attaches nothing and names no key event.
+ *    *Tests:* "advertises a chord-bearing action with aria-keyshortcuts, in key
+ *    values rather than display spelling", "omits aria-keyshortcuts from a
+ *    disabled action, because the chord will not fire", "advertises a chord on an
+ *    overflow menu item too" and "never advertises a chord on a host action"; that
+ *    this module itself attaches nothing is pinned by "finds no listener
+ *    registration in any module outside the hotkey-dispatch allowlist" and "finds
+ *    no key-event name in any module outside the key-event allowlist" in
+ *    `src/__tests__/noEventListener.test.ts`, neither of whose allowlists names
+ *    this file.
  *  - It contains **no error boundary**. A guard around `isVisible` is not a
  *    guard around a plug-in component's render; `FaultBoundary` is ISSUE-004.
  *
@@ -130,10 +156,11 @@ import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
  * not asserted": "a handler installed by a third-party module `src/` merely
  * imports — would pass". Quoted with its em-dash and contiguously, because an
  * earlier version of this sentence dropped both and presented a paraphrase as a
- * quotation — the wide-claim failure mode in a different costume. The repo-wide
- * claim is about the host's own modules, and it is still true here.
- * `PanelResizeHandle` in `ShellLayout.tsx` is the same arrangement, for the same
- * reason.
+ * quotation — the wide-claim failure mode in a different costume. That scan's
+ * listener half is no longer absolute — ISSUE-006 added an allowlist holding
+ * exactly `core/hotkeyDispatch.ts` — but this module is not on it and names no
+ * listener, which is the fact this paragraph needs. `PanelResizeHandle` in
+ * `ShellLayout.tsx` is the same arrangement, for the same reason.
  *
  * `aria-controls` is Radix's too, and it now appears only while the menu is open
  * rather than dangling at a non-existent id the whole time the menu is shut.
@@ -251,100 +278,32 @@ export interface RibbonToolbarProps {
 }
 
 /**
- * Report a plug-in failure without letting the report become a second failure.
+ * The chord an action advertises to assistive technology, or `undefined`.
  *
- * `console` is no more the host's object than the predicate that just threw is;
- * a plug-in that replaces `console.error` with a throwing function would
- * otherwise turn containment into an escape. Same guard, and same reasoning, as
- * the one in `ShellHostProvider`'s registry sweep.
+ * TWO REASONS TO OMIT IT, AND BOTH ARE THE SAME REASON: **do not advertise what
+ * will not fire.** An action with no `hotkey` has nothing to advertise. An action
+ * that is DISABLED is skipped by the dispatcher — `hotkeyDispatch.ts` checks
+ * `isDisabled` exactly as the button's own `onClick` guard does — so announcing a
+ * shortcut on it would tell a screen-reader user about a key that does nothing.
+ *
+ * `ariaKeyShortcuts` rather than `describeHotkey`: `aria-keyshortcuts` is defined
+ * in terms of UI Events `KeyboardEvent.key` VALUES, where the control key is
+ * `Control`. `Ctrl` is the display spelling and is not a valid key value, which is
+ * why the two are different functions. The tooltip keeps `describeHotkey`.
+ *
+ * Host actions never reach here: `HostRibbonAction` has no `hotkey` field, because
+ * the dispatcher walks the foreground extension's `ribbonActions` and nothing
+ * else. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "advertises a
+ * chord-bearing action with aria-keyshortcuts, in key values rather than display
+ * spelling", "omits aria-keyshortcuts from a disabled action, because the chord
+ * will not fire", "advertises a chord on an overflow menu item too" and "never
+ * advertises a chord on a host action".
  */
-function report(message: string, error: unknown): void {
-  try {
-    console.error(message, error);
-  } catch {
-    // Reporting is best-effort. Rendering the rest of the ribbon is not.
+function keyShortcutsOf(action: RibbonAction): string | undefined {
+  if (action.hotkey === undefined || action.isDisabled === true) {
+    return undefined;
   }
-}
-
-/** Stands in for an `id` that could not be read, so the report still names a slot. */
-const UNREADABLE_ID = '<an id that could not be read>';
-
-/**
- * `action.id` as text, for a failure report, without the report becoming the
- * second failure.
- *
- * Reading `.id` is a property access on plug-in-shaped data and `String()`
- * consults `Symbol.toPrimitive`, `toString` and `valueOf`, so both halves are
- * calls into code the plug-in may have written. Every use of this function is
- * inside a `catch` — the one place where an unguarded throw is worst, because it
- * replaces a contained failure with an uncontained one and loses the original
- * error on the way out.
- *
- * **Not reachable through the registry today, and guarded anyway.**
- * `normalizeRibbonAction` stores a frozen record whose `id` is a captured
- * primitive string, so nothing arriving by the documented route can detonate
- * here. This component's props are `readonly RibbonAction[]` and a caller is
- * plain JavaScript, which is exactly the standard `ShellAPI.ts` holds its own
- * doors to: the declared type proves nothing at runtime.
- *
- * It DOES interpolate the value, where `describeUntrusted` in `ShellAPI.ts`
- * deliberately refuses to. The two are answering different questions. That one
- * builds the message of a thrown `ShellUXError`, where a `toString` running
- * inside the host is a real escalation; this one builds a `console` line whose
- * entire usefulness is naming *which* action misbehaved, and the stringification
- * is already inside a guard whose failure mode is a placeholder.
- *
- * *Test:* `src/components/__tests__/RibbonToolbar.test.tsx` — "contains an id
- * getter that throws while a failing isVisible predicate is being reported" and
- * "contains an id getter that throws while a failing onExecute handler is being
- * reported".
- */
-function actionId(action: RibbonAction): string {
-  try {
-    return String(action.id);
-  } catch {
-    return UNREADABLE_ID;
-  }
-}
-
-/**
- * Whether `action` should appear, with a throwing predicate treated as "no".
- *
- * `=== true` rather than a truthiness test: `isVisible` is declared to return a
- * boolean and a plug-in is plain JavaScript, so a predicate returning a truthy
- * non-boolean is a contract violation and is resolved the safe way — hidden.
- *
- * **A throw is contained. A WRITE is not.** See rule 3a in the file banner: a
- * predicate that calls back into the shell store from here re-enters this
- * function through React and never stops, and nothing in this guard addresses
- * that.
- */
-function isVisible(action: RibbonAction, context: Readonly<RibbonContext>): boolean {
-  try {
-    return action.isVisible(context) === true;
-  } catch (error) {
-    report(
-      `RibbonToolbar: the isVisible predicate of ribbon action "${actionId(action)}" threw. The action is hidden and the rest of the ribbon still renders. A predicate must be pure and must return false rather than throw; see DEVELOPER.md, "Rules for writing predicates".`,
-      error,
-    );
-    return false;
-  }
-}
-
-/** Invoke `onExecute` without letting a throwing handler reach React. */
-function execute(
-  action: RibbonAction,
-  context: Readonly<RibbonContext>,
-  shell: IShellAPI,
-): void {
-  try {
-    action.onExecute(context, shell);
-  } catch (error) {
-    report(
-      `RibbonToolbar: the onExecute handler of ribbon action "${actionId(action)}" threw. The shell is still running; fix the handler.`,
-      error,
-    );
-  }
+  return ariaKeyShortcuts(action.hotkey);
 }
 
 interface ActionButtonProps {
@@ -353,6 +312,16 @@ interface ActionButtonProps {
   /** UNTRUSTED lookup key. Resolved through `RIBBON_ICONS`. */
   readonly icon: string;
   readonly isDisabled: boolean;
+  /**
+   * Host-computed `aria-keyshortcuts` value, or `undefined` for no announcement.
+   *
+   * Host-computed, and that word is doing work: the string is built by
+   * `ariaKeyShortcuts` from a registry-validated chord whose `key` came off the
+   * `HOTKEY_KEYS` allowlist and whose modifiers are booleans, so no plug-in text
+   * reaches this attribute. It is not an exception to the untrusted-string rule
+   * at the top of this file; it is a value the plug-in never authored.
+   */
+  readonly keyShortcuts: string | undefined;
   readonly onSelect: () => void;
 }
 
@@ -389,11 +358,18 @@ const ACTION_CHROME =
  * what actually stops it firing. The guard is the enforcement; the attribute is
  * only the announcement.
  */
-function ActionButton({ label, icon, isDisabled, onSelect }: ActionButtonProps): ReactElement {
+function ActionButton({
+  label,
+  icon,
+  isDisabled,
+  keyShortcuts,
+  onSelect,
+}: ActionButtonProps): ReactElement {
   return (
     <button
       type="button"
       aria-disabled={isDisabled ? true : undefined}
+      aria-keyshortcuts={keyShortcuts}
       title={label}
       onClick={() => {
         if (isDisabled) {
@@ -423,10 +399,17 @@ function ActionButton({ label, icon, isDisabled, onSelect }: ActionButtonProps):
  * menu open when a disabled item is chosen: closing would look like the action
  * had run.
  */
-function OverflowMenuItem({ label, icon, isDisabled, onSelect }: ActionButtonProps): ReactElement {
+function OverflowMenuItem({
+  label,
+  icon,
+  isDisabled,
+  keyShortcuts,
+  onSelect,
+}: ActionButtonProps): ReactElement {
   return (
     <DropdownMenu.Item
       aria-disabled={isDisabled ? true : undefined}
+      aria-keyshortcuts={keyShortcuts}
       title={label}
       onSelect={(event) => {
         if (isDisabled) {
@@ -513,6 +496,9 @@ export function RibbonToolbar({
             label={action.label}
             icon={action.icon}
             isDisabled={action.isDisabled === true}
+            // Never on a host command. `HostRibbonAction` carries no chord, and
+            // the dispatcher walks the foreground extension's actions only.
+            keyShortcuts={undefined}
             onSelect={action.onSelect}
           />
         ))}
@@ -530,6 +516,7 @@ export function RibbonToolbar({
                 label={action.label}
                 icon={action.icon}
                 isDisabled={action.isDisabled === true}
+                keyShortcuts={keyShortcutsOf(action)}
                 onSelect={() => {
                   execute(action, context, extension.shell);
                 }}
@@ -589,6 +576,7 @@ export function RibbonToolbar({
                     label={action.label}
                     icon={action.icon}
                     isDisabled={action.isDisabled === true}
+                    keyShortcuts={keyShortcutsOf(action)}
                     onSelect={() => {
                       execute(action, context, extension.shell);
                     }}

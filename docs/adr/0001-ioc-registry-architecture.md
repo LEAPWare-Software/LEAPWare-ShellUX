@@ -1786,7 +1786,8 @@ export interface RibbonAction {
 `ShellUXErrorCode` gains `DUPLICATE_HOTKEY`. `RegistryContext.tsx` gains the
 `HOTKEY_KEYS` allowlist beside `REGISTRY_LIMITS`, and `normalizeHotkey`.
 `src/core/hotkeys.ts` is new and holds three pure functions — `hotkeyToken`,
-`describeHotkey`, `matchesHotkey`. Nothing else changed: the `Map` store,
+`describeHotkey`, `matchesHotkey`. (Amendment J adds a fourth, `ariaKeyShortcuts`.)
+Nothing else changed: the `Map` store,
 `RESERVED_IDS`, `EXTENSION_ID_PATTERN`, the single-read discipline, normalisation
 and the deep-freezing are untouched.
 
@@ -1795,27 +1796,37 @@ listener of any kind, there is no `useHotkeyDispatcher`, and there is no
 evaluation site. This amendment records a *declaration and validation* decision,
 in the same present-tense-honest register Amendment G requires of `isVisible`.
 
-*Tests:* the repository-wide half of that sentence is pinned by "finds no
-listener registration in any module under src/, with no exceptions at all" in
-`src/__tests__/noEventListener.test.ts`. It parses every non-test `.ts`/`.tsx`
-file under `src/` with the TypeScript compiler and fails if any code position —
-identifier, property name, JSX attribute or string literal — spells
-`addEventListener` or `removeEventListener`.
+> **SUPERSEDED BY AMENDMENT J.** The paragraph above was true when it was written
+> and is not true now: ISSUE-006 built the dispatcher, `src/core/hotkeyDispatch.ts`
+> holds the repository's one `addEventListener`, and both halves of the scan below
+> are now allowlisted. It is preserved rather than rewritten because the rest of
+> this amendment is a record of decisions taken while it was true. Everything else
+> in Amendment H stands; see Amendment J for what the dispatcher does with it.
+
+*Tests:* the repository-wide half of that sentence was pinned by a test that
+forbade `addEventListener` in every module under `src/` with no exceptions at all.
+Amendment J narrowed it to a one-entry allowlist and re-pointed this citation with
+it: "finds no listener registration in any module outside the hotkey-dispatch
+allowlist" in `src/__tests__/noEventListener.test.ts`. It parses every non-test
+`.ts`/`.tsx` file under `src/` with the TypeScript compiler and fails if any code
+position — identifier, property name, JSX attribute or string literal — spells
+`addEventListener` or `removeEventListener` outside that allowlist.
 
 **AMENDED BY ISSUE-004, and amended by narrowing rather than by weakening.** That
 test used to forbid `keydown`, `keyup` and `keypress` in the same breath and with
 the same repo-wide reach. ISSUE-004's list virtualizer needs `onKeyDown` for
 arrow-key row navigation — it is the issue's own Definition of Done — so the two
-halves were split. The listener half above is unchanged and has NO allowlist
-mechanism at all, because that half is what "no dispatcher, no evaluation site"
-actually rests on. The key-event half is now scoped to a named allowlist
-containing exactly `components/shared/VirtualizedList.tsx`, and the allowlist is
-checked in both directions: a listed module that stops spelling what its entry
-claims fails as a stale exemption, and one that grows a spelling its entry does
-not name fails as an unreviewed widening. *Tests:* "finds no key-event name in any
-module outside the keyboard-navigation allowlist", "holds the key-event allowlist
-to the exact spellings each listed module contains" and "registers no listener and
-names no window or document target in the allowlisted module".
+halves were split. The listener half was left unchanged with NO allowlist
+mechanism at all, because that half was what "no dispatcher, no evaluation site"
+rested on; ISSUE-006 then had to narrow it too, and Amendment J records why. The
+key-event half is scoped to a named allowlist, and both allowlists are checked in
+both directions: a listed module that stops spelling what its entry claims fails
+as a stale exemption, and one that grows a spelling its entry does not name fails
+as an unreviewed widening. *Tests:* "finds no key-event name in any module
+outside the key-event allowlist", "holds the key-event allowlist to the exact
+spellings each listed module contains", "holds the hotkey-dispatch allowlist to
+the exact spellings the dispatcher contains" and "registers no listener and names
+no window or document target in the allowlisted module".
 
 Amendment G's three routes are name a test, narrow the claim, or delete it.
 Deleting the file or blanket-exempting `src/components/**` were both rejected:
@@ -2100,6 +2111,8 @@ Pane 2 view with ISSUE-004's virtualizer, not in this contract.
 - **Neutral.** `src/core/hotkeys.ts` is a new file under the 100% coverage gate,
   and it is deliberately trivial: three pure functions, no DOM, no React, no
   state. The interesting code is the dispatcher, and the dispatcher is Phase 2.
+  (It landed as `src/core/hotkeyDispatch.ts` — a separate module, so this one
+  stayed trivial. See Amendment J.)
 
 ---
 
@@ -2138,10 +2151,13 @@ amendment is about the allowlist applying its own stated rationale uniformly.
 
 ### Why now, and why the cost only rises
 
-Nothing dispatches a chord yet — pinned by "finds no listener registration in any
-module under src/, with no exceptions at all" in
-`src/__tests__/noEventListener.test.ts`. **No extension exists**, and ISSUE-005 has
-not landed. So today this change breaks nothing at all.
+Nothing dispatched a chord when this was written — pinned at the time by a scan
+that forbade `addEventListener` anywhere under `src/`, now narrowed by Amendment J
+to "finds no listener registration in any module outside the hotkey-dispatch
+allowlist" in `src/__tests__/noEventListener.test.ts`. **No extension exists**, and
+ISSUE-005 has not landed. So at the time this change broke nothing at all — and
+ISSUE-006's dispatcher, which landed after it, inherited the smaller allowlist
+rather than having to shrink a live one.
 
 That is the entire argument for doing it now rather than with the Phase 2
 dispatcher. The moment chords actually fire, removing a key from the allowlist or
@@ -2280,6 +2296,217 @@ the two messages fails one of those two cases whichever direction it merges in.
   work visible is to name the files. The authority was never the prose in any case
   — it is the test: "accepts every key in the host allowlist" in
   `src/core/__tests__/validation.test.ts` pins `HOTKEY_KEYS.size` at 60.
+
+---
+
+## Amendment J — Hotkey dispatch, and narrowing the no-listener invariant to keep it
+
+**Date:** 2026-07-31 · **Status:** Accepted · **Amends:** Amendment H (which
+recorded declaration and validation and deferred the dispatcher), Amendment H
+Decision 6 (foreground scoping, now the dispatcher's lookup rule) and Amendment G
+(the no-listener claim, whose evidence is narrowed rather than deleted)
+
+### What changed
+
+`src/core/hotkeyDispatch.ts` is new and exports `useHotkeyDispatch(): void`,
+called once by `ShellLayout`. `src/core/ribbonAction.ts` is new and holds
+`isVisible`, `execute` and `report`, moved out of `RibbonToolbar.tsx` unchanged.
+`src/core/hotkeys.ts` gains a fourth pure export, `ariaKeyShortcuts`.
+`RibbonToolbar.tsx` emits `aria-keyshortcuts`. `src/__tests__/noEventListener.test.ts`
+gains a second allowlist. Nothing about registration, validation, normalisation or
+the `Hotkey` contract changed at all: the dispatcher consumes the shape
+Amendment H specified, unaltered.
+
+### Decision 1 — the guards were extracted BEFORE the dispatcher was written
+
+`isVisible` and `execute` were module-private in `RibbonToolbar.tsx` while the
+button was the only route to a plug-in action. There are now two routes, and
+Amendment H Decision 1 licenses the second one in these words: a hotkey is "a
+second way to fire *this* `onExecute`, gated by the same `isVisible` and the same
+`isDisabled`".
+
+**The whole containment argument turns on the word *same*.** A second copy of those
+semantics would drift, and the drift would be silent: a chord that fired for an
+action the button would have hidden would be a WIDER route to a plug-in handler
+than the ribbon is, and the claim that a hotkey grants no capability the ribbon did
+not already grant would simply be false. So the extraction is not tidying — it is
+the precondition for the dispatcher being defensible, and it was done and verified
+green as its own step. This is Amendment I Decision 3's reasoning ("a rule
+evaluated twice is a rule that can disagree with itself") applied to a guard rather
+than to a validation. *Tests:* the existing ribbon cases still exercise both
+functions through the component — "hides an action whose isVisible predicate throws
+and still renders the rest", "treats a non-boolean isVisible result as not visible",
+"survives an onExecute that throws, leaving the ribbon interactive" — and the
+dispatcher exercises the same two through the chord: "does not fire a chord whose
+isVisible predicate throws, and reports it once" and "survives an onExecute that
+throws, leaving the dispatcher live" in `src/core/__tests__/hotkeyDispatch.test.tsx`.
+
+### Decision 2 — `ShellLayout` owns the listener, not `ShellHostProvider`
+
+`ShellLayout` is host territory above every `ExtensionHostBoundary`, it already
+holds `useActivation()` and `useShellContext()`, and it renders the ribbon — so
+the button path and the chord path resolve the same foreground extension and the
+same action list. A listener in the provider would be live with **no shell
+mounted**: a host that wrapped something other than `ShellLayout` in
+`ShellHostProvider` would get global chords over a UI with no ribbon and therefore
+no way for a user to discover what was bound.
+
+### Decision 3 — bubble phase, and the cost that comes with it
+
+Capture would make the host win over everything below it, including a Radix menu's
+own key handling and the Pane 2 list's arrow keys. Bubble lets a component that
+deliberately handles a key and calls `stopPropagation()` keep it, which is exactly
+what Amendment H Decision 8's view-local `J`/`K` navigation needs.
+
+**The accepted cost, recorded rather than discovered later:** a foreground
+extension that calls `stopPropagation()` on `keydown` inside its own pane starves
+its OWN chords. It starves nobody else's, because chords are foreground-scoped —
+the only actions the dispatcher would have walked are that same extension's. A
+plug-in denying itself its own shortcuts is a plug-in bug with a contained blast
+radius; capture would have traded that for the host breaking widgets it does not
+own, which is not contained.
+
+On a match the dispatcher calls `preventDefault()` and nothing else.
+`stopPropagation()` is deliberately absent: `window` is the last stop in the bubble
+path, so there is nothing left to stop.
+
+### Decision 4 — foreground-only, which is what makes the lookup total
+
+Amendment H Decision 6 makes cross-extension chord collisions **legal by design**:
+two live extensions may both declare `Ctrl+K` and both registrations succeed. A
+shell-wide dispatch table is therefore ambiguous by construction — there is no
+non-arbitrary answer to "whose `Ctrl+K`?" — and the ambiguity is not a bug to be
+fixed at dispatch time, it is the price Decision 6 paid to avoid making
+registration order semantically load-bearing and to avoid handing any extension a
+squatting attack.
+
+Scoping to `activation.getActive()` is what makes the lookup total again, and it
+mirrors the ribbon exactly. `getActive()` re-checks liveness against the registry
+rather than trusting the last commit, so a chord stops firing the statement after
+`release` or `unregister` rather than at the next render. *Tests:* "does not fire a
+background extension chord while another extension is in the foreground", "stops
+firing after the extension is released" and "stops firing from the statement after
+unregister, without waiting for a commit".
+
+### Decision 5 — the suppression list is a guardrail, and is labelled as one
+
+Before any `matchesHotkey` call, a keystroke is dropped when `defaultPrevented` is
+set, when `repeat` is set, when `isComposing` is true or `keyCode` is 229, and when
+the target is an editable surface — the three form elements, a `contenteditable`
+subtree whose value is not `"false"`, or an ARIA `textbox`/`searchbox`/`combobox`.
+The target is checked with `instanceof Element` first, so no property is read off a
+non-element.
+
+**This is a guardrail, not a boundary, in exactly the register of "No sandbox"
+above.** A plug-in can render a custom editor from a bare `div` with no recognised
+role, and a chord will fire into it while the user types. The host does not know
+what a plug-in's DOM means and cannot be made to; the remedy available to the
+plug-in is `stopPropagation()`, which Decision 3 deliberately leaves working. Two
+implementation notes that are easy to get wrong and were: `closest()` walks plug-in
+DOM but reads attributes only and invokes no plug-in code, and
+`element.isContentEditable` is NOT used — it returns `undefined` in this repository's
+jsdom, so a check built on it would pass every test while doing nothing in a
+browser. *Test:* the `it.each` table "does not fire while focus is in %s", with
+"still fires from an ordinary element, and from contenteditable=\"false\"" as its
+other side.
+
+### Decision 6 — `aria-keyshortcuts` is a fourth function, not `describeHotkey`
+
+`aria-keyshortcuts` is defined over UI Events `KeyboardEvent.key` **values** —
+`Control`, `Alt`, `Shift`, `Meta`. `describeHotkey` deliberately emits the
+**display** spelling, where the control key is `Ctrl`, because that is what a user
+reads on a keycap and in a tooltip. `Ctrl` is not a valid key value, so one
+function cannot serve both without being wrong for one of them. `ariaKeyShortcuts`
+is therefore a separate pure export sharing only the key half, where the two
+spellings genuinely agree.
+
+The attribute is emitted on a plug-in action that carries a `hotkey` and is **not
+disabled**, on the bar and in the overflow menu alike, and never on a host action.
+The omission on a disabled action is not an oversight: the dispatcher skips a
+disabled action, so announcing a shortcut on it would be the same lie in the other
+direction as the one the pre-ISSUE-006 ribbon avoided by announcing nothing at all.
+*Tests:* "spells the control key Control, which describeHotkey deliberately does
+not" in `src/core/__tests__/hotkeys.test.ts`; "advertises a chord-bearing action
+with aria-keyshortcuts, in key values rather than display spelling", "omits
+aria-keyshortcuts from a disabled action, because the chord will not fire",
+"advertises a chord on an overflow menu item too" and "never advertises a chord on
+a host action" in `src/components/__tests__/RibbonToolbar.test.tsx`.
+
+### Decision 7 — narrowing the no-listener scan beat deleting it, and beat pretending
+
+**This is the load-bearing part of the amendment.** ISSUE-004 split
+`src/__tests__/noEventListener.test.ts` into two halves and kept the listener half
+absolute *on purpose*, saying so in its own docblock: that half was what "no
+dispatcher, no evaluation site" rested on, and adding an exception mechanism to it
+"would be the change that quietly ends the invariant". ISSUE-006 is that change.
+Three options were on the table, which are Amendment G's three routes:
+
+1. **Delete the file.** Rejected. It is the evidence for a claim made in eight
+   prose sites, and deleting it at the moment the first ambient key handler lands
+   is deleting the evidence exactly when it is worth most.
+2. **Leave the title and let it lie.** Rejected outright, and named here because it
+   is the cheapest option and the one a hurried change actually takes: keeping
+   "with no exceptions at all" on a test that has an exception is the Amendment G
+   failure mode in its purest form.
+3. **Narrow the claim to what is still true, and re-point every site.** Taken. The
+   listener half now consults a one-entry allowlist naming `core/hotkeyDispatch.ts`
+   and its exact spellings, checked in both directions like the key-event half. The
+   property that survives is the one that matters going forward: there is exactly
+   ONE listener in the repository, it is in a named file, and a second cannot appear
+   without an edit to this test that a reviewer has to approve.
+
+**And the scan is the weaker half of the new claim, so it is not the whole of it.**
+A text scan can see that `addEventListener` appears once and `removeEventListener`
+once. It cannot see that the two name the same event, and it cannot see that the
+cleanup passes the SAME function reference — a cleanup that rebuilt the closure
+would leak one listener per mount while satisfying every count the scan can take.
+That pairing is therefore pinned at runtime, by spying on `window` across a mount
+and an unmount and comparing handler identity, and again under StrictMode whose
+simulated remount must net to a single registration. *Tests:* "finds no listener
+registration in any module outside the hotkey-dispatch allowlist", "holds the
+hotkey-dispatch allowlist to the exact spellings the dispatcher contains" and
+"holds the dispatcher to exactly one addEventListener and one removeEventListener"
+in `src/__tests__/noEventListener.test.ts`; "adds exactly one keydown listener and
+removes the identical handler on unmount" and "registers once under StrictMode,
+whose simulated remount is symmetric" in
+`src/core/__tests__/hotkeyDispatch.test.tsx`.
+
+Two test titles changed as a result — the listener scan's and the key-event scan's,
+the latter because its allowlist is no longer only about keyboard navigation — and
+every prose site citing either was re-pointed in the same change: `README.md`,
+`DEVELOPER.md`, `.github/ISSUES_MANIFEST.md`, this file, `src/core/types.ts`,
+`src/components/layout/ShellLayout.tsx`,
+`src/components/ui/RibbonToolbar.tsx`, `src/core/services/HydrationEngine.ts` and
+`src/components/__tests__/ShellLayout.test.tsx`.
+
+### Consequences
+
+- **Positive.** A declared chord now does something, through the same two gates the
+  ribbon button passes and through literally the same two functions. Amendment H
+  Decision 1's containment argument is now a property of code rather than a promise
+  about future code.
+- **Positive.** The repository still has exactly one event listener, and it is
+  harder to add a second than it was before: the source scan has to be edited, and
+  the runtime pairing test has to keep passing.
+- **Positive.** `aria-keyshortcuts` finally appears, and appears only where it is
+  true.
+- **Negative — accepted.** A foreground extension that stops `keydown` propagation
+  starves its own chords. See Decision 3; the alternative starves other people's
+  widgets.
+- **Negative — accepted.** The suppression list does not recognise a plug-in's
+  home-made editor. See Decision 5. It is labelled a guardrail everywhere it is
+  described, including in `DEVELOPER.md`, where the author who could actually fix
+  it will read it.
+- **Negative — accepted.** The no-listener invariant is now defended by an
+  allowlist rather than by an absolute rule, and an allowlist is a thing that can
+  be extended. The mitigations are that it is exact in both directions, that it has
+  one entry, and that the runtime pairing test does not care what the allowlist
+  says.
+- **Neutral.** `hotkeyToken` is still the deduplication key at registration and is
+  still not a dispatch lookup key: the dispatcher walks the foreground extension's
+  actions and calls `matchesHotkey`, because Decision 6 of Amendment H means there
+  is no unambiguous table to look a token up in. The token's second use, forecast in
+  Amendment H Decision 7, did not arrive and is not needed.
 
 ---
 

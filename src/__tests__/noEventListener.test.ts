@@ -29,32 +29,54 @@ import { describe, expect, it } from 'vitest';
  * exceptions. ISSUE-004's list virtualizer needs `onKeyDown` — arrow keys,
  * Home/End and Page Up/Down over a windowed list are the issue's own Definition
  * of Done, and there is no way to implement them without handling a key event.
- * So one of the two halves had to move, and the choice of WHICH is the point:
+ * So one of the two halves had to move, and the choice of WHICH was the point:
+ * the listener half stayed absolute with no allowlist mechanism at all, and the
+ * key-event half was scoped to a named allowlist, exact in BOTH directions.
  *
- *   - **The listener half is unchanged and has no allowlist.** `addEventListener`
- *     and `removeEventListener` are still forbidden in every module under `src/`,
- *     with no exception mechanism at all. That half is what actually pins "no
- *     global listener, no hotkey dispatcher, no evaluation site", which is the
- *     property the prose sites are about. A `keydown` handler on one scroll
- *     container is not a dispatcher; a listener on `window` or `document` is.
- *   - **The key-event half is scoped to a named allowlist**, and the allowlist is
- *     exact in BOTH directions. A listed module that stops containing its
- *     spellings fails as a stale entry, and a listed module that grows a spelling
- *     its entry does not name fails too. An allowlist that only ever gets longer
- *     is not a guardrail; this one has to be maintained in step with the code.
+ * ---------------------------------------------------------------------------
+ * WHAT ISSUE-006 CHANGED, AND WHY THE LISTENER HALF WAS NARROWED TOO
+ * ---------------------------------------------------------------------------
+ * **The half ISSUE-004 deliberately kept absolute is now allowlisted, and this is
+ * the honest record of that.** ISSUE-006 builds the hotkey dispatcher ADR-0001
+ * Amendment H deferred. A dispatcher is a global `keydown` listener; there is no
+ * version of it that does not register one. So the sentence "no module under
+ * `src/` registers a listener at all" stopped being true, and Amendment G's three
+ * routes are name a test, narrow the claim, or delete it.
  *
- * The alternative — deleting the file, or blanket-exempting `src/components/**` —
- * was rejected. Amendment G's three routes are name a test, narrow the claim, or
- * delete it, and narrowing is the one that keeps the evidence and the sentence
- * the same width. Every prose site that stated the wider claim was re-pointed at
- * the two titles below in the same change.
+ * **Narrowing beat deleting, for the same reason it did in ISSUE-004 and one
+ * more.** Deleting the file would destroy the evidence for a claim made in eight
+ * places — that the host installs no ambient key handling it has not argued for —
+ * at exactly the moment the first such handler lands, which is when the evidence
+ * is worth most. What survives narrowing is the property that actually matters
+ * going forward: there is exactly ONE listener in the repository, it is in a named
+ * file, and a second one cannot appear without editing this test.
+ *
+ * **And a source scan is the weaker half of the new claim, so it is not the whole
+ * of it.** A text scan can see that `addEventListener` appears once and
+ * `removeEventListener` once; it cannot see that they name the same event, or that
+ * the cleanup removes the SAME function reference — and an `addEventListener`
+ * whose cleanup passes a freshly-built closure leaks a listener per mount while
+ * satisfying every count this file can take. That pairing is therefore pinned at
+ * RUNTIME instead, by spying on `window` across a mount and an unmount: *tests:*
+ * "adds exactly one keydown listener and removes the identical handler on
+ * unmount" and "registers once under StrictMode, whose simulated remount is
+ * symmetric" in `src/core/__tests__/hotkeyDispatch.test.tsx`. This file keeps the
+ * cheaper half — the counts, and the fact that nothing ELSE registers anything —
+ * and the two together are the replacement for what the absolute scan gave for
+ * free.
+ *
+ * Both allowlists are exact in BOTH directions. A listed module that stops
+ * containing its spellings fails as a stale entry, and a listed module that grows
+ * a spelling its entry does not name fails as an unreviewed widening. An
+ * allowlist that only ever gets longer is not a guardrail. Every prose site that
+ * stated the wider claim was re-pointed at the titles below in the same change.
  *
  * **What is asserted, exactly.** Every `.ts`/`.tsx` file under `src/` that is not
  * itself a test is parsed with the TypeScript compiler, and the test fails if any
  * *code* position — identifier, property name, JSX attribute name, or
  * string/template literal — spells `addEventListener` or `removeEventListener`
- * anywhere at all, or spells `keydown`, `keyup` or `keypress` outside
- * `KEY_EVENT_ALLOWLIST`.
+ * outside `HOTKEY_DISPATCH_ALLOWLIST`, or spells `keydown`, `keyup` or `keypress`
+ * outside `KEY_EVENT_ALLOWLIST`.
  *
  * **Why the compiler and not a text search.** Several of the modules being
  * scanned discuss this very absence in prose, so a raw text match would fail on
@@ -80,11 +102,11 @@ import { describe, expect, it } from 'vitest';
 const SRC_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /**
- * Listener registration. **Repo-wide, with no allowlist and no exceptions.**
+ * Listener registration, allowlisted per module by `HOTKEY_DISPATCH_ALLOWLIST`.
  *
- * This is the half three prose sites are really about. Adding an exception
- * mechanism here would be the change that quietly ends the invariant, so there
- * is none: the only way to make this pass is not to register a listener.
+ * Absolute until ISSUE-006. It is now scoped to one named module for one named
+ * reason — see the second block of the banner — and the counts below are what
+ * stops that exemption growing an extra listener nobody argued for.
  */
 const LISTENER_REGISTRATION = /(?:add|remove)EventListener/i;
 
@@ -103,16 +125,59 @@ const FORBIDDEN_IN_CODE = /(?:add|remove)EventListener|key(?:down|up|press)/i;
  * The modules permitted to handle a key event, and the EXACT spellings each is
  * permitted to contain.
  *
- * One entry, and it earns it: `VirtualizedList` owns the only keyboard-navigable
- * widget in the shell, and its handler is bound to one scroll container through
- * a React prop. It reaches no `window`, no `document` and no chord table — which
- * is asserted below rather than asserted here in a comment.
+ * Two entries, for two different reasons, and neither is a general licence:
+ *
+ *  - `VirtualizedList` owns the only keyboard-navigable widget in the shell, and
+ *    its handler is bound to one scroll container through a React prop. It reaches
+ *    no `window`, no `document` and no chord table — asserted below rather than
+ *    asserted here in a comment.
+ *  - `hotkeyDispatch` is the shell's one global dispatcher. Its single spelling is
+ *    the event name it registers for; it declares no `onKeyDown` prop and handles
+ *    no other key event.
  *
  * Spellings are listed unique and sorted, exactly as the scan reports them.
  */
 const KEY_EVENT_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.freeze({
   'components/shared/VirtualizedList.tsx': Object.freeze(['handleKeyDown', 'onKeyDown']),
+  'core/hotkeyDispatch.ts': Object.freeze(['keydown']),
 });
+
+/**
+ * The modules permitted to REGISTER a listener, and the exact spellings each is
+ * permitted to contain.
+ *
+ * **One entry, and it is meant to stay one entry.** The whole value of narrowing
+ * rather than deleting is that a second global listener cannot appear without an
+ * edit to this object, which is a line in a diff a reviewer has to approve.
+ */
+const HOTKEY_DISPATCH_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  'core/hotkeyDispatch.ts': Object.freeze(['addEventListener', 'removeEventListener']),
+});
+
+/**
+ * How many times each listed module may spell each listener name.
+ *
+ * A count rather than a presence check, because "one `addEventListener` and one
+ * `removeEventListener`" is a materially stronger statement than "some": a second
+ * `addEventListener` slipped into the same module is exactly the change this
+ * allowlist would otherwise wave through.
+ */
+const LISTENER_OCCURRENCES: Readonly<Record<string, Readonly<Record<string, number>>>> =
+  Object.freeze({
+    'core/hotkeyDispatch.ts': Object.freeze({ addEventListener: 1, removeEventListener: 1 }),
+  });
+
+/**
+ * Key-event modules that are NOT permitted a listener.
+ *
+ * Derived rather than transcribed, so that adding a module to either allowlist
+ * cannot leave this set stale. Its one member is the list widget: an exemption to
+ * HANDLE a key on one element is not an exemption to reach the globals a
+ * dispatcher needs, and that distinction is asserted below.
+ */
+const HANDLER_ONLY_MODULES: readonly string[] = Object.keys(KEY_EVENT_ALLOWLIST).filter(
+  (file) => !Object.hasOwn(HOTKEY_DISPATCH_ALLOWLIST, file),
+);
 
 interface Finding {
   readonly file: string;
@@ -221,25 +286,36 @@ const KNOWN_MODULES = [
   'core/ActivationContext.tsx',
   'core/RegistryContext.tsx',
   'core/ShellAPI.ts',
+  'core/hotkeyDispatch.ts',
   'core/hotkeys.ts',
+  'core/ribbonAction.ts',
   'core/types.ts',
   'main.tsx',
   'test/setup.ts',
 ];
+
+/** Every occurrence of `pattern` in one module's code, counted by spelling. */
+function countWords(file: string, text: string, pattern: RegExp): Record<string, number> {
+  const counts: Record<string, number> = Object.create(null) as Record<string, number>;
+  for (const finding of scanFindings(file, text, pattern)) {
+    counts[finding.word] = (counts[finding.word] ?? 0) + 1;
+  }
+  return counts;
+}
 
 describe('src/ — no listener is registered anywhere, and key events are handled in one module', () => {
   it('visits every module under src/, so an empty scan cannot pass vacuously', () => {
     expect(sourceFiles()).toEqual(expect.arrayContaining(KNOWN_MODULES));
   });
 
-  it('finds no listener registration in any module under src/, with no exceptions at all', () => {
-    const findings = sourceFiles().flatMap((file) =>
-      scanSource(file, read(file), LISTENER_REGISTRATION),
-    );
+  it('finds no listener registration in any module outside the hotkey-dispatch allowlist', () => {
+    const findings = sourceFiles()
+      .filter((file) => !Object.hasOwn(HOTKEY_DISPATCH_ALLOWLIST, file))
+      .flatMap((file) => scanSource(file, read(file), LISTENER_REGISTRATION));
     expect(findings).toEqual([]);
   });
 
-  it('finds no key-event name in any module outside the keyboard-navigation allowlist', () => {
+  it('finds no key-event name in any module outside the key-event allowlist', () => {
     const findings = sourceFiles()
       .filter((file) => !Object.hasOwn(KEY_EVENT_ALLOWLIST, file))
       .flatMap((file) => scanSource(file, read(file), KEY_EVENT_NAME));
@@ -258,11 +334,39 @@ describe('src/ — no listener is registered anywhere, and key events are handle
     }
   });
 
+  it('holds the hotkey-dispatch allowlist to the exact spellings the dispatcher contains', () => {
+    // Same rule, same both directions, applied to the half that used to have no
+    // allowlist at all. The entry has to name a module that exists and has to
+    // name every listener spelling that module contains.
+    const modules = new Set(sourceFiles());
+    for (const [file, permitted] of Object.entries(HOTKEY_DISPATCH_ALLOWLIST)) {
+      expect(modules.has(file)).toBe(true);
+      expect(distinctWords(scanFindings(file, read(file), LISTENER_REGISTRATION))).toEqual([
+        ...permitted,
+      ]);
+    }
+  });
+
+  it('holds the dispatcher to exactly one addEventListener and one removeEventListener', () => {
+    // A COUNT, not a presence check. "Some addEventListener" would wave through a
+    // second global listener added to the same file, which is precisely the
+    // change the allowlist must not make invisible. What a count still cannot see
+    // is whether the two name the same event and the same function reference —
+    // that is pinned at runtime in `src/core/__tests__/hotkeyDispatch.test.tsx`.
+    for (const [file, expected] of Object.entries(LISTENER_OCCURRENCES)) {
+      expect(countWords(file, read(file), LISTENER_REGISTRATION)).toEqual({ ...expected });
+    }
+  });
+
   it('registers no listener and names no window or document target in the allowlisted module', () => {
     // The exemption is for HANDLING a key on one element, not for reaching the
-    // globals a dispatcher would need. Both are checked at the code level: the
+    // globals a dispatcher would need. The dispatcher is excluded by
+    // construction, which is what `HANDLER_ONLY_MODULES` derives — and it is
+    // pinned to its one member here so that "the allowlisted module" stays
+    // singular and stays the list widget. Both checks are at the code level: a
     // module may discuss `window` in prose, and comments are not scanned.
-    for (const file of Object.keys(KEY_EVENT_ALLOWLIST)) {
+    expect(HANDLER_ONLY_MODULES).toEqual(['components/shared/VirtualizedList.tsx']);
+    for (const file of HANDLER_ONLY_MODULES) {
       const text = read(file);
       expect(scanSource(file, text, LISTENER_REGISTRATION)).toEqual([]);
       expect(distinctWords(scanFindings(file, text, /^(?:window|document)$/))).toEqual([]);

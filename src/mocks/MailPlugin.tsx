@@ -466,11 +466,16 @@ type BodyFetch = { readonly status: 'ok'; readonly body: string } | { readonly s
  * Wait, unless the signal says not to bother.
  *
  * `signal.onabort` rather than a listener registration, and that is not a
- * stylistic choice: `src/__tests__/noEventListener.test.ts` parses every non-test
- * module under `src/` — this file included — and fails on the listener
- * registration names in any code position. A single assignment is also the right
- * shape here, because there is exactly one thing to cancel and it is cancelled
- * once.
+ * stylistic choice: the scan parses every non-test module under `src/` and fails
+ * on the listener registration names in any code position. That prohibition used
+ * to be absolute and is now allowlisted, but the allowlist has one entry —
+ * `src/core/hotkeyDispatch.ts`, the shell's keyboard dispatcher — and this file
+ * is not it, so nothing changed for this module. *Test:* "finds no listener
+ * registration in any module outside the hotkey-dispatch allowlist" in
+ * `src/__tests__/noEventListener.test.ts`.
+ *
+ * A single assignment is also the right shape here, because there is exactly one
+ * thing to cancel and it is cancelled once.
  *
  * Resolves `true` when the wait completed and `false` when it was cut short. The
  * timer is cleared on abort, so an aborted fetch leaves nothing pending.
@@ -757,7 +762,61 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
  * The two hotkeys carry `ctrl`, because the registry refuses a bare
  * character-key chord under WCAG 2.2 §2.1.4 — and because a bare `J`/`K`-style
  * binding is required by ADR-0001 Amendment H to be local to a focused list
- * rather than declared here. Nothing dispatches either chord yet.
+ * rather than declared here.
+ *
+ * **Both chords now fire.** `src/core/hotkeyDispatch.ts` holds the shell's one
+ * `keydown` listener — on `window`, bubble phase, attached by `ShellLayout` — and
+ * it walks the FOREGROUND extension's ribbon actions and nothing else, so
+ * `Ctrl+Shift+N` and `Ctrl+Delete` are dead keys while `DatabasePlugin` is in
+ * front. That scoping is Amendment H Decision 6 arriving in the dispatcher:
+ * cross-extension chord collisions are legal by design, so a shell-wide table
+ * would be ambiguous where a per-foreground lookup is total. These two mocks
+ * happen to declare disjoint chords, so nothing here exercises a collision.
+ * *Tests:* "fires a visible, enabled chord on the foreground extension" and "does
+ * not fire a background extension chord while another extension is in the
+ * foreground" in `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * **A chord is a second route to the button's action, never a wider one.**
+ * `Ctrl+Delete` is gated by the same `isVisible` as the Delete button, so with no
+ * message selected it does nothing at all, and an unrelated keystroke reaches no
+ * handler here either. An `isDisabled` action is refused the same way, though
+ * none of these five declares one. *Tests:* "does not fire a chord on an action
+ * whose predicate hides it", "does not fire a chord on a disabled action" and
+ * "ignores a key that is not the chord, and an action that declares no chord" in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * **Placement is not the gate.** `delete-message` is the fifth of five actions
+ * against an `INLINE_ACTION_LIMIT` of 4, and the four gated on `ownSelection`
+ * appear and disappear together — so whenever Delete is visible at all its button
+ * sits in the ribbon's overflow menu, and `Ctrl+Delete` fires anyway, because the
+ * dispatcher consults visibility and never the inline slice. *Test:* "fires a
+ * chord belonging to an action that renders in the overflow menu" in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * The chord-bearing buttons also carry `aria-keyshortcuts` in UI Events key-value
+ * spelling — `Control+Shift+N` and `Control+Delete`, not the `Ctrl+…` display
+ * spelling the tooltip uses — and the attribute is omitted from a disabled action
+ * because the chord is suppressed there too. *Tests:* "advertises a chord-bearing
+ * action with aria-keyshortcuts, in key values rather than display spelling",
+ * "advertises a chord on an overflow menu item too" and "omits aria-keyshortcuts
+ * from a disabled action, because the chord will not fire" in
+ * `src/components/__tests__/RibbonToolbar.test.tsx`.
+ *
+ * **The dispatcher's suppression list is a guardrail, not a boundary**, in the
+ * same register as ADR-0001's "No sandbox". It skips auto-repeat, an event
+ * something below already handled, an IME composition, and a target inside an
+ * `input`, `textarea`, `select`, `contenteditable` or an ARIA `textbox`,
+ * `searchbox` or `combobox`. This module renders none of those, so nothing here
+ * exercises it — and a plug-in whose custom editor is a `div` with no recognised
+ * role WILL receive these chords while the user is typing, and has to call
+ * `stopPropagation()` itself, which the bubble-phase listener deliberately leaves
+ * working. *Tests:* the "useHotkeyDispatch — suppression" group in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * One ordering is worth knowing and is NOT pinned by a test: `matchesHotkey` is
+ * consulted before `isVisible`, so a keystroke that is neither chord runs none of
+ * the predicates above. That is read off `hotkeyDispatch.ts` rather than
+ * asserted, and is recorded here as a reading rather than as evidence.
  */
 const RIBBON_ACTIONS: readonly RibbonAction[] = [
   {

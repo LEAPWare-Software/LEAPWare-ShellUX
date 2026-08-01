@@ -717,6 +717,132 @@ describe('RibbonToolbar — untrusted strings', () => {
   });
 });
 
+/**
+ * ============================================================================
+ * `aria-keyshortcuts` — ADVERTISED ONLY WHERE IT WILL ACTUALLY FIRE.
+ * ============================================================================
+ * This module's banner used to say no chord was advertised at all, because
+ * advertising a shortcut that does not fire is a lie to assistive technology.
+ * ISSUE-006 gave the shell a dispatcher, so the lie now runs the other way and
+ * the attribute is emitted — but only on the actions `useHotkeyDispatch` will
+ * really fire. The dispatcher skips a disabled action exactly as the button's own
+ * `onClick` guard does, so a disabled action gets no announcement.
+ *
+ * The value comes from `ariaKeyShortcuts`, not from `describeHotkey`: ARIA wants
+ * UI Events `key` VALUES, where the control key is `Control`. `Ctrl` would be a
+ * malformed attribute value, so the spelling is asserted rather than assumed.
+ * ============================================================================
+ */
+describe('RibbonToolbar — advertised shortcuts', () => {
+  it('advertises a chord-bearing action with aria-keyshortcuts, in key values rather than display spelling', () => {
+    render(
+      <RibbonToolbar
+        hostActions={[]}
+        extension={{
+          actions: [
+            action({ id: 'act-one', label: 'Act One', hotkey: { key: 'k', ctrl: true, shift: true } }),
+          ],
+          shell: shell(),
+        }}
+        context={CONTEXT}
+      />,
+    );
+    const button = screen.getByRole('button', { name: 'Act One' });
+    expect(button).toHaveAttribute('aria-keyshortcuts', 'Control+Shift+K');
+    // The display spelling would be a malformed attribute value. Asserted in the
+    // negative too, so substituting `describeHotkey` fails here.
+    expect(button.getAttribute('aria-keyshortcuts')).not.toContain('Ctrl');
+  });
+
+  it('omits aria-keyshortcuts entirely from an action that declares no chord', () => {
+    render(
+      <RibbonToolbar
+        hostActions={[]}
+        extension={{ actions: [action({ id: 'act-one', label: 'Act One' })], shell: shell() }}
+        context={CONTEXT}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Act One' })).not.toHaveAttribute(
+      'aria-keyshortcuts',
+    );
+  });
+
+  it('omits aria-keyshortcuts from a disabled action, because the chord will not fire', () => {
+    render(
+      <RibbonToolbar
+        hostActions={[]}
+        extension={{
+          actions: [
+            action({
+              id: 'act-one',
+              label: 'Act One',
+              isDisabled: true,
+              hotkey: { key: 'k', ctrl: true },
+            }),
+          ],
+          shell: shell(),
+        }}
+        context={CONTEXT}
+      />,
+    );
+    const button = screen.getByRole('button', { name: 'Act One' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).not.toHaveAttribute('aria-keyshortcuts');
+  });
+
+  it('advertises a chord on an overflow menu item too', async () => {
+    const user = userEvent.setup();
+    const actions = Array.from({ length: 7 }, (_unused, index) =>
+      action({ id: `act-${index}`, label: `Action ${index}` }),
+    );
+    actions[6] = action({
+      id: 'act-6',
+      label: 'Action 6',
+      hotkey: { key: 'arrowdown', alt: true },
+    });
+    actions[5] = action({
+      id: 'act-5',
+      label: 'Action 5',
+      isDisabled: true,
+      hotkey: { key: 'j', ctrl: true },
+    });
+    render(
+      <RibbonToolbar
+        hostActions={[]}
+        extension={{ actions, shell: shell() }}
+        context={CONTEXT}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
+    // The bar and the menu are two separate render sites; the rule holds at both,
+    // including the disabled omission.
+    expect(screen.getByRole('menuitem', { name: 'Action 6' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'Alt+ArrowDown',
+    );
+    expect(screen.getByRole('menuitem', { name: 'Action 5' })).not.toHaveAttribute(
+      'aria-keyshortcuts',
+    );
+  });
+
+  it('never advertises a chord on a host action', () => {
+    // `HostRibbonAction` carries no `hotkey` field at all, and the dispatcher
+    // walks the foreground extension's `ribbonActions` and nothing else. A host
+    // command announcing a shortcut would be advertising something with no
+    // declaration behind it.
+    render(
+      <RibbonToolbar
+        hostActions={[hostAction({ id: 'host-one', label: 'Host One' })]}
+        extension={null}
+        context={CONTEXT}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Host One' })).not.toHaveAttribute(
+      'aria-keyshortcuts',
+    );
+  });
+});
+
 describe('RibbonToolbar — overflow', () => {
   /** Seven visible actions: three more than the inline limit. */
   function manyActions(): RibbonAction[] {

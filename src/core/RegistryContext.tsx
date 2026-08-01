@@ -98,9 +98,12 @@ export const REGISTRY_LIMITS = {
  * `HOTKEY_MODIFIER_REQUIRED_KEYS` below for why that is a different rule from the
  * WCAG 2.1.4 one and carries a different citation.
  *
- * Nothing dispatches these yet — validation only. Pinned by "validateBlueprint —
- * ribbon action hotkeys" in `src/core/__tests__/validation.test.ts`, whose
- * rejection table walks all four absent groups by name.
+ * This module validates; it dispatches nothing. Since ISSUE-006 a chord DOES
+ * fire, from `src/core/hotkeyDispatch.ts`, and the split is deliberate: one rule
+ * at one door, with no second suppression at dispatch time — ADR-0001 Amendment I
+ * Decision 3. Pinned by "validateBlueprint — ribbon action hotkeys" in
+ * `src/core/__tests__/validation.test.ts`, whose rejection table walks all four
+ * absent groups by name.
  */
 export const HOTKEY_KEYS: ReadonlySet<string> = new Set([
   ...'abcdefghijklmnopqrstuvwxyz',

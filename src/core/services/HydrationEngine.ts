@@ -69,9 +69,13 @@ import { ShellUXError } from '../types';
  * ---------------------------------------------------------------------------
  * WHAT THIS MODULE DOES NOT DO
  * ---------------------------------------------------------------------------
- * It registers no event listener of any kind — no module under `src/` does,
- * pinned by "finds no listener registration in any module under src/, with no
- * exceptions at all" in `src/__tests__/noEventListener.test.ts`. In particular it
+ * It registers no event listener of any kind, pinned by "finds no listener
+ * registration in any module outside the hotkey-dispatch allowlist" in
+ * `src/__tests__/noEventListener.test.ts` — an allowlist that names
+ * `core/hotkeyDispatch.ts` and nothing else, so this module is covered by the
+ * scan rather than exempted from it. That sentence used to add that no module
+ * under `src/` did, which was true until ISSUE-006 gave the shell a hotkey
+ * dispatcher; the claim about THIS module is unchanged. In particular it
  * does not listen for cross-tab storage notifications: two tabs are last-write-
  * wins, and the unit of that is the WHOLE record, because it is written with one
  * `setItem` of one key. A half-written record is therefore not constructible.

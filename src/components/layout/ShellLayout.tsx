@@ -1,11 +1,20 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ExtensionHostBoundary, useActivation } from '../../core/ActivationContext';
 import type { ActiveExtension } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
-import { useShellContext, useShellStore } from '../../core/ShellAPI';
-import type { NavigationNode, RibbonContext } from '../../core/types';
+import { useBadgeCount, useShellContext, useShellStore } from '../../core/ShellAPI';
+import { useHotkeyDispatch } from '../../core/hotkeyDispatch';
+import {
+  DEFAULT_SHELL_STATE,
+  HYDRATION_LIMITS,
+  getDefaultHydrationEngine,
+  selectActiveExtensionId,
+} from '../../core/services/HydrationEngine';
+import type { HydrationEngine, PaneSizes } from '../../core/services/HydrationEngine';
+import type { NavigationNode, PaneId, RibbonContext } from '../../core/types';
+import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { FaultBoundary } from '../error/FaultBoundary';
 import { RibbonToolbar } from '../ui/RibbonToolbar';
 import type { HostRibbonAction, RibbonExtensionActions } from '../ui/RibbonToolbar';
@@ -13,7 +22,7 @@ import { PaneWrapper } from './PaneWrapper';
 
 /**
  * ============================================================================
- * THE THREE-PANE SHELL. FOUR DECISIONS WORTH ARGUING WITH BEFORE CHANGING.
+ * THE THREE-PANE SHELL. SEVEN DECISIONS WORTH ARGUING WITH BEFORE CHANGING.
  * ============================================================================
  *
  * 1. SIZES ARE PERCENTAGES, MEASURED ONCE INTO PIXELS.
@@ -55,11 +64,13 @@ import { PaneWrapper } from './PaneWrapper';
  *    **The measurement is not repeated.** There is no observer here. A later
  *    viewport change rescales the panes proportionally and leaves the
  *    percentage minimums where they were, which is predictable and — by the
- *    flex-ratio argument above — still cannot overflow; re-deriving pixel
- *    minimums live belongs with the persistence work in ISSUE-003, which has to
- *    answer the same question for restored sizes. When the width is
+ *    flex-ratio argument above — still cannot overflow. When the width is
  *    unmeasurable — 0, as it is in jsdom — `percentOf` falls back to
  *    `PANE_FALLBACK_PERCENT` rather than dividing by zero.
+ *
+ *    A restored size is held to the SAME minimums, at the width measured on this
+ *    load — see decision 6. That is the question this paragraph used to defer to
+ *    ISSUE-003, and the answer is a clamp rather than a live re-derivation.
  *
  * 2. COLLAPSE IS A DIFFERENT COMPONENT TREE, NOT A SMALL WIDTH.
  *    ISSUE-002 requires pane 1 to collapse to a 48px icon track and says
@@ -74,18 +85,30 @@ import { PaneWrapper } from './PaneWrapper';
  *    handle, which ends the drag. No half-applied layout survives, because the
  *    remaining panels are re-normalised to 100% by the library.
  *
- * 3. DIVIDER KEYBOARD OPERATION IS THE LIBRARY'S, NOT OURS.
+ * 3. DIVIDER KEYBOARD OPERATION IS THE LIBRARY'S, NOT OURS — AND THE SHELL'S ONE
+ *    KEYBOARD LISTENER IS CALLED FROM HERE.
  *    `PanelResizeHandle` renders `role="separator"` with `tabIndex={0}` and
  *    implements the window-splitter keyboard pattern itself. This file attaches
- *    no listener and handles no key event of its own; no module under `src/`
- *    registers a listener at all, pinned by "finds no listener registration in
- *    any module under src/, with no exceptions at all" in
- *    `src/__tests__/noEventListener.test.ts`. The one module that handles a key
- *    event is `src/components/shared/VirtualizedList.tsx`, whose `onKeyDown`
- *    drives list navigation and nothing else — pinned by "finds no key-event
- *    name in any module outside the keyboard-navigation allowlist" in the same
- *    file. Hotkey DISPATCH remains Phase 2; nothing here routes a chord to an
- *    action.
+ *    no listener and handles no key event of its own; the two modules under
+ *    `src/` that touch a key event at all are
+ *    `src/components/shared/VirtualizedList.tsx`, whose `onKeyDown` drives list
+ *    navigation and nothing else, and `src/core/hotkeyDispatch.ts`, which owns the
+ *    only `addEventListener` in the repository. Both are named in allowlists that
+ *    are checked in both directions, so a third module cannot join them quietly:
+ *    pinned by "finds no listener registration in any module outside the
+ *    hotkey-dispatch allowlist", "finds no key-event name in any module outside
+ *    the key-event allowlist", "holds the key-event allowlist to the exact
+ *    spellings each listed module contains" and "holds the hotkey-dispatch
+ *    allowlist to the exact spellings the dispatcher contains" in
+ *    `src/__tests__/noEventListener.test.ts`.
+ *
+ *    Hotkey DISPATCH is no longer Phase 2, and this file is where it is switched
+ *    on: `useHotkeyDispatch()` below. It is called from `ShellLayout` rather than
+ *    from `ShellHostProvider` because this component is host territory above every
+ *    `ExtensionHostBoundary` and renders the ribbon, so the chord path and the
+ *    button path resolve the same foreground extension and the same actions. The
+ *    listener itself, its bubble-phase trade and its suppression rules are all in
+ *    `hotkeyDispatch.ts`; nothing here routes a chord.
  *
  * 4. A PLUG-IN SUBTREE IS ALWAYS WRAPPED.
  *    `views.pane2` and `views.pane3` render inside `ExtensionHostBoundary`, which
@@ -124,10 +147,129 @@ import { PaneWrapper } from './PaneWrapper';
  *    a throwing ribbon without taking the panes down" and "clears a pane error
  *    surface when the active extension changes".
  *
- * NOT HERE, DELIBERATELY: persistence of sizes and collapse state (ISSUE-003).
- * `ShellLayout` does not itself window pane 2 either — `VirtualizedList` is a
- * component an extension's own `views.pane2` renders, not something the host
- * wraps around it, because the host does not know what a row is.
+ * 6. PERSISTENCE IS READ ONCE PER MOUNT AND WRITTEN THROUGH THE ENGINE.
+ *    ISSUE-003's `HydrationEngine` is consumed here, and this is the file that
+ *    used to say it was not. THREE slots are persisted and no more: the pane
+ *    sizes, the pane-1 collapsed flag, and the id of the foreground extension.
+ *
+ *    **What is deliberately NOT persisted, so the list above is not read as
+ *    "the shell remembers everything":** the utility drawer flag, which is a
+ *    transient inspection of pane 3 rather than a layout the user arranged; the
+ *    selected navigation node and the selected item, which belong to the shell
+ *    store and are cleared on every foreground handover by design (see
+ *    `publishForeground` in `ActivationContext.tsx`); the measured group width,
+ *    which is re-measured on every mount because it is a fact about this window
+ *    and not about this user; and pane sizes changed *while pane 1 is
+ *    collapsed*, because the two panes then in the group divide a width that
+ *    excludes the 48px track, so their percentages are a ratio against a
+ *    different denominator and writing them into a three-pane record would
+ *    record a number that means something else. *Tests:*
+ *    `src/components/__tests__/ShellLayoutPersistence.test.tsx` — "does not
+ *    persist a pane size while pane 1 is collapsed, because the two panes divide
+ *    a different width" and "persists no drawer state, so a reload opens with the
+ *    drawer shut".
+ *
+ *    **THE READ IS A MOUNT-TIME SNAPSHOT, AND THAT IS WHAT MAKES `defaultSize`
+ *    HONEST.** `restoredSizes` comes from a lazy `useState` initializer, so it is
+ *    the engine's state as of this mount and never moves again. `defaultSize` is
+ *    read by the library only when a panel mounts and MEANS "where this panel
+ *    starts"; feeding it a live subscription would make the value the user is
+ *    dragging also the value being fed back as the starting point. The collapsed
+ *    flag is the opposite case and is bound live through
+ *    `useLocalStorageState`, because it drives which component tree renders.
+ *
+ *    **There is no flash of the default layout, and the mechanism is the whole
+ *    point.** The engine hydrates synchronously in its constructor and the hook
+ *    reads through `useSyncExternalStore` during render, so the restored value is
+ *    in the very first render this component performs — not applied by an effect
+ *    one commit later. Pinned on the RENDER LOG rather than on the final DOM, in
+ *    `src/components/__tests__/ShellLayoutPersistence.test.tsx`: "renders the
+ *    restored pane sizes on the panel group first render, and the measured
+ *    default never" and "renders the collapsed icon track on the first render,
+ *    and the expanded navigation panel never".
+ *
+ *    **A restored size cannot be illegal by the time it reaches a `Panel`, and
+ *    there are two independent gates.** The engine refuses a whole record holding
+ *    a pane size outside `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]` — nothing is
+ *    half-applied, the defaults are served instead — and then this file clamps
+ *    whatever survives into the pane's OWN minimum and maximum at the width
+ *    measured on THIS load, which is where a layout saved on a wide monitor and
+ *    reopened on a narrow one is corrected. *Tests:* same file — "discards a
+ *    hand-edited record whose pane size is outside the engine band, and renders
+ *    the measured defaults" and "clamps a restored pane size that no longer fits
+ *    the pane minimums at this width".
+ *
+ *    **Writes are coalesced by the engine, not by this file.** Every layout
+ *    change the library commits calls `onResize` on each panel — once per frame
+ *    of a drag — and each of those is a `setSlot`; the engine holds them in one
+ *    debounce window and performs a single `setItem`. The mount notification is
+ *    skipped, because `onResize` reports `undefined` for the previous size
+ *    exactly when the group is announcing its own initial layout rather than a
+ *    change somebody made: a shell nobody has resized therefore writes nothing.
+ *    *Tests:* same file — "coalesces a keyboard-driven resize into one storage
+ *    write rather than one per frame" and "writes nothing at all for a mount
+ *    nobody resized".
+ *
+ *    **Storage being unavailable is not an error condition here.** The engine
+ *    degrades to memory and no member of it throws for it, so this file has no
+ *    branch for it and needs none. *Test:* same file — "renders, resizes and
+ *    collapses with a storage that throws on every access".
+ *
+ *    **The restore of the foreground extension is a ONE-SHOT that can wait.** A
+ *    persisted id names an extension that may not have registered yet — a lazily
+ *    loaded one is indistinguishable from an uninstalled one — so the restore is
+ *    retried on every registry revision and consumed the moment it lands OR the
+ *    moment the user activates anything at all. Until it is consumed, the
+ *    foreground is NOT written back: an unconsumed restore that persisted the
+ *    empty foreground of a shell whose extensions had not registered yet would
+ *    erase the very id it was waiting for. `selectActiveExtensionId` is the
+ *    engine's own door for "is this id still real?", and an id the registry does
+ *    not know activates nothing. *Tests:* same file — "brings the persisted
+ *    extension back to the foreground once it registers", "activates nothing and
+ *    throws nothing for a persisted extension id the registry does not know" and
+ *    "stops waiting for the persisted extension once the user activates a
+ *    different one".
+ *
+ * 7. A NAVIGATION BADGE IS THE STORE'S FIRST, THE BLUEPRINT'S SECOND.
+ *    `NavigationNode.badgeCount` is a value frozen into the registry's
+ *    host-owned record at registration and it can never change again;
+ *    `IShellAPI.setBadgeCount` writes into the shell store. Rendering the
+ *    blueprint field alone — which this file used to do — made every runtime
+ *    badge write invisible, which is the whole of the render half of issue #12.
+ *
+ *    So `NavNodeButton` subscribes through `useBadgeCount(extensionId, node.id)`
+ *    and a store value OVERRIDES the blueprint's, with the blueprint as the
+ *    fallback when the store holds nothing for that node. `??` rather than a
+ *    truthiness test, deliberately: a badge deliberately written down to `0` is a
+ *    value and must win over a blueprint's `3`. It works identically in the
+ *    collapsed 48px icon track, where `ShellNavButton` positions the same badge
+ *    absolutely instead of at the end of the row. *Tests:*
+ *    `src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a
+ *    setBadgeCount write through a live IShellAPI change what the sidebar
+ *    renders", "overrides a blueprint badge with the
+ *    store value, including down to zero" and "shows a runtime badge in the collapsed 48px
+ *    icon track too".
+ *
+ *    **The hook's validation posture is not defeated here, and must not be.**
+ *    `useBadgeCount` raises `INVALID_ID` DURING RENDER for a malformed scope or
+ *    node id rather than reading `undefined`, and nothing in this file catches
+ *    that. It is unreachable through the registry — a stored blueprint's node ids
+ *    passed `EXTENSION_ID_PATTERN` at registration, which is the same rule the
+ *    store's badge doors apply — so the posture costs the shell nothing and stays
+ *    a loud failure for a caller who reaches it another way. Pinned by "raises
+ *    INVALID_ID during render for a malformed scope, rather than reading
+ *    undefined" and "raises INVALID_ID during render for a malformed node id" in
+ *    `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ *    The extension rows above the tree take `badgeCount={undefined}` and are
+ *    deliberately unsubscribed: an extension is not a navigation node, it has no
+ *    node id, and there is no scope under which the store could hold a badge for
+ *    one.
+ *
+ * NOT HERE, DELIBERATELY: `ShellLayout` does not itself window pane 2 —
+ * `VirtualizedList` is a component an extension's own `views.pane2` renders, not
+ * something the host wraps around it, because the host does not know what a row
+ * is.
  * ============================================================================
  */
 
@@ -180,6 +322,39 @@ function percentOf(px: number, groupWidth: number, fallbackPercent: number): num
     return fallbackPercent;
   }
   return Math.min(90, Math.max(2, (px / groupWidth) * 100));
+}
+
+/**
+ * A restored percentage held to one pane's own live band.
+ *
+ * `low` and `high` are this pane's `minSize` and `maxSize` at the width measured
+ * on THIS load, so a layout saved on a wide monitor and reopened on a narrow one
+ * is corrected here rather than being handed to the library and re-clamped by it
+ * with a console warning. `Math.min`/`Math.max` rather than an `if`, so the
+ * function has one exit and no branch to leave untested.
+ */
+function clampToBand(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
+/**
+ * A percentage held to the band the ENGINE will store, before it is written.
+ *
+ * This is not belt and braces. Pane 3 declares a `minSize` and deliberately no
+ * `maxSize` — it is the remainder pane — so a layout with both dividers driven
+ * fully leading gives it whatever is left, and the engine refuses a slot value
+ * outside `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]` by throwing. A throw from a
+ * panel resize callback is a throw out of the library's own layout effect, so
+ * the value is clamped to what is storable instead. The bounds are the engine's
+ * own constants, imported rather than restated, for the reason
+ * `HYDRATION_LIMITS` gives about the two ends of this band agreeing.
+ */
+function clampPanePercent(value: number): number {
+  return clampToBand(
+    value,
+    HYDRATION_LIMITS.MIN_PANE_PERCENT,
+    HYDRATION_LIMITS.MAX_PANE_PERCENT,
+  );
 }
 
 interface ShellNavButtonProps {
@@ -276,7 +451,52 @@ function ShellNavButton({
   );
 }
 
+interface NavNodeButtonProps {
+  /** The scope the store keys this node's badge under. Registry-validated. */
+  readonly extensionId: string;
+  readonly node: NavigationNode;
+  readonly isCollapsed: boolean;
+  readonly isCurrent: boolean;
+  readonly onSelect: (nodeId: string) => void;
+}
+
+/**
+ * One navigation node, with its badge read from the store and not only from the
+ * blueprint.
+ *
+ * A component of its own because `useBadgeCount` is a hook and there is one
+ * subscription per node — which is also what makes a badge write re-render one
+ * row rather than the whole tree, since the hook's snapshot is a primitive and
+ * `useSyncExternalStore` bails out for every subscriber whose own number did not
+ * move. See decision 7 in the banner for the override rule and for why the
+ * hook's render-phase `INVALID_ID` is not caught here.
+ */
+function NavNodeButton({
+  extensionId,
+  node,
+  isCollapsed,
+  isCurrent,
+  onSelect,
+}: NavNodeButtonProps): ReactElement {
+  const liveBadge = useBadgeCount(extensionId, node.id);
+  return (
+    <ShellNavButton
+      label={node.label}
+      // `??`, not `||`: a badge written down to `0` is a value, and a truthiness
+      // test would silently fall back to the blueprint's stale number for it.
+      badgeCount={liveBadge ?? node.badgeCount}
+      isCollapsed={isCollapsed}
+      isCurrent={isCurrent}
+      onSelect={() => {
+        onSelect(node.id);
+      }}
+    />
+  );
+}
+
 interface NavigationTreeProps {
+  /** The foreground extension, which is the badge scope for every node below. */
+  readonly extensionId: string;
   readonly nodes: readonly NavigationNode[];
   readonly activeNodeId: string | null;
   readonly isCollapsed: boolean;
@@ -291,6 +511,7 @@ interface NavigationTreeProps {
  * label still reaches the DOM as a text node either way.
  */
 function NavigationTree({
+  extensionId,
   nodes,
   activeNodeId,
   isCollapsed,
@@ -300,18 +521,17 @@ function NavigationTree({
     <ul className={isCollapsed ? 'flex flex-col items-center gap-1' : 'flex flex-col gap-px'}>
       {nodes.map((node) => (
         <li key={node.id} className="min-w-0">
-          <ShellNavButton
-            label={node.label}
-            badgeCount={node.badgeCount}
+          <NavNodeButton
+            extensionId={extensionId}
+            node={node}
             isCollapsed={isCollapsed}
             isCurrent={activeNodeId === node.id}
-            onSelect={() => {
-              onSelect(node.id);
-            }}
+            onSelect={onSelect}
           />
           {isCollapsed || node.children === undefined ? null : (
             <div className="pl-2">
               <NavigationTree
+                extensionId={extensionId}
                 nodes={node.children}
                 activeNodeId={activeNodeId}
                 isCollapsed={isCollapsed}
@@ -418,21 +638,67 @@ function ShellResizeHandle({ label }: ShellResizeHandleProps): ReactElement {
   );
 }
 
+export interface ShellLayoutProps {
+  /**
+   * Where this shell persists its layout. Defaults to the process-wide engine
+   * over `localStorage`.
+   *
+   * It is a prop for the same two reasons `useLocalStorageState` takes one: a
+   * test needs an engine of its own rather than the module singleton every other
+   * test would then share, and two shells in one page must be able to keep two
+   * layouts apart. **Its identity must be stable across renders** — the default
+   * one is — because the restored snapshot below is taken once, at mount.
+   */
+  readonly engine?: HydrationEngine;
+}
+
 /** The assembled shell: ribbon above three horizontally resizable panes. */
-export function ShellLayout(): ReactElement {
+export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): ReactElement {
   const registry = useRegistry();
-  // The revision is subscribed to, not read. Its value carries no meaning; what
-  // it announces is that the registry's contents moved, which is exactly when
-  // the extension list below has to be re-read. Same reasoning as the sweep
-  // effect in `ShellHostProvider`.
-  useRegistryRevision();
+  // The revision is a CHANGE TRIGGER, not an input: its value carries no meaning
+  // and is deliberately not read for one. What it announces is that the
+  // registry's contents moved, which is exactly when the extension list below
+  // has to be re-read and when a pending foreground restore gets another chance.
+  // DO NOT drop it from the restore effect's dependencies because it looks
+  // unused there — that turns the restore into a mount-only attempt, and an
+  // extension that registers from its own mount effect would never be restored.
+  // Same reasoning, and the same warning, as the sweep effect in
+  // `ShellHostProvider`.
+  const revision = useRegistryRevision();
   const activation = useActivation();
   const store = useShellStore();
   const context = useShellContext();
 
+  // The shell's one keyboard listener. Called HERE — see decision 3 in the banner
+  // and decision 1 in `hotkeyDispatch.ts` — because this component is host
+  // territory above every `ExtensionHostBoundary` and already renders the ribbon,
+  // so the chord path and the button path read one source of truth.
+  useHotkeyDispatch();
+
+  const engine = suppliedEngine ?? getDefaultHydrationEngine();
+
   const [groupWidth, setGroupWidth] = useState<number | null>(null);
-  const [isNavCollapsed, setNavCollapsed] = useState(false);
+  // Bound LIVE, because this flag decides which component tree renders — see
+  // decision 6. The hook reads through `useSyncExternalStore` during render off
+  // an engine that hydrated in its constructor, which is the whole of the
+  // no-flash property.
+  const [isNavCollapsed, setNavCollapsed] = useLocalStorageState('isPane1Collapsed', { engine });
   const [isDrawerOpen, setDrawerOpen] = useState(false);
+
+  // A mount-time SNAPSHOT, not a subscription. `defaultSize` means "where this
+  // panel starts"; see decision 6 for why binding it live would feed the value
+  // being dragged back in as the starting point.
+  const [restoredSizes] = useState<PaneSizes>(() => engine.getState().paneSizes);
+  // Identity, not equality. Every discard path in the engine returns the one
+  // shared frozen `DEFAULT_SHELL_STATE`, and every restore and every write build
+  // a fresh record — so this is exactly "somebody chose a layout", and it stays
+  // true for a user who happens to have dragged back to the default numbers.
+  const hasRestoredLayout = restoredSizes !== DEFAULT_SHELL_STATE.paneSizes;
+
+  // Whether a persisted foreground extension is still waiting to be restored.
+  // Read once, at mount, and cleared by the effect below the moment the restore
+  // lands or the user activates anything. See decision 6.
+  const isRestorePending = useRef(engine.getState().activeExtensionId !== null);
 
   // A callback ref rather than an effect: it runs during commit, so the width is
   // known before the panel group first mounts and `defaultSize` is honoured on
@@ -456,27 +722,118 @@ export function ShellLayout(): ReactElement {
 
   const extensions = registry.listExtensions();
   const active = activation.getActive();
+  // The one id every boundary on this render resets against. Switching
+  // extension must not leave A's error surface standing over B's fresh view.
+  const activeId = active === null ? null : active.id;
+
+  /**
+   * Record one pane's new size, or decide that this is not a size worth
+   * recording. See decision 6 in the banner for both refusals.
+   *
+   * `previousSize` is `undefined` exactly when the group is announcing its own
+   * initial layout, so a mount nobody has resized writes nothing at all.
+   */
+  const persistPaneSize = useCallback(
+    (pane: PaneId, size: number, previousSize: number | undefined): void => {
+      if (previousSize === undefined || isNavCollapsed) {
+        return;
+      }
+      // Re-read rather than closed over: three panels report their new sizes one
+      // after another inside one layout pass, and each has to build on the one
+      // before it rather than on the record as it stood when this callback was
+      // created.
+      const current = engine.getState().paneSizes;
+      const next: Record<PaneId, number> = {
+        pane1: current.pane1,
+        pane2: current.pane2,
+        pane3: current.pane3,
+      };
+      next[pane] = clampPanePercent(size);
+      engine.setSlot('paneSizes', next);
+    },
+    [engine, isNavCollapsed],
+  );
+
+  useEffect(() => {
+    // `revision` is in the dependency list and is deliberately not read here: it
+    // is the change trigger that gives a pending restore another chance every
+    // time the registry moves. See the comment on `useRegistryRevision` above.
+    //
+    // **Guarded, and this is a call site a host cannot guard for itself.**
+    // `activate` publishes the new foreground through the shell store, the store
+    // notifies synchronously, and `useShellStore().subscribe` is public — so
+    // plug-in code runs inside this write. Every other `activate` in this file is
+    // called from a click handler; this one is called by React's passive-effect
+    // flush, where a throw reaches no error boundary and unmounts the whole root.
+    // Exactly the position, and exactly the argument, of the sweep effect in
+    // `ShellHostProvider`. The reporting call is guarded too, because `console`
+    // is no more the host's object than a listener is.
+    try {
+      if (!isRestorePending.current) {
+        engine.setSlot('activeExtensionId', activeId);
+        return;
+      }
+      if (activeId !== null) {
+        // Somebody activated something before the restore could land. The
+        // restore is spent either way: the user's choice is now the foreground,
+        // and re-imposing a remembered one over it would be the shell arguing.
+        isRestorePending.current = false;
+        engine.setSlot('activeExtensionId', activeId);
+        return;
+      }
+      const registeredIds = new Set(registry.listExtensions().map((blueprint) => blueprint.id));
+      // The engine's own door for "is this id still real?". An id the registry
+      // does not know answers `null`, and `null` activates nothing — a lazily
+      // loaded extension is indistinguishable from an uninstalled one, so the
+      // record is left exactly as it is and this runs again on the next
+      // revision.
+      const restorable = selectActiveExtensionId(engine.getState(), registeredIds);
+      if (restorable === null) {
+        return;
+      }
+      isRestorePending.current = false;
+      activation.activate(restorable);
+    } catch (error) {
+      try {
+        console.error(
+          'ShellLayout: restoring or recording the persisted foreground extension raised. The shell is still running; a shell store listener is a signal to re-read the context, not a place to work in.',
+          error,
+        );
+      } catch {
+        // Reporting is best-effort. Staying mounted is not.
+      }
+    }
+  }, [activation, activeId, engine, registry, revision]);
 
   // `?? 0` is the not-yet-measured render, which draws no panel group at all;
   // `percentOf` answers with the fallback band for it, and for any width a
   // browser reports as zero.
   const width = groupWidth ?? 0;
-  const navDefaultPercent = percentOf(
-    PANE_PX.navDefault,
-    width,
-    PANE_FALLBACK_PERCENT.navDefault,
-  );
-  const listDefaultPercent = percentOf(
-    PANE_PX.listDefault,
-    width,
-    PANE_FALLBACK_PERCENT.listDefault,
-  );
+  const navMinPercent = percentOf(PANE_PX.navMin, width, PANE_FALLBACK_PERCENT.navMin);
+  const navMaxPercent = percentOf(PANE_PX.navMax, width, PANE_FALLBACK_PERCENT.navMax);
+  const listMinPercent = percentOf(PANE_PX.listMin, width, PANE_FALLBACK_PERCENT.listMin);
+  const listMaxPercent = percentOf(PANE_PX.listMax, width, PANE_FALLBACK_PERCENT.listMax);
+  const detailMinPercent = percentOf(PANE_PX.detailMin, width, PANE_FALLBACK_PERCENT.detailMin);
+
+  // A restored size wins over the pixel-derived default, and is held to the same
+  // band that default would have been held to — see decision 6. With nothing
+  // restored the arithmetic is exactly what it always was, so a shell nobody has
+  // resized still opens on the pixel intent in `PANE_PX`.
+  const navDefaultPercent = hasRestoredLayout
+    ? clampToBand(restoredSizes.pane1, navMinPercent, navMaxPercent)
+    : percentOf(PANE_PX.navDefault, width, PANE_FALLBACK_PERCENT.navDefault);
+  const listDefaultPercent = hasRestoredLayout
+    ? clampToBand(restoredSizes.pane2, listMinPercent, listMaxPercent)
+    : percentOf(PANE_PX.listDefault, width, PANE_FALLBACK_PERCENT.listDefault);
   // Declared rather than left implicit: the library warns about a panel with no
   // `defaultSize`, and the remainder is what pane 3 would have been given anyway.
   // It is floored at the pane's own minimum so that two wide defaults cannot ask
-  // for a negative share.
+  // for a negative share. The remainder is also what makes a CLAMPED restore add
+  // up: when pane 1 or pane 2 was corrected above, pane 3 absorbs the difference
+  // rather than the three of them summing to something the library has to
+  // renormalise.
   const detailDefaultPercent = Math.max(
-    percentOf(PANE_PX.detailMin, width, PANE_FALLBACK_PERCENT.detailMin),
+    detailMinPercent,
     100 - navDefaultPercent - listDefaultPercent,
   );
 
@@ -486,7 +843,10 @@ export function ShellLayout(): ReactElement {
       label: isNavCollapsed ? 'Expand navigation' : 'Collapse navigation',
       icon: 'navigation',
       onSelect: () => {
-        setNavCollapsed((collapsed) => !collapsed);
+        // A value, not an updater: `useLocalStorageState`'s setter writes one
+        // slot of the engine's record and takes no function form. `hostActions`
+        // is rebuilt on every render, so the flag closed over here is current.
+        setNavCollapsed(!isNavCollapsed);
       },
     },
     {
@@ -510,10 +870,6 @@ export function ShellLayout(): ReactElement {
 
   const ribbonExtension: RibbonExtensionActions | null =
     active === null ? null : { actions: active.blueprint.ribbonActions, shell: active.shell };
-
-  // The one id every boundary on this render resets against. Switching
-  // extension must not leave A's error surface standing over B's fresh view.
-  const activeId = active === null ? null : active.id;
 
   const navigation = (
     <div className="flex min-w-0 flex-col gap-2">
@@ -561,6 +917,7 @@ export function ShellLayout(): ReactElement {
             Navigation
           </h2>
           <NavigationTree
+            extensionId={active.id}
             nodes={active.blueprint.navigationTree}
             activeNodeId={context.activeNavNodeId}
             isCollapsed={isNavCollapsed}
@@ -616,8 +973,11 @@ export function ShellLayout(): ReactElement {
                     order={1}
                     className="min-h-0 min-w-0"
                     defaultSize={navDefaultPercent}
-                    minSize={percentOf(PANE_PX.navMin, width, PANE_FALLBACK_PERCENT.navMin)}
-                    maxSize={percentOf(PANE_PX.navMax, width, PANE_FALLBACK_PERCENT.navMax)}
+                    minSize={navMinPercent}
+                    maxSize={navMaxPercent}
+                    onResize={(size, previousSize) => {
+                      persistPaneSize('pane1', size, previousSize);
+                    }}
                   >
                     <PaneWrapper
                       paneId="pane1"
@@ -635,8 +995,11 @@ export function ShellLayout(): ReactElement {
                 order={2}
                 className="min-h-0 min-w-0"
                 defaultSize={listDefaultPercent}
-                minSize={percentOf(PANE_PX.listMin, width, PANE_FALLBACK_PERCENT.listMin)}
-                maxSize={percentOf(PANE_PX.listMax, width, PANE_FALLBACK_PERCENT.listMax)}
+                minSize={listMinPercent}
+                maxSize={listMaxPercent}
+                onResize={(size, previousSize) => {
+                  persistPaneSize('pane2', size, previousSize);
+                }}
               >
                 <PaneWrapper
                   paneId="pane2"
@@ -667,7 +1030,10 @@ export function ShellLayout(): ReactElement {
                 order={3}
                 className="min-h-0 min-w-0"
                 defaultSize={detailDefaultPercent}
-                minSize={percentOf(PANE_PX.detailMin, width, PANE_FALLBACK_PERCENT.detailMin)}
+                minSize={detailMinPercent}
+                onResize={(size, previousSize) => {
+                  persistPaneSize('pane3', size, previousSize);
+                }}
               >
                 <PaneWrapper
                   paneId="pane3"

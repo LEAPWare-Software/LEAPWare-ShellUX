@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShellHostProvider, useExtensionActivation } from '../../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
+import { createHydrationEngine } from '../../core/services/HydrationEngine';
 import { makeBlueprint } from '../../core/__tests__/fixtures';
 import type { ExtensionViewProps } from '../../core/types';
 import { ShellLayout } from '../layout/ShellLayout';
@@ -112,12 +113,30 @@ interface HarnessProps {
   readonly blueprints?: readonly unknown[];
 }
 
+/**
+ * Every mount gets a hydration engine of its own, with **no storage at all**.
+ *
+ * ISSUE-003 wired persistence into `ShellLayout`, and its default engine is a
+ * process-wide singleton over the real `localStorage`. Left on the default, the
+ * collapse test below would write `isPane1Collapsed: true` and the next test in
+ * this file would open collapsed — a suite that passes or fails on its own
+ * ordering. A memory-only engine per mount is the isolation, and it also keeps
+ * every assertion in this file about the layout the shell computes rather than
+ * one it restored: with nothing persisted, `DEFAULT_SHELL_STATE` is what the
+ * engine serves and the pixel-derived defaults are what `ShellLayout` uses. What
+ * persistence itself does is asserted in
+ * `src/components/__tests__/ShellLayoutPersistence.test.tsx`.
+ *
+ * Created in a lazy `useState` initializer so its identity is stable for the
+ * mount, which is what `ShellLayout` requires of it.
+ */
 function Harness({ blueprints = [] }: HarnessProps): ReactElement {
+  const [engine] = useState(() => createHydrationEngine({ storage: null }));
   return (
     <ExtensionRegistryProvider>
       <ShellHostProvider>
         <Registrar blueprints={blueprints} />
-        <ShellLayout />
+        <ShellLayout engine={engine} />
       </ShellHostProvider>
     </ExtensionRegistryProvider>
   );
@@ -246,12 +265,12 @@ describe('ShellLayout — dividers', () => {
     const [first, second] = screen.getAllByRole('separator');
     // `tabIndex=0`, the `separator` role and the window-splitter key handling all
     // come from `PanelResizeHandle`. This file's own module attaches no listener
-    // and names no key event; no module under `src/` registers a listener at all,
-    // pinned by "finds no listener registration in any module under src/, with no
-    // exceptions at all" in `src/__tests__/noEventListener.test.ts`, and the only
-    // module allowlisted to handle a key event is the list virtualizer, pinned by
-    // "finds no key-event name in any module outside the keyboard-navigation
-    // allowlist" in the same file.
+    // and names no key event: the only module allowlisted to register one is the
+    // hotkey dispatcher, and the only other module allowlisted to handle a key
+    // event is the list virtualizer. Pinned by "finds no listener registration in
+    // any module outside the hotkey-dispatch allowlist" and "finds no key-event
+    // name in any module outside the key-event allowlist" in
+    // `src/__tests__/noEventListener.test.ts`.
     expect(first).toHaveAttribute('tabindex', '0');
     expect(second).toHaveAttribute('tabindex', '0');
 

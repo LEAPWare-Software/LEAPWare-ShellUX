@@ -762,7 +762,59 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
  * a function key is exempt from WCAG 2.2 §2.1.4 — it cannot be produced by
  * dictation or by typing into a field — whereas the two character-key chords
  * below carry `ctrl` because they would otherwise be refused at registration.
- * Nothing dispatches any of them yet.
+ *
+ * **All three chords now fire.** `src/core/hotkeyDispatch.ts` holds the shell's
+ * one `keydown` listener — on `window`, bubble phase, attached by `ShellLayout` —
+ * and it walks the FOREGROUND extension's ribbon actions and nothing else, so
+ * `Ctrl+Alt+R`, `Ctrl+Shift+L` and `F9` are dead keys while `MailPlugin` is in
+ * front. That scoping is Amendment H Decision 6 arriving in the dispatcher:
+ * cross-extension chord collisions are legal by design, so a shell-wide table
+ * would be ambiguous where a per-foreground lookup is total. *Tests:* "fires a
+ * visible, enabled chord on the foreground extension" and "does not fire a
+ * background extension chord while another extension is in the foreground" in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * **A chord is a second route to the button's action, never a wider one.** `F9`
+ * is gated by the same `isVisible` as the Audit category button, so with no
+ * pane-1 category selected it does nothing; the other two are unconditionally
+ * visible and so are live whenever this extension is in front. An `isDisabled`
+ * action is refused the same way, though none of these six declares one. *Tests:*
+ * "does not fire a chord on an action whose predicate hides it", "does not fire a
+ * chord on a disabled action" and "ignores a key that is not the chord, and an
+ * action that declares no chord" in `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * Visibility rather than placement decides it. Six actions against an
+ * `INLINE_ACTION_LIMIT` of 4 can push the fault pair into the overflow menu, but
+ * neither of those carries a chord and the three that do are always inline here —
+ * so this module never exercises the overflow case, which the dispatcher handles
+ * regardless because it consults visibility and never the inline slice. *Test:*
+ * "fires a chord belonging to an action that renders in the overflow menu" in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * Each chord-bearing, enabled button carries `aria-keyshortcuts` in UI Events
+ * key-value spelling — `Control+Alt+R`, `Control+Shift+L`, `F9`, not the `Ctrl+…`
+ * display spelling the tooltip uses — and the attribute is omitted from a
+ * disabled action because the chord is suppressed there too. *Tests:* "advertises
+ * a chord-bearing action with aria-keyshortcuts, in key values rather than
+ * display spelling" and "omits aria-keyshortcuts from a disabled action, because
+ * the chord will not fire" in `src/components/__tests__/RibbonToolbar.test.tsx`.
+ *
+ * **The dispatcher's suppression list is a guardrail, not a boundary**, in the
+ * same register as ADR-0001's "No sandbox". It skips auto-repeat, an event
+ * something below already handled, an IME composition, and a target inside an
+ * `input`, `textarea`, `select`, `contenteditable` or an ARIA `textbox`,
+ * `searchbox` or `combobox`. This module renders none of those, so nothing here
+ * exercises it — and a plug-in whose custom editor is a `div` with no recognised
+ * role WILL receive these chords while the user is typing, and has to call
+ * `stopPropagation()` itself, which the bubble-phase listener deliberately leaves
+ * working. A modifier-less `F9` makes that limit worth reading twice. *Tests:*
+ * the "useHotkeyDispatch — suppression" group in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
+ *
+ * One ordering is worth knowing and is NOT pinned by a test: `matchesHotkey` is
+ * consulted before `isVisible`, so a keystroke that is none of these three chords
+ * runs none of the predicates above. That is read off `hotkeyDispatch.ts` rather
+ * than asserted, and is recorded here as a reading rather than as evidence.
  */
 const RIBBON_ACTIONS: readonly RibbonAction[] = [
   {

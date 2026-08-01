@@ -21,21 +21,32 @@ It has **not yet been merged**; see the status note against ISSUE-002 in
 [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md), which explains why it
 is not marked `LANDED`.
 
-**ISSUE-003's hydration engine now exists and is tested — and nothing in the shell
-is wired to it.** `src/core/services/HydrationEngine.ts` and
-`src/hooks/useLocalStorageState.ts` are implemented and inside the same 100%
-coverage gate, but `src/components/layout/ShellLayout.tsx` and `src/App.tsx`
-neither read nor write persisted state: they do not import the hook and do not
-construct an engine. **So nothing you or the user does is persisted today.** Pane
-sizes, the pane-1 collapsed flag and the drawer flag are plain React state and
-reset on every reload, exactly as before. Treat "hydration exists" as a statement
-about a module, not about the running shell — and note that `IShellAPI` still has
-no persistence member, so an extension cannot reach the engine at all.
+**ISSUE-003's hydration engine now exists, is tested, and the shell consumes it.**
+`src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts` are
+implemented and inside the same 100% coverage gate, and
+`src/components/layout/ShellLayout.tsx` now restores and writes **three** slots:
+the pane sizes, the pane-1 collapsed flag and the id of the foreground extension.
+An earlier version of this paragraph said nothing in the shell was wired to any of
+it; that stopped being true and the correction is the reason this paragraph is
+still here rather than deleted.
 
-ISSUE-004 has since landed the row virtualizer and the fault boundaries, and both
-sections below have been rewritten out of the future tense. What is still
-specified only is the mock extensions and the integration suite (ISSUE-005), and
-hotkey dispatch (Phase 2). This guide marks such passages explicitly.
+**What is NOT persisted, stated because "hydration is wired" invites the opposite
+assumption:** the utility drawer flag, the selected navigation node and the
+selected item, the measured window width, and pane sizes changed while pane 1 is
+collapsed. And — the part that matters most to you — **`IShellAPI` still has no
+persistence member, so your extension cannot reach the engine at all.** The
+per-extension scopes the engine supports are reached by no code in the shell. The
+three slots above are the host's own, and the host writes them.
+*Tests:* `src/components/__tests__/ShellLayoutPersistence.test.tsx` — "persists a
+pane size the user changed, and a second shell over the same storage opens into
+it", "persists the pane-1 collapsed flag, and a second shell over the same storage
+opens collapsed", "brings the persisted extension back to the foreground once it
+registers" and "persists no drawer state, so a reload opens with the drawer shut".
+
+ISSUE-004 has since landed the row virtualizer and the fault boundaries, and
+ISSUE-006 has landed hotkey dispatch; all three sections below have been rewritten
+out of the future tense. What is still specified only is the mock extensions and
+the integration suite (ISSUE-005). This guide marks such passages explicitly.
 
 > **The types in `src/core/types.ts` are the single source of truth.** Read it.
 > Where this guide and that file disagree, that file wins and this guide is a
@@ -76,10 +87,11 @@ module) is a contract violation that will break without warning.
                                                         │
    host renders your Pane 1 entry, Pane 2 view,  ◄──────┤          ← BUILT
    Pane 3 view, and your ribbon actions                 │
+   the shell restores its layout and your foreground  ◄──┤          ← BUILT
+   position across reloads                              │
    ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄
-                                                        │   ← ISSUE-003/004
-   your layout is persisted across reloads, your rows ◄─┘
-   are virtualized, and your faults are contained
+                                                        │   ← ISSUE-005
+   YOUR OWN per-extension state is persisted for you   ◄─┘
 ```
 
 Everything above the dashed line exists today: registration, activation, a real
@@ -91,9 +103,13 @@ Since ISSUE-004, the fault boundaries and the row virtualizer are there too: a
 view of yours that throws during render degrades to a contained surface inside its
 own pane instead of taking the shell down, and
 `src/components/shared/VirtualizedList.tsx` is available for your Pane 2 view to
-window its own rows with. What remains below the line is persistence being wired
-to the running shell, the mock extensions and integration suite (ISSUE-005), and
-hotkey dispatch.
+window its own rows with. ISSUE-003's persistence is wired to the running shell as
+well, for the **host's** three slots — pane sizes, the pane-1 collapsed flag and
+which extension holds the foreground — so a user who left your extension in the
+foreground comes back to it. What remains below the line is a persistence channel
+for state of your OWN, and the mock extensions and integration suite (ISSUE-005).
+Hotkey dispatch has landed too: a chord you declare now fires, under the four
+conditions set out in the `Hotkey` section below.
 
 The host contains zero business logic. It does not know what your data means. It
 will not special-case you, and you should not need it to — if you cannot express
@@ -131,7 +147,7 @@ described one; it does not exist. Icons are per ribbon action only.
 |---|---|---|
 | `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique **within your own tree** — a duplicate anywhere in the tree, at any depth, rejects the whole blueprint. |
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
-| `badgeCount?` | `number` | Optional. Non-negative safe integer. An explicit `undefined` is treated as absent. |
+| `badgeCount?` | `number` | Optional. Non-negative safe integer. An explicit `undefined` is treated as absent. **This is the value the node is BORN with, and it is frozen at registration.** To change a badge at runtime call `IShellAPI.setBadgeCount(nodeId, count)`; pane 1 reads the store first and falls back to this field only when the store holds nothing for that node, so a runtime write of `0` really does clear a badge this field declared as `3`. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the blueprint badge for a node the store has never been written for" and "overrides a blueprint badge with the store value, including down to zero". |
 | `children?` | `readonly NavigationNode[]` | Optional. An explicit `undefined` is treated as absent. Counts against the 512-node and 8-level limits. |
 
 ### `RibbonAction`
@@ -142,7 +158,7 @@ described one; it does not exist. Icons are per ribbon action only.
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
 | `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the ribbon resolves it through `RIBBON_ICONS`, a host-owned `Map` of inline SVGs, and an unrecognised key renders a host fallback glyph. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "resolves a known icon key through the host table", "resolves an unknown icon key through the host fallback rather than through the key", "does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
 | `isDisabled?` | `boolean` | Optional. When present it must be a boolean. Renders the action greyed out but still visible. |
-| `hotkey?` | `Hotkey` | Optional keyboard chord for this action. Validated at registration — allowlisted key, boolean modifiers, the two bare-chord rules (WCAG 2.1.4 for a single-character key; activation for `enter`), unique within your own `ribbonActions`. **Nothing dispatches it yet**; the dispatcher is Phase 2. See the `Hotkey` section below. |
+| `hotkey?` | `Hotkey` | Optional keyboard chord for this action. Validated at registration — allowlisted key, boolean modifiers, the two bare-chord rules (WCAG 2.1.4 for a single-character key; activation for `enter`), unique within your own `ribbonActions`. **Dispatched since ISSUE-006**, but only while your extension is in the foreground and only for an action that is visible and not disabled. See the `Hotkey` section below for all four conditions. |
 | `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** The ribbon evaluates it on every render and shows the action only when it returns the boolean `true`; a throwing predicate is treated as "not visible". See "How `ribbonActions` visibility predicates work" below for the tests. |
 | `onExecute` | `(ctx: RibbonContext, shell: IShellAPI) => void` | Required. Invoked when the user activates the action, with **your own shell handle** as the second argument — that is what lets an action actually change shell state. The host ribbon calls it inside a guard, so a handler that throws is reported and does not unmount the shell. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "hands onExecute the context and the extension shell", "survives an onExecute that throws, leaving the ribbon interactive". |
 
@@ -167,42 +183,63 @@ described one; it does not exist. Icons are per ribbon action only.
 
 ### `Hotkey` — a keyboard chord on a ribbon action
 
-> ### ⚠ Declared and validated today. Nothing dispatches it.
+> ### Declared, validated and — since ISSUE-006 — dispatched.
 >
-> The host checks a `hotkey` at registration and stores a normalised, frozen copy
-> of it. **No module under `src/` registers an event listener of any kind**, there
-> is no dispatcher, and there is no evaluation site — so declaring a chord today
-> has no observable effect beyond the registration succeeding or failing. The
-> dispatcher is Phase 2, because it needs the foreground extension and a live
-> `RibbonContext`, neither of which the registry has a view of.
+> The host checks a `hotkey` at registration, stores a normalised frozen copy, and
+> `src/core/hotkeyDispatch.ts` routes a matching keystroke to your `onExecute`.
+> **Four things decide whether your chord fires, and all four are worth knowing
+> before you declare one:**
 >
-> Pinned by "finds no listener registration in any module under src/, with no
-> exceptions at all" in `src/__tests__/noEventListener.test.ts`, which parses every
-> non-test module under `src/` with the TypeScript compiler and fails on
-> `addEventListener` or `removeEventListener` in any code position — so the
-> sentence above stops being a promise the moment it stops being true.
+> 1. **Your extension must be in the FOREGROUND.** Chords are scoped exactly as
+>    `ribbonActions` are — see ADR-0001 Amendment H Decision 6, which is also why
+>    another vendor claiming your chord is not a conflict and is not rejected.
+>    While you are in the background none of your chords are live. *Tests:*
+>    `src/core/__tests__/hotkeyDispatch.test.tsx` — "fires a visible, enabled chord
+>    on the foreground extension" and "does not fire a background extension chord
+>    while another extension is in the foreground".
+> 2. **The action must be VISIBLE and NOT DISABLED**, through the same `isVisible`
+>    and `isDisabled` your ribbon button passes. A hotkey is a second route to an
+>    `onExecute` the button could already fire, and never a wider one. *Tests:*
+>    same file — "does not fire a chord on an action whose predicate hides it" and
+>    "does not fire a chord on a disabled action".
+> 3. **The keystroke must not be suppressed.** A chord is ignored when the event
+>    was already handled by something below (`defaultPrevented`), when it is
+>    auto-repeat from a held key, while an IME composition is in flight, and while
+>    focus is in an `input`, `textarea`, `select`, a `contenteditable` subtree, or
+>    an element with `role="textbox"`, `role="searchbox"` or `role="combobox"`.
+>    *Test:* same file — the `it.each` table "does not fire while focus is in %s".
+> 4. **The listener is on `window` in the BUBBLE phase.** If your view handles a
+>    key itself and calls `stopPropagation()`, the chord never reaches the host.
+>    That is deliberate — it is what keeps view-local navigation such as the Pane 2
+>    list's arrow keys working — but note the consequence: stopping propagation
+>    starves *your own* chords, and nobody else's.
 >
-> **One module in the shell handles a key event, and it is worth being exact
-> about which and why.** ISSUE-004's `src/components/shared/VirtualizedList.tsx`
-> puts an `onKeyDown` on the list's scroll container so that the arrow keys,
-> Home/End and Page Up/Down move the selection. It is not a dispatcher: it reads
-> no `hotkey`, consults no registry, and reaches no `window` or `document`. Every
-> other module under `src/` still names no `keydown`, `keyup` or `keypress` at
-> all, pinned by "finds no key-event name in any module outside the
-> keyboard-navigation allowlist", and the exemption is held to the exact spellings
-> that one module contains by "holds the key-event allowlist to the exact
-> spellings each listed module contains" — a listed file that stops needing its
-> exemption fails as a stale entry.
+> **The suppression list in point 3 is a guardrail, not a boundary.** If your view
+> renders a custom editor out of a bare `div` with no recognised role, a chord WILL
+> fire while the user is typing in it. The host cannot know what your DOM means.
+> Give the element `role="textbox"`, or call `stopPropagation()` on it.
+>
+> **Where the key handling lives, exactly.** Two modules under `src/` touch a key
+> event and both are allowlisted by name and by exact spelling:
+> `src/core/hotkeyDispatch.ts` holds the repository's only `addEventListener`, and
+> ISSUE-004's `src/components/shared/VirtualizedList.tsx` puts an `onKeyDown` on the
+> list's scroll container for arrow keys, Home/End and Page Up/Down — it reads no
+> `hotkey`, consults no registry, and reaches no `window` or `document`. Pinned by
+> "finds no listener registration in any module outside the hotkey-dispatch
+> allowlist", "finds no key-event name in any module outside the key-event
+> allowlist", "holds the key-event allowlist to the exact spellings each listed
+> module contains" and "holds the hotkey-dispatch allowlist to the exact spellings
+> the dispatcher contains" in `src/__tests__/noEventListener.test.ts`. That the one
+> listener is really removed on unmount, with the identical function reference, is
+> something a source scan cannot see and is pinned at runtime by "adds exactly one
+> keydown listener and removes the identical handler on unmount".
 >
 > Comments are not scanned, which is how these paragraphs are allowed to state the
 > property; a listener reached through a name that is not text is outside what the
 > scan can see, and the test says so. That `src/core/hotkeys.ts` itself exports
-> exactly three pure helpers and attaches nothing is the separate, narrower
+> four pure helpers and attaches nothing is the separate, narrower
 > "hotkeys module — does not attach anything" in
 > `src/core/__tests__/hotkeys.test.ts`.
->
-> Write your chords now if you want them; they will work when the ribbon lands.
-> Do not write code that assumes one has fired.
 
 ```ts
 interface Hotkey {
@@ -360,16 +397,26 @@ pinned by "lets two DIFFERENT extensions declare the same chord" in
 The practical consequence for you: **do not assume your chord is yours alone.**
 It is yours while you are in the foreground, and that is the whole promise.
 
-#### `src/core/hotkeys.ts` — three helpers you may use today
+#### `src/core/hotkeys.ts` — four helpers you may use today
 
 ```ts
-hotkeyToken({ key: 'k', ctrl: true, shift: true })      // 'ctrl+shift+k'
-describeHotkey({ key: 'k', ctrl: true, shift: true })   // 'Ctrl+Shift+K'
-matchesHotkey(hotkey, event)                            // boolean, pure
+hotkeyToken({ key: 'k', ctrl: true, shift: true })       // 'ctrl+shift+k'
+describeHotkey({ key: 'k', ctrl: true, shift: true })    // 'Ctrl+Shift+K'
+ariaKeyShortcuts({ key: 'k', ctrl: true, shift: true })  // 'Control+Shift+K'
+matchesHotkey(hotkey, event)                             // boolean, pure
 ```
 
-`describeHotkey` is what a Phase-2 ribbon will put in a tooltip and in
-`aria-keyshortcuts`; `matchesHotkey` takes only the five fields of a keyboard
+`describeHotkey` is the spelling a **user** reads, and it is what the ribbon puts
+in a button's `title`. `ariaKeyShortcuts` is the spelling **ARIA** requires, and
+it is what the ribbon emits as `aria-keyshortcuts`: that attribute is defined over
+UI Events `KeyboardEvent.key` values, where the control key is `Control`, and
+`Ctrl` is not one — which is why these are two functions and not one. The ribbon
+emits the attribute only on a chord-bearing action that is **not disabled**,
+because the dispatcher skips a disabled action and advertising it would be a lie.
+*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "advertises a
+chord-bearing action with aria-keyshortcuts, in key values rather than display
+spelling" and "omits aria-keyshortcuts from a disabled action, because the chord
+will not fire". `matchesHotkey` takes only the five fields of a keyboard
 event it reads (`key`, `ctrlKey`, `altKey`, `shiftKey`, `metaKey`), so a plain
 record is enough and it holds no reference to anything live. It matches
 **exactly**: a modifier your chord does not declare must also not be held, so
@@ -700,7 +747,7 @@ interface IShellAPI {
 | Member | Behaviour |
 |---|---|
 | `setSelectedItem(id)` | Sets — or clears, with `null` — the currently selected item, which surfaces as `RibbonContext.selectedItemId`. **This one throws.** The value is opaque to the host — it is your own item identifier, not a registry key, so it is *not* held to `EXTENSION_ID_PATTERN` and may be a GUID, a path or a number-as-string. Its **type** is enforced: anything that is neither a `string` nor `null` raises `ShellUXError` with code `INVALID_FIELD` and field `"id"`, and the context is left unchanged. |
-| `setBadgeCount(nodeId, count)` | Sets the badge count for one of your navigation nodes, **in your own scope** — see property 2 above. **This one throws.** It raises `ShellUXError` with code `INVALID_ID` when `nodeId` is not a string, or does not match the same allowlist and reserved-word rules the registry applied to your node ids, and code `INVALID_FIELD` when `count` is not a non-negative safe integer. Call it with values you control, or wrap it. |
+| `setBadgeCount(nodeId, count)` | Sets the badge count for one of your navigation nodes, **in your own scope** — see property 2 above. **This one throws.** It raises `ShellUXError` with code `INVALID_ID` when `nodeId` is not a string, or does not match the same allowlist and reserved-word rules the registry applied to your node ids, and code `INVALID_FIELD` when `count` is not a non-negative safe integer. Call it with values you control, or wrap it. **Since issue #12 it is also RENDERED.** The value used to reach no renderer at all — pane 1 drew the frozen blueprint field and nothing else — so a write appeared to do nothing. It now changes the sidebar for as long as your extension holds the foreground, in the expanded pane and in the collapsed 48px icon track alike, and it does so without a re-render of any other row. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a setBadgeCount write through a live IShellAPI change what the sidebar renders" and "shows a runtime badge in the collapsed 48px icon track too". |
 | `getContext()` | Returns a frozen snapshot of the current `RibbonContext`. A snapshot, not a live view: hold the result only for the duration of the work you are doing, and call again rather than caching it across renders. |
 
 `setSelectedItem` and `setBadgeCount` reject a bad argument; `getContext` takes no
@@ -1104,9 +1151,11 @@ extension that ignores this makes the whole application feel inconsistent.
 > registration, and has no opinion about what it returns. The same is true of
 > `onExecute`.
 >
-> **Still not built, so do not read it in:** nothing dispatches a `hotkey`, and
-> there is no fault boundary around a pane. The guard around your predicate is
-> not a guard around your *component's* render; see "Fault containment" below.
+> **Do not read more into the guard than is there.** It is not a guard around
+> your *component's* render; see "Fault containment" below. And it now runs on two
+> routes rather than one — the ribbon button and the keyboard chord both call the
+> same `isVisible` through the same guard, which is deliberate: a chord must never
+> reach an action the button would have hidden.
 
 The ribbon is split: **global host actions on the left, your contextual actions
 on the right.** Contextual means the set changes with context — and *you* define
@@ -1115,8 +1164,9 @@ what context means, because the host cannot.
 Each ribbon action carries an **id**, a **label**, an **icon**, an optional
 **disabled** flag, an optional **hotkey**, an **`onExecute` handler**, and an
 **`isVisible` predicate**. All seven are validated at registration; the two
-functions are checked for type and then stored, and the hotkey — which nothing
-dispatches yet — is normalised and frozen. See the `Hotkey` section above.
+functions are checked for type and then stored, and the hotkey — which the shell
+dispatches under the four conditions listed above — is normalised and frozen. See
+the `Hotkey` section above.
 
 The predicate is the interesting one. On each render the host evaluates your
 predicate against the current `RibbonContext` and shows the action only if it
@@ -1625,7 +1675,8 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
       Ctrl/Alt/Meta if the key is a single character (WCAG 2.2 §2.1.4) or is
       `enter` (it activates the focused control, which is a separate rule and not
       2.1.4), and is unique within your own `ribbonActions`. Shift counts for
-      neither rule. No code assumes a chord has fired: nothing dispatches one yet.
+      neither rule. A chord fires only while you are in the foreground and only
+      for an action that is visible and enabled; no code assumes otherwise.
 - [ ] The `RegistrationResult` from `register` is checked, and the `id` it
       returns is used rather than re-reading `blueprint.id`.
 - [ ] Every visibility predicate is pure, cheap, and returns false on states it
@@ -1680,7 +1731,9 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
 | `src/core/RegistryContext.tsx` | The registry, its validation rules and its limits. Landed. |
 | `src/core/ShellAPI.ts` | `createShellAPI`, `createRevocableShellAPI`, `createShellStateStore`, `useShellContext`, `useShellStore`, `ShellStoreContext`, `deepFreeze`. Landed. |
 | `src/core/ActivationContext.tsx` | `ShellHostProvider`, `ExtensionHostBoundary`, `useActivation` (host-only *by guardrail* — read the second banner in that file), `useExtensionActivation`, the two-state activation model and revocation. Landed. |
-| `src/core/hotkeys.ts` | `hotkeyToken`, `describeHotkey`, `matchesHotkey`. Three pure functions over a chord — no DOM, no listener, no dispatcher. Landed. |
+| `src/core/hotkeys.ts` | `hotkeyToken`, `describeHotkey`, `ariaKeyShortcuts`, `matchesHotkey`. Four pure functions over a chord — no DOM, no listener, no dispatcher. Landed. |
+| `src/core/hotkeyDispatch.ts` | `useHotkeyDispatch`. The shell's one `keydown` listener, called once by `ShellLayout`: foreground-scoped, bubble phase, gated by the same `isVisible`/`isDisabled` as the ribbon button. Landed. |
+| `src/core/ribbonAction.ts` | `isVisible`, `execute`, `report`. The two guards every route to a plug-in action goes through, in one copy so the button and the chord cannot drift apart. Landed. |
 
 `useShellStore` and `ShellStoreContext` are in that list deliberately, and their
 omission from an earlier version of it was a documentation defect rather than a

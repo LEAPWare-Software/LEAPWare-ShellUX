@@ -136,17 +136,18 @@ export interface NavigationNode {
  * shortcut (`z` for undo reads as `z` to the user) and the wrong one for a
  * *positional* shortcut; only mnemonics are offered.
  *
- * Nothing dispatches a hotkey today. It is declared and validated at
- * registration — see `normalizeRibbonAction` in `RegistryContext.tsx` — and the
- * dispatcher is Phase 2. **That is a scope decision, not a blocked one**, and
- * this comment used to say otherwise: it justified the absence by the dispatcher
- * needing the foreground extension and a live `RibbonContext`, and since
- * ISSUE-002 the ribbon renderer is handed both — the foreground extension's
- * normalised actions with its live handle, and the context every predicate is
- * evaluated against. So the infrastructure is no longer what is missing; the
- * dispatcher has simply not been built, and nothing evaluates a chord.
- * Validation is pinned by "validateBlueprint — ribbon action hotkeys" in
- * `src/core/__tests__/validation.test.ts`.
+ * **Dispatched since ISSUE-006.** `useHotkeyDispatch` in
+ * `src/core/hotkeyDispatch.ts` owns the shell's one `keydown` listener, called
+ * once by `ShellLayout`; a chord is live only for the FOREGROUND extension, and
+ * only for an action that is visible and not disabled. This comment used to say
+ * that nothing dispatched a chord and that the dispatcher was Phase 2, which was
+ * true when it was written and is not now. Declaration and validation are still
+ * where they were — `normalizeRibbonAction` in `RegistryContext.tsx` — and
+ * pinned by "validateBlueprint — ribbon action hotkeys" in
+ * `src/core/__tests__/validation.test.ts`. Dispatch is pinned by "fires a
+ * visible, enabled chord on the foreground extension" and "does not fire a
+ * background extension chord while another extension is in the foreground" in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
  */
 export interface Hotkey {
   /**
@@ -186,31 +187,39 @@ export interface RibbonAction {
    * action cannot be declared; that is additively fixable later, and the reverse
    * is not.
    *
-   * **Declared and validated now; nothing dispatches it.** The registry checks
-   * the shape, the allowlist, the modifier rule and intra-extension uniqueness,
-   * then stores a frozen host-owned copy. No module under `src/` registers an
-   * event listener of any kind — pinned by "finds no listener registration in
-   * any module under src/, with no exceptions at all" in
-   * `src/__tests__/noEventListener.test.ts`, which parses **every** non-test
-   * module under `src/` with the TypeScript compiler and fails on
-   * `addEventListener` or `removeEventListener` in any code position.
+   * **Declared, validated, and — since ISSUE-006 — dispatched.** The registry
+   * checks the shape, the allowlist, the modifier rule and intra-extension
+   * uniqueness, then stores a frozen host-owned copy; `useHotkeyDispatch` routes
+   * a matching keystroke to `onExecute` through the SAME `isVisible` and
+   * `isDisabled` guards the ribbon button uses, which is what keeps a chord from
+   * being a wider route to a plug-in handler than the button is.
    *
-   * **One module handles a key event, and it is not a dispatcher.** Since
-   * ISSUE-004, `src/components/shared/VirtualizedList.tsx` carries an
-   * `onKeyDown` on its scroll container, which moves the list selection — arrow
-   * keys, Home/End, Page Up/Down — and consults no chord, no `hotkey` field and
-   * no registry. Every OTHER module is still held to naming no
-   * `keydown`/`keyup`/`keypress` at all, by "finds no key-event name in any
-   * module outside the keyboard-navigation allowlist" in the same file, with
-   * "holds the key-event allowlist to the exact spellings each listed module
-   * contains" keeping that exemption from silently growing.
+   * **Exactly two modules under `src/` touch a key event, and both are named in
+   * allowlists checked in both directions.** `src/core/hotkeyDispatch.ts` holds
+   * the repository's only `addEventListener`; since ISSUE-004,
+   * `src/components/shared/VirtualizedList.tsx` carries an `onKeyDown` on its
+   * scroll container which moves the list selection — arrow keys, Home/End, Page
+   * Up/Down — and consults no chord, no `hotkey` field and no registry. Every
+   * other module is held to registering nothing and naming no
+   * `keydown`/`keyup`/`keypress` at all. Pinned by "finds no listener
+   * registration in any module outside the hotkey-dispatch allowlist", "finds no
+   * key-event name in any module outside the key-event allowlist", "holds the
+   * key-event allowlist to the exact spellings each listed module contains" and
+   * "holds the hotkey-dispatch allowlist to the exact spellings the dispatcher
+   * contains" in `src/__tests__/noEventListener.test.ts`, which parses every
+   * non-test module under `src/` with the TypeScript compiler.
    *
    * Comments are trivia to the parser and are not scanned, which is what lets
    * this docblock state the property; a listener reached through a name that is
    * not text — `el[fromAVariable](...)` — is outside what it can see, and that
-   * limit is stated in the test. The narrower fact that `src/core/hotkeys.ts`
-   * exports only its three pure helpers is "hotkeys module — does not attach
-   * anything" in `src/core/__tests__/hotkeys.test.ts`.
+   * limit is stated in the test. What a source scan cannot see at all is that the
+   * dispatcher's one listener is really removed on unmount, so that is pinned at
+   * runtime instead, by "adds exactly one keydown listener and removes the
+   * identical handler on unmount" in
+   * `src/core/__tests__/hotkeyDispatch.test.tsx`. The narrower fact that
+   * `src/core/hotkeys.ts` remains four pure helpers that attach nothing is
+   * "hotkeys module — does not attach anything" in
+   * `src/core/__tests__/hotkeys.test.ts`.
    */
   readonly hotkey?: Hotkey;
   /**

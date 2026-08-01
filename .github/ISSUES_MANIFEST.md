@@ -21,7 +21,7 @@ currently exists.
 |---|---|---|
 | ISSUE-001 | Type-Safe IoC Extension Registry & Primitives | `LANDED` |
 | ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
-| ISSUE-003 | UI State Hydration & Serialization Engine | `IN PROGRESS` — engine implemented and green, **not merged and not wired to anything**; see the note below |
+| ISSUE-003 | UI State Hydration & Serialization Engine | `IN PROGRESS` — engine implemented, green and **now consumed by the shell**; **not merged**; see the note below |
 | ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
 | ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `BLOCKED` (on 002–004) |
 
@@ -30,9 +30,11 @@ rather than rounded up.** `LANDED` is defined as four things: *merged*, the sour
 files exist, they are tested, and they pass the coverage gate. The last three are
 true — `src/components/layout/ShellLayout.tsx`,
 `src/components/layout/PaneWrapper.tsx` and `src/components/ui/RibbonToolbar.tsx`
-exist, carry 87 tests across three files in `src/components/__tests__/` — five of
-them ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx` — and the
-full suite runs 841 tests green at 100% statements, branches, functions and lines
+exist, carry 120 tests across five files in `src/components/__tests__/` — five of
+them ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 28 of
+them the ISSUE-003 persistence and issue-#12 badge cases in
+`ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` — and the
+full suite runs 915 tests green at 100% statements, branches, functions and lines
 with `src/components/**` inside the `vitest.config.ts` coverage include list. **The
 first is false.** The work is committed on branch `phase-2-shell` and has not been
 through review or merge; the older form of this paragraph said it was uncommitted on
@@ -43,28 +45,71 @@ carries the qualification inline so that nobody reads it as either "not written"
 happens; the tests and the gate are already satisfied and will not need re-checking
 for that transition.
 
-**No marker fits ISSUE-003 either, and it misses `LANDED` by two things rather than
-one.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`
+**ISSUE-003 now misses `LANDED` by ONE thing rather than two, and the second miss
+being closed is the change worth recording.**
+`src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`
 exist, carry 146 tests across
 `src/core/services/__tests__/hydrationEngine.test.ts` and
 `src/hooks/__tests__/useLocalStorageState.test.tsx`, and sit inside the same 100%
 statements/branches/functions/lines gate. So "the source files exist", "they are
 tested" and "they pass the coverage gate" are all true, and *merged* is false for the
-same reason it is false for ISSUE-002: the work is uncommitted on branch
-`phase-1-hotkeys`.
+same reason it is false for ISSUE-002: the work is on branch `phase-2-shell` and has
+not been through review or merge.
 
-**The second miss is the one that matters more, because no legend marker expresses it
-at all: nothing in the shell is wired to the engine.** `src/components/layout/ShellLayout.tsx`
-and `src/App.tsx` neither read nor write persisted state — they do not import
-`useLocalStorageState`, and they do not construct or consume a hydration engine. Pane
-sizes, the pane-1 collapsed flag and the drawer flag remain plain React state and
-still reset on every reload. What exists is a tested engine with no consumer. `IN
-PROGRESS` is the closest true marker and the row carries both qualifications inline,
-because "implemented and tested" read alone would imply a shell that restores your
-layout, and it does not. This row becomes `LANDED` when the work is merged **and** the
-shell actually consumes it; the Definition of Done items "No flash of default layout
-on reload" and the ISSUE-002 dependency ("consumes pane sizes and collapse state") are
-the two that remain unmet, and neither can be met by the engine alone.
+**The second miss is closed: the shell consumes the engine.** This paragraph used to
+say that `src/components/layout/ShellLayout.tsx` and `src/App.tsx` neither read nor
+wrote persisted state, that they imported neither `useLocalStorageState` nor an
+engine, and that what existed was "a tested engine with no consumer". All of that
+has stopped being true. `ShellLayout` now binds the pane-1 collapsed flag through
+`useLocalStorageState`, takes a mount-time snapshot of the pane sizes for its
+`defaultSize` props, writes back through `setSlot` on every layout the panel group
+commits, and restores the foreground extension through `selectActiveExtensionId`.
+`App.tsx` composes nothing for it and does not need to: `ShellLayout` resolves
+`getDefaultHydrationEngine()` when no engine is supplied, and that is the instance
+the running shell uses. 20 tests in
+`src/components/__tests__/ShellLayoutPersistence.test.tsx` drive the assembled shell
+over a real `ShellStorage`, inside the same coverage gate.
+
+**Exactly three slots are persisted, and the boundary is recorded here so that a
+later reader does not have to infer it:** the pane sizes, the pane-1 collapsed
+flag, and the id of the foreground extension. Deliberately NOT persisted — the
+utility drawer flag, the selected navigation node, the selected item, the measured
+group width, and any pane size changed while pane 1 is collapsed. Per-extension
+scoped persistence is supported by the engine and reached by nothing, because
+`IShellAPI` still has no persistence member; that channel belongs to ISSUE-005's
+reload-and-restore cases and is not claimed here.
+
+**Two Definition-of-Done items that could not be met by the engine alone are now
+met.** "No flash of default layout on reload" is asserted on the RENDER LOG rather
+than on the final DOM — the restored value is in the shell's first render and the
+number the shell would have computed for itself is in no render at all — and the
+ISSUE-002 dependency ("consumes pane sizes and collapse state") is satisfied in both
+directions, restore and write. *Tests:*
+`src/components/__tests__/ShellLayoutPersistence.test.tsx` — "renders the restored
+pane sizes on the panel group first render, and the measured default never",
+"renders the collapsed icon track on the first render, and the expanded navigation
+panel never", "coalesces a keyboard-driven resize into one storage write rather than
+one per frame", "clamps a restored pane size that no longer fits the pane minimums
+at this width", "discards a hand-edited record whose pane size is outside the engine
+band, and renders the measured defaults" and "renders, resizes and collapses with a
+storage that throws on every access". `IN PROGRESS` is still the closest true marker,
+and this row becomes `LANDED` on merge and on nothing else.
+
+**Issue #12 — the badge render path — is closed in the same change, and it was the
+render half only.** `IShellAPI.setBadgeCount` had been implemented, validated and
+tested since ISSUE-001 and the value it wrote reached no renderer:
+`ShellLayout` drew `NavigationNode.badgeCount` off the registry's frozen blueprint
+record, so a runtime badge write was invisible. `src/core/ShellAPI.ts` grew
+`useBadgeCount(extensionId, nodeId)` as the selector, and the nav tree now subscribes
+through it with the store OVERRIDING the blueprint and the blueprint as the fallback
+— in the collapsed 48px icon track as well as the expanded pane, and for a count
+written back down to `0`. *Tests:*
+`src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a setBadgeCount write
+through a live IShellAPI change what the sidebar renders", "overrides a blueprint
+badge with the store value, including down to zero", "shows a runtime badge in the
+collapsed 48px icon track too" and "renders the blueprint badge for a node the store
+has never been written for"; `src/core/__tests__/badgeSelector.test.tsx` for the
+selector in isolation.
 
 ISSUE-001 was verified against running code by an independent adversarial
 verification on **2026-07-29**. What that verification actually did, so the
@@ -321,29 +366,31 @@ None. This is the root of the dependency graph.
   checks the shape, the allowlist, the accessibility rule and intra-extension
   uniqueness, then stores a fresh host-owned chord with all four modifiers
   materialised as explicit booleans and frozen before it is assigned into the
-  action. `src/core/hotkeys.ts` is new and exports exactly three pure functions
-  over a chord — `hotkeyToken` (the canonical token, the deduplication key today
-  and a dispatch lookup key later), `describeHotkey` (a display spelling for a
-  tooltip or `aria-keyshortcuts`) and `matchesHotkey` (an exact match, in both
-  directions, so no chord swallows the supersets of itself). **Nothing dispatches
-  any of it.** There is no `keydown` listener, no dispatcher and no evaluation
-  site anywhere in `src/`; a dispatcher needs the foreground extension and a live
-  `RibbonContext`, and both arrive with the ribbon renderer, which is ISSUE-002.
-  Declaring a chord today therefore has no observable effect beyond the
-  registration succeeding or failing. Design and rejected alternatives: ADR-0001
-  Amendment H.
+  action. `src/core/hotkeys.ts` is new and exports pure functions over a chord —
+  `hotkeyToken` (the canonical token, the deduplication key), `describeHotkey` (a
+  display spelling for a tooltip), `matchesHotkey` (an exact match, in both
+  directions, so no chord swallows the supersets of itself) and, since ISSUE-006,
+  `ariaKeyShortcuts` (the UI Events key-value spelling `aria-keyshortcuts`
+  requires). **Nothing dispatched any of it when ISSUE-001 landed** — there was no
+  `keydown` listener, no dispatcher and no evaluation site anywhere in `src/`, and
+  declaring a chord had no observable effect beyond the registration succeeding or
+  failing. **ISSUE-006 built the dispatcher**, in `src/core/hotkeyDispatch.ts`,
+  and this row is left in its original tense with that correction attached rather
+  than rewritten, because it records what ISSUE-001 shipped. Design and rejected
+  alternatives: ADR-0001 Amendment H, and Amendment J for the dispatcher.
   *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no listener
-  registration in any module under src/, with no exceptions at all", which parses
+  registration in any module outside the hotkey-dispatch allowlist", which parses
   every non-test module under `src/` with the TypeScript compiler and fails on
-  `addEventListener` or `removeEventListener` in any code position, with "visits
-  every module under src/, so an empty scan cannot pass vacuously" and "reports a
-  planted listener, however it is spelled" beside it so the scan cannot pass by
-  scanning nothing; the key-event half of the same file is scoped to one
-  allowlisted module since ISSUE-004 and is "finds no key-event name in any module
-  outside the keyboard-navigation allowlist"; `hotkeys.test.ts` —
-  "hotkeys module — does not attach anything > exports exactly the three pure
-  helpers and no dispatcher" and "registers no keyboard listener when its
-  functions are called", plus "hotkeyToken", "describeHotkey" and "matchesHotkey";
+  `addEventListener` or `removeEventListener` in any code position outside a
+  one-entry allowlist, with "visits every module under src/, so an empty scan
+  cannot pass vacuously" and "reports a planted listener, however it is spelled"
+  beside it so the scan cannot pass by scanning nothing; the key-event half of the
+  same file is scoped to a named allowlist since ISSUE-004 and is "finds no
+  key-event name in any module outside the key-event allowlist"; `hotkeys.test.ts` —
+  "hotkeys module — does not attach anything > exports only pure helpers — the
+  dispatcher is a separate module" and "registers no keyboard listener when its
+  functions are called", plus "hotkeyToken", "describeHotkey", "ariaKeyShortcuts"
+  and "matchesHotkey";
   `registryNormalization.test.tsx` — "register — the stored record is host-owned >
   freezes the stored hotkey", "materialises all four modifiers, so the canonical
   token has no undefined branch", "is unaffected by the plugin mutating its own
@@ -686,13 +733,15 @@ the status is `IN PROGRESS`. The gates were checked by running
   event; the listener half stayed repo-wide with no allowlist at all, and the
   key-event half is now scoped to one named module. The ribbon's deviation therefore
   now rests on the narrower ground it always really had — it has not needed the
-  pattern, and keyboard dispatch (Phase 2) has to revisit ribbon key handling anyway.
+  pattern. **ISSUE-006's dispatcher did not change that either:** its listener is on
+  `window` and routes declared chords, it puts no arrow-key handler on the toolbar,
+  and every ribbon control stays individually reachable by Tab.
   Tab-through is the honest description of what the ribbon does. **Divider keyboard
   operation was not lost to this decision**, because it is the library's own:
   `PanelResizeHandle` renders `role="separator"` with `tabIndex={0}` and implements
   the window-splitter pattern internally, so the host attaches nothing.
   *Tests:* `src/__tests__/noEventListener.test.ts` — "finds no key-event name in any
-  module outside the keyboard-navigation allowlist" and "holds the key-event
+  module outside the key-event allowlist" and "holds the key-event
   allowlist to the exact spellings each listed module contains", with "reports a
   planted listener, however it is spelled" beside them, whose planted cases include a
   JSX `onKeyDown` attribute specifically; `src/components/__tests__/ShellLayout.test.tsx` — "makes
@@ -707,18 +756,25 @@ the status is `IN PROGRESS`. The gates were checked by running
   predicate author reading `RibbonContext` would otherwise reasonably assume the
   host populates every field it declares. `DEVELOPER.md` states the same thing where
   predicates are described.
-- **No `aria-keyshortcuts` is emitted on any ribbon button, deliberately.**
-  `RibbonAction.hotkey` is validated and stored, and `describeHotkey` in
-  `src/core/hotkeys.ts` exists precisely to produce a display spelling for this
-  attribute — but nothing dispatches a chord, so advertising one to assistive
-  technology would promise a shortcut that does not fire. That is a worse failure
-  than the absent attribute: a screen-reader user would be told a key works and find
-  that it does not. The attribute arrives with the dispatcher in Phase 2.
-  *Tests:* the absence of any dispatcher is pinned by
+- **No `aria-keyshortcuts` was emitted on any ribbon button, deliberately — and
+  ISSUE-006 reversed it, for the same reason.** While nothing dispatched a chord,
+  advertising one would have promised a shortcut that does not fire, which is a
+  worse failure than the absent attribute: a screen-reader user would be told a key
+  works and find that it does not. Now that `src/core/hotkeyDispatch.ts` fires
+  chords, the silence became the lie instead, so the ribbon emits
+  `aria-keyshortcuts` on exactly the actions the dispatcher will fire — a plug-in
+  action carrying a `hotkey` that is not disabled, on the bar and in the overflow
+  menu, and never on a host action. The value comes from `ariaKeyShortcuts`, not
+  `describeHotkey`: ARIA wants UI Events key values, where the control key is
+  `Control`.
+  *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "advertises a
+  chord-bearing action with aria-keyshortcuts, in key values rather than display
+  spelling", "omits aria-keyshortcuts from a disabled action, because the chord will
+  not fire", "advertises a chord on an overflow menu item too" and "never advertises
+  a chord on a host action"; that the ribbon module itself still attaches nothing is
   `src/__tests__/noEventListener.test.ts` — "finds no listener registration in any
-  module under src/, with no exceptions at all" and "finds no key-event name in any
-  module outside the keyboard-navigation allowlist", which both cover
-  `src/components/**` along with everything else.
+  module outside the hotkey-dispatch allowlist" and "finds no key-event name in any
+  module outside the key-event allowlist", neither of whose allowlists names it.
 - **A plug-in view is never rendered as a host sibling.** `views.pane2` and
   `views.pane3` mount only inside `ExtensionHostBoundary`. `ActivationContext.tsx`'s
   banner flagged host-rendered siblings as an outstanding hole in that guardrail
@@ -759,8 +815,10 @@ is more finished than it is:
 - **No persistence.** Pane sizes and the collapse state are React state and reset on
   reload. ISSUE-003's engine now exists and is tested, but `ShellLayout.tsx` does not
   import it, so this gap is unchanged from the user's side. ISSUE-003.
-- **No hotkey dispatch.** Chords are validated at registration and evaluated by
-  nothing. Phase 2.
+- **No hotkey dispatch — CLOSED by ISSUE-006.** This gap stood while ISSUE-002
+  shipped: chords were validated at registration and evaluated by nothing.
+  `src/core/hotkeyDispatch.ts` now evaluates them, foreground-scoped and gated by
+  the same `isVisible`/`isDisabled` as the ribbon button.
 
 ---
 
@@ -885,10 +943,11 @@ state" — is likewise unmet: nothing consumes anything yet.
   half-written record unconstructible.** Two tabs are last-write-wins, and the unit of
   that is the entire record rather than a field — there is no interleaving for a reader
   to observe, because there is no second write to interleave with. This is also why the
-  engine registers no `storage` event listener and does no cross-tab reconciliation:
-  the repo-wide no-listener invariant holds, pinned by "finds no listener registration
-  in any module under src/, with no exceptions at all" in
-  `src/__tests__/noEventListener.test.ts`.
+  engine registers no `storage` event listener and does no cross-tab reconciliation,
+  pinned by "finds no listener registration in any module outside the
+  hotkey-dispatch allowlist" in `src/__tests__/noEventListener.test.ts` — an
+  allowlist naming `core/hotkeyDispatch.ts` and nothing else, so this engine is
+  covered by the scan rather than exempted from it.
   *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of "two
   tabs over one storage entry", specifically "the loser's whole record is replaced,
   never interleaved with the winner's" and "interleaving the two tabs still produces
@@ -1012,15 +1071,18 @@ revisit.
 **One existing test was narrowed, deliberately and in one direction only.**
 `src/__tests__/noEventListener.test.ts` forbade `(?:add|remove)EventListener` and
 `key(?:down|up|press)` in every non-test module under `src/`, and the virtualizer's
-`onKeyDown` turns that red. The listener half is unchanged and has no allowlist
+`onKeyDown` turns that red. The listener half was left unchanged with no allowlist
 mechanism at all — that half is what the repo-wide "no dispatcher, no evaluation
-site" claim actually rests on. The key-event half is scoped to an allowlist naming
+site" claim rested on. The key-event half is scoped to an allowlist naming
 exactly `components/shared/VirtualizedList.tsx` and the exact spellings it may
 contain, checked in both directions so a stale entry fails as loudly as an
 unreviewed new one. Every prose site that stated the wider claim was re-pointed in
 the same change: ADR-0001 Amendment H, `DEVELOPER.md`, `README.md`, this file, the
 `Hotkey` docblock in `src/core/types.ts`, `HydrationEngine.ts` and
-`ShellLayout.tsx`.
+`ShellLayout.tsx`. **ISSUE-006 then had to narrow the listener half too**, because
+a hotkey dispatcher is a global `keydown` listener and there is no version of it
+that is not; see ADR-0001 Amendment J Decision 7 for why narrowing beat deleting
+the file and beat leaving a title that had stopped being true.
 
 **What ISSUE-004 does NOT do, stated so the row is not read as more than it is:**
 

@@ -446,11 +446,13 @@ describe('validateBlueprint — ribbon actions', () => {
 
 /**
  * ============================================================================
- * RIBBON ACTION HOTKEYS — DECLARED AND VALIDATED, NOT DISPATCHED
+ * RIBBON ACTION HOTKEYS — DECLARED AND VALIDATED HERE, DISPATCHED ELSEWHERE
  * ============================================================================
  * `RibbonAction.hotkey` is optional, structured, and checked at the same door
- * every other blueprint field is checked at. Nothing dispatches it — see
- * `src/core/__tests__/hotkeys.test.ts`, "does not attach anything".
+ * every other blueprint field is checked at. Dispatch is a different module and a
+ * different suite — `src/core/__tests__/hotkeyDispatch.test.tsx` — and the rules
+ * below are enforced at this door only, with no second suppression at dispatch
+ * time (ADR-0001 Amendment I Decision 3).
  *
  * Five rules carry weight here and each has its own group below:
  *

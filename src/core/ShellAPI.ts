@@ -1,4 +1,4 @@
-import { createContext, useContext, useSyncExternalStore } from 'react';
+import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
 import { EXTENSION_ID_PATTERN, RESERVED_IDS } from './RegistryContext';
 import type { IShellAPI, RibbonContext } from './types';
 import { PANE_IDS, ShellUXError } from './types';
@@ -226,6 +226,9 @@ export interface ShellStateStore {
    * `Symbol`, out of a function contracted to throw `ShellUXError`. Pinned by "the
    * badge scope and node id are validated at both doors" in
    * `src/core/__tests__/shellApi.test.ts`.
+   *
+   * A one-shot read. `useBadgeCount` at the foot of this module is the
+   * subscribing form, and is what a renderer should use.
    *
    * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
    *   registry-valid identifier nor the host scope, or `nodeId` is not a
@@ -833,7 +836,11 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     badgeCounts.set(badgeKey(extensionId, nodeId), count);
     // Badges are not part of the context snapshot, so `useShellContext` bails
     // out on its own unchanged snapshot. The notify is still correct — the store
-    // changed — and it is what a future badge-aware selector will subscribe to.
+    // changed — and `useBadgeCount` at the foot of this module is the
+    // badge-aware selector that subscribes to it. Note that this notify is
+    // UNCONDITIONAL: unlike `applyPatch`, a badge written with the value it
+    // already holds still wakes every listener, and it is the selector's own
+    // `Object.is` bail-out that stops that becoming a re-render.
     notify();
   }
 
@@ -1135,4 +1142,73 @@ export function useShellStore(): ShellStateStore {
 export function useShellContext(): Readonly<RibbonContext> {
   const store = useShellStore();
   return useSyncExternalStore(store.subscribe, store.getContext);
+}
+
+/**
+ * Subscribe to one node's badge count. Re-renders the calling component when
+ * that badge changes, and not when anything else in the store does.
+ *
+ * **This is the badge-aware selector the store has been notifying for and
+ * nothing had.** `setBadgeCount` commits its value and notifies, but badges are
+ * deliberately not part of the `RibbonContext` snapshot, so a `useShellContext`
+ * subscriber re-reads an unchanged snapshot and bails out — a runtime badge write
+ * woke every listener and moved nothing. Reading through this hook is what turns
+ * that notification into a render. Pinned by "re-renders when the badge it watches
+ * is written" in `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ * **The snapshot is a primitive, so no memoisation is needed and none is used.**
+ * `ShellStateStore.getBadgeCount` returns the `number` its `Map` holds, or
+ * `undefined`, and allocates nothing on the way out; two reads of an unchanged
+ * badge are therefore `Object.is`-equal and `useSyncExternalStore` bails out by
+ * itself. A `useMemo` over it would buy nothing, because there is no identity to
+ * stabilise. That bail-out carries more weight here than it does for the context:
+ * a badge write notifies UNCONDITIONALLY — it does not compare the way
+ * `applyPatch` does — so every badge write anywhere in the shell wakes every one
+ * of these subscribers, and only the ones whose own value moved re-render. Pinned
+ * by "does not re-render when the badge is rewritten with the value it already
+ * holds" and "does not re-render when a different node's badge is written" in the
+ * same file.
+ *
+ * **`extensionId` is a PARAMETER here, and that is deliberately not the
+ * `IShellAPI` posture.** `IShellAPI.setBadgeCount` closes over the scope the
+ * registry validated and offers no parameter through which to aim elsewhere; this
+ * hook names the scope it reads, because it is a host-side selector over the
+ * unscoped store and a sidebar has to read every extension's badges in order to
+ * draw them. That is consistent with the store underneath it and adds nothing to
+ * what a caller already had: `useShellStore()` is public, so
+ * `store.getBadgeCount('other-ext', 'inbox')` was reachable from anywhere inside
+ * the provider before this hook existed. Badge scoping is collision-resistance,
+ * not confinement — see `HOST_BADGE_SCOPE` above and ADR-0001 Amendment E. Pinned
+ * by "reads whatever scope it is handed, including another extension's and the
+ * host's" in `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ * **Both arguments are validated, and the rejection arrives DURING RENDER.** The
+ * check is `store.getBadgeCount`'s own and is not restated here, so the two cannot
+ * drift apart — but it runs inside `useSyncExternalStore`'s snapshot read, which
+ * is a render-phase call. A component that passes a malformed id therefore fails
+ * to render rather than quietly reading `undefined`, which is the same trade
+ * `useExtensionUiState` makes in `src/hooks/useLocalStorageState.ts` and for the
+ * same reason: a loud, deterministic failure at the point of the mistake. Pinned
+ * by "raises INVALID_ID during render for a malformed scope, rather than reading
+ * undefined" and "raises INVALID_ID during render for a malformed node id" in
+ * `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ * @param extensionId The badge scope to read — a registry-valid extension id, or
+ *   the host scope `createShellAPI` writes through.
+ * @param nodeId The navigation node id within that scope.
+ * @returns The badge count, or `undefined` when none was ever set for that node.
+ * @throws {ShellUXError} `INVALID_ID` during render when `extensionId` is neither
+ *   a registry-valid identifier nor the host scope, or `nodeId` is not a
+ *   registry-valid identifier. That is the only code reachable from here: this
+ *   hook reads and writes nothing else, so it never notifies and
+ *   `REENTRANT_NOTIFY` cannot come out of it.
+ * @throws when called outside `ShellHostProvider`.
+ */
+export function useBadgeCount(extensionId: string, nodeId: string): number | undefined {
+  const store = useShellStore();
+  const getSnapshot = useCallback(
+    (): number | undefined => store.getBadgeCount(extensionId, nodeId),
+    [store, extensionId, nodeId],
+  );
+  return useSyncExternalStore(store.subscribe, getSnapshot);
 }
