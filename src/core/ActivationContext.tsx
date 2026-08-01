@@ -336,10 +336,97 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
     [registry],
   );
 
+  /**
+   * Publish `next` as the foreground — and, when the foreground actually MOVES,
+   * clear the per-extension context in the same patch.
+   *
+   * ==========================================================================
+   * WHY THE SELECTION AND `activeNavNodeId` GO WITH IT
+   * ==========================================================================
+   * This used to patch `activeExtensionId` alone, which leaked one extension's
+   * state into the next one's. Every leaked field belongs to whichever extension
+   * is in the foreground and to nothing else: the selection is a set of row keys
+   * in that extension's own list, `activeNavNodeId` names a node in that
+   * extension's own navigation tree, and `contextKeys` is a record that extension
+   * published about its own panes. None of them means anything to the extension
+   * that replaces it, and `contextKeys` is the case where that would be worst —
+   * a predicate is a pure function of the context, so a stale key from the
+   * previous vendor is indistinguishable to it from one this vendor set.
+   *
+   * The consequence was not cosmetic. A newly activated extension was handed a
+   * selection id belonging to a different vendor, so its `isVisible` predicates
+   * asking "is anything selected?" answered TRUE for an item it cannot open, and
+   * it rendered ribbon actions whose `onExecute` would fail on the first click.
+   * The mock extensions defended themselves by prefixing their item ids, which is
+   * a plug-in-side workaround for a host-side leak: it only works if every vendor
+   * independently invents the same convention, and it cannot address
+   * `activeNavNodeId` at all, since a nav node id is registry-validated and a
+   * prefix is not part of that grammar.
+   *
+   * **One patch, not three.** `applyPatch` validates every supplied field, builds
+   * one draft and notifies once, so a subscriber observes the whole transition as
+   * a single coherent snapshot. Three separate `patchContext` calls would notify
+   * three times, and the first notification would carry the NEW `activeExtensionId`
+   * beside the OLD `selectedItemId` — exactly the torn state this is fixing,
+   * handed to every subscriber as a real, readable context. Pinned by "never lets
+   * a subscriber observe the new extension beside the old selection" in
+   * `src/core/__tests__/activationHandover.test.tsx`.
+   *
+   * **Only on a real move**, which is why `previous` is compared before it is
+   * overwritten. Republishing an unchanged foreground is ordinary here, not
+   * exotic: `reconcileForeground` runs from the sweep effect on EVERY registry
+   * revision, so merely registering a second extension re-publishes the current
+   * one; `activate` on the already-foreground id reuses and republishes the same
+   * entry; and `blur` is legal when nothing is in the foreground. Clearing on
+   * those would wipe a live selection the user had just made, for no transition at
+   * all. Pinned by "does not clear a live selection when the same foreground is
+   * republished" in `src/core/__tests__/activationHandover.test.tsx`.
+   *
+   * The comparison is on the `ActiveExtension`'s IDENTITY rather than on its id,
+   * for the same reason `isLive` is keyed on the blueprint record and
+   * `reconcileForeground` tests the entry: after an unregister/re-register cycle
+   * the id can be unchanged while belonging to a different extension, and that
+   * extension is entitled to a clean context just as much as one with a new name
+   * is. Same id, different record, different vendor.
+   * ==========================================================================
+   */
   const publishForeground = useCallback(
     (next: ActiveExtension | null): void => {
+      const previous = foreground.current;
       foreground.current = next;
-      store.patchContext({ activeExtensionId: next === null ? null : next.id });
+      const activeExtensionId = next === null ? null : next.id;
+      if (previous === next) {
+        // A republish, not a handover. The patch is still made: it is a per-field
+        // no-op when the store already agrees, and it is the correction when
+        // something has written over the published foreground since.
+        store.patchContext({ activeExtensionId });
+        return;
+      }
+      // Two halves of one handover, and the order is load-bearing.
+      //
+      // FIRST the bookkeeping: `clearContextKeys` drops every extension's
+      // context-key namespace and deliberately neither patches nor notifies.
+      // SECOND the publication: one patch carrying the new foreground, an empty
+      // selection, no nav node and an empty context-key record. Doing the
+      // bookkeeping inside the patch is impossible — it is store state, not
+      // context state — and doing it after would leave a window in which the
+      // published record said "empty" while the namespaces behind it did not.
+      //
+      // `selectedItemIds` is the field that carries the selection since GitHub
+      // issue #14, and it is cleared HERE rather than left to be inferred from
+      // `selectedItemId`. Naming both in the one patch is not belt and braces:
+      // `applyPatch` resolves the pair with `selectedItemIds` winning, so this
+      // says exactly what it means, and the alternative — clearing only the
+      // derived shorthand — would have worked by accident through the very
+      // precedence rule that exists to stop the two disagreeing.
+      store.clearContextKeys();
+      store.patchContext({
+        activeExtensionId,
+        activeNavNodeId: null,
+        selectedItemIds: [],
+        selectedItemId: null,
+        contextKeys: {},
+      });
     },
     [store],
   );
@@ -348,7 +435,9 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
    * Re-derive the foreground from liveness. The foreground must always be a live
    * extension, so an extension that has just lost its liveness loses the
    * foreground with it; one that still has it keeps it, and re-publishing the
-   * same id is a no-op because `patchContext` compares per field.
+   * same entry is a no-op because `patchContext` compares per field — and because
+   * `publishForeground` treats an unchanged entry as a republish rather than a
+   * handover, so a sweep that moves nothing clears nothing.
    *
    * The test is on the ENTRY's identity, not on the id being a key in the map, for
    * the same reason liveness is keyed on the blueprint record: after an

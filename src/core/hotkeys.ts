@@ -2,7 +2,7 @@ import type { Hotkey } from './types';
 
 /**
  * ============================================================================
- * THREE PURE FUNCTIONS OVER A CHORD. NO DOM, NO LISTENER, NO DISPATCHER.
+ * FOUR PURE FUNCTIONS OVER A CHORD. NO DOM, NO LISTENER, NO DISPATCHER HERE.
  * ============================================================================
  * This module attaches nothing. It has no `addEventListener`, no `window`, no
  * `document` and no React import; every export is a total function of its
@@ -10,18 +10,22 @@ import type { Hotkey } from './types';
  * actually needs rather than an event object, so it can be called on a plain
  * record and holds no reference to anything live.
  *
- * **The dispatcher is deliberately absent, and this is Phase 1's scope line.**
- * A dispatcher needs two things this layer has no view of: which extension is in
- * the foreground (a hotkey is live only for that one — see ADR-0001 Amendment H)
- * and the live `RibbonContext` that `isVisible` and `onExecute` are evaluated
- * against. Both arrive with the ribbon in Phase 2. What exists today is
- * declaration and validation at registration, and these three helpers, which is
- * what `RegistryContext.tsx` needs for intra-extension deduplication.
+ * **The dispatcher is a SEPARATE MODULE, and that is the boundary this file
+ * keeps.** `src/core/hotkeyDispatch.ts` owns the shell's one `keydown` listener,
+ * the foreground lookup and the suppression rules; this file owns the chord
+ * vocabulary those decisions are expressed in. Keeping them apart is what lets
+ * every function here stay callable on a plain record from a test with no DOM,
+ * and it is what "hotkeys module — does not attach anything" in
+ * `src/core/__tests__/hotkeys.test.ts` still asserts — a title worth keeping now
+ * that a dispatcher exists somewhere, rather than only while none did.
  *
- * `hotkeyToken` is the deduplication key today and the dispatch lookup key
- * later; keeping one canonical spelling in one function is what stops those two
- * uses drifting apart. Pinned by "hotkeyToken", "describeHotkey" and
- * "matchesHotkey" in `src/core/__tests__/hotkeys.test.ts`.
+ * `hotkeyToken` is the deduplication key at registration. `matchesHotkey` is what
+ * the dispatcher evaluates a live event against; keeping one canonical spelling
+ * and one comparison in one module is what stops those two uses drifting apart.
+ * `describeHotkey` and `ariaKeyShortcuts` are the two spellings a renderer needs,
+ * and they are different on purpose — see `ariaKeyShortcuts`. Pinned by
+ * "hotkeyToken", "describeHotkey", "ariaKeyShortcuts" and "matchesHotkey" in
+ * `src/core/__tests__/hotkeys.test.ts`.
  * ============================================================================
  */
 
@@ -85,8 +89,9 @@ export function hotkeyToken(hotkey: Hotkey): string {
 /**
  * The human-readable spelling of a chord — `"Ctrl+Shift+K"`.
  *
- * Intended for a tooltip and for the `aria-keyshortcuts` attribute a ribbon
- * renderer will emit in Phase 2. Nothing renders it today.
+ * The spelling a USER reads: a tooltip, a menu, printed documentation. **Not the
+ * `aria-keyshortcuts` value** — that attribute wants UI Events key values and
+ * `Ctrl` is not one; see `ariaKeyShortcuts` below.
  *
  * `Meta` is spelled `Meta` rather than `Cmd` or `Win`: this module cannot see
  * the platform, and guessing wrong prints a key the user does not have. A
@@ -96,6 +101,45 @@ export function describeHotkey(hotkey: Hotkey): string {
   let prefix = '';
   if (hotkey.ctrl === true) {
     prefix += 'Ctrl+';
+  }
+  if (hotkey.alt === true) {
+    prefix += 'Alt+';
+  }
+  if (hotkey.shift === true) {
+    prefix += 'Shift+';
+  }
+  if (hotkey.meta === true) {
+    prefix += 'Meta+';
+  }
+  return `${prefix}${describeKey(hotkey.key.toLowerCase())}`;
+}
+
+/**
+ * The chord in UI Events key-value spelling, for `aria-keyshortcuts`:
+ * `"Control+Shift+K"`.
+ *
+ * **A separate function from `describeHotkey`, and the difference is one word.**
+ * WAI-ARIA defines `aria-keyshortcuts` in terms of UI Events
+ * `KeyboardEvent.key` VALUES — `Control`, `Alt`, `Shift`, `Meta` — while
+ * `describeHotkey` deliberately emits the DISPLAY spelling a user reads on a
+ * keycap and in a tooltip, where the control key is `Ctrl`. `Ctrl` is not a valid
+ * key value, so an attribute built from `describeHotkey` would be malformed;
+ * `Control+Shift+K` in a tooltip would read as a key nobody's keyboard is
+ * labelled with. Merging the two would have to get one of them wrong.
+ *
+ * The key half is shared, because there the two spellings genuinely agree: ARIA
+ * asks for the `key` value, and `describeKey` already produces `K`, `F5` and
+ * `ArrowUp` — which are the `key` values.
+ *
+ * Pure, like the other three. It renders nothing and reads nothing ambient; the
+ * one module that puts the result in the DOM is
+ * `src/components/ui/RibbonToolbar.tsx`. Pinned by "ariaKeyShortcuts" in
+ * `src/core/__tests__/hotkeys.test.ts`.
+ */
+export function ariaKeyShortcuts(hotkey: Hotkey): string {
+  let prefix = '';
+  if (hotkey.ctrl === true) {
+    prefix += 'Control+';
   }
   if (hotkey.alt === true) {
     prefix += 'Alt+';

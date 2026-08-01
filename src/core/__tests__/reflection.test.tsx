@@ -360,11 +360,15 @@ describe('the between-extension boundary is not enforceable in-page', () => {
     // validates. This is an integrity control, not entry-point validation: it
     // holds for this caller exactly as it holds for the host.
     expect(Object.keys(store as ShellStateStore).sort()).toEqual([
+      'clearContextKeys',
       'getBadgeCount',
       'getContext',
       'patchContext',
+      'setActiveNavNode',
       'setBadgeCount',
+      'setContextKey',
       'setSelectedItem',
+      'setSelectedItems',
       'subscribe',
     ]);
 
@@ -387,10 +391,10 @@ describe('the between-extension boundary is not enforceable in-page', () => {
     expect(
       expectShellUXError(() => {
         ((store as ShellStateStore).patchContext as (patch: unknown) => void)({
-          focusedPane: 'pane9',
+          activeNavNodeId: 'not a legal id',
         });
       }).code,
-    ).toBe('INVALID_FIELD');
+    ).toBe('INVALID_ID');
     expect(
       expectShellUXError(() => {
         ((store as ShellStateStore).patchContext as (patch: unknown) => void)({
@@ -399,7 +403,7 @@ describe('the between-extension boundary is not enforceable in-page', () => {
       }).code,
     ).toBe('INVALID_FIELD');
     expect(harness.store.getContext().selectedItemId).toBeNull();
-    expect(harness.store.getContext().focusedPane).toBeNull();
+    expect(harness.store.getContext().activeNavNodeId).toBeNull();
   });
 
   it('never reaches the badge map itself, because it is a closure variable', () => {

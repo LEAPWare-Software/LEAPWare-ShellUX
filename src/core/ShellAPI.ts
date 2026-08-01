@@ -1,7 +1,7 @@
-import { createContext, useContext, useSyncExternalStore } from 'react';
-import { EXTENSION_ID_PATTERN, RESERVED_IDS } from './RegistryContext';
-import type { IShellAPI, RibbonContext } from './types';
-import { PANE_IDS, ShellUXError } from './types';
+import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
+import { EXTENSION_ID_PATTERN, REGISTRY_LIMITS, RESERVED_IDS } from './RegistryContext';
+import type { ContextKeyValue, IShellAPI, RibbonContext } from './types';
+import { ShellUXError } from './types';
 
 /**
  * Recursively freeze `value` and everything reachable from it.
@@ -150,7 +150,7 @@ export interface ShellStateStore {
    */
   subscribe(listener: () => void): () => void;
   /**
-   * Update any of the four context fields at once.
+   * Update any of the context fields at once.
    *
    * **This is a trust boundary, not a host-private back door.** An earlier
    * version of this comment claimed it was "not reachable from plugin code, and
@@ -164,12 +164,16 @@ export interface ShellStateStore {
    * It is therefore validated to exactly the standard `setSelectedItem` and
    * `setBadgeCount` are held to, field by field:
    *
+   *  - `selectedItemIds` — an array of distinct strings, at most
+   *    `REGISTRY_LIMITS.MAX_SELECTED_ITEMS` of them. Type only per element, for
+   *    the same reason as `selectedItemId`. A HOST-OWNED FROZEN COPY is stored.
    *  - `selectedItemId` — a string or `null`. Type only: it is the extension's
-   *    own item key, not a host lookup key.
+   *    own item key, not a host lookup key. **It is a shorthand, not a second
+   *    field**: it writes `selectedItemIds` and is then recomputed from it, and
+   *    a patch supplying both is decided by `selectedItemIds`. See below.
    *  - `activeExtensionId`, `activeNavNodeId` — `EXTENSION_ID_PATTERN`, not
    *    reserved, or `null`. Both are registry-validated identifiers everywhere
    *    else, so they are held to the registry's own rule here.
-   *  - `focusedPane` — a member of `PANE_IDS`, or `null`.
    *
    * **Rejection is a `ShellUXError` and the context is left exactly as it was.**
    * The commit happens after every supplied field has been checked, so a patch
@@ -193,26 +197,44 @@ export interface ShellStateStore {
    * subscribers about a state that no longer exists, which is worse than the
    * asymmetry.
    *
-   * Only the four `RibbonContext` fields are read from `patch`, and only as OWN
+   * **`selectedItemId` is derived and has ONE writer.** It is recomputed from
+   * the final `selectedItemIds` inside the same draft, so no notification can
+   * ever carry a `selectedItemId` that is not the last element of the
+   * `selectedItemIds` beside it. A patch naming both is not a conflict to be
+   * rejected — `patchContext(store.getContext())` names both and must be an exact
+   * round trip — so the rule is precedence rather than refusal: `selectedItemIds`
+   * decides, and `selectedItemId` is still validated so a malformed shorthand is
+   * reported rather than ignored. Pinned by "derives selectedItemId from the last
+   * element of selectedItemIds" and "lets selectedItemIds outrank selectedItemId
+   * in one patch" in `src/core/__tests__/contextPatch.test.ts`.
+   *
+   * Only the `RibbonContext` fields are read from `patch`, and only as OWN
    * properties (`Object.hasOwn`, never `in`), so neither a stray key nor an
    * inherited one can become a context field — pinned by "patchContext reads own
    * properties only" in `src/core/__tests__/contextPatch.test.ts`.
-   * `undefined` is normalised to
-   * `null`: every field is declared `... | null`, and `Object.is(null, undefined)`
-   * is `false`, so writing `undefined` through would both report a change that
-   * did not happen and make the declared type a runtime lie.
+   * `undefined` is normalised to each field's own EMPTY value — `null` for the
+   * three nullable fields, the shared frozen empty array for `selectedItemIds`.
+   * `Object.is(null, undefined)` is `false`, so writing `undefined` through would
+   * both report a change that did not happen and make the declared type a runtime
+   * lie.
    *
    * A field written with the value it already holds is not a change: no object is
-   * allocated, the snapshot keeps its identity, and no listener is notified.
+   * allocated, the snapshot keeps its identity, and no listener is notified. For
+   * `selectedItemIds` that comparison is ELEMENT-WISE rather than by identity,
+   * because a host-owned copy is built on every call and would never be identical
+   * to the stored one — pinned by "does not notify when a selection is rewritten
+   * with the ids it already holds" in `src/core/__tests__/contextPatch.test.ts`.
    *
    * @throws {ShellUXError} `INVALID_PAYLOAD` when `patch` is not an object, or
    *   refuses to be inspected or read; `INVALID_ID` when `activeExtensionId` or
    *   `activeNavNodeId` is not a registry-valid identifier or `null`;
    *   `INVALID_FIELD` when `selectedItemId` is neither a string nor `null`, or
-   *   `focusedPane` is not a member of `PANE_IDS` or `null`; `REENTRANT_NOTIFY`
-   *   from the notification cascade, after the fields are committed. The first
-   *   three leave the context exactly as it was; the fourth does not, and the
-   *   paragraphs above say why.
+   *   when `selectedItemIds` is not an array, refuses to be read, holds a
+   *   non-string, or repeats an id; `PAYLOAD_TOO_LARGE` when `selectedItemIds`
+   *   exceeds `REGISTRY_LIMITS.MAX_SELECTED_ITEMS`; `REENTRANT_NOTIFY`
+   *   from the notification cascade, after the fields are committed. Every code
+   *   but the last leaves the context exactly as it was; the last does not, and
+   *   the paragraphs above say why.
    */
   patchContext(patch: Partial<RibbonContext>): void;
   /**
@@ -226,6 +248,9 @@ export interface ShellStateStore {
    * `Symbol`, out of a function contracted to throw `ShellUXError`. Pinned by "the
    * badge scope and node id are validated at both doors" in
    * `src/core/__tests__/shellApi.test.ts`.
+   *
+   * A one-shot read. `useBadgeCount` at the foot of this module is the
+   * subscribing form, and is what a renderer should use.
    *
    * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
    *   registry-valid identifier nor the host scope, or `nodeId` is not a
@@ -259,14 +284,19 @@ export interface ShellStateStore {
    */
   setBadgeCount(extensionId: string, nodeId: string, count: number): void;
   /**
-   * Set or clear the selected item. Validates its argument, pinned by
-   * "setSelectedItem validates its argument" in
-   * `src/core/__tests__/shellApi.test.ts`.
+   * Set or clear the selected item — a selection of exactly one, or none.
    *
-   * It routes through `applyPatch` with a host-built one-field literal, so the
-   * `INVALID_PAYLOAD` and `INVALID_ID` outcomes that door can produce are not
-   * reachable from here: the patch is always an object, it never traps a read,
-   * and `selectedItemId` is the only key on it.
+   * Validates its argument, pinned by "setSelectedItem validates its argument"
+   * in `src/core/__tests__/shellApi.test.ts`. The check is performed HERE, under
+   * the parameter name `"id"`, before the value is handed on as a one-element
+   * selection; that is what keeps the rejection naming the parameter the caller
+   * actually passed rather than an array index it never wrote.
+   *
+   * It routes through `setSelectedItems` and therefore through `applyPatch` with
+   * a host-built one-field literal, so the `INVALID_PAYLOAD` and `INVALID_ID`
+   * outcomes that door can produce are not reachable from here: the patch is
+   * always an object and never traps a read. Nor are `PAYLOAD_TOO_LARGE` or the
+   * duplicate rejection: one element is neither too many nor a repeat.
    *
    * @throws {ShellUXError} `INVALID_FIELD` when `id` is neither a string nor
    *   `null`; `REENTRANT_NOTIFY` from the notification cascade, after the field
@@ -277,14 +307,101 @@ export interface ShellStateStore {
    *   driving the cascade through this member.
    */
   setSelectedItem(id: string | null): void;
+  /**
+   * Replace the whole selection. The single writer behind both selection doors.
+   *
+   * `ids` is untrusted: this member is reachable from plug-in code through the
+   * public `useShellStore()`, so the declared `readonly string[]` binds nobody.
+   * The array is read once into a host-owned array — length captured, then each
+   * element read exactly once — and that copy is what is validated, frozen and
+   * stored. Pinned by the "setSelectedItems validates its argument" group in
+   * `src/core/__tests__/shellApi.test.ts`.
+   *
+   * @throws {ShellUXError} `INVALID_FIELD` when `ids` is not an array, refuses to
+   *   report its length or an element, holds a non-string, or repeats an id;
+   *   `PAYLOAD_TOO_LARGE` when the count exceeds
+   *   `REGISTRY_LIMITS.MAX_SELECTED_ITEMS`; `REENTRANT_NOTIFY` from the
+   *   notification cascade, after the fields are committed.
+   */
+  setSelectedItems(ids: readonly string[]): void;
+  /**
+   * Set or clear the selected pane-1 navigation node.
+   *
+   * **One path, not two.** `ShellLayout`'s pane-1 click handler used to call
+   * `patchContext({ activeNavNodeId })` directly while `IShellAPI` could not
+   * write the field at all. Both now come through here, so the rule that decides
+   * what `activeNavNodeId` may hold — the registry's own allowlist and reserved
+   * words — is applied in one place and named in one message. Pinned by
+   * "setActiveNavNode validates its argument" in
+   * `src/core/__tests__/shellApi.test.ts`.
+   *
+   * @throws {ShellUXError} `INVALID_ID` when `nodeId` is neither a registry-valid
+   *   identifier nor `null`; `REENTRANT_NOTIFY` from the notification cascade,
+   *   after the field is committed.
+   */
+  setActiveNavNode(nodeId: string | null): void;
+  /**
+   * Write one of `extensionId`'s context keys.
+   *
+   * `extensionId` is a PARAMETER here and is closure-captured on the `IShellAPI`
+   * facade, which is the same split `getBadgeCount`/`useBadgeCount` make and for
+   * the same reason: this is the unscoped host-side store, and it is public, so
+   * naming a scope here adds nothing a caller did not already have. The scoping
+   * that matters is on the facade an extension holds.
+   *
+   * The published `RibbonContext.contextKeys` changes only when `extensionId` is
+   * the current foreground. See the implementation's docblock.
+   *
+   * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `key`;
+   *   `INVALID_FIELD` when `value` is not a finite number, string, boolean or
+   *   `null`; `PAYLOAD_TOO_LARGE` when a string value is too long or the key
+   *   would exceed `REGISTRY_LIMITS.MAX_CONTEXT_KEYS`; `REENTRANT_NOTIFY` from
+   *   the notification cascade, after the key is committed.
+   */
+  setContextKey(extensionId: string, key: string, value: ContextKeyValue): void;
+  /**
+   * Drop every extension's context keys, WITHOUT patching or notifying.
+   *
+   * The bookkeeping half of a foreground handover; the caller publishes
+   * `contextKeys: {}` in the same patch that moves the foreground. Its one caller
+   * is `publishForeground` in `ActivationContext.tsx`, and the implementation's
+   * docblock says why splitting it that way is what keeps the handover a single
+   * coherent notification.
+   */
+  clearContextKeys(): void;
 }
 
-/** The empty context: nothing active, nothing selected, nothing focused. */
+/**
+ * The one empty selection, shared by every context that has none.
+ *
+ * Shared rather than freshly allocated so that "nothing is selected" has a
+ * stable identity: `applyPatch` compares selections element-wise, but a
+ * subscriber holding two snapshots taken while nothing was selected sees one
+ * array, which is what makes the empty case cheap in a `useMemo` dependency.
+ */
+const EMPTY_SELECTION: readonly string[] = Object.freeze([]);
+
+/**
+ * The one empty context-key record, shared for the same reason.
+ *
+ * `Object.create(null)` rather than `{}`: this record is keyed by strings that
+ * originate in plug-in code, and although every key is held to
+ * `EXTENSION_ID_PATTERN` and `RESERVED_IDS` before it can get in, a record with
+ * no prototype has nothing to pollute even if that filter were wrong one day. It
+ * is the same belt-and-braces relationship the registry's `Map` stores have with
+ * `RESERVED_IDS` — the filter is the rule, the data structure is the guarantee.
+ */
+const EMPTY_CONTEXT_KEYS: Readonly<Record<string, ContextKeyValue>> = Object.freeze(
+  Object.create(null) as Record<string, ContextKeyValue>,
+);
+
+/** The empty context: nothing active, nothing selected, nothing published. */
 const EMPTY_CONTEXT: Readonly<RibbonContext> = Object.freeze({
   activeExtensionId: null,
   activeNavNodeId: null,
+  selectedItemIds: EMPTY_SELECTION,
   selectedItemId: null,
-  focusedPane: null,
+  contextKeys: EMPTY_CONTEXT_KEYS,
 });
 
 /** A context under construction. Frozen into a `RibbonContext` before it escapes. */
@@ -449,43 +566,263 @@ function assertValidSelectedItemId(value: unknown, method: string, field: string
   }
 }
 
-/** The pane ids, as text, for a rejection message. Built once, from the union. */
-const PANE_ID_LIST = Array.from(PANE_IDS).join(', ');
+/**
+ * What a read off an untrusted value answers when the read itself THREW.
+ *
+ * A `Symbol` rather than `undefined` or `null`, because both of those are values
+ * a legitimate array element can hold and neither would distinguish "the element
+ * is `undefined`" from "reading the element detonated". Module-private and never
+ * exported, so no caller can forge it.
+ */
+const REFUSED: unique symbol = Symbol('refused');
 
 /**
- * Assert that `value` is a `PaneId` or `null`.
+ * Read one property off an untrusted value without letting the read escape.
  *
- * `PaneId` is a type union and vanishes at runtime, so the check runs against
- * `PANE_IDS` — the membership set pinned to the union in `types.ts`. Without it
- * `focusedPane` was declared `PaneId | null` and would hold any string a plugin
- * chose, which every `switch` over the union downstream would then fall through.
+ * Reaching a property on a plug-in-supplied object is a call into plug-in code —
+ * a `get` trap, an own getter, or a revoked `Proxy` whose every internal method
+ * throws a raw `TypeError`. This module's banner forbids letting that out of a
+ * function contracted to throw `ShellUXError`, so every such read goes through
+ * here and a refusal becomes a value rather than an exception.
+ */
+function readGuarded(read: () => unknown): unknown {
+  try {
+    return read();
+  } catch {
+    return REFUSED;
+  }
+}
+
+/**
+ * Validate an untrusted selection and build the HOST-OWNED array that is stored.
  *
- * Pinned by "patchContext validates focusedPane against the real PaneId union" in
+ * This is `normalizeNavigationNode`'s discipline applied to a runtime argument,
+ * and for the same reason the registry states at length: validating a caller's
+ * array and then storing the caller's array checks nothing. Every element stays
+ * re-readable through a getter, and a `Proxy` is free to report one `length`
+ * while it is measured and another afterwards. So the length is captured ONCE,
+ * each element is read ONCE into a fresh array, and it is that array which is
+ * checked, frozen and stored. What was validated is what is stored.
+ *
+ * Four rejections, in the order they are decided:
+ *
+ *  - not an array, or an array that refuses to report its length;
+ *  - a length that is not a non-negative safe integer — a real array's never is
+ *    not, a `Proxy`'s can be anything;
+ *  - more entries than `REGISTRY_LIMITS.MAX_SELECTED_ITEMS`, which is
+ *    `PAYLOAD_TOO_LARGE` rather than `INVALID_FIELD` because it is a bound and
+ *    not a shape;
+ *  - an element that refuses to be read, an element that is not a string, or an
+ *    element that repeats one already in the selection.
+ *
+ * **Duplicates are rejected rather than collapsed**, and that is a decision
+ * rather than a default. Deduplicating silently would hand back a selection of a
+ * different length from the one the caller asked for, which is exactly the
+ * "selection that mysteriously never sticks" failure `assertValidSelectedItemId`
+ * refuses to create by coercing. A selection containing the same row twice is the
+ * caller's bug and is reported at the call site.
+ *
+ * `Array.isArray` is used through `readGuarded` because it raises a raw
+ * `TypeError` on a revoked `Proxy` — the same leak `checkArray` closes in
+ * `RegistryContext.tsx`, reached here by a different door.
+ *
+ * Pinned by the "setSelectedItems validates its argument" group in
+ * `src/core/__tests__/shellApi.test.ts`, which walks all four rejections, and by
+ * "patchContext rejects what setSelectedItems rejects" in
  * `src/core/__tests__/contextPatch.test.ts`.
  */
-function assertValidPaneId(value: unknown, method: string, field: string): void {
-  if (value === null) {
+function normalizeSelectedItemIds(
+  value: unknown,
+  method: string,
+  field: string,
+): readonly string[] {
+  if (readGuarded(() => Array.isArray(value)) !== true) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `${method}: "${field}" must be an array of strings; received ${describeUntrusted(value)}.`,
+      field,
+    );
+  }
+  const count = readGuarded(() => (value as { readonly length: unknown }).length);
+  if (typeof count !== 'number' || !Number.isSafeInteger(count) || count < 0) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `${method}: "${field}" must report a non-negative integer length.`,
+      field,
+    );
+  }
+  if (count > REGISTRY_LIMITS.MAX_SELECTED_ITEMS) {
+    throw new ShellUXError(
+      'PAYLOAD_TOO_LARGE',
+      `${method}: "${field}" exceeds the maximum of ${REGISTRY_LIMITS.MAX_SELECTED_ITEMS} selected items.`,
+      field,
+    );
+  }
+  const items: string[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < count; index += 1) {
+    const item = readGuarded(() => (value as readonly unknown[])[index]);
+    if (typeof item !== 'string') {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        // `item` is not stringified: it is either `REFUSED` or a value that
+        // failed the type check, which is exactly when reading it is dangerous.
+        `${method}: "${field}[${index}]" must be a string; received ${item === REFUSED ? 'a value that threw while it was being read' : describeUntrusted(item)}.`,
+        `${field}[${index}]`,
+      );
+    }
+    if (seen.has(item)) {
+      // A proven primitive string, so interpolating it is safe.
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `${method}: "${field}" repeats the selected item "${item}". A selection holds each item once.`,
+        `${field}[${index}]`,
+      );
+    }
+    seen.add(item);
+    items.push(item);
+  }
+  return items.length === 0 ? EMPTY_SELECTION : Object.freeze(items);
+}
+
+/**
+ * Assert that `value` is something a context key may hold.
+ *
+ * The union is `string | number | boolean | null` and the check is `typeof`, so
+ * nothing is read off the value and nothing it might have defined is invoked.
+ * That is the whole argument for primitives-only: a validator this cheap can run
+ * on every write, and there is no getter to fire inside a render-phase predicate
+ * afterwards. See `IShellAPI.setContextKey`.
+ *
+ * A `number` must additionally be FINITE. `NaN` and `±Infinity` are numbers a
+ * predicate cannot branch on usefully — `NaN !== NaN` catches an author out, and
+ * neither survives a round trip through a persisted record — so they are refused
+ * at the door rather than left to surprise somebody downstream.
+ *
+ * Pinned by "setContextKey validates its value" in
+ * `src/core/__tests__/contextKeys.test.tsx`.
+ */
+function assertValidContextKeyValue(value: unknown, method: string, field: string): void {
+  if (value === null || typeof value === 'boolean') {
+    return;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `${method}: "${field}" must be a finite number when it is a number.`,
+        field,
+      );
+    }
     return;
   }
   if (typeof value !== 'string') {
     throw new ShellUXError(
       'INVALID_FIELD',
-      `${method}: "${field}" must be a pane id or null; received ${describeUntrusted(value)}.`,
+      `${method}: "${field}" must be a string, a finite number, a boolean or null; received ${describeUntrusted(value)}.`,
       field,
     );
   }
-  if (!PANE_IDS.has(value)) {
-    // `value` is a primitive string here, so interpolating it is safe.
+  if (value.length > REGISTRY_LIMITS.MAX_CONTEXT_VALUE_LENGTH) {
     throw new ShellUXError(
-      'INVALID_FIELD',
-      `${method}: "${field}" must be one of ${PANE_ID_LIST}, or null; received "${value}".`,
+      'PAYLOAD_TOO_LARGE',
+      `${method}: "${field}" exceeds the maximum context-key value length of ${REGISTRY_LIMITS.MAX_CONTEXT_VALUE_LENGTH} characters.`,
       field,
     );
   }
 }
 
-/** Checks one context field's value, or throws `ShellUXError`. */
-type ContextFieldValidator = (value: unknown, method: string, field: string) => void;
+/**
+ * Validate an untrusted context-key record and build the HOST-OWNED copy stored
+ * in the snapshot.
+ *
+ * Same discipline as `normalizeSelectedItemIds`, applied to an object rather than
+ * an array: the key list is obtained once, each value is read exactly once, and
+ * it is the resulting fresh record that is checked and frozen. `Object.keys` and
+ * every property read go through `readGuarded`, because both re-enter plug-in
+ * code — an `ownKeys` trap, a `get` trap, an own getter, or a revoked `Proxy`
+ * whose every internal method throws.
+ *
+ * Keys are held to `assertValidIdentifier`, the registry's own rule, so a key can
+ * carry no path separator, no URL scheme, no markup and no `__proto__`. The
+ * record is built on `Object.create(null)` regardless — see `EMPTY_CONTEXT_KEYS`.
+ *
+ * Pinned by "patchContext rejects what setContextKey rejects" in
+ * `src/core/__tests__/contextKeys.test.tsx`.
+ */
+function normalizeContextKeys(
+  value: unknown,
+  method: string,
+  field: string,
+): Readonly<Record<string, ContextKeyValue>> {
+  if (typeof value !== 'object' || value === null || readGuarded(() => Array.isArray(value))) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `${method}: "${field}" must be a record of primitives; received ${describeUntrusted(value)}.`,
+      field,
+    );
+  }
+  const keys = readGuarded(() => Object.keys(value));
+  if (!Array.isArray(keys)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `${method}: "${field}" refused to list its own keys. Nothing was applied.`,
+      field,
+    );
+  }
+  if (keys.length > REGISTRY_LIMITS.MAX_CONTEXT_KEYS) {
+    throw new ShellUXError(
+      'PAYLOAD_TOO_LARGE',
+      `${method}: "${field}" exceeds the maximum of ${REGISTRY_LIMITS.MAX_CONTEXT_KEYS} context keys.`,
+      field,
+    );
+  }
+  const record = Object.create(null) as Record<string, ContextKeyValue>;
+  for (const key of keys) {
+    assertValidIdentifier(key, method, `${field}.${String(key)}`, false);
+    const held = readGuarded(() => (value as Record<string, unknown>)[key]);
+    if (held === REFUSED) {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `${method}: reading "${field}.${key}" threw. Nothing was applied.`,
+        `${field}.${key}`,
+      );
+    }
+    assertValidContextKeyValue(held, method, `${field}.${key}`);
+    record[key] = held as ContextKeyValue;
+  }
+  return keys.length === 0 ? EMPTY_CONTEXT_KEYS : Object.freeze(record);
+}
+
+/**
+ * Whether two context-key records hold the same keys with the same values.
+ *
+ * Element-wise for the same reason `sameSelection` is: a fresh host-owned record
+ * is built on every write and is never `Object.is` the stored one, so an identity
+ * comparison would report a change for every write and defeat the bail-out that
+ * keeps an unchanged write from waking every subscriber in the shell.
+ */
+function sameContextKeys(
+  current: Readonly<Record<string, ContextKeyValue>>,
+  next: Readonly<Record<string, ContextKeyValue>>,
+): boolean {
+  const currentKeys = Object.keys(current);
+  if (currentKeys.length !== Object.keys(next).length) {
+    return false;
+  }
+  for (const key of currentKeys) {
+    if (!Object.is(current[key], next[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Reads one context field off an untrusted patch, validates it, and returns the
+ * HOST-OWNED value to store — which for every scalar field is the value itself.
+ */
+type ContextFieldNormalizer = (value: unknown, method: string, field: string) => unknown;
 
 /**
  * Exhaustiveness pin for `CONTEXT_KEYS` **and** the validation table every write
@@ -493,24 +830,86 @@ type ContextFieldValidator = (value: unknown, method: string, field: string) => 
  *
  * The shape is the same as `SHELL_UX_ERROR_CODE_MEMBERS` in `types.ts`:
  * `Record<keyof RibbonContext, ...>` makes the compiler reject both a field this
- * module forgot and one it invented. Making the value a validator rather than
+ * module forgot and one it invented. Making the value a normaliser rather than
  * `true` extends that to the check itself — a field added to `RibbonContext`
  * cannot become patchable without someone deciding, in this table, what a legal
- * value for it is.
+ * value for it is and what host-owned form it is stored in.
  */
-const CONTEXT_FIELDS: Readonly<Record<keyof RibbonContext, ContextFieldValidator>> = Object.freeze({
+const CONTEXT_FIELDS: Readonly<Record<keyof RibbonContext, ContextFieldNormalizer>> = Object.freeze({
   // Both of these are registry-validated identifiers everywhere else in the
   // host, so they are held to the registry's own rule here.
-  activeExtensionId: (value, method, field): void =>
-    assertValidIdentifier(value, method, field, true),
-  activeNavNodeId: (value, method, field): void => assertValidIdentifier(value, method, field, true),
+  activeExtensionId: (value, method, field): unknown => {
+    assertValidIdentifier(value, method, field, true);
+    return value;
+  },
+  activeNavNodeId: (value, method, field): unknown => {
+    assertValidIdentifier(value, method, field, true);
+    return value;
+  },
   // Opaque to the host: type only. See `assertValidSelectedItemId`.
-  selectedItemId: assertValidSelectedItemId,
-  focusedPane: assertValidPaneId,
+  selectedItemId: (value, method, field): unknown => {
+    assertValidSelectedItemId(value, method, field);
+    return value;
+  },
+  selectedItemIds: normalizeSelectedItemIds,
+  contextKeys: normalizeContextKeys,
 });
 
 /** The context's own fields, and the only keys `patchContext` will read. */
 const CONTEXT_KEYS = Object.keys(CONTEXT_FIELDS) as readonly (keyof RibbonContext)[];
+
+/**
+ * What each field means by "no value", for a patch that spells it `undefined`.
+ *
+ * The three nullable fields spell it `null`; a selection spells it the empty
+ * array. Normalising `undefined` at all is the point made on `patchContext`:
+ * `Object.is(null, undefined)` is `false`, so passing `undefined` straight
+ * through would report a change that did not happen AND put `undefined` in a
+ * field whose declared type does not admit it. Pinned to `keyof RibbonContext`
+ * for the same reason the table above is.
+ */
+const CONTEXT_FIELD_EMPTY: Readonly<Record<keyof RibbonContext, unknown>> = Object.freeze({
+  activeExtensionId: null,
+  activeNavNodeId: null,
+  selectedItemId: null,
+  selectedItemIds: EMPTY_SELECTION,
+  contextKeys: EMPTY_CONTEXT_KEYS,
+});
+
+/**
+ * Whether two selections hold the same ids in the same order.
+ *
+ * Element-wise, not by identity: `normalizeSelectedItemIds` builds a fresh
+ * host-owned array on every call, so an identity comparison would report a
+ * change for every write and defeat the snapshot-identity bail-out `applyPatch`
+ * exists to preserve. Order is part of the comparison because it is part of the
+ * value — `selectedItemId` is the LAST element, so `['a','b']` and `['b','a']`
+ * are two different selections with two different derived ids.
+ */
+function sameSelection(current: readonly string[], next: readonly string[]): boolean {
+  if (current.length !== next.length) {
+    return false;
+  }
+  for (let index = 0; index < current.length; index += 1) {
+    if (current[index] !== next[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * `selectedItemId`, computed from the selection. The one derivation rule, in one
+ * place, so the two fields cannot be made to disagree.
+ */
+function lastSelected(ids: readonly string[]): string | null {
+  // Indexing `-1` on an empty array is `undefined`, so the empty case needs no
+  // length test of its own — which keeps this to one branch, both sides of it
+  // reachable, rather than a length check plus an `??` fallback the compiler
+  // wants and no input can ever take.
+  const last = ids[ids.length - 1];
+  return last === undefined ? null : last;
+}
 
 /**
  * How deep a notification cascade may go before the store refuses to follow it.
@@ -555,11 +954,11 @@ const MAX_NOTIFY_DEPTH = 16;
  * one, nothing on a function object that exposes what it captured. A caller who
  * walks React's fiber tree — which is possible, and is pinned by
  * `src/core/__tests__/reflection.test.tsx` ("never reaches the badge map itself,
- * because it is a closure variable") — obtains the six METHODS and never the state
+ * because it is a closure variable") — obtains the ten METHODS and never the state
  * behind them.
  *
  * *Its methods are its own.* The returned object is **frozen**, so no holder can
- * replace, delete or add a member. Every one of the six validates its arguments.
+ * replace, delete or add a member. Every one of the ten that takes an argument validates it.
  * Therefore no caller can put a value of the wrong shape into this store's
  * context: every value that enters the context through this store is well-typed,
  * for any caller however hostile. Pinned by `reflection.test.tsx` ("gets the store
@@ -569,7 +968,7 @@ const MAX_NOTIFY_DEPTH = 16;
  * **That is the whole of it, and a wider clause used to be appended here.** The
  * sentence went on: "and no caller can intercept, suppress or forge the writes and
  * reads another holder makes through it." **False, and the freeze is irrelevant to
- * it.** `subscribe` is one of the six frozen members, it is reachable through the
+ * it.** `subscribe` is one of the ten frozen members, it is reachable through the
  * public `useShellStore()`, and it runs plug-in code SYNCHRONOUSLY INSIDE ANOTHER
  * HOLDER'S WRITE. Nothing is replaced, so nothing the freeze does applies. The real
  * limit, stated plainly: **a listener is a synchronous call into untrusted code
@@ -608,11 +1007,16 @@ const MAX_NOTIFY_DEPTH = 16;
  * See `useShellStore` and ADR-0001.
  * ============================================================================
  *
- * @param initial Optional seed for the context. Anything omitted starts `null`.
- *   It is validated exactly as a `patchContext` call would be.
- * @throws {ShellUXError} `INVALID_PAYLOAD`, `INVALID_ID` or `INVALID_FIELD` when
- *   `initial` is rejected — the same three `patchContext` decides on, because it
- *   is the same door. `REENTRANT_NOTIFY` is deliberately NOT on this list and is
+ * @param initial Optional seed for the context. Anything omitted starts empty —
+ *   `null` for the three nullable fields, an empty selection and an empty
+ *   context-key record. It is validated exactly as a `patchContext` call would be.
+ * @throws {ShellUXError} `INVALID_PAYLOAD`, `INVALID_ID`, `INVALID_FIELD` or
+ *   `PAYLOAD_TOO_LARGE` when `initial` is rejected — the same four `patchContext`
+ *   decides on, because it is the same door. (`PAYLOAD_TOO_LARGE` joined the list
+ *   with the bounded fields `selectedItemIds` and `contextKeys`; a seed naming
+ *   either can exceed a `REGISTRY_LIMITS` bound, and a code that can be raised and
+ *   is not documented is as wrong as one documented and unreachable.)
+ *   `REENTRANT_NOTIFY` is deliberately NOT on this list and is
  *   not reachable here: the seed is applied before this function returns, so
  *   nothing has been handed a store to `subscribe` to yet and the notification
  *   pass has no listener to cascade through.
@@ -622,6 +1026,10 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   // A Map, never an object literal: badge keys come from plugin-supplied node
   // ids, and a Map has no prototype chain to pollute.
   const badgeCounts = new Map<string, number>();
+  // Context keys, namespaced by extension. Nested rather than flat because the
+  // published record needs a whole scope at once; a `Map` at both levels for the
+  // same prototype reason as `badgeCounts`. See `setContextKey`.
+  const contextKeyScopes = new Map<string, Map<string, ContextKeyValue>>();
   const listeners = new Set<() => void>();
   // Depth of the notification cascade currently in flight; see MAX_NOTIFY_DEPTH.
   let notifyDepth = 0;
@@ -716,8 +1124,9 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
    * "patchContext survives a patch that refuses to be inspected" in
    * `src/core/__tests__/contextPatch.test.ts`, which covers all four.
    *
-   * **It is all-or-nothing.** The draft is a local and `context` is replaced only
-   * after the loop, so a patch whose second field is rejected — or whose second
+   * **It is all-or-nothing.** Reading and validating is a complete pass that
+   * writes nothing; `context` is replaced only after every supplied field has
+   * survived it. So a patch whose second field is rejected — or whose second
    * field refuses to be read at all — does not apply its first, and does not
    * notify. Pinned by "applies none of a patch whose later field is rejected" and
    * "applies none of a patch whose later field refuses to be read", same file.
@@ -729,7 +1138,18 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
    * snapshot was then invalidated by a no-op, which both defeats memoisation and
    * makes a "did anything change?" question unanswerable. `Object.is` per field
    * — not a shallow object compare — is what decides, so `NaN` and `-0` behave
-   * the way React's own bail-out does.
+   * the way React's own bail-out does; `selectedItemIds` is compared with
+   * `sameSelection` instead, because a fresh host-owned copy is built on every
+   * call and is never `Object.is` the stored one.
+   *
+   * **SELECTION HAS ONE WRITER, AND THIS IS IT.** `selectedItemIds` is the field
+   * that is stored and `selectedItemId` is recomputed from it here, in the SAME
+   * draft, so the pair is committed atomically and no notification can carry one
+   * without the other. `selectedItemId` supplied in a patch is a SHORTHAND for a
+   * selection of one — it is validated under its own name, converted, and then
+   * outranked if the same patch also names `selectedItemIds`. Precedence rather
+   * than refusal, because `patchContext(store.getContext())` names both and has
+   * to be an exact round trip.
    */
   function applyPatch(patch: Partial<RibbonContext>, method: string): void {
     // The declared type says "object"; a plain-JavaScript caller can pass
@@ -745,7 +1165,10 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
       );
     }
 
-    let draft: MutableRibbonContext | null = null;
+    // READ AND VALIDATE FIRST, WRITE AFTERWARDS. Nothing below this loop can
+    // reject, which is what makes the patch all-or-nothing even though the
+    // selection now needs two fields resolved against each other.
+    const accepted = new Map<keyof RibbonContext, unknown>();
     for (const key of CONTEXT_KEYS) {
       // `Object.hasOwn`, never `key in patch`: `in` walks the prototype chain, so
       // `patchContext(Object.create({ selectedItemId: 'x' }))` would apply a
@@ -783,20 +1206,64 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
           key,
         );
       }
-      // `undefined` means "no value", and every context field spells that `null`.
+      // `undefined` means "no value", and each field spells that its own way —
+      // `null` for the three nullable ones, the empty array for a selection.
       // Writing `undefined` through would report a change that did not happen —
       // `Object.is(null, undefined)` is `false` — and would put `undefined` in a
-      // field declared `string | null`, making the declared type a runtime lie for
-      // every other extension that reads the snapshot.
-      const value: unknown = supplied === undefined ? null : supplied;
-      CONTEXT_FIELDS[key](value, method, key);
-      if (Object.is(context[key], value)) {
-        continue;
-      }
+      // field whose declared type does not admit it, making that declaration a
+      // runtime lie for every other extension that reads the snapshot.
+      const value: unknown = supplied === undefined ? CONTEXT_FIELD_EMPTY[key] : supplied;
+      // The normaliser returns the HOST-OWNED value to store, which for every
+      // scalar field is the value it was handed and for a selection is a fresh
+      // frozen copy built from a single read.
+      accepted.set(key, CONTEXT_FIELDS[key](value, method, key));
+    }
+
+    let draft: MutableRibbonContext | null = null;
+    const write = <K extends keyof RibbonContext>(key: K, value: RibbonContext[K]): void => {
       // Allocated on first real change and not before.
       draft ??= { ...context };
-      (draft as Record<string, unknown>)[key] = value;
+      draft[key] = value;
+    };
+
+    for (const key of ['activeExtensionId', 'activeNavNodeId'] as const) {
+      if (!accepted.has(key)) {
+        continue;
+      }
+      const value = accepted.get(key) as string | null;
+      if (!Object.is(context[key], value)) {
+        write(key, value);
+      }
     }
+
+    // ---- Selection: two doors, one field ------------------------------------
+    // `selectedItemId` is the shorthand and is resolved first; `selectedItemIds`
+    // is the source of truth and overwrites it when both are supplied. Whichever
+    // wins, `selectedItemId` is then DERIVED from the result rather than taken
+    // from the patch, which is what makes the two impossible to desynchronise.
+    let nextIds: readonly string[] | undefined;
+    if (accepted.has('selectedItemId')) {
+      const single = accepted.get('selectedItemId') as string | null;
+      nextIds = single === null ? EMPTY_SELECTION : Object.freeze([single]);
+    }
+    if (accepted.has('selectedItemIds')) {
+      nextIds = accepted.get('selectedItemIds') as readonly string[];
+    }
+    if (nextIds !== undefined && !sameSelection(context.selectedItemIds, nextIds)) {
+      write('selectedItemIds', nextIds);
+      const derived = lastSelected(nextIds);
+      if (!Object.is(context.selectedItemId, derived)) {
+        write('selectedItemId', derived);
+      }
+    }
+
+    if (accepted.has('contextKeys')) {
+      const nextKeys = accepted.get('contextKeys') as Readonly<Record<string, ContextKeyValue>>;
+      if (!sameContextKeys(context.contextKeys, nextKeys)) {
+        write('contextKeys', nextKeys);
+      }
+    }
+
     if (draft === null) {
       // Nothing changed: no allocation, so the snapshot keeps its identity, and
       // no notify, so no subscriber re-renders.
@@ -833,21 +1300,146 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     badgeCounts.set(badgeKey(extensionId, nodeId), count);
     // Badges are not part of the context snapshot, so `useShellContext` bails
     // out on its own unchanged snapshot. The notify is still correct — the store
-    // changed — and it is what a future badge-aware selector will subscribe to.
+    // changed — and `useBadgeCount` at the foot of this module is the
+    // badge-aware selector that subscribes to it. Note that this notify is
+    // UNCONDITIONAL: unlike `applyPatch`, a badge written with the value it
+    // already holds still wakes every listener, and it is the selector's own
+    // `Object.is` bail-out that stops that becoming a re-render.
     notify();
   }
 
   function setSelectedItem(id: string | null): void {
     // Checked here as well as inside `applyPatch`, and deliberately so: this is
     // the door an extension calls, so the rejection has to name the parameter the
-    // extension actually passed — `"id"`, not `"selectedItemId"`. `applyPatch`
-    // re-checks the same value under its own field name and finds it good.
+    // extension actually passed — `"id"`, not `"selectedItemId"` and certainly
+    // not `"ids[0]"`. `applyPatch` re-checks the same value under its own field
+    // name and finds it good.
     assertValidSelectedItemId(id, 'setSelectedItem', 'id');
     // Validated before it is written, so the frozen snapshot handed to other
     // extensions can never hold anything but a string or null. Routed through
     // `applyPatch` so that re-selecting the already-selected item is the no-op
-    // it should be.
+    // it should be — and through the SAME field `setSelectedItems` writes, so
+    // there is one writer and `selectedItemId` cannot drift from the array.
     applyPatch({ selectedItemId: id }, 'setSelectedItem');
+  }
+
+  function setSelectedItems(ids: readonly string[]): void {
+    // Normalised HERE, not left to `applyPatch`'s `undefined` rule, and the
+    // distinction is not pedantic: on a PATCH, `undefined` means "no value" and
+    // a selection spells that the empty array, so `patchContext({ selectedItemIds:
+    // undefined })` legitimately clears the selection. On a direct CALL,
+    // `setSelectedItems(undefined)` is a plug-in passing a bad argument, and
+    // clearing the selection for it would be the silent coercion
+    // `assertValidSelectedItemId` refuses for exactly the same reason: a
+    // selection that mysteriously empties is worse to find than an exception at
+    // the call site. Running the normaliser at the door makes that a rejection.
+    //
+    // The field name is not re-labelled the way `setSelectedItem`'s is, because
+    // here the parameter and the context field mean the same thing, and a
+    // rejection naming `"selectedItemIds[2]"` names something the caller can
+    // find in the array it passed. `applyPatch` re-checks the host-owned array
+    // this produced and finds it good.
+    const items = normalizeSelectedItemIds(ids, 'setSelectedItems', 'selectedItemIds');
+    applyPatch({ selectedItemIds: items }, 'setSelectedItems');
+  }
+
+  function setActiveNavNode(nodeId: string | null): void {
+    // Named for the parameter the caller passed, for the same reason
+    // `setSelectedItem` re-checks its own: a rejection reading `"nodeId"` is
+    // findable in the call, one reading `"activeNavNodeId"` is not.
+    assertValidIdentifier(nodeId, 'setActiveNavNode', 'nodeId', true);
+    applyPatch({ activeNavNodeId: nodeId }, 'setActiveNavNode');
+  }
+
+  /**
+   * Write one of `extensionId`'s context keys, and republish the record if that
+   * extension is the one in the foreground.
+   *
+   * **The namespace is a `Map` of `Map`s, and the outer key is the scope.** The
+   * badge store is flat and interpolates `${scope}:${node}` because it only ever
+   * answers one question at a time; this store has to hand back a WHOLE scope's
+   * worth of keys to build the published record, so it is nested — which also
+   * means no interpolation, and so no reason for `badgeKey`'s "both components
+   * must be proven strings" argument to be repeated here.
+   *
+   * **Publishing is conditional and the condition is the foreground.** Only the
+   * foreground extension's namespace reaches `RibbonContext.contextKeys`, so a
+   * background extension writing its own key changes the store and moves nothing
+   * a subscriber can see — and therefore does not notify. That is what stops one
+   * extension's keys landing in another's predicates without any filtering at the
+   * read end. It is also why writing a key you already hold is silent: the record
+   * is rebuilt, `sameContextKeys` finds it equal, and `applyPatch` bails out.
+   */
+  /**
+   * One extension's namespace, as the plain record the context publishes.
+   *
+   * Built fresh on every call from the `Map`, so what is published is a snapshot
+   * and not a live view of a structure the store goes on mutating. It is handed
+   * to `applyPatch`, which re-validates it through the same `normalizeContextKeys`
+   * an untrusted patch goes through and freezes the copy it keeps — one door,
+   * host caller and plug-in caller alike.
+   */
+  function publishedContextKeys(
+    scope: ReadonlyMap<string, ContextKeyValue>,
+  ): Record<string, ContextKeyValue> {
+    const record = Object.create(null) as Record<string, ContextKeyValue>;
+    for (const [key, value] of scope) {
+      record[key] = value;
+    }
+    return record;
+  }
+
+  function setContextKey(extensionId: string, key: string, value: ContextKeyValue): void {
+    assertValidBadgeScope(extensionId, 'setContextKey');
+    assertValidIdentifier(key, 'setContextKey', 'key', false);
+    assertValidContextKeyValue(value, 'setContextKey', 'value');
+
+    let scope = contextKeyScopes.get(extensionId);
+    if (scope === undefined) {
+      scope = new Map<string, ContextKeyValue>();
+      contextKeyScopes.set(extensionId, scope);
+    }
+    if (!scope.has(key) && scope.size >= REGISTRY_LIMITS.MAX_CONTEXT_KEYS) {
+      // Checked against what is STORED, and only for a key that is genuinely
+      // new: rewriting one of the keys already held is not growth and must not
+      // start failing at the bound.
+      throw new ShellUXError(
+        'PAYLOAD_TOO_LARGE',
+        `setContextKey: an extension may hold at most ${REGISTRY_LIMITS.MAX_CONTEXT_KEYS} context keys, and "${key}" would be one more.`,
+        'key',
+      );
+    }
+    scope.set(key, value);
+
+    if (context.activeExtensionId !== extensionId) {
+      // Not the foreground: the store moved, the published context did not, and
+      // there is nothing for a subscriber to re-read.
+      return;
+    }
+    applyPatch({ contextKeys: publishedContextKeys(scope) }, 'setContextKey');
+  }
+
+  /**
+   * Drop every extension's context keys. The BOOKKEEPING half of a handover.
+   *
+   * **It deliberately does not patch the context and does not notify**, and its
+   * one caller — `publishForeground` in `ActivationContext.tsx` — is what makes
+   * that correct: the handover publishes `contextKeys: {}` inside the SAME single
+   * patch that moves `activeExtensionId` and clears the selection, so a
+   * subscriber observes one coherent transition. Clearing and notifying here
+   * would make that two notifications, and the first would carry the old
+   * foreground beside an emptied record — exactly the torn state
+   * `publishForeground` exists to prevent.
+   *
+   * Every namespace goes, not only the outgoing extension's. A background
+   * extension that wrote a key since the last handover is describing a pane that
+   * is no longer mounted, and leaving its keys behind would mean a namespace that
+   * survives a handover it was never told about. Pinned by "clears every
+   * extension's context keys on a foreground handover" in
+   * `src/core/__tests__/contextKeys.test.tsx`.
+   */
+  function clearContextKeys(): void {
+    contextKeyScopes.clear();
   }
 
   if (initial !== undefined) {
@@ -865,13 +1457,13 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   //
   // `Object.freeze`, not `deepFreeze`: the members are host-written functions with
   // nothing underneath them worth walking, and a shallow freeze is exactly the
-  // property being bought — the six bindings cannot be replaced, deleted, or
+  // property being bought — the ten bindings cannot be replaced, deleted, or
   // added to. Pinned by "the store handed out by useShellStore is frozen" in
   // `capability.test.tsx` and "the store object cannot be rewired" in
   // `shellApi.test.ts`.
   //
   // What the freeze does NOT buy is that calls through the object are private:
-  // `subscribe` is one of the six, it is public, and it runs plug-in code inside
+  // `subscribe` is one of the ten, it is public, and it runs plug-in code inside
   // another holder's write. See its docblock and `subscribe.test.tsx`.
   return Object.freeze({
     getContext,
@@ -880,6 +1472,10 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     getBadgeCount,
     setBadgeCount,
     setSelectedItem,
+    setSelectedItems,
+    setActiveNavNode,
+    setContextKey,
+    clearContextKeys,
   });
 }
 
@@ -897,10 +1493,13 @@ export interface RevocableShellAPI {
    *
    * **Not on `api`, and not reachable from it.** It is a property of THIS wrapper,
    * and it closes over a variable no other scope can reach, so a plugin holding
-   * `api` has no route to it: `Object.keys(api)` is exactly the three `IShellAPI`
-   * members and there is no fourth. That much is an integrity control and holds
+   * `api` has no route to it: `Object.keys(api)` is exactly the seven `IShellAPI`
+   * members and there is no eighth. That much is an integrity control and holds
    * against any caller, and it is pinned by "does not expose revoke to the plugin"
-   * in `src/core/__tests__/dataflow.test.tsx`.
+   * in `src/core/__tests__/dataflow.test.tsx`, whose assertion is the literal
+   * member list rather than a count — so widening `IShellAPI` from three members
+   * to seven was a change that test had to be told about, which is the point of
+   * writing it that way.
    *
    * **It is not therefore host-only.** An earlier version of this comment
    * concluded that a plugin "cannot revoke itself, and cannot revoke another
@@ -920,15 +1519,19 @@ export interface RevocableShellAPI {
  *
  * Two properties beyond `createShellAPI`:
  *
- * **1. Badge writes are scoped, and the plugin cannot name the scope.**
+ * **1. Badge reads and writes are scoped, and the plugin cannot name the scope.**
  * `extensionId` is captured from the host at mint time and read from this
  * closure on every call. It is not a parameter of `setBadgeCount`, so passing an
  * extra argument — another extension's id, say — reaches nothing: `IShellAPI`
- * declares two parameters and the implementation reads two. That is
- * collision-resistance: it is what stops two vendors' `inbox` badges from
+ * declares two parameters and the implementation reads two. `getBadgeCount` is
+ * scoped by the same closure and for the same reason: a read half that took a
+ * scope would have handed every extension every other extension's badges through
+ * the documented API, which is a wider capability than the write half it mirrors.
+ * That is collision-resistance: it is what stops two vendors' `inbox` badges from
  * overwriting each other. It is not confinement, because the unscoped store
  * behind the facade is public. Pinned by "does not let an extension name the scope
- * it writes to" in `src/core/__tests__/dataflow.test.tsx`.
+ * it writes to" and "reads back only its own scope, and offers no parameter to
+ * name another" in `src/core/__tests__/dataflow.test.tsx`.
  *
  * `extensionId` is validated here rather than trusted, because it is
  * interpolated into the `REVOKED` message below. It must be a registry-valid
@@ -974,7 +1577,7 @@ export interface RevocableShellAPI {
  *
  * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
  *   registry-valid identifier nor `HOST_BADGE_SCOPE`. That is the only outcome
- *   THIS function decides on; what the returned `api`'s three members can raise
+ *   THIS function decides on; what the returned `api`'s seven members can raise
  *   is documented on `IShellAPI` in `types.ts`. Pinned by "refuses to mint a
  *   scoped facade for an extensionId that was never validated" in
  *   `src/core/__tests__/shellApi.test.ts`.
@@ -1011,10 +1614,36 @@ export function createRevocableShellAPI(
       store.setSelectedItem(id);
     },
 
+    setSelectedItems(ids: readonly string[]): void {
+      assertLive('setSelectedItems');
+      store.setSelectedItems(ids);
+    },
+
+    setActiveNavNode(nodeId: string | null): void {
+      assertLive('setActiveNavNode');
+      store.setActiveNavNode(nodeId);
+    },
+
     setBadgeCount(nodeId: string, count: number): void {
       assertLive('setBadgeCount');
       // `extensionId` from the closure, never from the caller.
       store.setBadgeCount(extensionId, nodeId, count);
+    },
+
+    setContextKey(key: string, value: ContextKeyValue): void {
+      assertLive('setContextKey');
+      // `extensionId` from the closure, never from the caller — the same scoping
+      // the badge doors have, so an extension can publish only into its own
+      // namespace and has no parameter with which to name another's.
+      store.setContextKey(extensionId, key, value);
+    },
+
+    getBadgeCount(nodeId: string): number | undefined {
+      assertLive('getBadgeCount');
+      // `extensionId` from the closure, never from the caller — the same scoping
+      // the write half has, so a handle can read back exactly what it can write
+      // and nothing else. There is no parameter through which to aim elsewhere.
+      return store.getBadgeCount(extensionId, nodeId);
     },
 
     getContext(): Readonly<RibbonContext> {
@@ -1135,4 +1764,75 @@ export function useShellStore(): ShellStateStore {
 export function useShellContext(): Readonly<RibbonContext> {
   const store = useShellStore();
   return useSyncExternalStore(store.subscribe, store.getContext);
+}
+
+/**
+ * Subscribe to one node's badge count. Re-renders the calling component when
+ * that badge changes, and not when anything else in the store does.
+ *
+ * **This is the badge-aware selector the store has been notifying for and
+ * nothing had.** `setBadgeCount` commits its value and notifies, but badges are
+ * deliberately not part of the `RibbonContext` snapshot, so a `useShellContext`
+ * subscriber re-reads an unchanged snapshot and bails out — a runtime badge write
+ * woke every listener and moved nothing. Reading through this hook is what turns
+ * that notification into a render. Pinned by "re-renders when the badge it watches
+ * is written" in `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ * **The snapshot is a primitive, so no memoisation is needed and none is used.**
+ * `ShellStateStore.getBadgeCount` returns the `number` its `Map` holds, or
+ * `undefined`, and allocates nothing on the way out; two reads of an unchanged
+ * badge are therefore `Object.is`-equal and `useSyncExternalStore` bails out by
+ * itself. A `useMemo` over it would buy nothing, because there is no identity to
+ * stabilise. That bail-out carries more weight here than it does for the context:
+ * a badge write notifies UNCONDITIONALLY — it does not compare the way
+ * `applyPatch` does — so every badge write anywhere in the shell wakes every one
+ * of these subscribers, and only the ones whose own value moved re-render. Pinned
+ * by "does not re-render when the badge is rewritten with the value it already
+ * holds" and "does not re-render when a different node's badge is written" in the
+ * same file.
+ *
+ * **`extensionId` is a PARAMETER here, and that is deliberately not the
+ * `IShellAPI` posture.** `IShellAPI.setBadgeCount` AND `IShellAPI.getBadgeCount`
+ * both close over the scope the registry validated and offer no parameter through
+ * which to aim elsewhere — the read half was added by GitHub issue #12 and was
+ * scoped the same way as the write half precisely so that this contrast stays a
+ * contrast; this hook names the scope it reads, because it is a host-side
+ * selector over the unscoped store and a sidebar has to read every extension's
+ * badges in order to draw them. That is consistent with the store underneath it and adds nothing to
+ * what a caller already had: `useShellStore()` is public, so
+ * `store.getBadgeCount('other-ext', 'inbox')` was reachable from anywhere inside
+ * the provider before this hook existed. Badge scoping is collision-resistance,
+ * not confinement — see `HOST_BADGE_SCOPE` above and ADR-0001 Amendment E. Pinned
+ * by "reads whatever scope it is handed, including another extension's and the
+ * host's" in `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ * **Both arguments are validated, and the rejection arrives DURING RENDER.** The
+ * check is `store.getBadgeCount`'s own and is not restated here, so the two cannot
+ * drift apart — but it runs inside `useSyncExternalStore`'s snapshot read, which
+ * is a render-phase call. A component that passes a malformed id therefore fails
+ * to render rather than quietly reading `undefined`, which is the same trade
+ * `useExtensionUiState` makes in `src/hooks/useLocalStorageState.ts` and for the
+ * same reason: a loud, deterministic failure at the point of the mistake. Pinned
+ * by "raises INVALID_ID during render for a malformed scope, rather than reading
+ * undefined" and "raises INVALID_ID during render for a malformed node id" in
+ * `src/core/__tests__/badgeSelector.test.tsx`.
+ *
+ * @param extensionId The badge scope to read — a registry-valid extension id, or
+ *   the host scope `createShellAPI` writes through.
+ * @param nodeId The navigation node id within that scope.
+ * @returns The badge count, or `undefined` when none was ever set for that node.
+ * @throws {ShellUXError} `INVALID_ID` during render when `extensionId` is neither
+ *   a registry-valid identifier nor the host scope, or `nodeId` is not a
+ *   registry-valid identifier. That is the only code reachable from here: this
+ *   hook reads and writes nothing else, so it never notifies and
+ *   `REENTRANT_NOTIFY` cannot come out of it.
+ * @throws when called outside `ShellHostProvider`.
+ */
+export function useBadgeCount(extensionId: string, nodeId: string): number | undefined {
+  const store = useShellStore();
+  const getSnapshot = useCallback(
+    (): number | undefined => store.getBadgeCount(extensionId, nodeId),
+    [store, extensionId, nodeId],
+  );
+  return useSyncExternalStore(store.subscribe, getSnapshot);
 }

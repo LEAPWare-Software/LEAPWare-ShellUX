@@ -16,29 +16,219 @@ control registry.
 > released.**
 >
 > This repository is at the very beginning of its life. **ISSUE-001 (the IoC
-> registry and type primitives) has landed.** Everything else described in this
-> README is specified but unbuilt — there is no layout, no ribbon, no
-> virtualizer, no persistence, and the host renders a placeholder.
+> registry and type primitives) has landed, and ISSUE-002 (the three-pane layout
+> and the ribbon) is implemented and passing but not yet merged.** The host now
+> boots to a real three-pane shell rather than a placeholder. **ISSUE-003's
+> hydration engine is implemented, tested and now consumed by the shell**: pane
+> sizes, the pane-1 collapsed flag and the foreground extension survive a reload,
+> and nothing else does. **ISSUE-004 (the row virtualizer
+> and the fault boundaries) is implemented and passing but not yet merged.**
+> Everything else described in this README is specified but unbuilt.
 >
 > There is no published package, no demo, and no release tag. The contract in
-> `src/core/types.ts` is now real and is the reference for anything written
-> against it; everything downstream of it may still move.
+> `src/core/types.ts` is real and is the reference for anything written against it;
+> everything downstream of it may still move.
 
 What that means for a reader:
 
 | Area | State |
 |---|---|
 | IoC extension registry (ISSUE-001) | **Landed.** `src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`, `src/core/ActivationContext.tsx`, `src/core/hotkeys.ts`, under a 100% coverage gate |
-| Three-pane resizable layout (ISSUE-002) | Specified, not started |
-| State hydration and persistence (ISSUE-003) | Specified, not started |
-| Row virtualizer and fault boundaries (ISSUE-004) | Specified, not started |
-| Verification remotes and integration suite (ISSUE-005) | Specified, not started |
+| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 120 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx`, `RibbonToolbar.test.tsx`, `ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 28 of which are the ISSUE-003 persistence and issue-#12 badge cases, all inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
+| State hydration and persistence (ISSUE-003) | **Engine implemented, green, and now consumed by the shell — not yet merged.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`, with 146 tests in `src/core/services/__tests__/hydrationEngine.test.ts` and `src/hooks/__tests__/useLocalStorageState.test.tsx`, plus 20 tests in `src/components/__tests__/ShellLayoutPersistence.test.tsx` driving the assembled shell over a real storage, inside the same 100% coverage gate. `ShellLayout.tsx` restores and writes **three** slots — pane sizes, the pane-1 collapsed flag and the foreground extension id — and the utility drawer is deliberately not one of them |
+| Row virtualizer and fault boundaries (ISSUE-004) | **Implemented and green, not yet merged.** `src/components/error/FaultBoundary.tsx`, `src/components/shared/VirtualizedList.tsx` and its pure arithmetic in `src/components/shared/virtualWindow.ts`, with 76 tests in `src/components/__tests__/FaultBoundary.test.tsx` and `src/components/__tests__/VirtualizedList.test.tsx`, inside the same 100% coverage gate. The virtualizer is a component an extension's own Pane 2 view renders — the host does not window your pane for you |
+| Verification remotes and integration suite (ISSUE-005) | **Implemented and green, not yet merged.** The two verification remotes `src/mocks/MailPlugin.tsx` and `src/mocks/DatabasePlugin.tsx`, driven by 60 tests in `src/__tests__/IntegrationSuite.test.tsx` — the first place in this repository where an operational plug-in is mounted at all. It runs the assembled shell, not a double of it, and nine of its cases are `PINS A KNOWN LIMIT` characterisations of behaviour the architecture has accepted rather than prevented. It is outside the coverage `include` list on purpose: it exercises code the gate already covers, and adding an integration file to a 100% gate measures nothing new. See [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 
-Consequences worth stating plainly, because they are easy to assume away:
-ribbon action `isVisible` predicates are **validated but never evaluated**,
-`onExecute` handlers are **never invoked by the host**, and a ribbon action's
-optional `hotkey` is **validated but never dispatched** — the ribbon renderer is
-ISSUE-002; and the pane fault boundaries described below are ISSUE-004.
+**What ISSUE-002 did change:** ribbon action `isVisible` predicates are now
+evaluated on every ribbon render, `onExecute` handlers are invoked on click, and
+both are called inside a guard so that a plug-in throwing from either is reported
+and contained rather than taking the shell down. *Tests:*
+`src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose isVisible
+predicate throws and still renders the rest", "survives an onExecute that throws,
+leaving the ribbon interactive".
+
+**What it did not change, stated plainly because a working-looking shell invites
+the opposite assumption:**
+
+- **There was no fault boundary, and ISSUE-004 added one.** The ribbon guards
+  above are around two *calls*, not around a component's render, and that gap was
+  live from the moment ISSUE-002 started mounting plug-in components. Since
+  ISSUE-004, `ShellLayout` wraps the children of every pane — pane 1 included — the
+  extension subtree inside panes 2 and 3, and the ribbon, each in its own
+  `FaultBoundary`. A view that throws during render degrades to a contained host
+  surface inside its own pane, naming the extension, with a bounded retry.
+  *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing
+  pane-2 view to pane 2, leaving the ribbon and pane 3 interactive" and "contains a
+  throwing ribbon without taking the panes down".
+- **The host does not virtualize your pane for you.** Pane 2 is still a plain
+  scroll container; `VirtualizedList` is a component an extension's `views.pane2`
+  mounts, because the host does not know what a row is or how tall one should be.
+  An extension that renders a thousand rows directly still has a thousand rows in
+  the DOM. *Tests:* `src/components/__tests__/VirtualizedList.test.tsx` — "mounts a
+  window bounded by the viewport rather than by the item count".
+- **Persistence is now wired, and it covers exactly three things.** This entry
+  used to read "nothing the shell renders is persisted", and that stopped being
+  true when `src/components/layout/ShellLayout.tsx` started consuming ISSUE-003's
+  engine. A divider you drag, a pane 1 you collapse and the extension you had in
+  the foreground all come back on the next load. **The utility drawer does not,
+  the selected navigation node does not, and the measured window width does
+  not** — the drawer is a transient inspection of pane 3 rather than a layout you
+  arranged, the two selections belong to the shell store and are cleared on every
+  foreground handover by design, and the width is a fact about this window rather
+  than about you. Pane sizes changed *while pane 1 is collapsed* are also not
+  written: the two panes then in the group divide a width that excludes the 48px
+  track, so their percentages are a ratio against a different denominator.
+  *Tests:* `src/components/__tests__/ShellLayoutPersistence.test.tsx` — "persists a
+  pane size the user changed, and a second shell over the same storage opens into
+  it", "persists the pane-1 collapsed flag, and a second shell over the same
+  storage opens collapsed", "brings the persisted extension back to the foreground
+  once it registers", "persists no drawer state, so a reload opens with the drawer
+  shut" and "does not persist a pane size while pane 1 is collapsed, because the
+  two panes divide a different width".
+- **A runtime badge write is now rendered, and it was not.** `IShellAPI.setBadgeCount`
+  has been implemented and validated since ISSUE-001, and until issue #12 the value
+  it wrote reached no renderer: pane 1 drew `NavigationNode.badgeCount` off the
+  registry's frozen blueprint record, which is fixed at registration. The nav tree
+  now subscribes through `useBadgeCount(extensionId, nodeId)` and a store value
+  **overrides** the blueprint's, falling back to the blueprint when the store holds
+  nothing for that node — including in the collapsed 48px icon track, and including
+  a count written back down to `0`, which a truthiness test would have dropped.
+  *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a
+  setBadgeCount write through a live IShellAPI change what the sidebar renders",
+  "overrides a blueprint badge with the store value, including down to zero",
+  "shows a runtime badge in the collapsed 48px icon track too" and "renders the
+  blueprint badge for a node the store has never been written for".
+- **Hotkey dispatch has landed, and it is narrow.** A ribbon action's optional
+  `hotkey` now fires: `src/core/hotkeyDispatch.ts` holds the shell's one `keydown`
+  listener, called once by `ShellLayout`, and a chord is live only for the
+  **foreground** extension and only for an action that is visible and not disabled
+  — the same two gates the button passes. Chord-bearing enabled actions advertise
+  themselves with `aria-keyshortcuts`; disabled ones deliberately do not. Exactly
+  two modules under `src/` touch a key event, and both are allowlisted by name and
+  by exact spelling.
+  *Tests:* `src/core/__tests__/hotkeyDispatch.test.tsx` — "fires a visible,
+  enabled chord on the foreground extension", "does not fire a background
+  extension chord while another extension is in the foreground" and "adds exactly
+  one keydown listener and removes the identical handler on unmount";
+  `src/__tests__/noEventListener.test.ts` — "finds no listener registration
+  in any module outside the hotkey-dispatch allowlist" and "finds no key-event name
+  in any module outside the key-event allowlist".
+
+**What ISSUE-005 added, and it is a different kind of thing from the four above.**
+Every one of the 915 tests that stood before it mounted **one unit** against
+fixtures whose pane views are `(): null => null`. Nothing in this repository had
+ever mounted a plug-in that holds state, owns a timer, fetches asynchronously or
+fails on purpose. `src/__tests__/IntegrationSuite.test.tsx` drives the assembled
+shell — real registry, real activation, real hydration engine, real panel group,
+real fault boundaries, real hotkey dispatcher — through the two verification
+remotes in `src/mocks/`, and asserts the things that only exist once several units
+are wired together: a selection made in pane 2 arriving in pane 3 through the host
+store rather than through the module, an extension's layout state surviving a round
+trip through another extension, a module's 200ms interval really being released on
+unmount, a persisted layout coming back across a simulated reload.
+
+**Nine of its cases are titled `PINS A KNOWN LIMIT`, and that is the part worth
+reading.** Each describes something the architecture has ACCEPTED rather than
+prevented, and each carries a comment in its own body saying it asserts current
+behaviour and is not a safety claim: that badge scoping and persisted-state
+namespacing are collision-resistance rather than confinement; that the `IShellAPI`
+deep-freeze does not reach the plug-in's own function objects, so one extension can
+reach a sibling's view component through the public registry and change what it
+renders; that `unregister` has no authorisation model; and that a `FaultBoundary`
+catches neither a throw from a `setTimeout` callback nor a rejected promise. The
+contained case is asserted beside the uncontained ones so that "a fault boundary
+catches nothing" is not the reading anybody takes away.
+*Tests:* `src/__tests__/IntegrationSuite.test.tsx` — "carries a pane-2 selection
+into pane 3 through the host store, not through the module", "keeps each module
+pane-2 selection its own across Mail → Database → Mail", "releases the database
+module 200ms interval, so the timer count returns to its baseline", "brings back
+the layout and the foreground extension over the same storage" and "contains a
+throwing ribbon action inside the ribbon own guard, without taking the shell down".
+
+**What ISSUE-003 added, and what it does not yet touch:**
+`src/core/services/HydrationEngine.ts` owns the serialization and deserialization
+of shell UI state — pane sizes, the pane-1 collapsed flag, the active extension id
+and a per-extension scope of JSON-shaped state — and writes all of it into **one**
+`localStorage` entry with a single `setItem`, so a record is replaced whole and a
+half-written one is not constructible. A schema version travels with the payload,
+and a version that is not the current one is **discarded, never migrated and never
+spread into live state**: older, newer, missing and wrong-typed alike. There has
+only ever been one version, so a migration would be a migration from a version that
+never shipped. Every read is treated as untrusted input — corrupt or truncated
+JSON, a payload of the wrong shape, `__proto__` and `constructor` keys, over-long
+strings, an oversized entry and a payload nested past the depth cap are all refused
+— and a payload that fails anywhere contributes **nothing**, rather than
+contributing its good fields. Writes are debounced, so a whole divider drag
+coalesces into one write. When storage is unavailable, disabled or throwing —
+private mode, site data off, quota exhausted — the engine degrades silently to
+in-memory rather than taking the shell down.
+*Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — the whole of
+"createHydrationEngine — a payload that is refused, one path at a time", which
+walks corrupt JSON, truncated JSON and every wrong-shaped entry one at a time,
+plus "discards a payload from an older schema version", "discards a payload from
+a FUTURE schema version, rather than guessing at it", "discards a payload with no
+version at all", "discards a version of the wrong type, so \"1\" is not 1" and
+"discards an entry longer than MAX_RAW_LENGTH without even parsing it"; the whole
+of "createHydrationEngine — hostile payloads", including "refuses a __proto__ key
+inside an extension scope" and "refuses a deeply nested payload rather than
+following it"; "applies none of a payload whose LATER field is illegal" for the
+all-or-nothing rule; "coalesces a whole drag into one write"; and "runs with
+persistence degraded to memory, and nothing throws" beside "degrades to memory
+when reading localStorage throws".
+
+Two tabs over the one entry are last-write-wins, and the unit of that is the whole
+record: one `setItem` of one key means the loser's record is replaced rather than
+interleaved with the winner's, and a write refused on quota leaves the previous
+record exactly where it was.
+*Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — "the loser's whole
+record is replaced, never interleaved with the winner's", "interleaving the two
+tabs still produces one complete record" and "a write that fails on quota leaves
+the previous record exactly as it was".
+
+`src/hooks/useLocalStorageState.ts` is the React binding over it, and it hydrates
+during the first render rather than in an effect, so a bound component paints the
+restored value instead of painting a default and correcting it one commit later.
+*Test:* `src/hooks/__tests__/useLocalStorageState.test.tsx` — "renders the persisted
+value on the very first paint, and never the default".
+
+**And what it is connected to, now that it is connected to something.** This
+paragraph used to say the engine reached no component at all.
+`src/components/layout/ShellLayout.tsx` now binds the pane-1 collapsed flag
+through `useLocalStorageState`, takes a mount-time snapshot of the pane sizes for
+its `defaultSize` props, writes every layout the panel group commits back through
+`setSlot`, and restores the foreground extension through the engine's own
+`selectActiveExtensionId`. `src/App.tsx` composes nothing for it: `ShellLayout`
+resolves `getDefaultHydrationEngine()` when no engine is supplied, which is the
+one instance the running shell uses.
+
+**Three properties are worth stating exactly, because each is easy to claim and
+easy to get wrong.** There is *no flash of the default layout* — the engine
+hydrates synchronously in its constructor and the value is read during render, so
+the restored number is in the shell's first render rather than applied by an
+effect one commit later, and that is asserted on the render log rather than on the
+final DOM. A *whole divider drag is one storage write*, because every frame is a
+`setSlot` into one debounce window. And a *restored size that is no longer legal
+never reaches a panel*: the engine discards a whole record holding a pane size
+outside its `[2, 90]` band, and `ShellLayout` then clamps whatever survives into
+each pane's own minimum and maximum at the width measured on this load.
+*Tests:* `src/components/__tests__/ShellLayoutPersistence.test.tsx` — "renders the
+restored pane sizes on the panel group first render, and the measured default
+never", "renders the collapsed icon track on the first render, and the expanded
+navigation panel never", "coalesces a keyboard-driven resize into one storage
+write rather than one per frame", "discards a hand-edited record whose pane size
+is outside the engine band, and renders the measured defaults", "clamps a restored
+pane size that no longer fits the pane minimums at this width" and "renders,
+resizes and collapses with a storage that throws on every access";
+`src/__tests__/App.test.tsx` — "restores a layout the shell persisted through the
+process-wide engine, with nothing wired up here".
+
+**A persisted extension id the registry does not know activates nothing and
+throws nothing, and is not erased either.** A lazily loaded extension is
+indistinguishable from an uninstalled one, so the id is retained and the restore
+is retried on every registry revision until it lands or until the user activates
+something themselves. *Tests:* same file — "activates nothing and throws nothing
+for a persisted extension id the registry does not know" and "stops waiting for
+the persisted extension once the user activates a different one".
 
 Registration and activation are complete. Registration validates, rejects
 duplicates deterministically, and never throws. Activation
@@ -56,9 +246,12 @@ is immediately re-registered by somebody else in the same commit. The activation
 *controller* — `activate`, `blur`, `release` — is kept out of an extension's
 subtree by `ExtensionHostBoundary`, which is a **guardrail against an honest
 mistake and not an enforced boundary**; see ADR-0001 Amendments D and E and the
-"Security posture" section below. What is still missing is the surface that would
-*use* any of it: there is no three-pane layout, so nothing renders an extension's
-views or calls its ribbon actions.
+"Security posture" section below. The surface that *uses* all of it now exists:
+`ShellLayout` lists registered extensions in pane 1, activates one on selection,
+mounts its `views.pane2` and `views.pane3` inside `ExtensionHostBoundary`, and
+feeds its `ribbonActions` to the ribbon. *Test:*
+`src/components/__tests__/ShellLayout.test.tsx` — "renders both plug-in views
+inside an ExtensionHostBoundary once activated".
 
 The authoritative work breakdown is [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md).
 
@@ -100,7 +293,10 @@ npm run dev
 ```
 
 `npm run dev` starts the Vite dev server on its default port, 5173, and prints the
-URL. What renders today is a placeholder — see Project Status above.
+URL. What renders today is the real three-pane shell with an **empty registry**:
+`src/App.tsx` registers no extensions, so you get the ribbon's host actions, a
+resizable and collapsible pane 1 with nothing in it, and two empty panes. The mock
+extensions that would fill it are ISSUE-005. See Project Status above.
 
 ### Scripts
 
@@ -110,11 +306,12 @@ URL. What renders today is a placeholder — see Project Status above.
 | `npm run build` | Typechecks, then produces a production bundle in `dist/`. |
 | `npm test` | Runs the Vitest suite once. |
 | `npm run test:coverage` | Runs the suite and enforces the coverage gate in `vitest.config.ts` — 100% statements, branches, functions and lines over `src/core/**`. Exits non-zero if a threshold is unmet. |
+| `npm run test:integration` | Runs `src/__tests__/IntegrationSuite.test.tsx` a **second** time under `--sequence.shuffle`, which is ISSUE-005's requirement that the integration cases pass in a randomised order. The flag lives here rather than in `vitest.config.ts` because that file is shared by all 29 suites and the wider suite is not yet order-independent — under `--sequence.shuffle`, `src/core/__tests__/shellApi.test.ts` fails three of its own cases today. Vitest prints the seed it used, and the seed defaults to the clock. |
 | `npm run typecheck` | `tsc --noEmit`. Emits nothing; only checks. |
 | `npm run lint` | ESLint at `--max-warnings 0`. There is no warning tier; a warning fails. |
 | `npm run check:portability` | Enforces ADR-0002 — see below. |
 | `npm run audit:prod` | `npm audit` over production dependencies at `--audit-level=high`. Needs network access. |
-| `npm run verify` | **The gate.** Runs all of the above in order: portability, lint, typecheck, coverage, build, audit. This is exactly what CI applies. |
+| `npm run verify` | **The gate.** Runs all of the above in order: portability, citations, lint, typecheck, coverage, the randomised integration run, the script tests, build, audit. This is exactly what CI applies. |
 
 ### The acceptance test
 
@@ -186,29 +383,73 @@ A ribbon action may carry an optional `hotkey`: a **structured chord**, `key`
 plus the optional `ctrl`, `alt`, `shift` and `meta` booleans, rather than a string
 like `"Ctrl+Shift+K"` that would need a parser at the trust boundary.
 
-> **⚠ Declared and validated today. Nothing dispatches it.**
+> **Declared, validated and — since ISSUE-006 — dispatched.**
 >
-> There is no `keydown` listener, no dispatcher and no evaluation site anywhere
-> in `src/`. Declaring a chord has no observable effect beyond the registration
-> succeeding or failing. A dispatcher needs the foreground extension and a live
-> `RibbonContext`, and both arrive with the ribbon — ISSUE-002.
-> *Test:* `src/__tests__/noEventListener.test.ts` — "finds no listener
-> registration and no key-event name in any module under src/", which parses
-> every non-test module under `src/` with the TypeScript compiler, so this
-> paragraph turns the suite red rather than turning quietly false the day a
-> listener lands.
+> `src/core/hotkeyDispatch.ts` owns the shell's one `keydown` listener, attached to
+> `window` in the **bubble** phase and called once by `ShellLayout`. A chord is
+> live only for the **foreground** extension — ADR-0001 Amendment H Decision 6
+> makes two extensions claiming `Ctrl+K` legal, so a shell-wide table would be
+> ambiguous by construction — and only for an action that is **visible** and **not
+> disabled**, through the same `isVisible` and `isDisabled` guards the button
+> passes. A chord is suppressed outright when the event was already handled, when
+> it is auto-repeat, while an IME composition is in flight, and while focus is in
+> an `input`, `textarea`, `select`, a `contenteditable` subtree or an ARIA
+> `textbox`/`searchbox`/`combobox`. **That list is a guardrail, not a boundary:** a
+> plug-in that builds a custom editor out of a bare `div` will get chords fired
+> into it, and its remedy is `stopPropagation()`, which the bubble phase
+> deliberately leaves working.
+>
+> `aria-keyshortcuts` is now emitted, on exactly the actions that will fire — a
+> chord-bearing action that is not disabled, on the bar and in the overflow menu.
+> A disabled action gets none, because advertising a shortcut that does not fire
+> is a lie to assistive technology in either direction.
+>
+> **The no-listener scan was narrowed rather than deleted, and both halves are now
+> allowlisted.** ISSUE-004 scoped the key-event half to one named module for the
+> list virtualizer and deliberately left the listener half absolute; a dispatcher
+> is a global listener, so ISSUE-006 scoped that half too — to exactly
+> `core/hotkeyDispatch.ts`. Both allowlists are exact in both directions, so a
+> stale entry and an unreviewed widening each fail. What a source scan cannot see —
+> that the one listener is really removed, with the identical function reference —
+> is pinned at runtime instead. *Tests:*
+> `src/__tests__/noEventListener.test.ts` — "finds no listener registration in any
+> module outside the hotkey-dispatch allowlist", "finds no key-event name in any
+> module outside the key-event allowlist", "holds the key-event allowlist to the
+> exact spellings each listed module contains", "holds the hotkey-dispatch
+> allowlist to the exact spellings the dispatcher contains" and "holds the
+> dispatcher to exactly one addEventListener and one removeEventListener";
+> `src/core/__tests__/hotkeyDispatch.test.tsx` — "adds exactly one keydown listener
+> and removes the identical handler on unmount" and "registers once under
+> StrictMode, whose simulated remount is symmetric".
 
 What the host does enforce, at registration:
 
-- **`key` must name one of 61 keys on the `HOTKEY_KEYS` allowlist** — the 26
-  letters, the 10 digits, `f1`–`f12`, the four arrows and nine named navigation
+- **`key` must name one of 60 keys on the `HOTKEY_KEYS` allowlist** — the 26
+  letters, the 10 digits, `f1`–`f12`, the four arrows and eight named navigation
   and editing keys. `tab` (it owns focus order), `space` (it activates the focused
-  control) and every modifier named as a key are deliberately absent.
+  control), `escape` (it is the shell's dismissal key — it closes the ribbon's
+  overflow menu, cancels a drag, leaves fullscreen and dismisses a Radix dialog,
+  and this project ships `@radix-ui/react-dialog`) and every modifier named as a
+  key are deliberately absent.
   *Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — ribbon
   action hotkeys > accepts every key in the host allowlist", which also pins the
-  size at 61, and "rejects %s as a hotkey key" beside it.
-- **A single-character key must carry `ctrl`, `alt` or `meta`**, or the
-  registration is refused. See Accessibility below.
+  size at 60 and asserts `escape` is not a member, and the `it.each` table
+  "rejects %s as a hotkey key" beside it, which walks `escape` alongside `tab` and
+  `space`.
+- **A bare chord is refused, under two rules that are deliberately kept apart.** A
+  **single-character** key (`k`, `7`) carrying no `ctrl`, `alt` or `meta` is
+  refused under WCAG 2.2 §2.1.4 Character Key Shortcuts, Level A — see
+  Accessibility below. Separately, **`enter`** is refused bare because it
+  *activates the focused control* — the default button, a focused link, a table
+  row — which is the same reason `space` is off the allowlist entirely. 2.1.4 is
+  about *character* keys and does not reach `enter`, so the Enter refusal names no
+  criterion and no level. **`Ctrl+Enter` stays legal**, and is the one genuinely
+  wanted chord in that family.
+  *Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — the
+  activation rule for keys that must carry a modifier > does NOT cite WCAG 2.1.4
+  for enter, which is not a character key", "leaves the 2.1.4 message alone for a
+  genuine character key" — the two together pin the split in both directions — and
+  "accepts ctrl+enter, the one genuinely wanted chord in this family".
 - **The same chord twice inside one extension is refused**, with the
   `ShellUXError` code `DUPLICATE_HOTKEY`. Scoped to one extension on purpose:
   chords are live only for the foreground extension, so two *different*
@@ -218,13 +459,18 @@ What the host does enforce, at registration:
   DUPLICATE_HOTKEY on the second action" and "lets two DIFFERENT extensions
   declare the same chord".
 
-`src/core/hotkeys.ts` exports three pure functions over a chord and nothing else:
-`hotkeyToken` (the canonical token that deduplicates today and will look up a
-dispatch target later), `describeHotkey` (`"Ctrl+Shift+K"`, for a tooltip or an
-`aria-keyshortcuts` attribute nothing emits yet) and `matchesHotkey` (an exact
-match against the five keyboard-event fields it declares).
+`src/core/hotkeys.ts` exports four pure functions over a chord and nothing else:
+`hotkeyToken` (the canonical token that deduplicates at registration),
+`describeHotkey` (`"Ctrl+Shift+K"`, the spelling a user reads in a tooltip),
+`ariaKeyShortcuts` (`"Control+Shift+K"`, the UI Events key values ARIA requires —
+`Ctrl` is not a valid key value, which is why these are two functions) and
+`matchesHotkey` (an exact match against the five keyboard-event fields it
+declares). The dispatcher is a separate module, which is what keeps every one of
+these callable on a plain record with no DOM.
 *Test:* `src/core/__tests__/hotkeys.test.ts` — "hotkeys module — does not attach
-anything > exports exactly the three pure helpers and no dispatcher".
+anything > exports only pure helpers — the dispatcher is a separate module" and
+"ariaKeyShortcuts > spells the control key Control, which describeHotkey
+deliberately does not".
 
 The author-facing contract in full is in [`DEVELOPER.md`](DEVELOPER.md) under
 "`Hotkey` — a keyboard chord on a ribbon action"; the decisions and what was
@@ -267,7 +513,7 @@ deliberate, enforced constraint, not a stylistic preference.
 | Base type | 11px – 13px. |
 | Borders | 1px. `border-neutral-200` light, `border-neutral-800` dark. |
 | Pane 1 | 240px default, collapses to a 48px icon track. |
-| Pane 2 | 360px default, virtualized. |
+| Pane 2 | 360px default. Virtualized by the extension's own view, with the host's `VirtualizedList`. |
 | Pane 3 | Flex. Own header, own scroll container, utility drawer slot. |
 
 Airy mobile-web spacing is explicitly out of scope. A user of this shell is
@@ -318,6 +564,103 @@ Level AA work in scope:
 - Accessible names preserved when Pane 1 collapses to its 48px icon track.
 - Correct landmark and region structure across ribbon and three panes.
 
+**Partly delivered by ISSUE-002, and one deliberate deviation to record.** The last
+two items above now have code and tests behind them: pane-1 entries keep their
+accessible names in both the expanded and the 48px-collapsed state, each pane is a
+labelled region, and the dividers are keyboard-operable — that last one is
+`react-resizable-panels`' own window-splitter implementation, not the host's.
+*Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "keeps the accessible
+name of every pane-1 entry in both states", "names all three panes as regions",
+"makes every divider keyboard-reachable and actually resizes with the arrow keys";
+`src/components/__tests__/PaneWrapper.test.tsx` — "exposes the pane as a labelled
+region carrying its pane id".
+
+**The deviation:** the ribbon uses `role="toolbar"` with every button individually
+tabbable, *not* the roving-tabindex pattern the ARIA authoring practices recommend
+for a toolbar. That was originally decided because a roving pattern needs an
+arrow-key handler and no module under `src/` was permitted to name one. ISSUE-004
+changed the second half of that: `src/components/shared/VirtualizedList.tsx` is now
+allowlisted for exactly that reason, so the ribbon's deviation stands on the
+narrower ground it always really had — the ribbon has not needed the pattern. And
+ISSUE-006's dispatcher did **not** change it either: that listener is on `window`
+and routes declared chords, it puts no arrow-key handler on the toolbar, and every
+ribbon control remains individually reachable by Tab. Recorded here rather than
+left for an auditor to find. *Tests:*
+`src/__tests__/noEventListener.test.ts` — "finds no key-event name in any module
+outside the key-event allowlist" and "holds the key-event allowlist to
+the exact spellings each listed module contains".
+
+**List navigation is no longer scope.** `VirtualizedList` implements the single-tab-stop
+`aria-activedescendant` listbox pattern — arrow keys, Home/End, Page Up/Down, and
+scroll-into-view by assigning the container's own `scrollTop` rather than by
+calling `scrollIntoView`. *Tests:*
+`src/components/__tests__/VirtualizedList.test.tsx` — "keeps a single tab stop on
+the container rather than roving focus onto rows", "moves by row with the arrow
+keys and clamps at both ends", "moves by a viewport at a time with Page Up and Page
+Down" and "scrolls the selected row into view by assigning scrollTop on its
+own container".
+
+**The ribbon's overflow menu is a second exception, and it is worth being precise
+about why that is not a contradiction.** Inside the menu the arrow keys, Home/End,
+typeahead, Escape and outside-click dismissal all work, because the menu is
+`@radix-ui/react-dropdown-menu`. That handling lives in `node_modules`, not in
+`src/`, so the no-listener invariant is untouched — that test's own
+docblock states the limit it has always had, under "What is not asserted": "a handler
+installed by a third-party module `src/` merely imports — would pass".
+`PanelResizeHandle` in `ShellLayout.tsx` is
+the same arrangement. The invariant is a claim about the host's own modules, not a
+claim that the shell has no keyboard behaviour.
+
+**An accessibility audit on 2026-07-31 found eight blockers, and the fixes closed
+those eight. That is the whole of the claim.** It is not an audit against the full
+WCAG 2.2 AA criteria set, it was not performed by an external auditor, and it does
+**not** move this project to conformance — the paragraph at the top of this section
+still stands, and AA remains a target rather than a delivered state. What changed is
+that eight specific, reproducible defects that had been found are no longer present:
+
+- The overflow menu was **clipped to zero height** by two `overflow-hidden`
+  ancestors, which made it invisible and unclickable rather than merely awkward. It
+  is now portalled under `document.body`, outside every clipping ancestor by
+  construction. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "renders
+  the menu outside the ribbon, which is what un-clips it".
+- Activating a menu item **dropped focus onto `document.body`**, so the next Tab
+  restarted from the top of the document (WCAG 2.4.3). Focus now returns to the
+  trigger however the menu closed. *Tests:* same file — "returns focus to the trigger
+  after an item is activated, not to document.body" and "closes on Escape and puts
+  focus back on the trigger".
+- `role="menu"` **promised an interaction model that did not exist** — arrows did
+  nothing, Escape did not close, focus never entered, and an outside click left it
+  open. Screen readers switch to application mode inside a menu and hand the arrow
+  keys to the page, so the role actively misled the user. The full menu-button
+  pattern is now real. *Tests:* the whole of "RibbonToolbar — the overflow menu
+  keyboard model", including "moves focus into the menu when it opens", "walks the
+  items with the arrow keys, which is what the role promises" and "closes when the
+  pointer goes down outside it".
+- The menu is deliberately **not modal**, so opening it does not hide the rest of the
+  shell from assistive technology. *Tests:* same file — "does not modally hide the
+  rest of the shell while the menu is open".
+- `aria-controls` **dangled at a non-existent id** while the menu was shut; it is now
+  advertised only while the menu exists. *Tests:* same file — "advertises
+  aria-controls only while the menu exists, so the id never dangles".
+- An unavailable action used the native `disabled` attribute, which **removes it from
+  the tab order entirely** — a screen-reader user could not discover that the action
+  existed. It is now `aria-disabled`: reachable, announced, and still inert. *Tests:*
+  same file — "marks an unavailable action aria-disabled rather than removing it from
+  the tab order" and "leaves a disabled menu item focusable, announced, and inert".
+- Contrast and target-size defects in the shell chrome: muted body strings that
+  failed 4.5:1 in dark mode, selection shown by fill alone, dividers too faint to
+  read as controls, and rows below a 24px minimum. *Tests:*
+  `src/components/__tests__/ShellLayout.test.tsx` — the whole of "ShellLayout —
+  contrast and target size", including "gives every muted body string a dark-mode
+  value that clears 4.5:1", "carries the selected navigation state on a rule and a
+  weight, not only a fill", "draws the dividers dark enough to read as controls rather
+  than as pane borders", "gives every navigation row a 24px minimum height" and "gives
+  every ribbon control a 24px minimum height".
+- A badge count folded a **bare digit into the button's accessible name**, and
+  dividers were not reported as vertical separators. *Tests:* same file — "names the
+  badge count instead of folding a bare digit into the button name" and "reports every
+  divider as a vertical separator".
+
 **One criterion is already enforced by the host rather than being scoped work.**
 A plugin-declared `hotkey` whose `key` is a single character and which carries no
 `ctrl`, `alt` or `meta` modifier is **refused at registration**, with a message
@@ -325,18 +668,44 @@ naming WCAG 2.2 Success Criterion **2.1.4 Character Key Shortcuts (Level A)**.
 `shift` does not satisfy the rule, because Shift produces a character too.
 2.1.4's three conformance routes — turn the shortcut off, remap it, or make it
 active only on focus — need a settings surface, a remapping UI or a
-component-scoped dispatcher, and Phase 1 has none of the three, so the criterion
-is met the fourth way: the declaration does not happen. Function keys and the
-named navigation keys are exempt, because no dictation and no typing produces
-them.
+component-scoped dispatcher, and the shell offers none of the three: ISSUE-006's
+dispatcher is extension-scoped, not component-scoped, which is exactly the route
+this rule was written not to rely on. So the criterion is met the fourth way: the
+declaration does not happen. Function keys and the
+named navigation keys are exempt **from this criterion**, because no dictation and
+no typing produces them — `enter` is refused bare by a different rule, below, and
+not by this one.
 *Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — the WCAG
 2.1.4 modifier rule for character keys > rejects a bare single-character key and
 names the criterion", with "rejects shift alone, because Shift produces a
 character" and "exempts every non-character key in the allowlist, which may be
 bare" beside it.
 This is one rule at one door, not an audit: it is **entry-point validation** in
-the vocabulary of "Security posture" below, and nothing dispatches a chord yet in
-any case — see "Keyboard shortcuts on ribbon actions" above.
+the vocabulary of "Security posture" below. It is enforced at the declaration door
+only, and there is deliberately no second suppression inside the dispatcher — see
+ADR-0001 Amendment I Decision 3, and "Keyboard shortcuts on ribbon actions" above.
+
+**A second bare-chord rule shares that door and is deliberately not this
+criterion.** `enter` is on the allowlist but may never be declared bare, because
+Enter **activates the focused control** — the default button, a focused link, a
+table row — so a bare Enter chord would fire on top of the activation the user
+asked for. That is the same failure mode `space` is excluded outright for, and it
+has nothing to do with 2.1.4: the criterion governs single printable *character*
+keys and genuinely does not reach `enter`, `backspace`, `delete` or `insert`.
+Extending the 2.1.4 message to cover Enter would have been the smaller change and
+would have stated something false about the criterion, so the refusal carries its
+own message, naming the activation and ADR-0001 Amendment I — no criterion, no
+level. `shift` satisfies neither rule; `Ctrl+Enter` is accepted and is the chord
+this family was wanted for.
+*Test:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — the
+activation rule for keys that must carry a modifier > does NOT cite WCAG 2.1.4 for
+enter, which is not a character key" asserts the Enter message names neither
+2.1.4, nor Character Key Shortcuts, nor Level A, and "leaves the 2.1.4 message
+alone for a genuine character key" asserts the character-key message still names
+the criterion — so a future edit merging the two fails one of them whichever way
+it merges; with "rejects a bare enter, which activates the focused control",
+"rejects enter with shift only, because Shift does not stop the activation" and
+"accepts ctrl+enter, the one genuinely wanted chord in this family" beside them.
 
 **This commitment constrains the architecture, and the constraint is recorded
 rather than discovered later.** ARIA IDREF attributes — `aria-labelledby`,
@@ -578,6 +947,26 @@ defending one extension from another.
   about *who may revoke* — the controller carrying `release` is reachable by
   reflection, pinned in `reflection.test.tsx`.
 
+- **The host constants cannot be replaced.** `EXTENSION_ID_PATTERN`,
+  `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS`, `HOTKEY_MODIFIER_REQUIRED_KEYS`
+  and `PANE_IDS` are the rules every untrusted payload is measured against, they
+  are exported from modules a plug-in can import, and until ADR-0001 Amendment K
+  every one of them was runtime-mutable — `REGISTRY_LIMITS` was `as const`, which
+  binds nobody who is not being compiled. All six are frozen. No own property can
+  be added, replaced or deleted, so `REGISTRY_LIMITS` is genuinely immutable and
+  the sets' and pattern's `has`/`test` cannot be **shadowed** by an own property,
+  which was the interesting attack: a plug-in owning `HOTKEY_KEYS.has` owned the
+  hotkey allowlist for the whole page.
+
+  **The obvious wider reading is false and is asserted against.** A frozen `Set`
+  is not an immutable one — `Set` state lives in internal slots rather than
+  properties, so `add`, `delete` and `clear` still work. The claim is "cannot be
+  replaced", never "cannot be changed".
+  *Tests:* `src/core/__tests__/hostConstants.test.ts` — "freezes the host constants
+  against replacement", "refuses to let a caller raise a registry bound" and "does
+  not claim more than a frozen Set delivers", the last of which demonstrates the
+  remaining mutability on a throwaway `Set` rather than on a live allowlist.
+
 ### Entry-point validation — real at the door, bypassable elsewhere
 
 - **Identifier hygiene.** Every plugin-supplied id — the extension id, navigation
@@ -599,16 +988,20 @@ defending one extension from another.
   `registryNormalization.test.tsx` — "register — a lying `length` cannot grow the
   payload after it is measured"; `registrySecurity.test.tsx` — "validateBlueprint —
   collection lengths are read once".
-- **Argument validation on `IShellAPI`.** `setBadgeCount` and `setSelectedItem`
-  both check their arguments and raise `ShellUXError` rather than letting an
-  arbitrary value reach the context snapshot the host passes to *other*
-  extensions. `patchContext` — the unscoped store member the same values can reach
+- **Argument validation on `IShellAPI`.** Every member that takes an argument
+  checks it and raises `ShellUXError` rather than letting an arbitrary value reach
+  the context snapshot the host passes to *other* extensions — the six writers and
+  readers the interface has grown to since ADR-0001 Amendment K, not just the two
+  it had. `patchContext` — the unscoped store member the same values can reach
   through the public `useShellStore()` — is held to the identical standard field by
-  field.
+  field, and a collection field is read once into a host-owned copy that is what
+  gets validated and stored.
   *Tests:* `src/core/__tests__/shellApi.test.ts` — "setSelectedItem validates its
-  argument", "the badge scope and node id are validated at both doors";
+  argument", the "setSelectedItems validates its argument" group, "setActiveNavNode
+  validates its argument", "the badge scope and node id are validated at both
+  doors"; `contextKeys.test.tsx` — "setContextKey validates its value";
   `contextPatch.test.ts` — "patchContext rejects what setSelectedItem rejects",
-  "patchContext validates focusedPane against the real PaneId union", "patchContext is
+  "patchContext rejects what setSelectedItems rejects", "patchContext is
   all-or-nothing".
 
 These are called entry-point validation rather than integrity controls for one
@@ -631,6 +1024,31 @@ a caller who reaches the objects behind them another way is not bound by them.
   id does not collide". The *absence* of confinement is pinned by "reaches the host
   ActivationController by reflection anyway, and steals a sibling handle" in
   `reflection.test.tsx`.
+
+  **The read half is scoped the same way, since ADR-0001 Amendment K.**
+  `IShellAPI.getBadgeCount(nodeId)` closes over the same validated id and takes no
+  scope parameter, so a handle reads back exactly what it can write and nothing
+  else. That keeps the read from being a wider capability than the write it
+  mirrors; it does not make either one confinement, for the reason above. *Test:*
+  `dataflow.test.tsx` — "reads back only its own scope, and offers no parameter to
+  name another".
+
+- **Context-key scoping.** Same shape, same limit, new surface.
+  `IShellAPI.setContextKey(key, value)` writes into a namespace keyed by the
+  closure-captured extension id, so two extensions that both publish a key called
+  `loaded` keep their own, and an extension has no parameter with which to name
+  another's namespace. **It is not confinement**: `RibbonContext.contextKeys`
+  publishes the FOREGROUND extension's record into the one host-wide snapshot, and
+  anything holding a context — a backgrounded extension's `getContext()` included
+  — can read it. Every namespace is dropped on a foreground handover, which bounds
+  how long a key is readable but does not make it private. **Nothing confidential
+  belongs in a context key.** The value type is deliberately
+  `string | number | boolean | null` and nothing else, which is what stops it
+  becoming an object-injection channel into another extension's predicates.
+  *Tests:* `src/core/__tests__/contextKeys.test.tsx` — "keeps two extensions'
+  context keys apart, and publishes only the foreground's", "does not let an
+  extension name the scope it writes a context key to", "clears every extension's
+  context keys on a foreground handover", "setContextKey validates its value".
 
 ### Guardrails — honest mistakes only
 
@@ -659,23 +1077,42 @@ a caller who reaches the objects behind them another way is not bound by them.
 
 ### Stated as intent, with no test — do not read as a control
 
-- **No HTML injection path for plugin content.** The registry stores plugin strings
-  and never renders them; the render-boundary rule — text nodes only, no
-  `dangerouslySetInnerHTML` — is documented at the type declarations, in
-  `DEVELOPER.md`, and as a cross-cutting gate in `.github/ISSUES_MANIFEST.md`.
-  **No test exercises it, because there is no shell component today
-  that renders plugin content at all.** It is therefore an obligation on the future
-  renderer (ISSUE-002, ISSUE-004), not a property this codebase has. Under the rule
-  above it stays here only because it is labelled as untested; it must not be restated
-  anywhere as a delivered protection until there is a render site and a test at it.
+- **No HTML injection path for plugin content — now true of ONE render site, and
+  still only an intent at the others.** This entry has been split rather than
+  promoted wholesale, because promoting it wholesale is exactly the error the rule
+  above exists to catch.
 
-  Round 10 found it restated as delivered at two sites and corrected both: the
-  `.github/ISSUES_MANIFEST.md` cross-cutting gate, which asserted in the present tense
-  that such surfaces "render them as text nodes" while none exists, and the `icon` row
-  of `DEVELOPER.md`'s `RibbonAction` table, which said the key "is never interpolated
-  into a URL or into markup". Both are now future-tense requirements carrying the
-  untested label. The two spec sections in the manifest that describe the ribbon
-  (ISSUE-002) and the virtualizer (ISSUE-004) were moved to `must` in the same pass.
+  **Delivered and tested at the ribbon.** `src/components/ui/RibbonToolbar.tsx`
+  renders `RibbonAction.label` as a JSX text node and resolves `RibbonAction.icon`
+  through a host-owned `Map` of inline SVGs, so an untrusted icon key cannot reach a
+  URL, markup, or an inherited `Object.prototype` value. *Tests:*
+  `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
+  plug-in label as a text node, not as markup"; "the module source contains no
+  HTML-injection sink at all", which parses the module with the TypeScript compiler
+  so the absence is asserted against the source rather than trusted to review;
+  "reports a planted sink, so the scan above cannot pass vacuously"; and "does not
+  resolve a prototype-shaped icon key to anything inherited". For this component,
+  and only this component, the claim is now backed the way "Integrity controls —
+  unconditional" above requires.
+
+  **Still intent, still untested, at every other site.**
+  `src/components/layout/ShellLayout.tsx` renders `NavigationNode.label` and the
+  extension `name` with ordinary JSX interpolation — the correct pattern — but
+  `ShellLayout.test.tsx` contains no injection case and no source scan, so nothing
+  pins it and it must not be cited as a control. The row virtualizer added by
+  ISSUE-004 is the SECOND site that does carry the pair. *Tests:*
+  `src/components/__tests__/VirtualizedList.test.tsx` — "the module source contains
+  no HTML-injection sink at all", "the module source names no URL-bearing attribute
+  a plug-in value could reach", "renders extension row content as text, with no
+  HTML-injection path" and "reports a planted sink, so the scans above cannot pass
+  vacuously". Anything an extension renders inside its own panes is still the
+  extension's responsibility and the host neither inspects nor sanitizes it.
+
+  Round 10 found this entry restated as delivered at two sites while no renderer
+  existed, and corrected both. The correction is preserved as history: the risk was
+  never that the code was wrong, but that the sentence was wider than the premise
+  licensing it — which is why the ribbon's arrival buys a sentence about the ribbon
+  and nothing more.
 
 Accepted limits — decided, not overlooked:
 
@@ -712,12 +1149,36 @@ Accepted limits — decided, not overlooked:
 
 Specified but **not yet enforced** — do not read these as current guarantees:
 
-- **Namespaced persistence.** Intended: per-extension state namespaced by
-  extension id. Badge state is namespaced today, and the scope is not a parameter
-  of the facade an extension holds — but see "Collision-resistance, not
-  confinement" above: that is not a confinement claim, and persisted state will
-  need its own answer rather than inheriting one. There is still no persistence
-  member on `IShellAPI` and no storage layer. ISSUE-003.
+- **Namespaced persistence.** This one has landed as code, which makes the wording
+  matter more than it did. `src/core/services/HydrationEngine.ts` namespaces
+  per-extension persisted state by extension id, and that namespace is
+  **collision-resistance and not confinement**: two extensions that both persist a
+  key named `selection` keep their own copies, and that is the whole of what it
+  buys. It confines nothing, for two independent reasons. The scope is an
+  **argument, not a closure** — `setExtensionState(id, state)` takes the id from
+  its caller, so any holder of the engine can name any scope; there is no
+  per-extension facade over persistence the way `createRevocableShellAPI` is one
+  over badges, and `IShellAPI` still has no persistence member. And the store is
+  one `localStorage` entry under one origin, which any script on the page reads and
+  rewrites without going through the engine at all — the same shape as
+  `useShellStore()` being public. **Nothing confidential belongs in persisted UI
+  state.** Weaker than badge scoping, not equal to it. It stays in this list, and
+  did not graduate out of it when the code arrived, because what landed is a store
+  and not a boundary. ISSUE-003.
+
+  **Wiring the shell to the engine did not change any of that, and the reason is
+  which half was wired.** `ShellLayout` consumes the three HOST slots — pane
+  sizes, the pane-1 collapsed flag, the foreground extension id — through
+  `useLocalStorageState` and `setSlot`. The per-extension scopes this entry is
+  about are still reached by nothing, `IShellAPI` still has no persistence member,
+  and no extension can put a value into that namespace through the documented
+  contract at all. So the namespace remains untested-in-anger collision
+  resistance for a case the shell does not yet create.
+  *Tests:* `src/core/services/__tests__/hydrationEngine.test.ts` — "keeps two
+  extensions that both use the key \"selection\" apart" for what the namespace does
+  buy; "lets any caller name any scope, so the namespace confines nothing" and
+  "reads and rewrites another extension's scope straight through the storage entry"
+  for what it does not, each reproduced as behaviour rather than asserted in prose.
 - **A sandbox.** There is none, and nothing in this repository substitutes for
   one. `useShellStore()` is public and a plugin view renders inside the provider,
   so a plugin can reach the unscoped host store and bypass its own facade; every
@@ -737,11 +1198,44 @@ Specified but **not yet enforced** — do not read these as current guarantees:
   `reflection.test.tsx` — "reaches the host ActivationController by reflection
   anyway, and steals a sibling handle" for the controller; `subscribe.test.tsx` for
   the listener channel.
-- **Fault containment.** Intended: an extension that throws during render is
-  contained to its own pane. There is no error boundary in `src/`. ISSUE-004.
-- **Ribbon predicate containment.** Intended: a throwing `isVisible` hides the
-  action and is reported. Nothing calls `isVisible` yet; the registry only
-  validates that it is a function. ISSUE-002.
+**Newly enforced by ISSUE-004 — moved out of this list:**
+
+- **Fault containment.** No longer "intended". This entry used to read that there
+  was **no error boundary in `src/`** and that a plug-in view throwing during
+  render unmounted the whole shell — a live exposure, correctly labelled as one,
+  and it stopped being true in `cd52bbf`. `src/components/error/FaultBoundary.tsx`
+  is a real error boundary, and `ShellLayout` composes one around every set of
+  children it hands a `PaneWrapper` — both plug-in panes, the ribbon, and pane 1's
+  navigation, which renders plug-in labels and badge counts and so was never
+  incapable of failing. The boundary sits OUTSIDE `ExtensionHostBoundary`, which
+  is still not an error boundary and still catches nothing: the inner one throws
+  for a non-string `extensionId`, and a boundary nested beneath it could not catch
+  its own parent. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` —
+  "contains a throwing pane-2 view to pane 2, leaving the ribbon and pane 3
+  interactive", "contains a throwing ribbon without taking the panes down" and
+  "clears a pane error surface when the active extension changes".
+
+  **Scope, so this is not over-read:** a boundary contains a throw during RENDER.
+  It is not a sandbox, it does not contain a plug-in that wedges the UI thread
+  without throwing, and ADR-0001 "No sandbox" and Amendment E are untouched by it.
+
+**Newly enforced by ISSUE-002 — moved out of this list:**
+
+- **Ribbon predicate and handler containment.** No longer "intended". The ribbon
+  calls `isVisible` inside a guard and treats a throw as "not visible", reporting it
+  and continuing to render the remaining actions; it calls `onExecute` inside the
+  same kind of guard, so a throwing handler does not reach React. The report path is
+  itself guarded, so a tampered `console.error` cannot turn the containment into an
+  escape. A non-boolean return is treated as not visible, since the comparison is
+  `=== true`. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an
+  action whose isVisible predicate throws and still renders the rest", "survives a
+  console.error that itself throws while reporting a bad predicate", "survives an
+  onExecute that throws, leaving the ribbon interactive", "treats a non-boolean
+  isVisible result as not visible".
+
+  **Scope, so this is not over-read:** it contains what arrives through
+  `RibbonAction` — a buggy or hostile predicate or handler. It is not a sandbox, and
+  ADR-0001 "No sandbox" and Amendment E are untouched by it.
 
 Extension authors: see the security section of
 [`DEVELOPER.md`](DEVELOPER.md) for the rules your code must follow.

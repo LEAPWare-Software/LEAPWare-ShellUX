@@ -165,19 +165,21 @@ describe('createShellStateStore', () => {
     expect(store.getContext()).toEqual({
       activeExtensionId: null,
       activeNavNodeId: null,
+      selectedItemIds: [],
       selectedItemId: null,
-      focusedPane: null,
+      contextKeys: {},
     });
   });
 
   it('applies a seed context', () => {
     const store = createShellStateStore({
       activeExtensionId: 'sample-ext',
-      focusedPane: 'pane2',
+      selectedItemIds: ['msg-1', 'msg-2'],
     });
     expect(store.getContext().activeExtensionId).toBe('sample-ext');
-    expect(store.getContext().focusedPane).toBe('pane2');
-    expect(store.getContext().selectedItemId).toBeNull();
+    expect(store.getContext().selectedItemIds).toEqual(['msg-1', 'msg-2']);
+    // Derived by the seed pass, exactly as it is by any other write.
+    expect(store.getContext().selectedItemId).toBe('msg-2');
   });
 
   it('returns a frozen context snapshot', () => {
@@ -245,11 +247,15 @@ describe('createShellStateStore', () => {
       const target = store as unknown as Record<string, unknown>;
       const before = { ...target };
       expect(Object.keys(before).sort()).toEqual([
+        'clearContextKeys',
         'getBadgeCount',
         'getContext',
         'patchContext',
+        'setActiveNavNode',
         'setBadgeCount',
+        'setContextKey',
         'setSelectedItem',
+        'setSelectedItems',
         'subscribe',
       ]);
 
@@ -286,8 +292,8 @@ describe('createShellStateStore', () => {
       expect(typeof store.getContext).toBe('function');
       expect((store as unknown as Record<string, unknown>)['extra']).toBeUndefined();
 
-      store.patchContext({ focusedPane: 'pane2' });
-      expect(store.getContext().focusedPane).toBe('pane2');
+      store.patchContext({ activeNavNodeId: 'root-a' });
+      expect(store.getContext().activeNavNodeId).toBe('root-a');
     });
   });
 
@@ -820,6 +826,191 @@ describe('IShellAPI', () => {
       store.setSelectedItem('item-3');
       expect(store.getContext().selectedItemId).toBe('item-3');
       expect(Object.isFrozen(store.getContext())).toBe(true);
+    });
+
+    it('writes the same field setSelectedItems writes, as a selection of one', () => {
+      const api = makeApi();
+      api.setSelectedItem('item-1');
+      // One writer: the shorthand is not a second field beside the array.
+      expect(api.getContext().selectedItemIds).toEqual(['item-1']);
+      api.setSelectedItem(null);
+      expect(api.getContext().selectedItemIds).toEqual([]);
+    });
+  });
+
+  /* ---- setSelectedItems: the multi-selection door (GitHub issue #14) ------ */
+
+  describe('setSelectedItems validates its argument', () => {
+    function callSetSelectedItems(api: IShellAPI, ids: unknown): () => void {
+      return () => {
+        (api.setSelectedItems as (ids: unknown) => void)(ids);
+      };
+    }
+
+    it('accepts an array of distinct strings, and the empty array', () => {
+      const api = makeApi();
+      api.setSelectedItems(['item-1', 'item-2', 'item-3']);
+      expect(api.getContext().selectedItemIds).toEqual(['item-1', 'item-2', 'item-3']);
+      // Derived, and derived from the LAST element.
+      expect(api.getContext().selectedItemId).toBe('item-3');
+
+      api.setSelectedItems([]);
+      expect(api.getContext().selectedItemIds).toEqual([]);
+      expect(api.getContext().selectedItemId).toBeNull();
+    });
+
+    it.each([
+      ['a string', 'item-1'],
+      ['null', null],
+      ['undefined', undefined],
+      ['a number', 42],
+      ['an array-shaped plain object', { 0: 'item-1', length: 1 }],
+    ])('rejects %s in place of an array', (_label, ids) => {
+      const api = makeApi();
+      const error = expectShellUXError(callSetSelectedItems(api, ids));
+      expect(error.code).toBe('INVALID_FIELD');
+      expect(error.field).toBe('selectedItemIds');
+      expect(api.getContext().selectedItemIds).toEqual([]);
+    });
+
+    it.each([
+      ['a number', 42],
+      ['null', null],
+      ['undefined', undefined],
+      ['a nested array', ['item-1']],
+      ['a symbol', Symbol('item')],
+    ])('rejects %s as an element', (_label, element) => {
+      const api = makeApi();
+      const error = expectShellUXError(callSetSelectedItems(api, ['item-1', element]));
+      expect(error.code).toBe('INVALID_FIELD');
+      expect(error.field).toBe('selectedItemIds[1]');
+      // All-or-nothing: the good element at index 0 did not land either.
+      expect(api.getContext().selectedItemIds).toEqual([]);
+    });
+
+    it('does not stringify a rejected element', () => {
+      const api = makeApi();
+      let ran = false;
+      const hostile = {
+        toString(): never {
+          ran = true;
+          throw new Error('arbitrary attacker code');
+        },
+      };
+      const error = expectShellUXError(callSetSelectedItems(api, [hostile]));
+      expect(ran).toBe(false);
+      expect(error.message).toContain('"object"');
+    });
+
+    it('rejects a repeated id rather than deduplicating it', () => {
+      const api = makeApi();
+      const error = expectShellUXError(callSetSelectedItems(api, ['a', 'b', 'a']));
+      expect(error.code).toBe('INVALID_FIELD');
+      expect(error.field).toBe('selectedItemIds[2]');
+      // Collapsing would have stored two where three were asked for, which is a
+      // selection the caller never made.
+      expect(api.getContext().selectedItemIds).toEqual([]);
+    });
+
+    it('stores a frozen host-owned copy the caller cannot go on editing', () => {
+      const api = makeApi();
+      const mine = ['item-1'];
+      api.setSelectedItems(mine);
+      const stored = api.getContext().selectedItemIds;
+
+      expect(stored).not.toBe(mine);
+      expect(Object.isFrozen(stored)).toBe(true);
+      mine.push('item-2');
+      expect(api.getContext().selectedItemIds).toEqual(['item-1']);
+    });
+
+    it('reads each element exactly once, so a shifting getter cannot substitute one', () => {
+      const api = makeApi();
+      let reads = 0;
+      const shifting = new Proxy(['item-1'], {
+        get(target, property, receiver): unknown {
+          if (property === '0') {
+            reads += 1;
+            return reads === 1 ? 'item-1' : { injected: true };
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+
+      api.setSelectedItems(shifting);
+
+      expect(reads).toBe(1);
+      expect(api.getContext().selectedItemIds).toEqual(['item-1']);
+    });
+  });
+
+  /* ---- setActiveNavNode: the navigation door (GitHub issue #15) ----------- */
+
+  describe('setActiveNavNode validates its argument', () => {
+    function callSetActiveNavNode(api: IShellAPI, nodeId: unknown): () => void {
+      return () => {
+        (api.setActiveNavNode as (nodeId: unknown) => void)(nodeId);
+      };
+    }
+
+    it('accepts a registry-valid id and null', () => {
+      const api = makeApi();
+      api.setActiveNavNode('root-a');
+      expect(api.getContext().activeNavNodeId).toBe('root-a');
+      api.setActiveNavNode(null);
+      expect(api.getContext().activeNavNodeId).toBeNull();
+    });
+
+    it.each([
+      ['a number', 42],
+      ['undefined', undefined],
+      ['a boolean', true],
+      ['a symbol', Symbol('node')],
+    ])('rejects %s with INVALID_ID naming the parameter', (_label, nodeId) => {
+      const api = makeApi();
+      const error = expectShellUXError(callSetActiveNavNode(api, nodeId));
+      expect(error.code).toBe('INVALID_ID');
+      // Named for the parameter the caller passed, not for the context field.
+      expect(error.field).toBe('nodeId');
+      expect(api.getContext().activeNavNodeId).toBeNull();
+    });
+
+    it.each([
+      ['a path escape', '../escape'],
+      ['a URL scheme', 'javascript:alert(1)'],
+      ['markup', '<script>'],
+      ['a reserved key', 'constructor'],
+      ['an uppercase id', 'Root-A'],
+    ])('holds %s to the registry allowlist, exactly as setBadgeCount does', (_label, nodeId) => {
+      const api = makeApi();
+      const error = expectShellUXError(callSetActiveNavNode(api, nodeId));
+      expect(error.code).toBe('INVALID_ID');
+      expect(api.getContext().activeNavNodeId).toBeNull();
+    });
+
+    it('does not stringify the rejected value', () => {
+      const api = makeApi();
+      let ran = false;
+      const hostile = {
+        toString(): never {
+          ran = true;
+          throw new Error('arbitrary attacker code');
+        },
+      };
+      const error = expectShellUXError(callSetActiveNavNode(api, hostile));
+      expect(ran).toBe(false);
+      expect(error.message).toContain('"object"');
+    });
+
+    it('is the same store path the host pane-1 click handler uses', () => {
+      // One member, two callers. `ShellLayout.selectNavNode` calls exactly this,
+      // so a rule change here cannot apply to one route and not the other.
+      const store = createShellStateStore();
+      expect(() => {
+        (store.setActiveNavNode as (nodeId: unknown) => void)(7);
+      }).toThrow(ShellUXError);
+      store.setActiveNavNode('root-b');
+      expect(store.getContext().activeNavNodeId).toBe('root-b');
     });
   });
 

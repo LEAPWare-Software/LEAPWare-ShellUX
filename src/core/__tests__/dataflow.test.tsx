@@ -377,6 +377,50 @@ describe('badge collision-resistance', () => {
     expect(error.code).toBe('INVALID_ID');
     expect(error.field).toBe('nodeId');
   });
+
+  it('reads back only its own scope, and offers no parameter to name another', () => {
+    const host = mountHost();
+    const mail = activate(host, makeNavExtension('mail-ext'));
+    const crm = activate(host, makeNavExtension('crm-ext'));
+
+    act(() => {
+      mail.shell.setBadgeCount('inbox', 7);
+      crm.shell.setBadgeCount('inbox', 3);
+    });
+
+    // Symmetric with the write half: each handle reads what IT wrote.
+    expect(mail.shell.getBadgeCount('inbox')).toBe(7);
+    expect(crm.shell.getBadgeCount('inbox')).toBe(3);
+
+    // A plug-in trying to aim the read at a sibling. `getBadgeCount` declares one
+    // parameter and the implementation reads one; the scope comes from the
+    // closure, so the extra argument reaches nothing and the answer is still its
+    // own. This is what stops the read half being a wider capability than the
+    // write half it mirrors.
+    const aimed = (mail.shell.getBadgeCount as (nodeId: string, scope?: string) => number | undefined)(
+      'inbox',
+      'crm-ext',
+    );
+    expect(aimed).toBe(7);
+
+    // And a node nobody ever wrote is `undefined` rather than an error.
+    expect(mail.shell.getBadgeCount('archive')).toBeUndefined();
+
+    // The absence of confinement, stated by the same test that states the
+    // scoping: the unscoped store is public and reads any scope at all.
+    expect(host.current.store.getBadgeCount('crm-ext', 'inbox')).toBe(3);
+  });
+
+  it('rejects a malformed node id on the read half too', () => {
+    const host = mountHost();
+    const mail = activate(host, makeNavExtension('mail-ext'));
+
+    const error = expectShellUXError(() => {
+      mail.shell.getBadgeCount('../escape');
+    });
+    expect(error.code).toBe('INVALID_ID');
+    expect(error.field).toBe('nodeId');
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -403,6 +447,17 @@ describe('activation and revocation', () => {
     expect(released).toBe(true);
     expect(host.current.activation.getActive()).toBeNull();
 
+    // Losing the foreground took mail-ext's selection with it — a handover clears
+    // the outgoing extension's own state, which is what
+    // `activationHandover.test.tsx` is about. A fresh sentinel is planted here so
+    // that "the revoked write changed nothing" is still asserted against a value
+    // that can be distinguished from the cleared one; `null` would be satisfied by
+    // a write that really did land and really did clear the field.
+    expect(host.current.store.getContext().selectedItemId).toBeNull();
+    act(() => {
+      host.current.store.setSelectedItem('msg-sentinel');
+    });
+
     // The retained reference is now a typed failure, not a silent no-op.
     const error = expectShellUXError(() => {
       retained.setSelectedItem('msg-2');
@@ -411,10 +466,23 @@ describe('activation and revocation', () => {
     expect(error.code).toBe('REVOKED');
 
     // ...and it changed nothing.
-    expect(host.current.store.getContext().selectedItemId).toBe('msg-1');
+    expect(host.current.store.getContext().selectedItemId).toBe('msg-sentinel');
 
+    // EVERY member, not a representative one. The wave that widened `IShellAPI`
+    // from three members to seven (ADR-0001 Amendment K) is exactly the change
+    // that could have added a live door onto a revoked handle, so the list here
+    // is the whole interface and is checked against `Object.keys` below in "does
+    // not expose revoke to the plugin".
+    expect(expectShellUXError(() => retained.setSelectedItems(['msg-2'])).code).toBe('REVOKED');
+    expect(expectShellUXError(() => retained.setActiveNavNode('root-a')).code).toBe('REVOKED');
     expect(expectShellUXError(() => retained.setBadgeCount('inbox', 1)).code).toBe('REVOKED');
+    expect(expectShellUXError(() => retained.getBadgeCount('inbox')).code).toBe('REVOKED');
+    expect(expectShellUXError(() => retained.setContextKey('loaded', true)).code).toBe('REVOKED');
     expect(expectShellUXError(() => retained.getContext()).code).toBe('REVOKED');
+
+    // ...and none of them changed anything either.
+    expect(host.current.store.getContext().selectedItemId).toBe('msg-sentinel');
+    expect(host.current.store.getContext().activeNavNodeId).toBeNull();
     expect(host.current.store.getBadgeCount('mail-ext', 'inbox')).toBeUndefined();
   });
 
@@ -523,10 +591,19 @@ describe('activation and revocation', () => {
     const active = activate(host, MAIL);
     const surface = active.shell as unknown as Record<string, unknown>;
 
+    // The LITERAL member list, not a count. A count would have let the
+    // contract-hardening wave (ADR-0001 Amendment K) widen `IShellAPI` from
+    // three members to seven with this test still passing on a number nobody
+    // read; spelling the names out is what forced the widening to be a change
+    // somebody had to make on purpose, here, in a test named for `revoke`.
     expect(Object.keys(surface).sort()).toEqual([
+      'getBadgeCount',
       'getContext',
+      'setActiveNavNode',
       'setBadgeCount',
+      'setContextKey',
       'setSelectedItem',
+      'setSelectedItems',
     ]);
     for (const key of Reflect.ownKeys(surface)) {
       expect(String(key)).not.toContain('revoke');

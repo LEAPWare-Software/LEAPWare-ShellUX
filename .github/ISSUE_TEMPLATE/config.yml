@@ -1,0 +1,25 @@
+# Issue template configuration.
+#
+# Blank issues are OFF. Not to make reporting harder — to make a report usable.
+# The two forms beside this file ask for the commit, the file-and-line evidence,
+# and what is NOT being claimed, and those three are what separate a finding that
+# can be acted on from one that has to be re-derived from scratch. A blank issue
+# reliably arrives without them.
+blank_issues_enabled: false
+
+# SECURITY REPORTS DO NOT BELONG IN AN ISSUE OF ANY KIND.
+#
+# A suspected vulnerability goes through GitHub Security Advisories, privately:
+# the repository's Security tab, then "Report a vulnerability". SECURITY.md at the
+# repository root is the full policy — the supported versions, the trust model,
+# what the host does and does not defend against, and what to put in a report.
+#
+# There is deliberately NO `contact_links:` entry pointing at it. A contact link
+# requires an absolute URL naming a host, and `npm run check:portability` refuses
+# a hardcoded network host in a tracked non-Markdown file (rule
+# `hardcoded-hostname`, which skips `.md` and does not skip `.yml`). The rule is
+# right and this file is not the exception to it: the advisory URL is derivable
+# from the repository itself, and every route a reporter can take to it is spelled
+# out above, in SECURITY.md, and in the opening block of both issue forms. If a
+# link here is ever genuinely wanted, it needs an ALLOWLIST entry with a written
+# reason in `scripts/check-portability.mjs` — never a loosened rule.

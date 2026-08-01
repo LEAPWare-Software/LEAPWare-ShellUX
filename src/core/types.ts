@@ -37,15 +37,37 @@ import type { ComponentType } from 'react';
  * Pinned by "register — a shifting id cannot smuggle a reserved key into the store"
  * in `src/core/__tests__/registrySecurity.test.tsx`.
  *
- * The render-boundary rule above is the one obligation on this list that **no test
- * exercises**, and it is stated as an obligation on a future renderer rather than as
- * a property of the code: nothing in `src/` renders plug-in content yet (ISSUE-002,
- * ISSUE-004). Per ADR-0001 Amendment G it must not be restated anywhere as a
- * delivered protection until there is a render site and a test at it.
+ * The render-boundary rule above now has a render site, and it is no longer stated
+ * only as an obligation on future work. `src/components/ui/RibbonToolbar.tsx` is the
+ * first place in `src/` where an untrusted plug-in string reaches the DOM, and it
+ * renders `RibbonAction.label` as a JSX text node and resolves `RibbonAction.icon`
+ * through a host-owned `Map` rather than into markup or a URL. Two tests hold the
+ * rule, and they hold deliberately different things: *tests:*
+ * `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
+ * plug-in label as a text node, not as markup", which is a statement about one
+ * hostile input, and "the module source contains no HTML-injection sink at all",
+ * which parses the component with the TypeScript compiler and is a statement about
+ * the module, so it still holds if someone adds a second render path tomorrow.
+ *
+ * **That is one render site, not a host-wide property, and this paragraph must not
+ * be read as the wider claim.** The row virtualizer that will render plug-in row
+ * content is ISSUE-004 and does not exist, so for that surface the rule remains an
+ * untested obligation on future work — exactly what it was for the ribbon until
+ * ISSUE-002. Per ADR-0001 Amendment G, the ribbon's tests license a sentence about
+ * the ribbon and nothing beyond it.
  * ============================================================================
  */
 
-/** Identifier of one of the three shell panes. */
+/**
+ * Identifier of one of the three shell panes.
+ *
+ * **A layout type, not a context field — since GitHub issue #13.** It names the
+ * three panes for `PaneWrapper`, for `ShellLayout`'s resize bookkeeping and for
+ * `HydrationEngine.PaneSizes`. It used to have a second life as the type of
+ * `RibbonContext.focusedPane`, which is removed: nothing in the host ever wrote
+ * that field, so it was permanently `null` and invited predicates that could
+ * never fire. See ADR-0001 Amendment K Decision 6.
+ */
 export type PaneId = 'pane1' | 'pane2' | 'pane3';
 
 /**
@@ -63,13 +85,34 @@ const PANE_ID_MEMBERS: Readonly<Record<PaneId, true>> = Object.freeze({
 /**
  * `PaneId` as a runtime membership test.
  *
- * A type union vanishes at runtime, and `RibbonContext.focusedPane` is written
- * through `ShellStateStore.patchContext` — a member reachable from plugin code,
- * which may be plain JavaScript that the compiler never saw. Validating that
- * field therefore needs the union as data; see `assertValidPaneId` in
- * `ShellAPI.ts`.
+ * **Its original caller is gone and it is not therefore dead.** It existed
+ * because `RibbonContext.focusedPane` was written through `patchContext` — a
+ * member reachable from plain JavaScript the compiler never saw — so validating
+ * it needed the union as data. `focusedPane` was removed by GitHub issue #13 and
+ * `assertValidPaneId` went with it.
+ *
+ * What is left is the other thing a runtime copy of a type union is good for:
+ * asserting that a host-owned `Record<PaneId, …>` really has the union's keys and
+ * no others. `HydrationEngine`'s `DEFAULT_PANE_SIZES` is exactly such a record,
+ * and "covers exactly the pane ids the host declares" in
+ * `src/core/services/__tests__/hydrationEngine.test.ts` compares the two.
+ * Deleting this would have meant that test restating the union in its own words,
+ * which is the drift the pin exists to prevent.
  */
-export const PANE_IDS: ReadonlySet<string> = new Set(Object.keys(PANE_ID_MEMBERS));
+export const PANE_IDS: ReadonlySet<string> = Object.freeze(new Set(Object.keys(PANE_ID_MEMBERS)));
+
+/**
+ * What a context key may hold: a primitive, and nothing else.
+ *
+ * **The narrowness IS the design** — see `IShellAPI.setContextKey` and ADR-0001
+ * Amendment K Decision 2. An object would carry getters that re-enter host code
+ * during a render-phase predicate, a prototype another extension could reach
+ * through, and an identity no `Object.is` bail-out could compare; a primitive
+ * carries none of those and costs one `typeof` to validate. This union is the
+ * whole difference between a context key and the opaque `extensionState` blob
+ * Amendment K records as rejected.
+ */
+export type ContextKeyValue = string | number | boolean | null;
 
 /**
  * The ambient host state handed to a ribbon action so it can decide whether it
@@ -85,10 +128,94 @@ export interface RibbonContext {
   readonly activeExtensionId: string | null;
   /** Selected node in the pane-1 navigation tree, or `null`. */
   readonly activeNavNodeId: string | null;
-  /** Item selected inside the active extension's view, or `null`. */
+  /**
+   * Every item selected inside the active extension's view, in the order the
+   * writer supplied them. Empty when nothing is selected.
+   *
+   * **This is the SINGLE SOURCE OF TRUTH for selection**, and `selectedItemId`
+   * below is derived from it. It exists because `selectedItemId` alone cannot
+   * express a multi-selection, and a list pane whose user has shift-clicked six
+   * rows had no way to say so — the ribbon could only ever be told about one of
+   * them (GitHub issue #14, ADR-0001 Amendment K Decision 1).
+   *
+   * The array is a HOST-OWNED FROZEN COPY, never the caller's object. It is
+   * built element by element from a single read of the supplied value, exactly
+   * as `normalizeNavigationNode` builds a navigation tree, so a Proxy that
+   * reports one `length` while it is measured and another afterwards cannot grow
+   * what the host stores. Every element is a string, there are no duplicates,
+   * and the count is bounded by `REGISTRY_LIMITS.MAX_SELECTED_ITEMS`. Pinned by
+   * the "setSelectedItems validates its argument" group in
+   * `src/core/__tests__/shellApi.test.ts` and by "patchContext rejects what
+   * setSelectedItems rejects" in `src/core/__tests__/contextPatch.test.ts`.
+   */
+  readonly selectedItemIds: readonly string[];
+  /**
+   * The LAST element of `selectedItemIds`, or `null` when nothing is selected.
+   *
+   * **Derived, not stored beside the array.** There is one writer — the store's
+   * `applyPatch` — and it recomputes this field from `selectedItemIds` in the
+   * same draft, so no subscriber can ever observe the two disagreeing. It is
+   * kept on the interface because it is what a single-selection extension
+   * actually wants, and because a great deal of code and documentation reads it.
+   *
+   * It stays WRITABLE through `patchContext` and `IShellAPI.setSelectedItem` as
+   * a shorthand for a selection of one — those doors funnel into the same one
+   * writer rather than setting this field beside the array. When a single patch
+   * supplies both, `selectedItemIds` wins and this field is recomputed from it;
+   * that keeps `patchContext(store.getContext())` an exact round trip. Pinned by
+   * "derives selectedItemId from the last element of selectedItemIds" and
+   * "lets selectedItemIds outrank selectedItemId in one patch" in
+   * `src/core/__tests__/contextPatch.test.ts`.
+   */
   readonly selectedItemId: string | null;
-  /** Pane that currently holds keyboard focus, or `null`. */
-  readonly focusedPane: PaneId | null;
+  /**
+   * The FOREGROUND extension's own context keys — named primitive facts it has
+   * published about itself, for its own predicates to branch on.
+   *
+   * **This is the general mechanism, and `selectedItemIds` above is not an
+   * instance of it.** Selection is a host concept: the shell renders it, clears
+   * it on handover and hands it to `onExecute`. A context key is plug-in-private
+   * state the host stores and republishes without understanding — which is
+   * exactly what VS Code's `when` clauses read, and the prior art is named
+   * because the shape is deliberately the same one (ADR-0001 Amendment K
+   * Decision 2). Without it, every plug-in state a ribbon needed to react to
+   * would have to become a new `RibbonContext` field, and `selectedItemIds`
+   * would have been the first of many.
+   *
+   * **It is what makes a predicate able to be pure AND reactive.** The rejected
+   * alternative was an `invalidateRibbon()` signal letting a predicate read
+   * mutable module state; that reintroduces the tearing `useSyncExternalStore`
+   * exists to prevent, because the predicate runs during render. A context key
+   * goes through the store, so the value a predicate reads is part of the same
+   * snapshot every other subscriber has, and the predicate stays a pure function
+   * of its argument.
+   *
+   * **Host-owned, frozen, and NULL-PROTOTYPE.** The keys originate in a plug-in
+   * manifest-shaped string and are held to `EXTENSION_ID_PATTERN` and
+   * `RESERVED_IDS`, so `__proto__` cannot get in — and the record is built on
+   * `Object.create(null)` anyway, so there is nothing to pollute even if the
+   * filter were wrong. That is the same belt-and-braces the registry's `Map`
+   * stores are. Read it with `ctx.contextKeys['my-key']`; it has no
+   * `hasOwnProperty` and needs none.
+   *
+   * **Scope, stated exactly.** The record published here belongs to whichever
+   * extension is in the FOREGROUND. An extension writes only into its own
+   * namespace and has no parameter with which to name another's, so it cannot
+   * WRITE another extension's keys — but a backgrounded extension calling
+   * `getContext()` gets this same snapshot and can therefore READ the foreground
+   * extension's keys. That is collision-resistance, in exactly the register
+   * `setBadgeCount` uses, and not confinement. Do not put anything in a context
+   * key that would matter if another extension read it. Pinned by "keeps two
+   * extensions' context keys apart, and publishes only the foreground's" in
+   * `src/core/__tests__/contextKeys.test.tsx`.
+   *
+   * Cleared on every real foreground handover, in the same single patch that
+   * clears the selection and the nav node, and for the same reason: one
+   * extension's state must not be handed to the next one. Pinned by "clears
+   * every extension's context keys on a foreground handover" in
+   * `src/core/__tests__/contextKeys.test.tsx`.
+   */
+  readonly contextKeys: Readonly<Record<string, ContextKeyValue>>;
 }
 
 /** A node in an extension's pane-1 navigation tree. */
@@ -97,6 +224,22 @@ export interface NavigationNode {
   readonly id: string;
   /** UNTRUSTED display text. Render as a text node only. */
   readonly label: string;
+  /**
+   * UNTRUSTED icon key, or omitted for no icon. Same rule as
+   * `RibbonAction.icon`: resolve through the host-owned lookup table, never by
+   * interpolating it into a URL or markup.
+   *
+   * The vocabulary is `SHELL_ICONS` in `src/components/ui/shellIcons.tsx` and is
+   * published for extension authors in `DEVELOPER.md`. A key the host does not
+   * publish resolves to the host's fallback glyph rather than to nothing, and a
+   * node that declares no icon at all keeps the monogram the collapsed pane-1
+   * track has always drawn. Pinned by "renders a declared node icon in the
+   * collapsed track instead of the monogram", "falls back to the host glyph for
+   * an icon key the host does not publish" and "keeps the monogram for a node
+   * that declares no icon" in
+   * `src/components/__tests__/ShellLayoutIcons.test.tsx`.
+   */
+  readonly icon?: string;
   /** Non-negative integer badge, or omitted when the node carries no badge. */
   readonly badgeCount?: number;
   /** Nested children; depth is bounded by the registry. */
@@ -123,11 +266,18 @@ export interface NavigationNode {
  * shortcut (`z` for undo reads as `z` to the user) and the wrong one for a
  * *positional* shortcut; only mnemonics are offered.
  *
- * Nothing dispatches a hotkey today. It is declared and validated at
- * registration — see `normalizeRibbonAction` in `RegistryContext.tsx` — and the
- * dispatcher is Phase 2, because it needs the foreground extension and a live
- * `RibbonContext`. Validation is pinned by "validateBlueprint — ribbon action
- * hotkeys" in `src/core/__tests__/validation.test.ts`.
+ * **Dispatched since ISSUE-006.** `useHotkeyDispatch` in
+ * `src/core/hotkeyDispatch.ts` owns the shell's one `keydown` listener, called
+ * once by `ShellLayout`; a chord is live only for the FOREGROUND extension, and
+ * only for an action that is visible and not disabled. This comment used to say
+ * that nothing dispatched a chord and that the dispatcher was Phase 2, which was
+ * true when it was written and is not now. Declaration and validation are still
+ * where they were — `normalizeRibbonAction` in `RegistryContext.tsx` — and
+ * pinned by "validateBlueprint — ribbon action hotkeys" in
+ * `src/core/__tests__/validation.test.ts`. Dispatch is pinned by "fires a
+ * visible, enabled chord on the foreground extension" and "does not fire a
+ * background extension chord while another extension is in the foreground" in
+ * `src/core/__tests__/hotkeyDispatch.test.tsx`.
  */
 export interface Hotkey {
   /**
@@ -167,19 +317,37 @@ export interface RibbonAction {
    * action cannot be declared; that is additively fixable later, and the reverse
    * is not.
    *
-   * **Declared and validated now; nothing dispatches it.** The registry checks
-   * the shape, the allowlist, the modifier rule and intra-extension uniqueness,
-   * then stores a frozen host-owned copy. There is no `keydown` listener
-   * anywhere in `src/` — pinned by "finds no listener registration and no
-   * key-event name in any module under src/" in
-   * `src/__tests__/noEventListener.test.ts`, which parses **every** non-test
-   * module under `src/` with the TypeScript compiler and fails on
-   * `addEventListener`, `removeEventListener` or a `keydown`/`keyup`/`keypress`
-   * name in any code position. Comments are trivia to the parser and are not
-   * scanned, which is what lets this sentence state the property; a listener
-   * reached through a name that is not text — `el[fromAVariable](...)` — is
-   * outside what it can see, and that limit is stated in the test. The narrower
-   * fact that `src/core/hotkeys.ts` exports only its three pure helpers is
+   * **Declared, validated, and — since ISSUE-006 — dispatched.** The registry
+   * checks the shape, the allowlist, the modifier rule and intra-extension
+   * uniqueness, then stores a frozen host-owned copy; `useHotkeyDispatch` routes
+   * a matching keystroke to `onExecute` through the SAME `isVisible` and
+   * `isDisabled` guards the ribbon button uses, which is what keeps a chord from
+   * being a wider route to a plug-in handler than the button is.
+   *
+   * **Exactly two modules under `src/` touch a key event, and both are named in
+   * allowlists checked in both directions.** `src/core/hotkeyDispatch.ts` holds
+   * the repository's only `addEventListener`; since ISSUE-004,
+   * `src/components/shared/VirtualizedList.tsx` carries an `onKeyDown` on its
+   * scroll container which moves the list selection — arrow keys, Home/End, Page
+   * Up/Down — and consults no chord, no `hotkey` field and no registry. Every
+   * other module is held to registering nothing and naming no
+   * `keydown`/`keyup`/`keypress` at all. Pinned by "finds no listener
+   * registration in any module outside the hotkey-dispatch allowlist", "finds no
+   * key-event name in any module outside the key-event allowlist", "holds the
+   * key-event allowlist to the exact spellings each listed module contains" and
+   * "holds the hotkey-dispatch allowlist to the exact spellings the dispatcher
+   * contains" in `src/__tests__/noEventListener.test.ts`, which parses every
+   * non-test module under `src/` with the TypeScript compiler.
+   *
+   * Comments are trivia to the parser and are not scanned, which is what lets
+   * this docblock state the property; a listener reached through a name that is
+   * not text — `el[fromAVariable](...)` — is outside what it can see, and that
+   * limit is stated in the test. What a source scan cannot see at all is that the
+   * dispatcher's one listener is really removed on unmount, so that is pinned at
+   * runtime instead, by "adds exactly one keydown listener and removes the
+   * identical handler on unmount" in
+   * `src/core/__tests__/hotkeyDispatch.test.tsx`. The narrower fact that
+   * `src/core/hotkeys.ts` remains four pure helpers that attach nothing is
    * "hotkeys module — does not attach anything" in
    * `src/core/__tests__/hotkeys.test.ts`.
    */
@@ -201,10 +369,24 @@ export interface RibbonAction {
    * delivers is that the direct route is closed and the honest mistake is hard to
    * make by accident. Purity stays the author's obligation.
    *
-   * As a guardrail it has **no test**, and per ADR-0001 Amendment G that is stated
-   * rather than glossed: nothing in `src/` calls `isVisible` yet (ISSUE-002), so
-   * there is no call site at which purity could be observed. The registry checks only
-   * that it is a function — "validateBlueprint — ribbon actions" in
+   * As a guardrail it still has **no test**, and per ADR-0001 Amendment G that is
+   * stated rather than glossed. The reason is no longer "no call site": since
+   * ISSUE-002, `src/components/ui/RibbonToolbar.tsx` calls `isVisible` on every
+   * render, inside a guard. What that guard contains is MISBEHAVIOUR, not impurity.
+   * A predicate that throws is treated as not visible and reported, and the
+   * remaining actions still render; the report itself is wrapped, so a plug-in that
+   * replaced `console.error` with a throwing function cannot turn containment into
+   * an escape. A non-boolean return is treated as not visible too, because the call
+   * site compares `=== true` rather than testing truthiness. *Tests:*
+   * `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
+   * isVisible predicate throws and still renders the rest", "treats a non-boolean
+   * isVisible result as not visible" and "survives a console.error that itself
+   * throws while reporting a bad predicate".
+   *
+   * **None of that is a purity test.** A predicate that writes through a captured
+   * store rather than throwing returns cleanly, so the guard never sees it and no
+   * test asserts against it. Purity stays the author's obligation. The registry
+   * checks only that it is a function — "validateBlueprint — ribbon actions" in
    * `src/core/__tests__/validation.test.ts`.
    */
   isVisible(ctx: RibbonContext): boolean;
@@ -214,7 +396,7 @@ export interface RibbonAction {
    *
    * `shell` is the same deep-frozen, per-extension `IShellAPI` the host holds
    * for this extension, so a ribbon action can actually change shell state.
-   * Without it the handler received four nullable strings and no capability, and
+   * Without it the handler received a `RibbonContext` and no capability, and
    * therefore provably could not do anything at all.
    *
    * `shell` is revocable: after the extension is released or unregistered every
@@ -290,11 +472,18 @@ export interface IShellAPI {
   /**
    * Set — or clear, with `null` — the currently selected item.
    *
+   * **A selection of one.** Since GitHub issue #14 this is exactly
+   * `setSelectedItems(id === null ? [] : [id])`: `selectedItemIds` is the field
+   * that is written and `selectedItemId` is recomputed from it, so the two
+   * cannot drift. Nothing about the single-selection case changed — an extension
+   * that only ever selects one row can go on calling this and reading
+   * `ctx.selectedItemId`.
+   *
    * The value is opaque to the host: it is the extension's own item
    * identifier, not a registry key, so it is checked for TYPE only and not
    * against `EXTENSION_ID_PATTERN`. It is checked, though, because this value
-   * lands in `RibbonContext.selectedItemId` — a snapshot the host hands to
-   * OTHER extensions' `isVisible` and `onExecute`. An unchecked argument would
+   * lands in `RibbonContext` — a snapshot the host hands to OTHER extensions'
+   * `isVisible` and `onExecute`. An unchecked argument would
    * make the declared `string | null` a runtime lie and turn the context into
    * a cross-plugin object-injection channel. Pinned at both doors that reach the
    * field: "setSelectedItem validates its argument" in
@@ -318,6 +507,125 @@ export interface IShellAPI {
    *   `src/core/__tests__/contextPatch.test.ts`.
    */
   setSelectedItem(id: string | null): void;
+  /**
+   * Replace the whole selection. Pass an empty array to clear it.
+   *
+   * This is the multi-selection door, and `RibbonContext.selectedItemIds` is
+   * what it writes; `selectedItemId` is recomputed from the last element in the
+   * same patch, so a subscriber never sees the two disagree.
+   *
+   * **`ids` is untrusted input and is neither trusted nor retained.** The array
+   * is read once — its length captured, then each element read exactly once into
+   * a host-owned array — and it is that host-owned array which is validated,
+   * frozen and stored. Mutating the array you passed afterwards changes nothing.
+   * Each element is held to the same rule `setSelectedItem` applies to `id`
+   * (a string, opaque, not `EXTENSION_ID_PATTERN`), the count is bounded by
+   * `REGISTRY_LIMITS.MAX_SELECTED_ITEMS`, and **a repeated id is rejected**
+   * rather than silently collapsed: a selection containing the same row twice is
+   * the caller's bug, and quietly deduplicating it would return a different
+   * selection from the one that was asked for. Pinned by the "setSelectedItems
+   * validates its argument" group in `src/core/__tests__/shellApi.test.ts`.
+   *
+   * A store listener runs inside this call, exactly as it does for
+   * `setSelectedItem`.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written;
+   *   `INVALID_FIELD` when `ids` is not an array, when it or one of its elements
+   *   refuses to be read, when an element is not a string, or when an id
+   *   repeats; `PAYLOAD_TOO_LARGE` when the count exceeds
+   *   `REGISTRY_LIMITS.MAX_SELECTED_ITEMS`; `REENTRANT_NOTIFY` from the
+   *   notification cascade, after the fields are committed.
+   */
+  setSelectedItems(ids: readonly string[]): void;
+  /**
+   * Set — or clear, with `null` — the selected pane-1 navigation node.
+   *
+   * **The host's pane-1 click handler and this method are one path, not two.**
+   * `ShellLayout` calls `ShellStateStore.setActiveNavNode` and so does this
+   * facade, so the rule that decides what `activeNavNodeId` may hold is written
+   * once. Before GitHub issue #15 an extension could not navigate at all: the
+   * field was writable only by the host's own click handler, so a plug-in that
+   * wanted "open the Invoices node" from a ribbon action had nothing to call.
+   *
+   * `nodeId` IS a host lookup key — unlike `setSelectedItem`'s `id` — so it is
+   * held to the registry's own allowlist and reserved words, the same rule
+   * `setBadgeCount` applies to its `nodeId`. Pinned by "setActiveNavNode
+   * validates its argument" in `src/core/__tests__/shellApi.test.ts`.
+   *
+   * **It is not checked against YOUR navigation tree**, and that is deliberate
+   * rather than an omission: `activeNavNodeId` is one host-wide field, the host
+   * clears it on every foreground handover, and an extension that names a node
+   * it does not own gets a field no renderer of its own will match. That is the
+   * same posture `setSelectedItem` takes towards an item id the extension made
+   * up. It is scoping by convention, not confinement — see `setBadgeCount`.
+   *
+   * A store listener runs inside this call, exactly as it does for
+   * `setSelectedItem`.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written;
+   *   `INVALID_ID` when `nodeId` is neither a registry-valid identifier nor
+   *   `null`; `REENTRANT_NOTIFY` from the notification cascade, after the field
+   *   is committed.
+   */
+  setActiveNavNode(nodeId: string | null): void;
+  /**
+   * Publish one named primitive fact about YOUR extension, for your own ribbon
+   * predicates to branch on. It surfaces as `RibbonContext.contextKeys[key]`.
+   *
+   * **Why this exists, and what it replaces.** A predicate is a pure function of
+   * the context and is handed no capability, which is what stops it writing
+   * during render. That left a plug-in with no way to make the ribbon
+   * re-evaluate from state the host does not model: a mail module that wants
+   * "Reply" hidden until a message is loaded had nothing to say so with, because
+   * `selectedItemId` says a row is selected and not that its body arrived. The
+   * two alternatives were both rejected in ADR-0001 Amendment K Decision 1 — an
+   * `invalidateRibbon()` signal, which would have licensed predicates to read
+   * mutable module state and brought the tearing back, and an opaque
+   * `extensionState` blob, which is a dumping ground with no validation story.
+   * This is the third answer, and it is VS Code's: named keys, host-owned,
+   * read by visibility expressions.
+   *
+   * **`value` is primitives only, and that is the load-bearing constraint.** A
+   * `string`, `number`, `boolean` or `null` — nothing else, ever. An object would
+   * put a getter the plug-in wrote inside a render-phase predicate read, hand one
+   * extension a live prototype chain into another's code, and defeat the
+   * `Object.is` comparison that keeps an unchanged write from waking every
+   * subscriber in the shell. Anything else is `INVALID_FIELD`. A `number` must be
+   * finite: `NaN` and `Infinity` are values a predicate cannot usefully branch on
+   * and are refused at the door rather than left to surprise one.
+   *
+   * **`key` is a host lookup key** and is held to the registry's own allowlist
+   * and reserved words, exactly as `setBadgeCount`'s `nodeId` is. An extension
+   * may hold at most `REGISTRY_LIMITS.MAX_CONTEXT_KEYS` distinct keys, and a
+   * `string` value at most `REGISTRY_LIMITS.MAX_CONTEXT_VALUE_LENGTH`
+   * characters. There is no delete: spell "unset" `null`, which still occupies a
+   * slot.
+   *
+   * **Scoped by the closure, like `setBadgeCount`.** The extension id is captured
+   * at mint time and is not a parameter, so this method offers no way to write
+   * another extension's keys. It is collision-resistance and not confinement —
+   * the published record is readable by anything holding a context, and the
+   * unscoped store behind this facade is public. See `RibbonContext.contextKeys`.
+   *
+   * **Writing the value a key already holds changes nothing and notifies
+   * nobody**, the same bail-out `patchContext` applies field by field. A key
+   * written from a background extension does not move the published record
+   * either, because only the foreground's namespace is published — so it does
+   * not notify. Both pinned by "does not notify when a context key is rewritten
+   * with the value it already holds" and "does not notify for a background
+   * extension's own context key" in `src/core/__tests__/contextKeys.test.tsx`.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is written;
+   *   `INVALID_ID` when `key` is not a registry-valid identifier;
+   *   `INVALID_FIELD` when `value` is not a finite `number`, `string`, `boolean`
+   *   or `null`; `PAYLOAD_TOO_LARGE` when a `string` value is too long or the key
+   *   would be one too many; `REENTRANT_NOTIFY` from the notification cascade,
+   *   after the key is committed.
+   */
+  setContextKey(key: string, value: ContextKeyValue): void;
   /**
    * Set the badge count for one of YOUR navigation nodes.
    *
@@ -356,6 +664,35 @@ export interface IShellAPI {
    *   `src/core/__tests__/shellApi.test.ts`.
    */
   setBadgeCount(nodeId: string, count: number): void;
+  /**
+   * Read back the badge count for one of YOUR navigation nodes, or `undefined`
+   * when none was ever set.
+   *
+   * **Scoped by the same closure `setBadgeCount` is scoped by.** The extension
+   * id is captured at mint time in `createRevocableShellAPI` and is not a
+   * parameter, so this method offers no way to name another extension's scope
+   * and read their badges — it reads back exactly what this handle can write.
+   * Before GitHub issue #12 an extension could write a badge and had no way to
+   * read one, so a module that wanted to increment its own count had to keep a
+   * shadow copy and hope nothing else had written since.
+   *
+   * **That is collision-resistance and symmetry, not confinement**, in exactly
+   * the terms `setBadgeCount` sets out: the unscoped store behind this facade is
+   * reachable through the public `useShellStore()`, and
+   * `store.getBadgeCount('other-ext', 'inbox')` reads another extension's badge.
+   * What this member guarantees is that IT is not a route to one. Pinned by
+   * "reads back only its own scope, and offers no parameter to name another"
+   * under "badge collision-resistance" in `src/core/__tests__/dataflow.test.tsx`.
+   *
+   * A one-shot read that subscribes to nothing. A renderer wanting to re-render
+   * when a badge moves uses `useBadgeCount` in `ShellAPI.ts` instead.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is read; `INVALID_ID`
+   *   when `nodeId` is not a registry-valid identifier. It writes nothing, so it
+   *   never notifies and `REENTRANT_NOTIFY` cannot come out of it.
+   */
+  getBadgeCount(nodeId: string): number | undefined;
   /**
    * Immutable snapshot of the current host context.
    *

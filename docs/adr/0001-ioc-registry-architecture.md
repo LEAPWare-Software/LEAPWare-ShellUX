@@ -165,12 +165,37 @@ is a silent no-op", "cannot have its prototype swapped".
 > extension's unfrozen view components. Amendment E states what is and is not
 > delivered, in three terms used consistently across the repository.
 
-**Intent, not current behaviour:** per-extension persisted state *is to be*
-namespaced by extension id for the same reason. **No persistence exists.** There is no persistence member on
-`IShellAPI` and no storage layer in `src/`. This is ISSUE-003, and until it
-lands nothing here should be read as a guarantee. `README.md` lists it under
-"Specified but not yet enforced"; this paragraph previously asserted it in the
-present tense and was wrong to.
+**Landed as code, not reached by the shell:** per-extension persisted state *is*
+namespaced by extension id, in `src/core/services/HydrationEngine.ts` and the
+`src/hooks/useLocalStorageState.ts` bindings over it. **That namespace is
+collision-resistance, not confinement** — Amendment E's vocabulary, and Amendment
+E is what forbids the stronger sentence being written here. Two extensions that
+both persist a key named `selection` keep their own copies, and that is the whole
+of what it buys. It confines nothing, for two independent reasons. The scope is an
+**argument, not a closure**, so any holder of the engine can name any scope: there
+is no per-extension facade over persistence the way `createRevocableShellAPI` is
+one over badges, and `IShellAPI` still has **no persistence member**. And the store
+is one `localStorage` entry under one origin, which any script on the page reads
+and rewrites without going through the engine at all. Nothing confidential belongs
+in persisted UI state. *Tests:*
+`src/core/services/__tests__/hydrationEngine.test.ts` — "keeps two extensions that
+both use the key \"selection\" apart" for what the namespace does buy; "lets any
+caller name any scope, so the namespace confines nothing" and "reads and rewrites
+another extension's scope straight through the storage entry" for what it does
+not, each reproduced as behaviour rather than asserted in prose.
+
+Nothing in the shell is wired to any of it yet. Neither
+`src/components/layout/ShellLayout.tsx` nor `src/App.tsx` reads or writes persisted
+state, so no pane divider and no collapse toggle survives a reload today: the
+engine and the hook exist and are tested, and the shell does not use them.
+
+> **Superseded 2026-07-31, when ISSUE-003 landed the engine.** This paragraph
+> previously declared the whole subject absent — nothing written anywhere, no
+> module under `src/` owning a storage entry — and sent the reader to ISSUE-003 and
+> to the README's "Specified but not yet enforced" list. That was accurate when it
+> was written and is not now. What survives of it is the `IShellAPI` half, which is
+> unchanged, and its warning, which the paragraph above keeps: what has landed is a
+> store, not a boundary.
 
 ### 4. Contextual behaviour through visibility predicates
 
@@ -218,8 +243,11 @@ handling and are documented as extension-author responsibility in
   designed out.** Deep freezing means an `IShellAPI` instance cannot be patched;
   the closure-held state store means `RibbonContext`'s declared types hold for
   every caller; validated ids and scoped badge keys mean two vendors cannot
-  silently overwrite each other. Deep freezing has landed; the persistence half is
-  ISSUE-003 intent and is not in effect yet — see §3.
+  silently overwrite each other. Deep freezing has landed, and so has the
+  persistence half: the hydration engine namespaces persisted state by extension id
+  and two vendors picking the same state key do not collide. Like the badge scoping
+  beside it, that is collision-resistance and not confinement, and nothing in the
+  shell reads or writes it yet — see §3.
 
   > **Corrected by Amendment E.** This entry was headed "**Vendor isolation is
   > real, within the limits of a shared page**" and concluded that "one extension
@@ -566,7 +594,8 @@ member of `ShellUXErrorCode` and is pinned in the exhaustiveness record in
 `createRevocableShellAPI(store, extensionId)` returns `{ api, revoke }` as two
 separate objects. `revoke` closes over a variable only that factory's scope can
 reach and is a property of the wrapper the host keeps — never of `api`.
-`Object.keys(api)` is exactly the three `IShellAPI` members. `createShellAPI(store)`
+`Object.keys(api)` is exactly the `IShellAPI` members and nothing else — three of
+them when this amendment was written, seven since Amendment K. `createShellAPI(store)`
 is unchanged for existing callers: it is the unscoped host-side facade and simply
 discards the `revoke` handle. *Tests:* `src/core/__tests__/dataflow.test.tsx` — "does not
 expose revoke to the plugin"; and for what that does *not* buy,
@@ -888,11 +917,14 @@ without someone deciding what a legal value for it is:
 |---|---|
 | `selectedItemId` | `string` or `null`. Type only — it is the extension's own item key, not a host lookup key. |
 | `activeExtensionId`, `activeNavNodeId` | `EXTENSION_ID_PATTERN`, not reserved, or `null` — the registry's own rule, imported rather than restated. |
-| `focusedPane` | a member of `PANE_IDS`, or `null`. |
+| `focusedPane` | a member of `PANE_IDS`, or `null`. **Superseded by Amendment K Decision 6: the field is removed, and so is this row and its validator.** |
 
 `PANE_IDS` is new in `types.ts`: `PaneId` is a type union and vanishes at runtime,
 so it is pinned to a `Record<PaneId, true>` exhaustiveness record in the same idiom
-as `SHELL_UX_ERROR_CODES`. The validators reuse `describeUntrusted` and never read
+as `SHELL_UX_ERROR_CODES`. (`PANE_IDS` outlived the field it was built for: since
+Amendment K it is what `HydrationEngine`'s pane-size record is checked against, and
+the reason it was kept rather than deleted with `assertValidPaneId` is written on it
+in `types.ts`.) The validators reuse `describeUntrusted` and never read
 an untrusted value — `typeof` only, with interpolation reserved for a value already
 proven to be a primitive string. Rejection is **all-or-nothing**: the draft is a
 local and the context is replaced only after the loop, so a patch whose second
@@ -1758,23 +1790,57 @@ export interface RibbonAction {
 `ShellUXErrorCode` gains `DUPLICATE_HOTKEY`. `RegistryContext.tsx` gains the
 `HOTKEY_KEYS` allowlist beside `REGISTRY_LIMITS`, and `normalizeHotkey`.
 `src/core/hotkeys.ts` is new and holds three pure functions — `hotkeyToken`,
-`describeHotkey`, `matchesHotkey`. Nothing else changed: the `Map` store,
+`describeHotkey`, `matchesHotkey`. (Amendment J adds a fourth, `ariaKeyShortcuts`.)
+Nothing else changed: the `Map` store,
 `RESERVED_IDS`, `EXTENSION_ID_PATTERN`, the single-read discipline, normalisation
 and the deep-freezing are untouched.
 
-**Nothing dispatches a hotkey.** There is no `keydown` listener anywhere in
-`src/`, no `useHotkeyDispatcher`, and no evaluation site. This amendment records
-a *declaration and validation* decision, in the same present-tense-honest
-register Amendment G requires of `isVisible`.
+**Nothing dispatches a hotkey.** No module under `src/` registers an event
+listener of any kind, there is no `useHotkeyDispatcher`, and there is no
+evaluation site. This amendment records a *declaration and validation* decision,
+in the same present-tense-honest register Amendment G requires of `isVisible`.
 
-*Tests:* the repository-wide half of that sentence is pinned by "finds no
-listener registration and no key-event name in any module under src/" in
-`src/__tests__/noEventListener.test.ts`. It parses every non-test `.ts`/`.tsx`
-file under `src/` with the TypeScript compiler and fails if any code position —
-identifier, property name, JSX attribute or string literal — spells
-`addEventListener`, `removeEventListener`, `keydown`, `keyup` or `keypress`.
+> **SUPERSEDED BY AMENDMENT J.** The paragraph above was true when it was written
+> and is not true now: ISSUE-006 built the dispatcher, `src/core/hotkeyDispatch.ts`
+> holds the repository's one `addEventListener`, and both halves of the scan below
+> are now allowlisted. It is preserved rather than rewritten because the rest of
+> this amendment is a record of decisions taken while it was true. Everything else
+> in Amendment H stands; see Amendment J for what the dispatcher does with it.
+
+*Tests:* the repository-wide half of that sentence was pinned by a test that
+forbade `addEventListener` in every module under `src/` with no exceptions at all.
+Amendment J narrowed it to a one-entry allowlist and re-pointed this citation with
+it: "finds no listener registration in any module outside the hotkey-dispatch
+allowlist" in `src/__tests__/noEventListener.test.ts`. It parses every non-test
+`.ts`/`.tsx` file under `src/` with the TypeScript compiler and fails if any code
+position — identifier, property name, JSX attribute or string literal — spells
+`addEventListener` or `removeEventListener` outside that allowlist.
+
+**AMENDED BY ISSUE-004, and amended by narrowing rather than by weakening.** That
+test used to forbid `keydown`, `keyup` and `keypress` in the same breath and with
+the same repo-wide reach. ISSUE-004's list virtualizer needs `onKeyDown` for
+arrow-key row navigation — it is the issue's own Definition of Done — so the two
+halves were split. The listener half was left unchanged with NO allowlist
+mechanism at all, because that half was what "no dispatcher, no evaluation site"
+rested on; ISSUE-006 then had to narrow it too, and Amendment J records why. The
+key-event half is scoped to a named allowlist, and both allowlists are checked in
+both directions: a listed module that stops spelling what its entry claims fails
+as a stale exemption, and one that grows a spelling its entry does not name fails
+as an unreviewed widening. *Tests:* "finds no key-event name in any module
+outside the key-event allowlist", "holds the key-event allowlist to the exact
+spellings each listed module contains", "holds the hotkey-dispatch allowlist to
+the exact spellings the dispatcher contains" and "registers no listener and names
+no window or document target in the allowlisted module".
+
+Amendment G's three routes are name a test, narrow the claim, or delete it.
+Deleting the file or blanket-exempting `src/components/**` were both rejected:
+the first destroys the evidence for a claim made in five places, and the second is
+an allowlist that only ever gets longer. Narrowing is the route that keeps the
+sentence and the evidence the same width, and every prose site stating the wider
+claim was re-pointed in the same change.
+
 Comments are trivia to the parser and are not scanned, which is the distinction
-the claim needs: this paragraph and two other docblocks discuss the absence, and
+the claim needs: this paragraph and several docblocks discuss the absence, and
 a raw text search would fail on the sentences describing it. Its limit is stated
 in the test rather than glossed — a listener reached through a name that is not
 text, or one installed by an imported third-party module, is outside what a
@@ -1898,6 +1964,13 @@ all three groups explicitly, and "accepts every key in the host allowlist" pins
 the size at 61 so that a key joining or leaving the list is a failing test rather
 than a silent widening.
 
+> **Amended by Amendment I.** The list is **60** keys, not 61, and there are
+> **four** absent groups, not three: `escape` was removed, on the same reasoning
+> given here for `space`. `enter` stays on the list but may no longer be declared
+> bare. The three exclusions above stand exactly as written; what was wrong was
+> that the reasoning was not applied to two keys it plainly reached — GitHub issue
+> #8. See Amendment I.
+
 ### Decision 5 — a single-character key must carry ctrl, alt or meta
 
 **This is the WCAG 2.2 Success Criterion 2.1.4 Character Key Shortcuts, Level A
@@ -1928,6 +2001,17 @@ modifier rule for character keys" in `src/core/__tests__/validation.test.ts`,
 which asserts the message contains `2.1.4`, `Character Key Shortcuts` and
 `Level A`, pins shift-alone as a rejection, and derives the exempt set from
 `HOTKEY_KEYS` itself so a new named key is covered the moment it lands.
+
+> **Amended by Amendment I.** This decision is unchanged and its message is
+> unchanged. What changed is that it is no longer the *only* reason a chord may be
+> refused for carrying no modifier: `enter` is now refused bare as well, on
+> **activation** grounds, with its own message that names no criterion. The
+> sentence above — "Function keys and the named navigation and editing keys are
+> exempt" — remains true of 2.1.4 and is true of `enter` too; `enter` is refused by
+> a different rule, and conflating the two would have made this citation
+> inaccurate. The exempt set in the test now subtracts
+> `HOTKEY_MODIFIER_REQUIRED_KEYS`, so it still derives rather than transcribes. See
+> Amendment I.
 
 ### Decision 6 — cross-extension conflicts are impossible, and REJECTING them was refused
 
@@ -2031,6 +2115,686 @@ Pane 2 view with ISSUE-004's virtualizer, not in this contract.
 - **Neutral.** `src/core/hotkeys.ts` is a new file under the 100% coverage gate,
   and it is deliberately trivial: three pure functions, no DOM, no React, no
   state. The interesting code is the dispatcher, and the dispatcher is Phase 2.
+  (It landed as `src/core/hotkeyDispatch.ts` — a separate module, so this one
+  stayed trivial. See Amendment J.)
+
+---
+
+## Amendment I — `enter` and `escape`: the allowlist now applies its own rule to itself
+
+**Date:** 2026-07-31 · **Status:** Accepted · **Amends:** Amendment H Decision 4
+(the allowlist and its absences) and Amendment H Decision 5 (the modifier rule,
+which is now one of two rules rather than the only one)
+
+### The finding
+
+GitHub issue #8. `HOTKEY_KEYS` admitted `enter` and `escape` as chords with **zero
+modifiers**, because the guard in `normalizeHotkey` refused a bare chord only when
+`key.length === 1`. Decision 4 excludes `space` in these words:
+
+> **`space`.** Space activates the focused control: a button, a checkbox, a row.
+> Claiming it globally means the focused control stops responding to the key that
+> operates it.
+
+That reason reaches `enter` exactly. Enter activates the focused control — the
+default button, a focused link, a table row — and submits a form, in every browser
+and every assistive technology. Two keys with one failure mode sat on opposite
+sides of the list, and the list explained only one of them.
+
+`escape` has a second, concrete collision. It is the shell's dismissal key: it
+closes the ribbon's overflow menu, cancels a drag, leaves fullscreen, and dismisses
+a `@radix-ui/react-dialog` dialog — and this project ships that dependency. Once a
+dispatcher exists, an extension holding bare `escape` and an open dialog are in a
+fight neither side declared.
+
+**What was *not* wrong, and is not being fixed here.** WCAG 2.2 §2.1.4 Character
+Key Shortcuts is about single printable **character** keys. It genuinely does not
+reach `enter`, `escape`, `backspace`, `delete` or `insert`, so the rule as shipped
+was conformant and no accessibility claim in this repository was false. This
+amendment is about the allowlist applying its own stated rationale uniformly.
+
+### Why now, and why the cost only rises
+
+Nothing dispatched a chord when this was written — pinned at the time by a scan
+that forbade `addEventListener` anywhere under `src/`, now narrowed by Amendment J
+to "finds no listener registration in any module outside the hotkey-dispatch
+allowlist" in `src/__tests__/noEventListener.test.ts`. **No extension exists**, and
+ISSUE-005 has not landed. So at the time this change broke nothing at all — and
+ISSUE-006's dispatcher, which landed after it, inherited the smaller allowlist
+rather than having to shrink a live one.
+
+That is the entire argument for doing it now rather than with the Phase 2
+dispatcher. The moment chords actually fire, removing a key from the allowlist or
+adding a modifier requirement to one is a **breaking change for every extension
+that declared it** — it turns a working registration into a rejected one, and a
+rejected registration takes the whole blueprint with it. The cost of this decision
+therefore rises with every release after this one, and it never falls. It is
+recorded here so that a later reader who finds the change disruptive can see that
+the alternative was to make it more disruptive later.
+
+### Decision 1 — `escape` is removed from the allowlist outright
+
+`HOTKEY_KEYS` is **60** keys: 26 Latin letters, 10 digits, `f1`–`f12`, the four
+arrows, and `home`, `end`, `pageup`, `pagedown`, `enter`, `delete`, `insert`,
+`backspace`. Decision 4's list of absences gains a fourth group.
+
+**A modifier-gated Escape was considered and refused as dead surface rather than
+accepted as a compromise.** The obvious symmetric move — keep `escape`, require a
+modifier, as with `enter` below — buys nothing, because the modified forms are all
+claimed by something outside this shell: `Ctrl+Escape` opens the Start menu on
+Windows, and `Alt+Escape` and `Meta+Escape` belong to the window manager on the
+major desktops. Offering a family of chords the host cannot deliver would be worse
+than offering none, because the failure is invisible at registration and shows up
+only as a shortcut that silently never fires.
+
+Escape belongs to the focused component, exactly as `tab` and `space` do. That is
+the whole rule and it needs no exception. *Tests:* "rejects %s as a hotkey key" in
+`src/core/__tests__/validation.test.ts` now carries `escape` alongside `tab` and
+`space`, and "accepts every key in the host allowlist" pins `HOTKEY_KEYS.size` at
+60 and asserts `HOTKEY_KEYS.has('escape')` is `false`.
+
+### Decision 2 — `enter` stays on the allowlist and becomes modifier-required
+
+`enter` is not removed, because `Ctrl+Enter` — "send", "commit", "run" — is the one
+genuinely wanted chord in this family, and it collides with nothing. Removing the
+key would have taken that with the rest.
+
+A new export sits beside the allowlist:
+
+```ts
+/** Keys that may never be bound bare, whatever their length. */
+export const HOTKEY_MODIFIER_REQUIRED_KEYS: ReadonlySet<string> = new Set(['enter']);
+```
+
+and Decision 5's guard widens by exactly one clause:
+
+```ts
+if ((key.length === 1 || HOTKEY_MODIFIER_REQUIRED_KEYS.has(key)) && !ctrl && !alt && !meta) {
+```
+
+`shift` satisfies neither half, for two different reasons that happen to agree:
+Shift+K still produces a character, and Shift+Enter still activates the focused
+control. *Tests:* "validateBlueprint — the activation rule for keys that must carry
+a modifier" in `src/core/__tests__/validation.test.ts`, which pins the bare
+rejection, shift-alone as a rejection, `Ctrl+Enter` as accepted, and derives its
+coverage from `HOTKEY_MODIFIER_REQUIRED_KEYS` itself so a key added to that set is
+covered the moment it lands.
+
+### Decision 3 — one rule at one door, and no second suppression at dispatch time
+
+Suppressing bare Enter a second time inside the Phase 2 dispatcher was considered
+and **refused**. Two copies of one rule drift, and the drift is silent: whichever
+copy is edited, the other keeps enforcing the old rule and the system as a whole
+enforces neither predictably. The declaration door is where every chord already
+passes, it is where `HOTKEY_KEYS`, the 2.1.4 rule and the uniqueness check already
+live, and the check is a `Set` membership test that costs nothing.
+
+This is the same reasoning Amendment A used for validating and storing in one pass,
+and Amendment H Decision 6 used for refusing to give `normalizeBlueprint` a view of
+the store: a rule evaluated twice is a rule that can disagree with itself.
+
+### Decision 4 — the Enter refusal gets its own message and does NOT cite 2.1.4
+
+**This is the load-bearing part of the amendment, and it is the reason the change
+is not two lines.**
+
+Extending the existing 2.1.4 message to cover Enter would have been the smallest
+diff and would have been wrong. 2.1.4 is about *character* keys. Enter is not one.
+A message telling an author that WCAG 2.2 Success Criterion 2.1.4 forbids their
+bare Enter shortcut states something false about the criterion, and it teaches the
+author a wrong rule they will carry into their next project.
+
+That is precisely the failure mode Amendment G exists to stop — a citation written
+one step wider than what licenses it — and the tenth instance of the pattern would
+have been introduced by the fix for issue #8 itself. So the two rules meet at one
+`if` and then part company:
+
+| | Refused because | Message names |
+|---|---|---|
+| `k`, `7` — one character, no modifier | WCAG 2.2 §2.1.4 Character Key Shortcuts, Level A | the criterion, its title and its level |
+| `enter` — on the modifier-required list | it **activates the focused control** | the activation, and ADR-0001 Amendment I. **No criterion, no level.** |
+
+`bareChordMessage` in `RegistryContext.tsx` is the branch point, and the split is
+asserted in both directions rather than merely written down. *Tests:* "does NOT
+cite WCAG 2.1.4 for enter, which is not a character key" asserts the Enter message
+contains neither `2.1.4`, nor `Character Key Shortcuts`, nor `Level A`; "leaves the
+2.1.4 message alone for a genuine character key" asserts the character-key message
+still names `2.1.4` and does *not* name this amendment. A future edit that merges
+the two messages fails one of those two cases whichever direction it merges in.
+
+### Consequences
+
+- **Positive.** The allowlist's docblock no longer implies a rule it does not
+  apply. `space` and `enter` are now on the same side of the same reasoning, and
+  `escape` is absent for a reason stated at the list rather than discovered by a
+  user whose dialog stopped closing.
+- **Positive.** The change is free today and expensive later, and it was made
+  today. No extension exists to break, and ISSUE-005 has not landed.
+- **Positive.** `Ctrl+Enter` survives, which is the chord anybody actually wanted
+  out of this family.
+- **Negative — accepted.** `HOTKEY_MODIFIER_REQUIRED_KEYS` is a second list to keep
+  in step with `HOTKEY_KEYS`. It is a `Set` with one member, it is exported so it
+  can be asserted rather than trusted, and "holds exactly the keys that activate
+  the focused control" pins both its contents and the fact that every member of it
+  is a real allowlist key — a member that was not would guard a chord already
+  rejected one check earlier and would mean nothing.
+- **Negative — accepted.** An extension that wants a bare Escape or a bare Enter
+  cannot have one, and there is no escape hatch. That is the same trade Decision 4
+  already made for `tab` and `space`.
+- **Neutral.** Nothing was dispatched before this amendment and nothing is
+  dispatched after it. The Phase 2 dispatcher inherits a smaller and more
+  defensible set of chords to route.
+- **Housekeeping owed, stated rather than left to be found — and since paid.** The
+  count `61` stood in `README.md`, `DEVELOPER.md` and `.github/ISSUES_MANIFEST.md`
+  when this amendment was written, and `escape` was named in the allowlist prose of
+  the latter two. Those three files were **not** edited here — they were outside
+  the change's remit and in other hands at the time — so each carried a stale count
+  and a stale key, and the debt was recorded instead of being left for a reader to
+  discover. It has since been swept, in all three: no allowlist-context `61`
+  survives anywhere, `escape` is gone from every enumeration and appears instead in
+  each file's list of deliberately absent keys with the dismissal-key reason
+  attached, and the two bare-chord rules are documented apart, with the Enter rule
+  citing no criterion as Decision 4 requires. The entry is kept rather than deleted
+  because what it records is not the count but the shape: an amendment that changes
+  a number owes a sweep of every file repeating it, and the way to make that owed
+  work visible is to name the files. The authority was never the prose in any case
+  — it is the test: "accepts every key in the host allowlist" in
+  `src/core/__tests__/validation.test.ts` pins `HOTKEY_KEYS.size` at 60.
+
+---
+
+## Amendment J — Hotkey dispatch, and narrowing the no-listener invariant to keep it
+
+**Date:** 2026-07-31 · **Status:** Accepted · **Amends:** Amendment H (which
+recorded declaration and validation and deferred the dispatcher), Amendment H
+Decision 6 (foreground scoping, now the dispatcher's lookup rule) and Amendment G
+(the no-listener claim, whose evidence is narrowed rather than deleted)
+
+### What changed
+
+`src/core/hotkeyDispatch.ts` is new and exports `useHotkeyDispatch(): void`,
+called once by `ShellLayout`. `src/core/ribbonAction.ts` is new and holds
+`isVisible`, `execute` and `report`, moved out of `RibbonToolbar.tsx` unchanged.
+`src/core/hotkeys.ts` gains a fourth pure export, `ariaKeyShortcuts`.
+`RibbonToolbar.tsx` emits `aria-keyshortcuts`. `src/__tests__/noEventListener.test.ts`
+gains a second allowlist. Nothing about registration, validation, normalisation or
+the `Hotkey` contract changed at all: the dispatcher consumes the shape
+Amendment H specified, unaltered.
+
+### Decision 1 — the guards were extracted BEFORE the dispatcher was written
+
+`isVisible` and `execute` were module-private in `RibbonToolbar.tsx` while the
+button was the only route to a plug-in action. There are now two routes, and
+Amendment H Decision 1 licenses the second one in these words: a hotkey is "a
+second way to fire *this* `onExecute`, gated by the same `isVisible` and the same
+`isDisabled`".
+
+**The whole containment argument turns on the word *same*.** A second copy of those
+semantics would drift, and the drift would be silent: a chord that fired for an
+action the button would have hidden would be a WIDER route to a plug-in handler
+than the ribbon is, and the claim that a hotkey grants no capability the ribbon did
+not already grant would simply be false. So the extraction is not tidying — it is
+the precondition for the dispatcher being defensible, and it was done and verified
+green as its own step. This is Amendment I Decision 3's reasoning ("a rule
+evaluated twice is a rule that can disagree with itself") applied to a guard rather
+than to a validation. *Tests:* the existing ribbon cases still exercise both
+functions through the component — "hides an action whose isVisible predicate throws
+and still renders the rest", "treats a non-boolean isVisible result as not visible",
+"survives an onExecute that throws, leaving the ribbon interactive" — and the
+dispatcher exercises the same two through the chord: "does not fire a chord whose
+isVisible predicate throws, and reports it once" and "survives an onExecute that
+throws, leaving the dispatcher live" in `src/core/__tests__/hotkeyDispatch.test.tsx`.
+
+### Decision 2 — `ShellLayout` owns the listener, not `ShellHostProvider`
+
+`ShellLayout` is host territory above every `ExtensionHostBoundary`, it already
+holds `useActivation()` and `useShellContext()`, and it renders the ribbon — so
+the button path and the chord path resolve the same foreground extension and the
+same action list. A listener in the provider would be live with **no shell
+mounted**: a host that wrapped something other than `ShellLayout` in
+`ShellHostProvider` would get global chords over a UI with no ribbon and therefore
+no way for a user to discover what was bound.
+
+### Decision 3 — bubble phase, and the cost that comes with it
+
+Capture would make the host win over everything below it, including a Radix menu's
+own key handling and the Pane 2 list's arrow keys. Bubble lets a component that
+deliberately handles a key and calls `stopPropagation()` keep it, which is exactly
+what Amendment H Decision 8's view-local `J`/`K` navigation needs.
+
+**The accepted cost, recorded rather than discovered later:** a foreground
+extension that calls `stopPropagation()` on `keydown` inside its own pane starves
+its OWN chords. It starves nobody else's, because chords are foreground-scoped —
+the only actions the dispatcher would have walked are that same extension's. A
+plug-in denying itself its own shortcuts is a plug-in bug with a contained blast
+radius; capture would have traded that for the host breaking widgets it does not
+own, which is not contained.
+
+On a match the dispatcher calls `preventDefault()` and nothing else.
+`stopPropagation()` is deliberately absent: `window` is the last stop in the bubble
+path, so there is nothing left to stop.
+
+### Decision 4 — foreground-only, which is what makes the lookup total
+
+Amendment H Decision 6 makes cross-extension chord collisions **legal by design**:
+two live extensions may both declare `Ctrl+K` and both registrations succeed. A
+shell-wide dispatch table is therefore ambiguous by construction — there is no
+non-arbitrary answer to "whose `Ctrl+K`?" — and the ambiguity is not a bug to be
+fixed at dispatch time, it is the price Decision 6 paid to avoid making
+registration order semantically load-bearing and to avoid handing any extension a
+squatting attack.
+
+Scoping to `activation.getActive()` is what makes the lookup total again, and it
+mirrors the ribbon exactly. `getActive()` re-checks liveness against the registry
+rather than trusting the last commit, so a chord stops firing the statement after
+`release` or `unregister` rather than at the next render. *Tests:* "does not fire a
+background extension chord while another extension is in the foreground", "stops
+firing after the extension is released" and "stops firing from the statement after
+unregister, without waiting for a commit".
+
+### Decision 5 — the suppression list is a guardrail, and is labelled as one
+
+Before any `matchesHotkey` call, a keystroke is dropped when `defaultPrevented` is
+set, when `repeat` is set, when `isComposing` is true or `keyCode` is 229, and when
+the target is an editable surface — the three form elements, a `contenteditable`
+subtree whose value is not `"false"`, or an ARIA `textbox`/`searchbox`/`combobox`.
+The target is checked with `instanceof Element` first, so no property is read off a
+non-element.
+
+**This is a guardrail, not a boundary, in exactly the register of "No sandbox"
+above.** A plug-in can render a custom editor from a bare `div` with no recognised
+role, and a chord will fire into it while the user types. The host does not know
+what a plug-in's DOM means and cannot be made to; the remedy available to the
+plug-in is `stopPropagation()`, which Decision 3 deliberately leaves working. Two
+implementation notes that are easy to get wrong and were: `closest()` walks plug-in
+DOM but reads attributes only and invokes no plug-in code, and
+`element.isContentEditable` is NOT used — it returns `undefined` in this repository's
+jsdom, so a check built on it would pass every test while doing nothing in a
+browser. *Test:* the `it.each` table "does not fire while focus is in %s", with
+"still fires from an ordinary element, and from contenteditable=\"false\"" as its
+other side.
+
+### Decision 6 — `aria-keyshortcuts` is a fourth function, not `describeHotkey`
+
+`aria-keyshortcuts` is defined over UI Events `KeyboardEvent.key` **values** —
+`Control`, `Alt`, `Shift`, `Meta`. `describeHotkey` deliberately emits the
+**display** spelling, where the control key is `Ctrl`, because that is what a user
+reads on a keycap and in a tooltip. `Ctrl` is not a valid key value, so one
+function cannot serve both without being wrong for one of them. `ariaKeyShortcuts`
+is therefore a separate pure export sharing only the key half, where the two
+spellings genuinely agree.
+
+The attribute is emitted on a plug-in action that carries a `hotkey` and is **not
+disabled**, on the bar and in the overflow menu alike, and never on a host action.
+The omission on a disabled action is not an oversight: the dispatcher skips a
+disabled action, so announcing a shortcut on it would be the same lie in the other
+direction as the one the pre-ISSUE-006 ribbon avoided by announcing nothing at all.
+*Tests:* "spells the control key Control, which describeHotkey deliberately does
+not" in `src/core/__tests__/hotkeys.test.ts`; "advertises a chord-bearing action
+with aria-keyshortcuts, in key values rather than display spelling", "omits
+aria-keyshortcuts from a disabled action, because the chord will not fire",
+"advertises a chord on an overflow menu item too" and "never advertises a chord on
+a host action" in `src/components/__tests__/RibbonToolbar.test.tsx`.
+
+### Decision 7 — narrowing the no-listener scan beat deleting it, and beat pretending
+
+**This is the load-bearing part of the amendment.** ISSUE-004 split
+`src/__tests__/noEventListener.test.ts` into two halves and kept the listener half
+absolute *on purpose*, saying so in its own docblock: that half was what "no
+dispatcher, no evaluation site" rested on, and adding an exception mechanism to it
+"would be the change that quietly ends the invariant". ISSUE-006 is that change.
+Three options were on the table, which are Amendment G's three routes:
+
+1. **Delete the file.** Rejected. It is the evidence for a claim made in eight
+   prose sites, and deleting it at the moment the first ambient key handler lands
+   is deleting the evidence exactly when it is worth most.
+2. **Leave the title and let it lie.** Rejected outright, and named here because it
+   is the cheapest option and the one a hurried change actually takes: keeping
+   "with no exceptions at all" on a test that has an exception is the Amendment G
+   failure mode in its purest form.
+3. **Narrow the claim to what is still true, and re-point every site.** Taken. The
+   listener half now consults a one-entry allowlist naming `core/hotkeyDispatch.ts`
+   and its exact spellings, checked in both directions like the key-event half. The
+   property that survives is the one that matters going forward: there is exactly
+   ONE listener in the repository, it is in a named file, and a second cannot appear
+   without an edit to this test that a reviewer has to approve.
+
+**And the scan is the weaker half of the new claim, so it is not the whole of it.**
+A text scan can see that `addEventListener` appears once and `removeEventListener`
+once. It cannot see that the two name the same event, and it cannot see that the
+cleanup passes the SAME function reference — a cleanup that rebuilt the closure
+would leak one listener per mount while satisfying every count the scan can take.
+That pairing is therefore pinned at runtime, by spying on `window` across a mount
+and an unmount and comparing handler identity, and again under StrictMode whose
+simulated remount must net to a single registration. *Tests:* "finds no listener
+registration in any module outside the hotkey-dispatch allowlist", "holds the
+hotkey-dispatch allowlist to the exact spellings the dispatcher contains" and
+"holds the dispatcher to exactly one addEventListener and one removeEventListener"
+in `src/__tests__/noEventListener.test.ts`; "adds exactly one keydown listener and
+removes the identical handler on unmount" and "registers once under StrictMode,
+whose simulated remount is symmetric" in
+`src/core/__tests__/hotkeyDispatch.test.tsx`.
+
+Two test titles changed as a result — the listener scan's and the key-event scan's,
+the latter because its allowlist is no longer only about keyboard navigation — and
+every prose site citing either was re-pointed in the same change: `README.md`,
+`DEVELOPER.md`, `.github/ISSUES_MANIFEST.md`, this file, `src/core/types.ts`,
+`src/components/layout/ShellLayout.tsx`,
+`src/components/ui/RibbonToolbar.tsx`, `src/core/services/HydrationEngine.ts` and
+`src/components/__tests__/ShellLayout.test.tsx`.
+
+### Consequences
+
+- **Positive.** A declared chord now does something, through the same two gates the
+  ribbon button passes and through literally the same two functions. Amendment H
+  Decision 1's containment argument is now a property of code rather than a promise
+  about future code.
+- **Positive.** The repository still has exactly one event listener, and it is
+  harder to add a second than it was before: the source scan has to be edited, and
+  the runtime pairing test has to keep passing.
+- **Positive.** `aria-keyshortcuts` finally appears, and appears only where it is
+  true.
+- **Negative — accepted.** A foreground extension that stops `keydown` propagation
+  starves its own chords. See Decision 3; the alternative starves other people's
+  widgets.
+- **Negative — accepted.** The suppression list does not recognise a plug-in's
+  home-made editor. See Decision 5. It is labelled a guardrail everywhere it is
+  described, including in `DEVELOPER.md`, where the author who could actually fix
+  it will read it.
+- **Negative — accepted.** The no-listener invariant is now defended by an
+  allowlist rather than by an absolute rule, and an allowlist is a thing that can
+  be extended. The mitigations are that it is exact in both directions, that it has
+  one entry, and that the runtime pairing test does not care what the allowlist
+  says.
+- **Neutral.** `hotkeyToken` is still the deduplication key at registration and is
+  still not a dispatch lookup key: the dispatcher walks the foreground extension's
+  actions and calls `matchesHotkey`, because Decision 6 of Amendment H means there
+  is no unambiguous table to look a token up in. The token's second use, forecast in
+  Amendment H Decision 7, did not arrive and is not needed.
+
+---
+
+## Amendment K — The contract-hardening wave: multi-selection, context keys, and one deliberate removal
+
+**Date:** 2026-08-01 · **Status:** Accepted · **Amends:** Amendment C
+(`Object.keys(api)` is "exactly the three `IShellAPI` members"), Amendment D (the
+`patchContext` validation table, whose `focusedPane` row is removed) and
+Amendment G (which is the rule this amendment is written to satisfy, not one it
+changes)
+
+### What changed
+
+`IShellAPI` went from **three members to seven**: `setSelectedItems`,
+`setActiveNavNode`, `getBadgeCount` and `setContextKey` join `setSelectedItem`,
+`setBadgeCount` and `getContext`. `RibbonContext` gained `selectedItemIds` and
+`contextKeys`, made `selectedItemId` a derived read, and **lost `focusedPane`**.
+`NavigationNode` gained an optional `icon`. The ribbon's icon table moved to
+`src/components/ui/shellIcons.tsx` as `SHELL_ICONS` and is now published in
+`DEVELOPER.md`. Every host constant is frozen. Seven GitHub issues (#10, #12,
+#13, #14, #15, #18, #19) land as one change, because five of them touch the shape
+of `IShellAPI` and doing the "three members" documentation sweep once is
+materially safer than doing it five times.
+
+### Decision 1 — multi-selection is a first-class field, and the two alternatives are recorded so they are not re-proposed
+
+`RibbonContext.selectedItemId: string | null` cannot express a multi-selection. A
+list pane whose user has shift-clicked six rows had exactly one thing it could
+tell the ribbon, and a plug-in had no way to make the ribbon re-evaluate from its
+own state at all. Two designs were considered and **both were rejected**:
+
+1. **An `invalidateRibbon()` signal**, letting a predicate read mutable plug-in
+   module state and asking the host to re-render when that state moved.
+   **Rejected: predicates run during render.** A predicate reading mutable
+   external state reintroduces exactly the tearing `useSyncExternalStore` exists
+   to prevent — two panes evaluating the same predicate at two points in one
+   commit can read two different values, and the contract requires pure
+   predicates for that reason. The signal would also have made "pure" mean
+   "does not write", when the problem is reading something that is not the
+   argument.
+2. **A generic opaque `extensionState` blob on the context.** **Rejected on two
+   grounds.** It becomes a dumping ground — there is no answer to "what may go in
+   it?", so everything does. And an unvalidated opaque field is against the grain
+   of a codebase that validates every untrusted value once, at the door, and
+   stores a host-owned copy; a blob has no validation story, and an object in it
+   carries getters that fire inside a render-phase predicate read and a prototype
+   chain one extension can reach through into another's code.
+
+What landed instead: `selectedItemIds: readonly string[]` as the **single source
+of truth**, with `selectedItemId` becoming the LAST element or `null`. One
+writer — `applyPatch` — recomputes the derived field inside the same draft, so no
+notification can ever carry the two disagreeing. `selectedItemId` stays on the
+interface and stays writable as a shorthand for a selection of one, because a
+great deal of code and documentation reads it and single selection is the common
+case; a patch naming both is resolved by precedence rather than refused, because
+`patchContext(store.getContext())` names both and must be an exact round trip.
+
+The array is untrusted input and is handled in this codebase's established idiom:
+length captured once, each element read exactly once into a host-owned array, and
+that array validated, frozen and stored — the discipline `normalizeNavigationNode`
+already applies to a registered tree, so a `Proxy` reporting one length while it
+is measured and another afterwards cannot grow what the host holds.
+`REGISTRY_LIMITS.MAX_SELECTED_ITEMS` bounds it.
+
+**Duplicates are REJECTED, not collapsed**, and the choice is recorded because
+either would have been defensible. Deduplicating silently returns a selection of a
+different length from the one the caller asked for, which is the same class of
+failure `assertValidSelectedItemId` refuses to create by coercing a bad id to
+`null`: a selection that mysteriously differs from the one you set is worse to
+find than an exception at the call site.
+
+`publishForeground` clears `selectedItemIds` in the SAME single patch that clears
+`selectedItemId` and `activeNavNodeId`, so no subscriber observes a torn state.
+
+*Tests:* the "setSelectedItems validates its argument" group in
+`src/core/__tests__/shellApi.test.ts`; "patchContext rejects what setSelectedItems
+rejects", "derives selectedItemId from the last element of selectedItemIds", "lets
+selectedItemIds outrank selectedItemId in one patch" and "does not notify when a
+selection is rewritten with the ids it already holds" in
+`src/core/__tests__/contextPatch.test.ts`.
+
+### Decision 2 — context keys are the general mechanism, and `selectedItemIds` is deliberately not an instance of it
+
+Decision 1 answers selection. It does not answer the question underneath it:
+**every time a plug-in needs the ribbon to react to something the host does not
+model, does the host grow another `RibbonContext` field?** That does not scale,
+and `selectedItemIds` would have been the first of many.
+
+The prior art is named plainly because the shape is deliberately the same one:
+**VS Code's `when` clauses over context keys**. An extension publishes named
+values through the host; visibility expressions read them. That preserves the
+purity guarantee which killed `invalidateRibbon()` — the predicate is still a pure
+function of its argument, because the value went through the store and is part of
+the same snapshot every other subscriber holds.
+
+`IShellAPI.setContextKey(key, value)` writes one, and
+`RibbonContext.contextKeys` publishes them. The design turns on four constraints:
+
+- **The value type is `string | number | boolean | null` and nothing else.** This
+  is what distinguishes a context key from the opaque `extensionState` blob
+  rejected in Decision 1, and it is not a limitation waiting to be lifted. A
+  primitive costs one `typeof` to validate, invokes nothing when it is read,
+  carries no prototype another extension can reach through, and compares with
+  `Object.is` — which is what makes the unchanged-write bail-out possible at all.
+  A `number` must be finite: `NaN` and `Infinity` are values a predicate cannot
+  branch on usefully.
+- **The key is a host lookup key** and is held to `EXTENSION_ID_PATTERN` and
+  `RESERVED_IDS`, exactly as a badge node id is. The published record is built on
+  `Object.create(null)` regardless, so there is nothing to pollute even if that
+  filter were wrong — the same belt-and-braces relationship Amendment F describes
+  between the registry's `RESERVED_IDS` check and its `Map` stores.
+- **The scope is closure-captured**, exactly as `setBadgeCount`'s is. An extension
+  writes only into its own namespace and has no parameter with which to name
+  another's. **That is collision-resistance, not confinement**, in the same
+  register Amendment C uses for badges: the published record is the FOREGROUND
+  extension's, and anything holding a context can read it. Stated in
+  `DEVELOPER.md` in those words, because the honest version of this is the useful
+  one.
+- **Notification follows the store's existing discipline.** A key that moves
+  notifies, so the ribbon re-evaluates; a key rewritten with the value it already
+  holds does not, and neither does a background extension's write, because only
+  the foreground's namespace is published and the context therefore did not move.
+
+Keys are cleared on every real foreground handover, in the same single patch as
+the selection and the nav node, and every namespace is dropped rather than only
+the outgoing one. This is the bug class `publishForeground` was fixed for and it
+would have been worst here: a predicate is a pure function of the context, so a
+stale key from the previous vendor is indistinguishable to it from one this vendor
+set. The clearing is split into a store-state half (`clearContextKeys`, which
+deliberately neither patches nor notifies) and a published half (`contextKeys: {}`
+inside the handover patch), because store state cannot be cleared from inside a
+context patch and doing it afterwards would leave a window where the two
+disagreed.
+
+**`selectedItemIds` is NOT re-expressed as a context key, and that is the line
+between the two.** Selection is a host concept: the shell renders it, hands it to
+`onExecute`, clears it on handover and reasons about it. A context key is
+plug-in-private state the host stores and republishes without understanding.
+Collapsing the first into the second would make the host unable to say anything
+about selection at all.
+
+*Tests:* `src/core/__tests__/contextKeys.test.tsx` — "setContextKey validates its
+value", "patchContext rejects what setContextKey rejects", "keeps two extensions'
+context keys apart, and publishes only the foreground's", "clears every
+extension's context keys on a foreground handover", "does not notify when a
+context key is rewritten with the value it already holds", "does not notify for a
+background extension's own context key" and "carries the cleared record in the
+same single notification as the rest of the handover".
+
+### Decision 3 — `setActiveNavNode`, and one path rather than two
+
+`activeNavNodeId` was writable only by the host's pane-1 click handler, through a
+raw `patchContext`. An extension could not navigate at all. The new member and
+that handler now both go through **one** store member, `setActiveNavNode`, which
+is Amendment J Decision 1's argument about `isVisible` applied to a field: two
+routes to one thing must not be two copies of one rule.
+
+`nodeId` **is** a host lookup key, unlike `setSelectedItem`'s `id`, so it is held
+to the registry's allowlist and reserved words. It is deliberately **not** checked
+against the calling extension's own tree: `activeNavNodeId` is one host-wide
+field, the host clears it on every handover, and an extension naming a node it
+does not own gets a value none of its own rendering will match — the same posture
+`setSelectedItem` takes toward an invented item id. *Test:* "setActiveNavNode
+validates its argument" in `src/core/__tests__/shellApi.test.ts`.
+
+### Decision 4 — `getBadgeCount` is scoped by the closure, because a scoped write with an unscoped read is not a scope
+
+`setBadgeCount` existed and `getBadgeCount` did not, so an extension that wanted
+to increment its own count had to keep a shadow copy. The read half is scoped by
+the same closure-captured `extensionId` the write half is, and takes no scope
+parameter. A read half that took one would have handed every extension every other
+extension's badges **through the documented API** — a strictly wider capability
+than the write half it mirrors, and a widening nobody asked for. *Test:* "reads
+back only its own scope, and offers no parameter to name another" in
+`src/core/__tests__/dataflow.test.tsx`.
+
+### Decision 5 — freezing the host constants, and exactly what a frozen `Set` is worth
+
+`EXTENSION_ID_PATTERN`, `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS` and
+`HOTKEY_MODIFIER_REQUIRED_KEYS` are the rules every untrusted payload is measured
+against, and all five were runtime-mutable. `REGISTRY_LIMITS` was `as const`,
+which is a **compile-time** assertion binding nobody who is not being compiled.
+All five are now `Object.freeze`d.
+
+**The claim is stated narrowly on purpose, because the obvious wider version is
+false.** Freezing buys, unconditionally, that no own property can be added,
+replaced or deleted: `REGISTRY_LIMITS` becomes genuinely immutable, and for the
+`Set`s and the `RegExp` it means `has` and `test` cannot be **shadowed** by an own
+property — which was the interesting attack, since a plug-in owning
+`HOTKEY_KEYS.has` owned the hotkey allowlist for the whole page.
+
+It does **not** make a `Set` immutable. `Set` state lives in internal slots rather
+than in properties, so `Object.freeze(set)` leaves `add`, `delete` and `clear`
+working, and `HOTKEY_KEYS.add('tab')` still widens the allowlist. Closing that
+would mean shipping a `Set` whose mutators throw — a different object from the one
+`ReadonlySet` describes — and it was not done. This is the same register as "No
+sandbox": hardened against replacement, not against a determined caller. Both
+halves are asserted rather than one, by "freezes the host constants against
+replacement" and "does not claim more than a frozen Set delivers" in
+`src/core/__tests__/hostConstants.test.ts`, the second of which demonstrates the
+mutability on a throwaway `Set` so that no real allowlist is left widened behind
+it.
+
+### Decision 6 — `focusedPane` is deleted, not populated
+
+`RibbonContext.focusedPane` was declared `PaneId | null`, was validated, and was
+written by nothing: permanently `null` for the whole life of the field. ISSUE-002
+recorded that as a known limit and `DEVELOPER.md` warned authors about it, which
+is documentation of a defect rather than a fix for one.
+
+**A field that is permanently null is worse than an absent one, because it looks
+available.** It invites predicates that can never fire, and the author gets no
+error — just an action that never shows. The alternative was to populate it, which
+needs focus tracking the shell deliberately does not do (it would be a second
+ambient listener, against the invariant Amendment J went to some trouble to keep
+narrow). So it is removed: from `RibbonContext`, from the `CONTEXT_FIELDS`
+validator table, from `assertValidPaneId`, and from every document that described
+it.
+
+**Two things survive it, and the second was nearly deleted by mistake.** `PaneId`
+remains as a layout type — `PaneWrapper`, `ShellLayout`'s resize bookkeeping,
+`HydrationEngine.PaneSizes`. And `PANE_IDS`, the runtime membership set, turned
+out to have a second consumer unrelated to the field it was built for: "covers
+exactly the pane ids the host declares" in
+`src/core/services/__tests__/hydrationEngine.test.ts` checks the engine's
+pane-size record against it. Deleting it would have forced that test to restate
+the union in its own words, which is exactly the drift the pin exists to prevent,
+so it stays and its docblock now says why.
+
+The `focusedPane` cases in `contextPatch.test.ts` were **re-pointed rather than
+deleted**. The properties they held — a patch value is validated before it reaches
+the snapshot, and a rejection never stringifies what it is rejecting — are
+unchanged; they now hold against `selectedItemIds`, which is a strictly harder
+case, because a collection can refuse to report its length, refuse to yield an
+element, and carry a hostile value at any index.
+
+### Decision 7 — `NavigationNode.icon`, one icon table, and a published vocabulary
+
+The collapsed 48px pane-1 track drew a monogram — the first letter of the label —
+so `DatabasePlugin`'s Components / Assemblies / Consumables rendered as "C A C".
+`NavigationNode.icon` is optional, validated in the nav-node normaliser beside
+`badgeCount` and held to exactly what `RibbonAction.icon` is held to.
+
+The icon table was module-private in `RibbonToolbar.tsx`. It moved to
+`src/components/ui/shellIcons.tsx` as `SHELL_ICONS` **with its `Map` semantics
+intact** — a `Map` specifically so a prototype-shaped key cannot resolve to
+something inherited — because two surfaces resolve an icon key now and two copies
+of a lookup table drift the way two copies of a validation rule do.
+
+Three outcomes are kept distinct, deliberately: a known key draws its glyph, an
+**unknown** key draws the host fallback, and **no key at all** keeps the monogram.
+A mistyped key and an undeclared icon are different situations and must not render
+identically.
+
+The vocabulary is published in `DEVELOPER.md` (issue #18). The fallback stays —
+guessing wrong should not break a ribbon — but a soft landing with no way to
+discover the real keys is a vendor guessing forever. The list is machine-checked
+against the map in both directions by "publishes every icon key in DEVELOPER.md,
+and no key it does not have" in
+`src/components/__tests__/ShellLayoutIcons.test.tsx`, so it cannot go stale by
+omission and cannot document a key that does not exist.
+
+### Consequences
+
+- **Positive.** A plug-in can express a multi-selection, navigate, read its own
+  badges, and drive ribbon visibility from its own state — the last through a
+  mechanism rather than through a bespoke field per need.
+- **Positive.** `selectedItemId` can no longer disagree with the selection,
+  because it is not stored beside it.
+- **Positive.** The host constants can no longer have their interrogation methods
+  replaced, and the limit of that is written down rather than assumed away.
+- **Negative — accepted.** `IShellAPI` is more than twice the size it was, and
+  every member is a capability handed to untrusted code. The mitigation is that
+  each of the four additions was argued for individually above, and that
+  `dataflow.test.tsx` asserts the LITERAL member list rather than a count, so an
+  eighth cannot arrive quietly.
+- **Negative — accepted.** `contextKeys` published in a single host-wide snapshot
+  means a backgrounded extension can READ the foreground extension's keys. It
+  cannot write them. This is the badge posture and it is documented as
+  collision-resistance rather than confinement.
+- **Negative — accepted.** A frozen `Set` is still `add`-able. See Decision 5.
+- **Neutral.** `PANE_IDS` outlived the field it was created for and is now
+  justified by a different consumer. Its docblock says so, rather than leaving a
+  reader to assume it is dead.
 
 ---
 

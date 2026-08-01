@@ -302,8 +302,9 @@ describe('register — the stored record is host-owned', () => {
     const context: RibbonContext = {
       activeExtensionId: null,
       activeNavNodeId: null,
+      selectedItemIds: [],
       selectedItemId: null,
-      focusedPane: null,
+      contextKeys: {},
     };
     expect(stored.ribbonActions[0]?.isVisible(context)).toBe(true);
 

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createShellStateStore } from '../ShellAPI';
 import type { ShellStateStore } from '../ShellAPI';
-import { PANE_IDS, ShellUXError } from '../types';
-import type { RibbonContext } from '../types';
+import { REGISTRY_LIMITS } from '../RegistryContext';
+import { ShellUXError } from '../types';
 import { makeUnstringifiableValue } from './fixtures';
 
 /**
@@ -101,31 +101,26 @@ describe('patchContext rejects what setSelectedItem rejects', () => {
   });
 });
 
-describe('patchContext validates focusedPane against the real PaneId union', () => {
-  it.each(Array.from(PANE_IDS))('accepts the pane id %s', (pane) => {
-    const store = createShellStateStore();
-    store.patchContext({ focusedPane: pane as RibbonContext['focusedPane'] });
-    expect(store.getContext().focusedPane).toBe(pane);
-  });
-
-  it('accepts null', () => {
-    const store = createShellStateStore({ focusedPane: 'pane2' });
-    store.patchContext({ focusedPane: null });
-    expect(store.getContext().focusedPane).toBeNull();
-  });
-
-  it('refuses a string that is not a pane', () => {
-    const store = createShellStateStore();
-    const error = expectShellUXError(() => {
-      patchAnything(store)({ focusedPane: 'pane9' });
-    });
-    expect(error.code).toBe('INVALID_FIELD');
-    expect(error.field).toBe('focusedPane');
-    // Provably a string, so naming it is safe and useful.
-    expect(error.message).toContain('pane9');
-    expect(store.getContext().focusedPane).toBeNull();
-  });
-
+/**
+ * ============================================================================
+ * THE BLOCK THIS REPLACED, AND WHY IT IS NOT A DELETION
+ * ============================================================================
+ * This describe used to be "patchContext validates focusedPane against the real
+ * PaneId union". `RibbonContext.focusedPane` was removed by GitHub issue #13 —
+ * nothing in the host ever wrote it, so it was permanently `null` and invited
+ * predicates that could never fire (ADR-0001 Amendment K Decision 6) — and with
+ * it went the field those cases were about.
+ *
+ * The PROPERTIES they pinned did not go anywhere, so they are re-pointed at the
+ * field that replaced it as the interesting one: a patch value must be validated
+ * before it reaches the snapshot, and a rejection must never stringify what it is
+ * rejecting. `selectedItemIds` is a strictly harder case than `focusedPane` was —
+ * it is a collection, so it can refuse to report its length, refuse to yield an
+ * element, and carry a hostile value at any index, none of which a single string
+ * field could do.
+ * ============================================================================
+ */
+describe('patchContext rejects what setSelectedItems rejects', () => {
   it('refuses a non-string without stringifying it', () => {
     const store = createShellStateStore();
     let ran = false;
@@ -136,11 +131,224 @@ describe('patchContext validates focusedPane against the real PaneId union', () 
       },
     };
     const error = expectShellUXError(() => {
-      patchAnything(store)({ focusedPane: hostile });
+      patchAnything(store)({ selectedItemIds: [hostile] });
     });
-    expect(error.field).toBe('focusedPane');
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('selectedItemIds[0]');
     expect(error.message).toContain('"object"');
     expect(ran).toBe(false);
+    expect(store.getContext().selectedItemIds).toEqual([]);
+  });
+
+  it.each([
+    ['a string', 'msg-1'],
+    ['null', null],
+    ['a number', 7],
+    ['a plain object', { 0: 'msg-1', length: 1 }],
+  ])('refuses %s in place of an array', (_label, value) => {
+    const store = createShellStateStore();
+    const error = expectShellUXError(() => {
+      patchAnything(store)({ selectedItemIds: value });
+    });
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('selectedItemIds');
+  });
+
+  it('refuses a revoked Proxy in place of an array, rather than raising a raw TypeError', () => {
+    const store = createShellStateStore();
+    const revocable = Proxy.revocable<string[]>([], {});
+    revocable.revoke();
+    // `Array.isArray` on a revoked Proxy is a raw TypeError — the same leak
+    // `checkArray` closes in the registry, reached here by a different door.
+    expect(() => Array.isArray(revocable.proxy)).toThrow(TypeError);
+
+    const error = expectShellUXError(() => {
+      patchAnything(store)({ selectedItemIds: revocable.proxy });
+    });
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('selectedItemIds');
+  });
+
+  it('refuses an array that lies about its length', () => {
+    const store = createShellStateStore();
+    const lying = new Proxy(['msg-1'], {
+      get(target, property, receiver): unknown {
+        return property === 'length' ? 1.5 : Reflect.get(target, property, receiver);
+      },
+    });
+    const error = expectShellUXError(() => {
+      patchAnything(store)({ selectedItemIds: lying });
+    });
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.message).toContain('non-negative integer length');
+  });
+
+  it('refuses an array that refuses to report its length', () => {
+    const store = createShellStateStore();
+    const hostile = new Proxy(['msg-1'], {
+      get(target, property, receiver): unknown {
+        if (property === 'length') {
+          throw new Error('length refused');
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const error = expectShellUXError(() => {
+      patchAnything(store)({ selectedItemIds: hostile });
+    });
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('selectedItemIds');
+  });
+
+  it('refuses an element that throws while it is being read', () => {
+    const store = createShellStateStore();
+    const hostile = new Proxy(['msg-1', 'msg-2'], {
+      get(target, property, receiver): unknown {
+        if (property === '1') {
+          throw new Error('element refused');
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const error = expectShellUXError(() => {
+      patchAnything(store)({ selectedItemIds: hostile });
+    });
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('selectedItemIds[1]');
+    expect(error.message).toContain('threw while it was being read');
+  });
+
+  it('refuses a repeated id rather than collapsing it', () => {
+    const store = createShellStateStore();
+    const error = expectShellUXError(() => {
+      store.patchContext({ selectedItemIds: ['msg-1', 'msg-2', 'msg-1'] });
+    });
+    expect(error.code).toBe('INVALID_FIELD');
+    expect(error.field).toBe('selectedItemIds[2]');
+    expect(error.message).toContain('msg-1');
+    // Deduplicating would have stored a selection of two when three were asked
+    // for. Nothing was stored at all.
+    expect(store.getContext().selectedItemIds).toEqual([]);
+  });
+
+  it('refuses more selected items than the registry bound allows', () => {
+    const store = createShellStateStore();
+    const tooMany = Array.from(
+      { length: REGISTRY_LIMITS.MAX_SELECTED_ITEMS + 1 },
+      (_unused, index) => `msg-${String(index)}`,
+    );
+    const error = expectShellUXError(() => {
+      store.patchContext({ selectedItemIds: tooMany });
+    });
+    expect(error.code).toBe('PAYLOAD_TOO_LARGE');
+    expect(error.field).toBe('selectedItemIds');
+    // The bound is on what is STORED: it refused before building the copy.
+    expect(store.getContext().selectedItemIds).toEqual([]);
+  });
+
+  it('stores a host-owned frozen copy, not the caller array', () => {
+    const store = createShellStateStore();
+    const mine = ['msg-1', 'msg-2'];
+    store.patchContext({ selectedItemIds: mine });
+
+    const stored = store.getContext().selectedItemIds;
+    expect(stored).not.toBe(mine);
+    expect(Object.isFrozen(stored)).toBe(true);
+
+    // Mutating the array that was passed changes nothing.
+    mine.push('msg-3');
+    expect(store.getContext().selectedItemIds).toEqual(['msg-1', 'msg-2']);
+  });
+});
+
+describe('selectedItemId is derived from selectedItemIds', () => {
+  it('derives selectedItemId from the last element of selectedItemIds', () => {
+    const store = createShellStateStore();
+    store.patchContext({ selectedItemIds: ['msg-1', 'msg-2', 'msg-3'] });
+    expect(store.getContext().selectedItemId).toBe('msg-3');
+
+    store.patchContext({ selectedItemIds: [] });
+    expect(store.getContext().selectedItemId).toBeNull();
+  });
+
+  it('lets selectedItemIds outrank selectedItemId in one patch', () => {
+    const store = createShellStateStore();
+    // A caller naming both is not rejected — `patchContext(getContext())` names
+    // both — and the array is what decides.
+    store.patchContext({ selectedItemId: 'ignored', selectedItemIds: ['msg-1', 'msg-2'] });
+    expect(store.getContext().selectedItemIds).toEqual(['msg-1', 'msg-2']);
+    expect(store.getContext().selectedItemId).toBe('msg-2');
+  });
+
+  it('round-trips its own snapshot exactly, and without notifying', () => {
+    const store = createShellStateStore();
+    store.patchContext({ selectedItemIds: ['msg-1', 'msg-2'] });
+    const before = store.getContext();
+    let notifications = 0;
+    store.subscribe(() => {
+      notifications += 1;
+    });
+
+    store.patchContext(before);
+
+    expect(store.getContext()).toBe(before);
+    expect(notifications).toBe(0);
+  });
+
+  it('makes selectedItemId a one-element selection when it is written alone', () => {
+    const store = createShellStateStore();
+    store.patchContext({ selectedItemId: 'msg-9' });
+    expect(store.getContext().selectedItemIds).toEqual(['msg-9']);
+    expect(store.getContext().selectedItemId).toBe('msg-9');
+  });
+
+  it('does not notify when a selection is rewritten with the ids it already holds', () => {
+    const store = createShellStateStore();
+    store.setSelectedItems(['msg-1', 'msg-2']);
+    const before = store.getContext();
+    let notifications = 0;
+    store.subscribe(() => {
+      notifications += 1;
+    });
+
+    // A fresh host-owned array is built on every call, so an identity comparison
+    // would have reported a change here and woken every subscriber in the shell.
+    store.setSelectedItems(['msg-1', 'msg-2']);
+
+    expect(store.getContext()).toBe(before);
+    expect(notifications).toBe(0);
+  });
+
+  it('treats a reordered selection as a change, because the derived id moves', () => {
+    const store = createShellStateStore();
+    store.setSelectedItems(['msg-1', 'msg-2']);
+    store.setSelectedItems(['msg-2', 'msg-1']);
+    expect(store.getContext().selectedItemIds).toEqual(['msg-2', 'msg-1']);
+    expect(store.getContext().selectedItemId).toBe('msg-1');
+  });
+
+  it('changes the selection without changing the derived id when only the head moves', () => {
+    const store = createShellStateStore();
+    store.setSelectedItems(['msg-1', 'msg-9']);
+    const before = store.getContext();
+    store.setSelectedItems(['msg-2', 'msg-9']);
+
+    // `selectedItemIds` moved and `selectedItemId` did not, which is the case a
+    // single `Object.is` on the derived field alone would have missed.
+    expect(store.getContext()).not.toBe(before);
+    expect(store.getContext().selectedItemIds).toEqual(['msg-2', 'msg-9']);
+    expect(store.getContext().selectedItemId).toBe('msg-9');
+  });
+
+  it('clears the selection when selectedItemIds is spelled undefined', () => {
+    const store = createShellStateStore();
+    store.setSelectedItems(['msg-1']);
+    patchAnything(store)({ selectedItemIds: undefined });
+
+    // `undefined` means "no value", and a selection spells that the empty array
+    // rather than `null` — which is the field-specific half of the normalisation.
+    expect(store.getContext().selectedItemIds).toEqual([]);
+    expect(store.getContext().selectedItemId).toBeNull();
   });
 });
 
@@ -193,7 +401,7 @@ describe('patchContext is all-or-nothing', () => {
     const before = store.getContext();
 
     expectShellUXError(() => {
-      patchAnything(store)({ selectedItemId: 'msg-1', focusedPane: 'pane9' });
+      patchAnything(store)({ selectedItemId: 'msg-1', selectedItemIds: [42] });
     });
 
     // The good field did not land, the snapshot kept its identity, and nobody
@@ -226,7 +434,6 @@ describe('patchContext normalises undefined to null', () => {
     ['selectedItemId', 'msg-1'],
     ['activeExtensionId', 'mail-ext'],
     ['activeNavNodeId', 'root-a'],
-    ['focusedPane', 'pane2'],
   ] as const)('clears %s rather than writing undefined into it', (field, seed) => {
     const store = createShellStateStore({ [field]: seed });
     expect(store.getContext()[field]).toBe(seed);
@@ -261,14 +468,14 @@ describe('patchContext reads own properties only', () => {
     const store = createShellStateStore();
     const patch: unknown = Object.create({
       selectedItemId: 'inherited',
-      focusedPane: 'pane3',
+      activeNavNodeId: 'root-a',
     });
 
     patchAnything(store)(patch);
 
     // `key in patch` walks the prototype chain; `Object.hasOwn` does not.
     expect(store.getContext().selectedItemId).toBeNull();
-    expect(store.getContext().focusedPane).toBeNull();
+    expect(store.getContext().activeNavNodeId).toBeNull();
   });
 
   it('reads each field exactly once, so a shifting getter cannot substitute a value', () => {
@@ -295,13 +502,13 @@ describe('patchContext reads own properties only', () => {
 
   it('still reads an own property on an object with a prototype', () => {
     const store = createShellStateStore();
-    const patch: Record<string, unknown> = Object.create({ focusedPane: 'pane3' });
+    const patch: Record<string, unknown> = Object.create({ activeNavNodeId: 'root-a' });
     patch['selectedItemId'] = 'own';
 
     patchAnything(store)(patch);
 
     expect(store.getContext().selectedItemId).toBe('own');
-    expect(store.getContext().focusedPane).toBeNull();
+    expect(store.getContext().activeNavNodeId).toBeNull();
   });
 });
 
@@ -364,7 +571,7 @@ describe('patchContext survives a patch that refuses to be inspected', () => {
   it('reports a throwing own getter as a ShellUXError', () => {
     const store = createShellStateStore();
     const hostile: Record<string, unknown> = {};
-    Object.defineProperty(hostile, 'focusedPane', {
+    Object.defineProperty(hostile, 'activeNavNodeId', {
       enumerable: true,
       get(): never {
         throw new Error('getter refused');
@@ -375,7 +582,7 @@ describe('patchContext survives a patch that refuses to be inspected', () => {
       patchAnything(store)(hostile);
     });
     expect(error.code).toBe('INVALID_PAYLOAD');
-    expect(error.field).toBe('focusedPane');
+    expect(error.field).toBe('activeNavNodeId');
   });
 
   it('reports a revoked Proxy as a ShellUXError, not a raw TypeError', () => {
@@ -398,9 +605,9 @@ describe('patchContext survives a patch that refuses to be inspected', () => {
     });
     const before = store.getContext();
 
-    // `selectedItemId` is read before `focusedPane`, and is perfectly good.
+    // `selectedItemId` is read before `selectedItemIds`, and is perfectly good.
     const hostile: Record<string, unknown> = { selectedItemId: 'msg-1' };
-    Object.defineProperty(hostile, 'focusedPane', {
+    Object.defineProperty(hostile, 'selectedItemIds', {
       enumerable: true,
       get(): never {
         throw new Error('getter refused');
@@ -423,7 +630,7 @@ describe('the seed passed to createShellStateStore is validated too', () => {
   it('refuses a hostile seed', () => {
     const error = expectShellUXError(() => {
       (createShellStateStore as (initial: unknown) => ShellStateStore)({
-        focusedPane: 'pane9',
+        selectedItemIds: ['msg-1', 'msg-1'],
       });
     });
     expect(error.code).toBe('INVALID_FIELD');
@@ -549,9 +756,9 @@ describe('notify', () => {
     // One level of cascade is not a runaway, and is not refused.
     const unsubscribe = store.subscribe(() => {
       unsubscribe();
-      store.patchContext({ focusedPane: 'pane1' });
+      store.patchContext({ selectedItemId: 'msg-1' });
     });
     store.patchContext({ activeNavNodeId: 'root-a' });
-    expect(store.getContext().focusedPane).toBe('pane1');
+    expect(store.getContext().selectedItemId).toBe('msg-1');
   });
 });

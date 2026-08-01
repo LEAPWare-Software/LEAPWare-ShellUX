@@ -1,15 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as hotkeysModule from '../hotkeys';
-import { describeHotkey, hotkeyToken, matchesHotkey } from '../hotkeys';
+import { ariaKeyShortcuts, describeHotkey, hotkeyToken, matchesHotkey } from '../hotkeys';
 import type { Hotkey } from '../types';
 
 /**
- * `src/core/hotkeys.ts` is three pure functions and nothing else.
+ * `src/core/hotkeys.ts` is four pure functions and nothing else.
  *
- * The last describe block in this file is the scope line for Phase 1: the module
- * must attach no listener and export no dispatcher. That is asserted rather than
- * promised, because "we did not build it yet" is exactly the kind of claim that
- * quietly stops being true.
+ * The last describe block in this file is the boundary between the chord
+ * vocabulary and the dispatcher that consumes it. It used to be the Phase 1 scope
+ * line — "no dispatcher exists anywhere" — and since ISSUE-006 one does, in
+ * `src/core/hotkeyDispatch.ts`. The assertion is worth MORE now, not less: it is
+ * what keeps every function here callable on a plain record with no DOM, and it
+ * is what stops a listener drifting back into the module the ribbon, the registry
+ * and the dispatcher all import.
  */
 
 /** The five fields `matchesHotkey` reads, all optional. */
@@ -102,6 +105,39 @@ describe('describeHotkey', () => {
   });
 });
 
+describe('ariaKeyShortcuts', () => {
+  it('spells the control key Control, which describeHotkey deliberately does not', () => {
+    // The whole reason these are two functions. `aria-keyshortcuts` is defined
+    // over UI Events `KeyboardEvent.key` VALUES, and `Ctrl` is not one of them;
+    // `Control+Shift+K` in a tooltip would name a key no keyboard is labelled
+    // with. Asserted as a pair so that merging the two functions fails here.
+    expect(ariaKeyShortcuts({ key: 'k', ctrl: true, shift: true })).toBe('Control+Shift+K');
+    expect(describeHotkey({ key: 'k', ctrl: true, shift: true })).toBe('Ctrl+Shift+K');
+  });
+
+  it('spells every modifier as its key value, in the same fixed order', () => {
+    expect(ariaKeyShortcuts({ key: 'k', ctrl: true, alt: true, shift: true, meta: true })).toBe(
+      'Control+Alt+Shift+Meta+K',
+    );
+  });
+
+  it('spells each modifier alone as a key value', () => {
+    expect(ariaKeyShortcuts({ key: 'k', ctrl: true })).toBe('Control+K');
+    expect(ariaKeyShortcuts({ key: 'k', alt: true })).toBe('Alt+K');
+    expect(ariaKeyShortcuts({ key: 'k', shift: true })).toBe('Shift+K');
+    expect(ariaKeyShortcuts({ key: 'k', meta: true })).toBe('Meta+K');
+  });
+
+  it('gives the key itself the same key-value spelling describeHotkey uses', () => {
+    // Here the two DO agree, because ARIA wants the `key` value and these labels
+    // already are the `key` values.
+    expect(ariaKeyShortcuts({ key: 'f5' })).toBe('F5');
+    expect(ariaKeyShortcuts({ key: 'arrowup', alt: true })).toBe('Alt+ArrowUp');
+    expect(ariaKeyShortcuts({ key: 'pagedown', ctrl: true })).toBe('Control+PageDown');
+    expect(ariaKeyShortcuts({ key: 'ENTER', ctrl: true })).toBe('Control+Enter');
+  });
+});
+
 describe('matchesHotkey', () => {
   it('matches when the key and all four modifier states agree', () => {
     const hotkey: Hotkey = { key: 'k', ctrl: true, shift: true };
@@ -158,8 +194,12 @@ describe('hotkeys module — does not attach anything', () => {
     vi.restoreAllMocks();
   });
 
-  it('exports exactly the three pure helpers and no dispatcher', () => {
+  it('exports only pure helpers — the dispatcher is a separate module', () => {
+    // Exact, in both directions. A dispatcher, a listener registration or an
+    // ambient chord table added HERE would fail this even though it would be
+    // legal one module over, which is the boundary this case exists to hold.
     expect(Object.keys(hotkeysModule).sort()).toEqual([
+      'ariaKeyShortcuts',
       'describeHotkey',
       'hotkeyToken',
       'matchesHotkey',
@@ -173,6 +213,7 @@ describe('hotkeys module — does not attach anything', () => {
     const hotkey: Hotkey = { key: 'k', ctrl: true };
     hotkeyToken(hotkey);
     describeHotkey(hotkey);
+    ariaKeyShortcuts(hotkey);
     matchesHotkey(hotkey, keyEvent({ key: 'k', ctrlKey: true }));
 
     expect(onWindow).not.toHaveBeenCalled();
