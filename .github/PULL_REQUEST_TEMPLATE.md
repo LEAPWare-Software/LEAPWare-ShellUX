@@ -51,6 +51,9 @@ and build, and nothing else. The citation check, the integration run and the scr
 tests execute on no CI leg, and the audit runs only when the dependency graph
 changed. So this paste is the only place several of these gates are observed.
 
+The browser lane is a separate workflow and is deliberately outside `verify`; if
+your change is geometric or visual, the section below is where it gets answered.
+
 ```text
 paste the output here
 ```
@@ -93,6 +96,9 @@ Answer both. "No user-visible change" is a complete answer to the first.
 - [ ] This change touches nothing geometric, visual, focus-ordered or
       pointer-driven — **or** the behaviour was seen working in a real browser, and
       what was seen, how it was reached, and at what viewport is described above.
+- [ ] If it is geometric or visual, `e2e/` covers it and `npm run test:browser`
+      passed, **or** the reason a case could not be written there is stated. A
+      Playwright case that only reads the DOM belongs in the Vitest suite instead.
 - [ ] Nothing here is labelled done on the strength of a jsdom test that cannot
       observe the behaviour it is named for. Anything unverified in a browser is
       labelled as unverified rather than as covered.

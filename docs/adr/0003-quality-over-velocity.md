@@ -318,10 +318,25 @@ The change states what was seen, how it was reached, and at what viewport if the
 viewport matters. If it was not run, that is stated as a limit and the change is
 labelled unverified rather than done.
 
-Note what this rule is up against: at `edc29db`, `npm run dev` renders an empty
-shell, so satisfying this rule for a shell-level change currently requires a
-harness that registers something. That is a cost of the rule and it is accepted;
-GitHub issues #39 and #42 track the absence.
+**This rule became servable while this ADR was in review, and the change is
+recorded rather than quietly absorbed.** When the Decision was drafted, nothing in
+the repository could drive a real browser, and this paragraph said so. The browser
+lane then landed on `main` independently, as `3ebf86d`: `e2e/` driven by
+`playwright.config.ts`, `.github/workflows/browser.yml` running Chromium on Ubuntu
+for every pull request, and a `dev.html` / `src/dev/` fixture that mounts the shell
+with the two verification remotes registered.
+
+So the answer to "how do I satisfy rule 5" is now `npm run test:browser`, with
+`npm run test:browser:install` once per machine. Two things stay true and matter
+here. `src/App.tsx` still registers nothing, so `npm run dev` still renders an empty
+shell — the fixture is `dev.html`, not the production entry point. And the lane is
+deliberately **not** chained into `npm run verify`, because Playwright needs a
+browser download that `npm ci` does not perform, which would falsify the acceptance
+test; `CONTRIBUTING.md` states that trade and it is the right one.
+
+GitHub issue #42 asked for exactly this lane. Issue #39 — that no human has run the
+application — is narrowed by it but not answered: an automated browser lane is not a
+person looking at the thing.
 
 *Decidable by:* the pull request describes an observation of the running
 application, or states that none was made.
@@ -497,8 +512,12 @@ Context, which is why the Context is written at the length it is.
   touch Amendment G's *scope*.
 - **It does not make any of items 1 through 6 untrue.** The false `README.md`
   sentence in item 5 is filed as GitHub issue #58, not fixed, by this change.
-  `npm run dev` still renders an empty shell. The browser lane rule 5 depends on is
-  tracked by GitHub issues #39 and #42 and does not exist at `edc29db`.
+  `npm run dev` still renders an empty shell.
+- **It did not build the browser lane, and no longer needs to.** That lane landed
+  separately as `3ebf86d` while this decision was in review — see rule 5, which was
+  rewritten when this branch merged `main` rather than left describing a repository
+  that had moved. This ADR contributes the *rule*; `e2e/` is what makes the rule
+  answerable.
 - **It adds no automated check.** Rule 2's mechanical half was already `verify`'s;
   everything else here is decided by a human. A future issue may mechanise a clause,
   and until it does, no sentence in this repository may describe these rules as

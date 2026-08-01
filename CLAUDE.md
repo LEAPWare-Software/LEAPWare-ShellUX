@@ -61,6 +61,20 @@ change plus a weekly timer. So `verify` is the stronger gate and it only runs wh
 somebody runs it. Do not skip it on the theory that CI will catch it. GitHub issue
 #58 tracks the incorrect sentence in `README.md`.
 
+**The browser lane is a fourth CI leg and is deliberately NOT in `verify`.**
+
+```bash
+npm run test:browser:install   # once per machine — downloads Chromium
+npm run test:browser
+```
+
+`.github/workflows/browser.yml` runs it on Chromium on Ubuntu for every pull
+request. It stays out of `verify` because Playwright needs a browser download that
+`npm ci` does not perform, and chaining it in would falsify the acceptance test
+below. **Do not "fix" that by editing the acceptance test** — `CONTRIBUTING.md`
+spells out why that is the wrong end of the trade. This lane is how rule 5 gets
+answered; see it for what belongs there rather than in the Vitest suite.
+
 Standing invariants, both currently at zero, both a decision rather than a number:
 
 - **Zero inline suppressions.** No `eslint-disable`, no `v8 ignore`, no `c8 ignore`,
@@ -101,6 +115,12 @@ through both.**
 verified in a real browser or carries an honest "not verified in a browser" label.
 There is no third option, and a passing jsdom test is not one — it is worse than no
 test, because it tells the next reader the question was answered.
+
+**`e2e/` is where the first half of that gets done.** Both defects above are now
+reproduced there against a real layout pass, so the geometric blind spot is guarded
+rather than merely documented. Put a case there when it needs measured pixels, real
+clipping, a real pointer or a real reload; keep it in the Vitest suite when it only
+reads the DOM, where it runs in a second instead of a minute.
 
 Stubbing the environment to make such a test pass is stubbing the instrument. A
 test that supplies its own geometry is doing arithmetic over invented numbers and
@@ -239,22 +259,26 @@ Citation markers the checker recognises: `*Tests:*`, `*Test:*`, and `pinned by`.
 | Why these rules, and the evidence for each | `docs/adr/0003-quality-over-velocity.md` |
 | Why a registry IoC contract, and what it does *not* guarantee | `docs/adr/0001-ioc-registry-architecture.md` — Amendments **E**, **F**, **G** first |
 | Why nothing tracked may depend on a laptop | `docs/adr/0002-no-local-environment-dependencies.md` |
-| The rules for contributors, and the portability rule ids | `CONTRIBUTING.md` |
+| The rules for contributors, the portability rule ids, and the browser lane | `CONTRIBUTING.md` |
+| What a real browser asserts that jsdom cannot | `e2e/`, `playwright.config.ts` |
+| Where the project stands and what is in flight | `HANDOFF.md` |
 | Writing an extension | `DEVELOPER.md` |
 | The five-item work breakdown | `.github/ISSUES_MANIFEST.md` |
 | What has actually been fixed, and what made each defect possible | `CHANGELOG.md` |
 
 ---
 
-## Two things that are true at `edc29db` and will surprise you
+## Two things that will surprise you
 
-- **Nobody has ever run this application.** `src/App.tsx` registers nothing — its
-  own docblock says "Nothing is registered here" — so `npm run dev` renders an empty
-  shell. GitHub issue #39 tracks it. Rule 5 above therefore currently requires you
-  to build a harness that registers something before you can satisfy it.
-- **Nothing in the repository can reproduce the real-browser investigations that
-  found the clipping bug.** The geometric blind spot is documented in several files
-  and guarded by no automated lane. GitHub issue #42 tracks it.
+- **`npm run dev` renders an empty shell.** `src/App.tsx` registers nothing — its
+  own docblock says "Nothing is registered here". That is the production entry
+  point and it is deliberate. The browser fixture is **`dev.html`** with
+  `src/dev/`, which mounts the same shell with the two verification remotes in
+  `src/mocks/` registered. If you are trying to look at the shell, that is the one
+  you want.
+- **No human has signed off on the running application.** GitHub issue #39 is still
+  open, and the browser lane below narrows it without answering it: an automated
+  Chromium run is not a person looking at the thing.
 
-Neither is fixed by ADR-0003. Both are stated here so that no one reads rule 5 as
-describing something that already works.
+Neither is fixed by ADR-0003. Both are stated so that no one reads rule 5 as
+describing more than it does.

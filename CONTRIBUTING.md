@@ -42,7 +42,9 @@ Read it once; it is not repeated here.
    nothing about whether the assertion was right, whether the test name describes
    what the test does, or whether a user can reach the behaviour.
 5. **Run it.** A user-visible change is not done until a human has seen it work in
-   a browser. If you did not, say so and label the change unverified.
+   a browser. If you did not, say so and label the change unverified. "The browser
+   test lane" below is how this is answered mechanically, and `dev.html` is the
+   fixture to look at by hand — `npm run dev` renders an empty shell by design.
 6. **Parallel work needs disjoint file ownership.** Name the files each workstream
    may write before it starts. Where two would touch one file, they serialise.
    Concurrent work on one tree has already made `npm run verify` unrunnable here
