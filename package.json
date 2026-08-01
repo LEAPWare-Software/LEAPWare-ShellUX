@@ -16,6 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --sequence.shuffle src/__tests__/IntegrationSuite.test.tsx",
     "test:scripts": "node --test scripts/__tests__/check-portability.test.mjs",
+    "test:browser": "playwright test",
+    "test:browser:install": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "check:portability": "node scripts/check-portability.mjs",
@@ -36,6 +38,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.62.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",

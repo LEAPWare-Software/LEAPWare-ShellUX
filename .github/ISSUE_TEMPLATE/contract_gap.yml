@@ -68,7 +68,7 @@ body:
         line your claim rests on, in `path:line` form. If your claim is that
         something is absent, say where you looked.
       placeholder: |
-        src/core/types.ts:214 - IShellAPI declares three members and no persistence one
+        src/core/types.ts:471 - IShellAPI declares seven members and no persistence one
         my extension code, and the type error it produced
     validations:
       required: true
