@@ -179,3 +179,69 @@ you already know, not tell you something new.
 
 `verify` needs network access, for `npm ci` and for the audit's advisory-database
 query. It is not an offline operation.
+
+---
+
+## The browser test lane
+
+```bash
+npm run test:browser:install   # once per machine — downloads Chromium
+npm run test:browser
+```
+
+**What it is for.** Every other suite in this repository runs under jsdom, which
+has **no layout engine**. Nothing is ever laid out, `getBoundingClientRect`
+answers 0×0, no ancestor clips anything and no pointer hit-tests. That is fine
+for logic and fatal for geometry, and this project has already shipped two
+defects it made invisible:
+
+- The ribbon's overflow menu was **clipped out of existence** by two
+  `overflow-hidden` ancestors — zero visible pixels, and a pointer click at its
+  centre hit-testing to a different pane. Six jsdom tests asserted the menu
+  worked. All six passed, vacuously.
+- A case named for surviving "a divider drag in flight" **never started a drag**,
+  because a 0×0 rect cannot intersect a 12px hit area.
+
+Both were found by rendering in a real browser as throwaway session work that
+the repository could not reproduce. `e2e/` is that work, made permanent.
+
+**It is deliberately NOT part of `npm run verify`, and that is not an
+oversight.** The acceptance test is *"a fresh clone on a different operating
+system runs `npm ci && npm run verify` with no local setup and no edits."*
+Playwright needs `npx playwright install` — a browser download that is outside
+`npm ci` and outside `package-lock.json`, which is exactly the local setup that
+sentence rules out. Chaining the lane into `verify` would make the claim false;
+giving the lane its own script and its own workflow keeps it true. **If you find
+yourself editing that sentence to accommodate a test, stop — that is the wrong
+end of the trade.**
+
+`.github/workflows/browser.yml` runs it on Ubuntu, on Chromium, on pull requests
+and pushes to `main`, and uploads the trace when it fails. `ci.yml` is untouched
+and still runs `verify` on three operating systems.
+
+**What is under `e2e/`, and why it is not under `src/`.** `vitest.config.ts`
+includes `src/**/*.{test,spec}.{ts,tsx}` and `src/__tests__/noEventListener.test.ts`
+walks `src/` from its own location, so a Playwright spec under `src/` would be
+executed by Vitest — where it cannot run — and scanned by the listener check,
+where its `page.keyboard` calls are not the finding that test is about. The
+directory sits at the repository root so that neither happens, and `tsconfig.json`
+includes it so it is still typechecked by `npm run typecheck`.
+
+**Chromium only.** The defects this lane exists for are layout and hit-testing
+defects, not engine-compatibility defects — they reproduce anywhere there is a
+layout pass. A second and third browser would re-run identical assertions for
+three times the CI minutes. Add one when there is a rendering difference this
+project actually cares about, not before.
+
+**The fixture.** `src/App.tsx` registers no extension, so the production shell
+has nothing for a browser test to drive. `dev.html` and `src/dev/` mount the same
+shell with the two verification remotes in `src/mocks/` registered. It is
+dev-server-only by construction — Vite's build input is `index.html` alone, so
+`dev.html` is never emitted into `dist/` — and it uses **no environment
+variable**, because ADR-0002 forbids one without a working default. What the
+production bundle renders is unchanged.
+
+**When you add a case here, make it one jsdom could not have made.** Assert
+measured pixels, real clipping, a real pointer, or a real reload. A case that
+only reads the DOM belongs in the Vitest suite, where it will run in a second
+instead of a minute.

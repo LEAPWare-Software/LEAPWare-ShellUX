@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LEAPWare ShellUX — dev fixture</title>
+  </head>
+  <!--
+    The browser lane's fixture document, and NOT a production entry point.
+
+    Vite's build input is `index.html` alone, so this document is served by the
+    dev server and is never emitted into `dist/`. It exists because `src/App.tsx`
+    registers no extension, which leaves the production shell with nothing for a
+    browser test to drive. See `src/dev/main.dev.tsx`.
+  -->
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/dev/main.dev.tsx"></script>
+  </body>
+</html>
