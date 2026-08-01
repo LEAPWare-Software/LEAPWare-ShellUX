@@ -37,7 +37,7 @@ What that means for a reader:
 | Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 120 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx`, `RibbonToolbar.test.tsx`, `ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 28 of which are the ISSUE-003 persistence and issue-#12 badge cases, all inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 | State hydration and persistence (ISSUE-003) | **Engine implemented, green, and now consumed by the shell — not yet merged.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`, with 146 tests in `src/core/services/__tests__/hydrationEngine.test.ts` and `src/hooks/__tests__/useLocalStorageState.test.tsx`, plus 20 tests in `src/components/__tests__/ShellLayoutPersistence.test.tsx` driving the assembled shell over a real storage, inside the same 100% coverage gate. `ShellLayout.tsx` restores and writes **three** slots — pane sizes, the pane-1 collapsed flag and the foreground extension id — and the utility drawer is deliberately not one of them |
 | Row virtualizer and fault boundaries (ISSUE-004) | **Implemented and green, not yet merged.** `src/components/error/FaultBoundary.tsx`, `src/components/shared/VirtualizedList.tsx` and its pure arithmetic in `src/components/shared/virtualWindow.ts`, with 76 tests in `src/components/__tests__/FaultBoundary.test.tsx` and `src/components/__tests__/VirtualizedList.test.tsx`, inside the same 100% coverage gate. The virtualizer is a component an extension's own Pane 2 view renders — the host does not window your pane for you |
-| Verification remotes and integration suite (ISSUE-005) | Specified, not started |
+| Verification remotes and integration suite (ISSUE-005) | **Implemented and green, not yet merged.** The two verification remotes `src/mocks/MailPlugin.tsx` and `src/mocks/DatabasePlugin.tsx`, driven by 60 tests in `src/__tests__/IntegrationSuite.test.tsx` — the first place in this repository where an operational plug-in is mounted at all. It runs the assembled shell, not a double of it, and nine of its cases are `PINS A KNOWN LIMIT` characterisations of behaviour the architecture has accepted rather than prevented. It is outside the coverage `include` list on purpose: it exercises code the gate already covers, and adding an integration file to a 100% gate measures nothing new. See [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 
 **What ISSUE-002 did change:** ribbon action `isVisible` predicates are now
 evaluated on every ribbon render, `onExecute` handlers are invoked on click, and
@@ -113,6 +113,37 @@ the opposite assumption:**
   `src/__tests__/noEventListener.test.ts` — "finds no listener registration
   in any module outside the hotkey-dispatch allowlist" and "finds no key-event name
   in any module outside the key-event allowlist".
+
+**What ISSUE-005 added, and it is a different kind of thing from the four above.**
+Every one of the 915 tests that stood before it mounted **one unit** against
+fixtures whose pane views are `(): null => null`. Nothing in this repository had
+ever mounted a plug-in that holds state, owns a timer, fetches asynchronously or
+fails on purpose. `src/__tests__/IntegrationSuite.test.tsx` drives the assembled
+shell — real registry, real activation, real hydration engine, real panel group,
+real fault boundaries, real hotkey dispatcher — through the two verification
+remotes in `src/mocks/`, and asserts the things that only exist once several units
+are wired together: a selection made in pane 2 arriving in pane 3 through the host
+store rather than through the module, an extension's layout state surviving a round
+trip through another extension, a module's 200ms interval really being released on
+unmount, a persisted layout coming back across a simulated reload.
+
+**Nine of its cases are titled `PINS A KNOWN LIMIT`, and that is the part worth
+reading.** Each describes something the architecture has ACCEPTED rather than
+prevented, and each carries a comment in its own body saying it asserts current
+behaviour and is not a safety claim: that badge scoping and persisted-state
+namespacing are collision-resistance rather than confinement; that the `IShellAPI`
+deep-freeze does not reach the plug-in's own function objects, so one extension can
+reach a sibling's view component through the public registry and change what it
+renders; that `unregister` has no authorisation model; and that a `FaultBoundary`
+catches neither a throw from a `setTimeout` callback nor a rejected promise. The
+contained case is asserted beside the uncontained ones so that "a fault boundary
+catches nothing" is not the reading anybody takes away.
+*Tests:* `src/__tests__/IntegrationSuite.test.tsx` — "carries a pane-2 selection
+into pane 3 through the host store, not through the module", "keeps each module
+pane-2 selection its own across Mail → Database → Mail", "releases the database
+module 200ms interval, so the timer count returns to its baseline", "brings back
+the layout and the foreground extension over the same storage" and "contains a
+throwing ribbon action inside the ribbon own guard, without taking the shell down".
 
 **What ISSUE-003 added, and what it does not yet touch:**
 `src/core/services/HydrationEngine.ts` owns the serialization and deserialization
@@ -275,11 +306,12 @@ extensions that would fill it are ISSUE-005. See Project Status above.
 | `npm run build` | Typechecks, then produces a production bundle in `dist/`. |
 | `npm test` | Runs the Vitest suite once. |
 | `npm run test:coverage` | Runs the suite and enforces the coverage gate in `vitest.config.ts` — 100% statements, branches, functions and lines over `src/core/**`. Exits non-zero if a threshold is unmet. |
+| `npm run test:integration` | Runs `src/__tests__/IntegrationSuite.test.tsx` a **second** time under `--sequence.shuffle`, which is ISSUE-005's requirement that the integration cases pass in a randomised order. The flag lives here rather than in `vitest.config.ts` because that file is shared by all 29 suites and the wider suite is not yet order-independent — under `--sequence.shuffle`, `src/core/__tests__/shellApi.test.ts` fails three of its own cases today. Vitest prints the seed it used, and the seed defaults to the clock. |
 | `npm run typecheck` | `tsc --noEmit`. Emits nothing; only checks. |
 | `npm run lint` | ESLint at `--max-warnings 0`. There is no warning tier; a warning fails. |
 | `npm run check:portability` | Enforces ADR-0002 — see below. |
 | `npm run audit:prod` | `npm audit` over production dependencies at `--audit-level=high`. Needs network access. |
-| `npm run verify` | **The gate.** Runs all of the above in order: portability, lint, typecheck, coverage, build, audit. This is exactly what CI applies. |
+| `npm run verify` | **The gate.** Runs all of the above in order: portability, citations, lint, typecheck, coverage, the randomised integration run, the script tests, build, audit. This is exactly what CI applies. |
 
 ### The acceptance test
 
@@ -915,6 +947,26 @@ defending one extension from another.
   about *who may revoke* — the controller carrying `release` is reachable by
   reflection, pinned in `reflection.test.tsx`.
 
+- **The host constants cannot be replaced.** `EXTENSION_ID_PATTERN`,
+  `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS`, `HOTKEY_MODIFIER_REQUIRED_KEYS`
+  and `PANE_IDS` are the rules every untrusted payload is measured against, they
+  are exported from modules a plug-in can import, and until ADR-0001 Amendment K
+  every one of them was runtime-mutable — `REGISTRY_LIMITS` was `as const`, which
+  binds nobody who is not being compiled. All six are frozen. No own property can
+  be added, replaced or deleted, so `REGISTRY_LIMITS` is genuinely immutable and
+  the sets' and pattern's `has`/`test` cannot be **shadowed** by an own property,
+  which was the interesting attack: a plug-in owning `HOTKEY_KEYS.has` owned the
+  hotkey allowlist for the whole page.
+
+  **The obvious wider reading is false and is asserted against.** A frozen `Set`
+  is not an immutable one — `Set` state lives in internal slots rather than
+  properties, so `add`, `delete` and `clear` still work. The claim is "cannot be
+  replaced", never "cannot be changed".
+  *Tests:* `src/core/__tests__/hostConstants.test.ts` — "freezes the host constants
+  against replacement", "refuses to let a caller raise a registry bound" and "does
+  not claim more than a frozen Set delivers", the last of which demonstrates the
+  remaining mutability on a throwaway `Set` rather than on a live allowlist.
+
 ### Entry-point validation — real at the door, bypassable elsewhere
 
 - **Identifier hygiene.** Every plugin-supplied id — the extension id, navigation
@@ -936,16 +988,20 @@ defending one extension from another.
   `registryNormalization.test.tsx` — "register — a lying `length` cannot grow the
   payload after it is measured"; `registrySecurity.test.tsx` — "validateBlueprint —
   collection lengths are read once".
-- **Argument validation on `IShellAPI`.** `setBadgeCount` and `setSelectedItem`
-  both check their arguments and raise `ShellUXError` rather than letting an
-  arbitrary value reach the context snapshot the host passes to *other*
-  extensions. `patchContext` — the unscoped store member the same values can reach
+- **Argument validation on `IShellAPI`.** Every member that takes an argument
+  checks it and raises `ShellUXError` rather than letting an arbitrary value reach
+  the context snapshot the host passes to *other* extensions — the six writers and
+  readers the interface has grown to since ADR-0001 Amendment K, not just the two
+  it had. `patchContext` — the unscoped store member the same values can reach
   through the public `useShellStore()` — is held to the identical standard field by
-  field.
+  field, and a collection field is read once into a host-owned copy that is what
+  gets validated and stored.
   *Tests:* `src/core/__tests__/shellApi.test.ts` — "setSelectedItem validates its
-  argument", "the badge scope and node id are validated at both doors";
+  argument", the "setSelectedItems validates its argument" group, "setActiveNavNode
+  validates its argument", "the badge scope and node id are validated at both
+  doors"; `contextKeys.test.tsx` — "setContextKey validates its value";
   `contextPatch.test.ts` — "patchContext rejects what setSelectedItem rejects",
-  "patchContext validates focusedPane against the real PaneId union", "patchContext is
+  "patchContext rejects what setSelectedItems rejects", "patchContext is
   all-or-nothing".
 
 These are called entry-point validation rather than integrity controls for one
@@ -968,6 +1024,31 @@ a caller who reaches the objects behind them another way is not bound by them.
   id does not collide". The *absence* of confinement is pinned by "reaches the host
   ActivationController by reflection anyway, and steals a sibling handle" in
   `reflection.test.tsx`.
+
+  **The read half is scoped the same way, since ADR-0001 Amendment K.**
+  `IShellAPI.getBadgeCount(nodeId)` closes over the same validated id and takes no
+  scope parameter, so a handle reads back exactly what it can write and nothing
+  else. That keeps the read from being a wider capability than the write it
+  mirrors; it does not make either one confinement, for the reason above. *Test:*
+  `dataflow.test.tsx` — "reads back only its own scope, and offers no parameter to
+  name another".
+
+- **Context-key scoping.** Same shape, same limit, new surface.
+  `IShellAPI.setContextKey(key, value)` writes into a namespace keyed by the
+  closure-captured extension id, so two extensions that both publish a key called
+  `loaded` keep their own, and an extension has no parameter with which to name
+  another's namespace. **It is not confinement**: `RibbonContext.contextKeys`
+  publishes the FOREGROUND extension's record into the one host-wide snapshot, and
+  anything holding a context — a backgrounded extension's `getContext()` included
+  — can read it. Every namespace is dropped on a foreground handover, which bounds
+  how long a key is readable but does not make it private. **Nothing confidential
+  belongs in a context key.** The value type is deliberately
+  `string | number | boolean | null` and nothing else, which is what stops it
+  becoming an object-injection channel into another extension's predicates.
+  *Tests:* `src/core/__tests__/contextKeys.test.tsx` — "keeps two extensions'
+  context keys apart, and publishes only the foreground's", "does not let an
+  extension name the scope it writes a context key to", "clears every extension's
+  context keys on a foreground handover", "setContextKey validates its value".
 
 ### Guardrails — honest mistakes only
 
@@ -1117,12 +1198,26 @@ Specified but **not yet enforced** — do not read these as current guarantees:
   `reflection.test.tsx` — "reaches the host ActivationController by reflection
   anyway, and steals a sibling handle" for the controller; `subscribe.test.tsx` for
   the listener channel.
-- **Fault containment.** Intended: an extension that throws during render is
-  contained to its own pane. There is **no error boundary in `src/`**, and
-  `ExtensionHostBoundary` is not one — it severs host context and catches nothing.
-  **This is now a live exposure rather than a theoretical one:** since ISSUE-002 the
-  host actually mounts plug-in views, so a throw during render unmounts the whole
-  shell. ISSUE-004.
+**Newly enforced by ISSUE-004 — moved out of this list:**
+
+- **Fault containment.** No longer "intended". This entry used to read that there
+  was **no error boundary in `src/`** and that a plug-in view throwing during
+  render unmounted the whole shell — a live exposure, correctly labelled as one,
+  and it stopped being true in `cd52bbf`. `src/components/error/FaultBoundary.tsx`
+  is a real error boundary, and `ShellLayout` composes one around every set of
+  children it hands a `PaneWrapper` — both plug-in panes, the ribbon, and pane 1's
+  navigation, which renders plug-in labels and badge counts and so was never
+  incapable of failing. The boundary sits OUTSIDE `ExtensionHostBoundary`, which
+  is still not an error boundary and still catches nothing: the inner one throws
+  for a non-string `extensionId`, and a boundary nested beneath it could not catch
+  its own parent. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` —
+  "contains a throwing pane-2 view to pane 2, leaving the ribbon and pane 3
+  interactive", "contains a throwing ribbon without taking the panes down" and
+  "clears a pane error surface when the active extension changes".
+
+  **Scope, so this is not over-read:** a boundary contains a throw during RENDER.
+  It is not a sandbox, it does not contain a plug-in that wedges the UI thread
+  without throwing, and ADR-0001 "No sandbox" and Amendment E are untouched by it.
 
 **Newly enforced by ISSUE-002 — moved out of this list:**
 

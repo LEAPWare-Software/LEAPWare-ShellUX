@@ -23,7 +23,7 @@ currently exists.
 | ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
 | ISSUE-003 | UI State Hydration & Serialization Engine | `IN PROGRESS` — engine implemented, green and **now consumed by the shell**; **not merged**; see the note below |
 | ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
-| ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `BLOCKED` (on 002–004) |
+| ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `IN PROGRESS` — remotes and suite implemented, **not merged**; one Definition-of-Done clause deliberately substituted; see "As landed" below |
 
 **No marker in the legend fits ISSUE-002 exactly, and it is being recorded that way
 rather than rounded up.** `LANDED` is defined as four things: *merged*, the source
@@ -663,10 +663,15 @@ the status is `IN PROGRESS`. The gates were checked by running
   untrusted.** `RibbonAction.icon` arrives from a plug-in manifest and is used as a
   lookup key. An object literal answers `icons['__proto__']` with
   `Object.prototype` — an inherited value reached from a key that matches no own
-  property, and an object React then refuses to render. `RIBBON_ICONS` is therefore
+  property, and an object React then refuses to render. `SHELL_ICONS` is therefore
   a `ReadonlyMap` of host-authored inline SVGs, for the same reason the registry's
   stores are `Map`s: no prototype chain means no inherited answer, by construction
-  rather than by filtering. An unrecognised key renders `FALLBACK_ICON`. Nothing a
+  rather than by filtering. An unrecognised key renders `FALLBACK_ICON`. It was
+  named `RIBBON_ICONS` and lived inside `RibbonToolbar.tsx` until GitHub issue #19
+  gave `NavigationNode` an `icon` too; it moved to
+  `src/components/ui/shellIcons.tsx` with its `Map` semantics and this argument
+  intact, because two copies of a lookup table drift the way two copies of a
+  validation rule do. Nothing a
   plug-in supplies ever reaches an SVG `d` attribute, an `href` or a `src`.
   *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "does not resolve a
   prototype-shaped icon key to anything inherited", "resolves an unknown icon key
@@ -748,14 +753,18 @@ the status is `IN PROGRESS`. The gates were checked by running
   every divider keyboard-reachable and actually resizes with the arrow keys", and
   "renders the ribbon and three panes in ribbon → pane 1 → pane 2 → pane 3 order"
   for the required focus order.
-- **`RibbonContext.focusedPane` is left `null`, and nothing in the shell writes
-  it.** Populating it needs focus tracking — which pane holds focus, updated as
-  focus moves — and that is a listener, or a `focusin` handler, which is the same
-  invariant as above. It is a validated field of the declared contract and remains
-  one; it simply never changes value under host control. Recorded here because a
-  predicate author reading `RibbonContext` would otherwise reasonably assume the
-  host populates every field it declares. `DEVELOPER.md` states the same thing where
-  predicates are described.
+- **`RibbonContext.focusedPane` was left `null`, nothing in the shell ever wrote
+  it, and it has since been REMOVED.** Populating it needed focus tracking — which
+  pane holds focus, updated as focus moves — and that is a listener, or a
+  `focusin` handler, which is the same invariant as above. This entry used to end
+  by saying it remained a validated field of the declared contract that simply
+  never changed value, and that recording the fact was enough. It was not: a field
+  that is permanently `null` invites predicates that can never fire, which is worse
+  than an absent one because it looks available. GitHub issue #13 deleted it from
+  `RibbonContext`, from the store's validator table and from every document that
+  described it. `PaneId` survives as a layout type and `PANE_IDS` survives as the
+  runtime exhaustiveness pin `HydrationEngine`'s pane-size record is checked
+  against. See ADR-0001 Amendment K Decision 6.
 - **No `aria-keyshortcuts` was emitted on any ribbon button, deliberately — and
   ISSUE-006 reversed it, for the same reason.** While nothing dispatched a chord,
   advertising one would have promised a shortcut that does not fire, which is a
@@ -1210,7 +1219,10 @@ and "still windows correctly with no ResizeObserver in the environment".
 
 ## ISSUE-005 — Verification Remotes & Adversarial Integration Suite
 
-**Status:** `BLOCKED` on ISSUE-002 through ISSUE-004
+**Status:** `IN PROGRESS` — implemented and green, **not merged**. See "As landed"
+at the end of this section, which also records the one Definition-of-Done clause
+that was **substituted rather than satisfied**, and the two contract gaps the
+suite exposed that no open issue covers.
 
 ### Technical Specification
 
@@ -1331,6 +1343,197 @@ plugin fault to confirm containment.
 - Integration tests pass in a randomized order and with storage cleared between
   cases.
 - The Vitest coverage gate passes for the files in scope.
+
+### As landed
+
+**Status is `IN PROGRESS`, not `LANDED`, and the miss is the same one ISSUE-002
+through ISSUE-004 have: it is unmerged.** All three files exist and type-check,
+the suite is green, and the coverage gate is untouched by it. The work is on
+branch `phase-2-shell` and has not been through review or merge.
+
+`src/__tests__/IntegrationSuite.test.tsx` is the new file and the only one this
+change adds. It carries **60 tests** and is the first place in this repository
+where an operational plug-in is mounted at all: every one of the 915 tests that
+stood before it mounted ONE unit against fixtures whose views are
+`(): null => null`. The two verification remotes — `src/mocks/MailPlugin.tsx` and
+`src/mocks/DatabasePlugin.tsx` — were already written; what was missing was
+anything that ran them.
+
+**Nothing under `src/core/**`, `src/components/**`, `src/hooks/**` or
+`src/mocks/**` was changed.** One line of `package.json` was added and one
+amended; see "Randomisation" below.
+
+#### The Definition-of-Done clause that was SUBSTITUTED, not satisfied
+
+**"…and that no update-after-unmount warning is emitted" is unsatisfiable as
+written, and it is recorded here rather than quietly passed.** React removed that
+warning in React 18 (`facebook/react#22114`), and this project is on
+`react@^18.3.1` — so a test asserting the ABSENCE of that warning would pass
+whatever the shell did, including a shell that wrote into an unmounted module on
+every switch. It is a vacuous assertion, not a weak one.
+
+What replaced it is two assertions that are not vacuous, over a churn tight enough
+that `MailPlugin`'s 120ms body fetch is always in flight when its module is
+unmounted:
+
+1. **Zero `console.error` and zero `console.warn` for the whole churn**, captured
+   rather than sampled. *Test:* `src/__tests__/IntegrationSuite.test.tsx` — "emits
+   no console error or warning while extensions are switched faster than a fetch
+   settles".
+2. **A behavioural assertion that the unmounted module's resolving work writes
+   nothing** — not into the live module, and not into its own store either, which
+   is the half a console assertion could never reach. *Test:* same file — "lets an
+   unmounted module resolving fetch write nothing, into its own store or the live
+   one".
+
+The clause above is left standing in the Definition of Done unedited, so that the
+substitution is visible as a substitution.
+
+#### Three clauses that were narrowed to what jsdom can observe
+
+Each is narrowed in the test's own NAME, so a reader cannot mistake the narrower
+claim for the wider one.
+
+- **"the selected row is scrolled into view."** `Element.prototype.scrollIntoView`
+  does not exist in jsdom, and `VirtualizedList` deliberately does not call it —
+  it assigns `scrollTop` on its own container, for the two reasons in decision 3
+  of that module's banner. The assertion is on the assignment. *Test:* same file —
+  "asks for the selected row to be scrolled into view by assigning scrollTop,
+  which is what jsdom can observe".
+- **A pointer DRAG of a divider.** This jsdom implements no `PointerEvent`, so
+  `fireEvent.pointerMove` falls back to a plain `Event` carrying no `clientX` and
+  the panel library's delta arithmetic is never handed a coordinate. Asserting a
+  moved pane after that sequence would be asserting against a no-op, so the no-op
+  is asserted instead and the resize cases drive the library's own window-splitter
+  KEYBOARD path over a stubbed `getBoundingClientRect`. *Tests:* same file —
+  "cannot be driven by a POINTER drag at all, because this jsdom implements no
+  PointerEvent" and "resizes a pane through the library own window-splitter
+  keyboard path, against geometry this file supplied".
+- **`J`/`K` list navigation.** Not implemented by either remote and not added
+  here; ADR-0001 Amendment H Decision 8 requires it to be view-local, and no
+  extension in this repository declares it. Arrow keys, `Home`/`End` and
+  `PageUp`/`PageDown` ARE proven, through the real virtualizer, and the
+  editable-surface suppression clause is proven against a real `<input>`. *Tests:*
+  same file — "moves the pane-2 selection with the arrow keys, and the selection
+  reaches pane 3", "moves to the first and last rows with Home and End", "moves a
+  viewport at a time with PageDown and PageUp" and "does not fire a chord while
+  focus is in the extension own text input".
+
+#### Randomisation — which route was taken
+
+`sequence.shuffle` is a global Vitest setting and `vitest.config.ts` is shared by
+every suite in the repository, so switching it on there would have re-ordered all
+28 test files at once. It was **not** switched on. A dedicated script carries the
+flag for this one file instead:
+
+```
+"test:integration": "vitest run --sequence.shuffle src/__tests__/IntegrationSuite.test.tsx"
+```
+
+It is chained into `verify` between `test:coverage` and `test:scripts`, so the
+randomised run is a build gate rather than something a developer has to remember.
+Vitest prints `Running tests with seed "<n>"` on every such run and the seed
+defaults to the clock, so consecutive runs really are different orders. The suite
+was run under three seeds during development and was green in all three.
+
+**Not switching it on repo-wide was not merely caution.** Run under
+`--sequence.shuffle`, `src/core/__tests__/shellApi.test.ts` fails three of its own
+cases — that is pre-existing, is nothing to do with this change, and is the direct
+evidence that the wider suite is not yet order-independent. Making it so is not
+ISSUE-005's work and is not claimed here.
+
+#### The known limits this suite pins
+
+Each is a characterisation of CURRENT behaviour, titled `PINS A KNOWN LIMIT — `
+and carrying a comment in the test body saying so. **None of them is a safety
+claim**, and several describe something a reader might otherwise assume is
+prevented. All are in `src/__tests__/IntegrationSuite.test.tsx`:
+
+1. "PINS A KNOWN LIMIT — badge scoping is collision-resistance, not confinement: a
+   plug-in writes into a sibling scope and the sibling sidebar renders it (no issue
+   filed; ADR-0001 Amendment E records it as accepted)". The correct-behaviour case
+   sits beside it: "two extensions that both name a node inbox do not collide,
+   which is the property the scope really has".
+2. "PINS A KNOWN LIMIT — persisted-state namespacing is collision-resistance too:
+   one extension reads and overwrites another persisted scope through the public
+   HydrationEngine (no issue filed; the engine banner records it as accepted, and
+   GitHub issue #4 covers only documenting it)".
+3. "PINS A KNOWN LIMIT — the IShellAPI deep-freeze does not reach plug-in-supplied
+   functions: a sibling view component obtained from the public registry is
+   mutable, and the sibling rendered output changes (no issue filed; ADR-0001
+   records it as accepted, because freezing a component breaks memo and
+   forwardRef)".
+4. "PINS A KNOWN LIMIT — unregister has no authorisation model: one extension
+   removes another while the victim holds the foreground, and the shell simply
+   carries on (no issue filed; the unregister docblock defers an ownership model to
+   its own issue)".
+5. "PINS A KNOWN LIMIT — the host tells a plug-in nothing about where keyboard
+   focus is, so no ribbon predicate can key on it (GitHub issue #13)".
+6. "PINS A KNOWN LIMIT — a FaultBoundary does not catch a plug-in throw from a
+   setTimeout callback: it escapes to the host environment and no fallback is
+   rendered (no issue filed; this is React error-boundary semantics and the
+   FaultBoundary banner records it)".
+7. "PINS A KNOWN LIMIT — a FaultBoundary does not catch a plug-in rejected promise:
+   the rejection is delivered to the promise and no fallback is rendered (no issue
+   filed; this is React error-boundary semantics and the FaultBoundary banner
+   records it)".
+8. "PINS A KNOWN LIMIT — with no ResizeObserver in the environment, moving a
+   divider does not re-window the list: it corrects on the next render the list
+   performs for any other reason (no issue filed; VirtualizedList decision 4
+   records the fallback as accepted)".
+9. "PINS A KNOWN LIMIT — neither shipped verification remote renders
+   VirtualizedList, so ISSUE-004 has no consumer in src/ outside this suite (no
+   issue filed; reported with this change)".
+
+The contained case is asserted beside the two uncontained ones, so that "a fault
+boundary catches nothing" is not the reading anyone takes away: a ribbon
+`onExecute` that throws IS guarded, by `RibbonToolbar`'s own wrapper. *Test:* same
+file — "contains a throwing ribbon action inside the ribbon own guard, without
+taking the shell down".
+
+#### Two contract gaps this suite exposed that issues #12–#18 do not cover
+
+Neither is fixed here — both are `src/` production changes, which this change was
+scoped out of.
+
+1. **ISSUE-004's virtualizer has no consumer.** `ShellLayout` deliberately does not
+   window pane 2, and neither verification remote calls `VirtualizedList`:
+   `DatabasePlugin` maps all 280 records into a plain `<ul>`. So the Definition of
+   Done's keyboard-navigation clause could not be met through either remote, and is
+   met against a third, test-authored extension registered through the same public
+   contract. Pinned by limit 9 above.
+2. **`DatabasePlugin` republishes its three top-level badges from its pane-2 mount
+   effect**, so any badge written into one of those nodes by anything else — the
+   host, another extension, or the module's own earlier call — is overwritten the
+   moment that pane remounts. It is not wrong, and it is not documented anywhere.
+   Both badge cases below therefore write to a LEAF node, and say why in a comment.
+   *Tests:* same file — "shows a badge written while the extension was NOT in the
+   foreground, on re-activation" and limit 1 above.
+
+#### One obligation discharged that its own source comment still calls outstanding
+
+Both mock banners describe the untrusted-content rule as an obligation met in code
+and not yet pinned by a test at that site, because the integration suite was
+blocked on ISSUE-003 and ISSUE-004. It is pinned now, by a compiler-parsed source
+scan of each mock plus a rendered case, and **those two comments are stale in the
+safe direction** — they understate what is covered. They were not corrected because
+this change does not edit `src/mocks/**`. *Tests:* same file — "the %s source
+contains no HTML-injection sink at all", "the %s source names no URL-bearing
+attribute a plug-in value could reach", "reports a planted sink, so the two scans
+above cannot pass vacuously" and "renders a markup-shaped extension string as a
+text node in the mounted shell".
+
+#### What was NOT confirmed, stated so the green is not over-read
+
+At the time this section was written, `npm run verify` **could not be run to a
+clean exit**, and the reason is not this change: the working tree carried another
+change in flight across `src/core/**` and `src/components/**` — the removal of
+`RibbonContext.focusedPane` and the addition of `selectedItemIds` — which left
+`src/core/ShellAPI.ts` and seven pre-existing test files failing `tsc`. The
+integration suite itself was green, 60 of 60, under three shuffle seeds against
+that tree. **`verify` has to be re-run to a clean exit before this row moves to
+`LANDED`, and the coverage figure has to be re-read at that point rather than
+carried over.**
 
 ---
 

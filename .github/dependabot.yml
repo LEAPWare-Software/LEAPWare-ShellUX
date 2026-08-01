@@ -1,0 +1,58 @@
+# Dependabot keeps this project CURRENT. It is not the vulnerability scanner.
+#
+# Advisory coverage already exists and is deliberately separate:
+#
+#   .github/workflows/audit-dependencies.yml  audits the production tree whenever
+#                                             the dependency graph changes.
+#   .github/workflows/audit-schedule.yml      audits the same tree weekly on a
+#                                             timer, so an advisory published
+#                                             against a lockfile nobody touched
+#                                             still surfaces.
+#
+# Those two answer "is anything we ship known-vulnerable today". This file answers
+# a different question: "how far behind has this drifted while nobody looked".
+# Staying current is what makes a security bump a one-line change rather than a
+# migration, so the two are complementary — but do not read a green Dependabot
+# queue as an audit, and do not disable an audit because this exists.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      # Monday morning UTC, matching the scheduled audit's slot. UTC and not a
+      # local timezone, because the runner has no opinion about where anyone lives.
+      day: monday
+      time: '07:00'
+      timezone: Etc/UTC
+
+    # Minor and patch updates arrive as ONE pull request. Sixteen separate
+    # single-line bumps a week is a queue nobody reads, and a queue nobody reads
+    # is indistinguishable from having no updates configured at all. Major
+    # updates are deliberately NOT grouped: each one is a breaking change that
+    # needs its own reading, its own `npm run verify`, and possibly its own ADR.
+    groups:
+      minor-and-patch:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
+
+    # Low, on purpose. Every one of these has to pass the full verify gate on
+    # three operating systems before it merges, and an open queue longer than
+    # this means the earlier ones are going stale rather than waiting.
+    open-pull-requests-limit: 5
+
+    commit-message:
+      prefix: chore
+      include: scope
+
+    labels:
+      - dependencies
+
+# Only the npm ecosystem is configured. Workflow action versions are pinned by
+# tag in .github/workflows/ and are updated by hand today; enabling the
+# github-actions ecosystem here is a reasonable follow-up and is deliberately not
+# being decided as a side effect of adding this file.

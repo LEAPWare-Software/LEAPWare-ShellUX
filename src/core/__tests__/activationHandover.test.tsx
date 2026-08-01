@@ -149,10 +149,9 @@ describe('foreground handover clears the outgoing extension state', () => {
     expect(host.current.store.getContext()).toEqual({
       activeExtensionId: null,
       activeNavNodeId: null,
+      selectedItemIds: [],
       selectedItemId: null,
-      // Never written by anything, here or elsewhere, and deliberately not
-      // started here.
-      focusedPane: null,
+      contextKeys: {},
     });
   });
 
@@ -325,15 +324,16 @@ describe('the handover is one coherent context, not a torn one', () => {
 
     activate(host, 'crm-ext');
 
-    // Three fields moved and one notification carried all three. A separate write
-    // per field would be three passes, and the first two would publish exactly the
-    // torn snapshot the test above forbids.
+    // Four fields moved and one notification carried all four. A separate write
+    // per field would be four passes, and the first three would publish exactly
+    // the torn snapshot the test above forbids.
     expect(seen).toHaveLength(1);
     expect(seen[0]).toEqual({
       activeExtensionId: 'crm-ext',
       activeNavNodeId: null,
+      selectedItemIds: [],
       selectedItemId: null,
-      focusedPane: null,
+      contextKeys: {},
     });
     expect(seen[0]).toBe(host.current.store.getContext());
   });
@@ -350,8 +350,9 @@ describe('the handover is one coherent context, not a torn one', () => {
     expect(seen[0]).toEqual({
       activeExtensionId: null,
       activeNavNodeId: null,
+      selectedItemIds: [],
       selectedItemId: null,
-      focusedPane: null,
+      contextKeys: {},
     });
   });
 });

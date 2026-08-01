@@ -201,7 +201,7 @@ describe('useBadgeCount', () => {
 
     act(() => {
       store.setSelectedItem('msg-42');
-      store.patchContext({ activeExtensionId: 'mail-ext', focusedPane: 'pane2' });
+      store.patchContext({ activeExtensionId: 'mail-ext', activeNavNodeId: 'root-a' });
     });
 
     // A badge subscriber is not a context subscriber. Both notifications come

@@ -23,7 +23,43 @@ import { hotkeyToken } from './hotkeys';
  * that arrives through the registry's doors, and pinned by "validateBlueprint —
  * identifier hardening" in `src/core/__tests__/validation.test.ts`.
  */
-export const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/**
+ * ============================================================================
+ * THE HOST CONSTANTS ARE FROZEN, AND EXACTLY WHAT THAT BUYS
+ * ============================================================================
+ * `EXTENSION_ID_PATTERN`, `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS` and
+ * `HOTKEY_MODIFIER_REQUIRED_KEYS` are the rules every untrusted payload is
+ * measured against, and they are exported from a module a plug-in can import.
+ * Until GitHub issue #10 every one of them was runtime-mutable. `REGISTRY_LIMITS`
+ * was `as const` — a COMPILE-TIME assertion that binds nobody who is not being
+ * compiled — so `REGISTRY_LIMITS.MAX_NAV_NODES = 1e9` was an ordinary assignment,
+ * and `EXTENSION_ID_PATTERN.test = () => true` shadowed the prototype method that
+ * every id check calls.
+ *
+ * All five are now `Object.freeze`d, and the claim that buys is stated exactly:
+ *
+ *  - **What it buys, unconditionally:** no own property can be added, replaced or
+ *    deleted on any of them. `REGISTRY_LIMITS` is a plain object, so freezing it
+ *    makes it genuinely immutable. For the three `Set`s and the `RegExp` it means
+ *    the interrogation methods — `has`, `test` — cannot be SHADOWED by an own
+ *    property, which was the interesting attack: a plug-in that owned
+ *    `HOTKEY_KEYS.has` owned the hotkey allowlist for the whole page.
+ *  - **What it does NOT buy, and this is not a detail:** a frozen `Set` can still
+ *    be mutated. `Set` state lives in internal slots rather than in properties, so
+ *    `Object.freeze(set)` leaves `set.add(...)`, `set.delete(...)` and
+ *    `set.clear()` working. `HOTKEY_KEYS.add('tab')` still widens the allowlist.
+ *    Closing that would mean shipping a `Set` whose mutators throw, which is a
+ *    different object from the one `ReadonlySet` describes; it was not done, and
+ *    the honest statement is that these are hardened against replacement and not
+ *    against a determined caller — which is the same register as ADR-0001's
+ *    "No sandbox".
+ *
+ * Both halves are pinned by "freezes the host constants against replacement" and
+ * "does not claim more than a frozen Set delivers" in
+ * `src/core/__tests__/hostConstants.test.ts`.
+ * ============================================================================
+ */
+export const EXTENSION_ID_PATTERN = Object.freeze(/^[a-z0-9][a-z0-9-]{0,63}$/);
 
 /**
  * Identifiers rejected outright.
@@ -37,7 +73,9 @@ export const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
  * `src/core/__tests__/registrySecurity.test.tsx`, which asserts both layers: the
  * rejection, and that no live key is ever `__proto__`.
  */
-export const RESERVED_IDS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+export const RESERVED_IDS: ReadonlySet<string> = Object.freeze(
+  new Set(['__proto__', 'constructor', 'prototype']),
+);
 
 /**
  * Hard bounds on blueprint size. A plugin cannot make the host walk forever.
@@ -49,7 +87,7 @@ export const RESERVED_IDS: ReadonlySet<string> = new Set(['__proto__', 'construc
  * grow the payload after it is measured" in
  * `src/core/__tests__/registryNormalization.test.tsx`.
  */
-export const REGISTRY_LIMITS = {
+export const REGISTRY_LIMITS = Object.freeze({
   /** Max length of any display string (`name`, `label`, `icon`). */
   MAX_TEXT_LENGTH: 256,
   /** Max length of `version`. */
@@ -60,7 +98,51 @@ export const REGISTRY_LIMITS = {
   MAX_NAV_DEPTH: 8,
   /** Max ribbon actions contributed by a single extension. */
   MAX_RIBBON_ACTIONS: 128,
-} as const;
+  /**
+   * Max items in one `RibbonContext.selectedItemIds`.
+   *
+   * The odd one out in this table, and deliberately here rather than in
+   * `ShellAPI.ts`: every other bound is on a REGISTERED payload and this one is
+   * on a RUNTIME call, but it is the same kind of promise — a plug-in cannot
+   * make the host allocate and walk forever — and splitting the bounds across
+   * two modules would mean two places to look for "what is the limit on X".
+   *
+   * 4096 is chosen against what the field is for. A selection is something a
+   * user made in a list; `MAX_NAV_NODES` is 512 and a Select-All over a
+   * virtualized pane 2 is the realistic large case, so the bound sits well above
+   * any plausible selection and well below a number that would make the
+   * duplicate walk expensive. It bounds what is STORED, like every bound above
+   * it: the count is captured once and the host-owned array is filled with
+   * exactly that many entries.
+   */
+  MAX_SELECTED_ITEMS: 4096,
+  /**
+   * Max distinct context keys one extension may hold at once.
+   *
+   * A context key is a named fact an extension publishes so that its own ribbon
+   * predicates can branch on it — `RibbonContext.contextKeys`, ADR-0001
+   * Amendment K Decision 2. 64 is chosen against what the mechanism is FOR:
+   * VS Code's `when` clauses, the prior art, are read by a human writing an
+   * expression, and an extension needing more than a few dozen named states is
+   * not describing states any more, it is using the shell as a database.
+   *
+   * There is deliberately no way to DELETE a key, so this bound is what stops an
+   * extension growing the record without limit. Setting a key to `null` is how
+   * "unset" is spelled, and a `null` key still occupies a slot — which is the
+   * honest arrangement, because a key that vanished would make a predicate
+   * reading it undistinguishable from one that was never set.
+   */
+  MAX_CONTEXT_KEYS: 64,
+  /**
+   * Max length of a `string` context-key value.
+   *
+   * Its own bound rather than `MAX_TEXT_LENGTH`, because it bounds a different
+   * thing: `MAX_TEXT_LENGTH` is on a display string validated once at
+   * registration, this is on a value written at runtime, as often as a plug-in
+   * likes, into a record every predicate reads on every render.
+   */
+  MAX_CONTEXT_VALUE_LENGTH: 256,
+});
 
 /**
  * The key names a `RibbonAction.hotkey` may bind, compared lowercased.
@@ -105,34 +187,36 @@ export const REGISTRY_LIMITS = {
  * `src/core/__tests__/validation.test.ts`, whose rejection table walks all four
  * absent groups by name.
  */
-export const HOTKEY_KEYS: ReadonlySet<string> = new Set([
-  ...'abcdefghijklmnopqrstuvwxyz',
-  ...'0123456789',
-  'f1',
-  'f2',
-  'f3',
-  'f4',
-  'f5',
-  'f6',
-  'f7',
-  'f8',
-  'f9',
-  'f10',
-  'f11',
-  'f12',
-  'arrowup',
-  'arrowdown',
-  'arrowleft',
-  'arrowright',
-  'home',
-  'end',
-  'pageup',
-  'pagedown',
-  'enter',
-  'delete',
-  'insert',
-  'backspace',
-]);
+export const HOTKEY_KEYS: ReadonlySet<string> = Object.freeze(
+  new Set([
+    ...'abcdefghijklmnopqrstuvwxyz',
+    ...'0123456789',
+    'f1',
+    'f2',
+    'f3',
+    'f4',
+    'f5',
+    'f6',
+    'f7',
+    'f8',
+    'f9',
+    'f10',
+    'f11',
+    'f12',
+    'arrowup',
+    'arrowdown',
+    'arrowleft',
+    'arrowright',
+    'home',
+    'end',
+    'pageup',
+    'pagedown',
+    'enter',
+    'delete',
+    'insert',
+    'backspace',
+  ]),
+);
 
 /**
  * Keys that may never be bound bare, whatever their length.
@@ -160,7 +244,7 @@ export const HOTKEY_KEYS: ReadonlySet<string> = new Set([
  * and that every member of this set is refused bare — so a key added here is
  * covered the moment it lands.
  */
-export const HOTKEY_MODIFIER_REQUIRED_KEYS: ReadonlySet<string> = new Set(['enter']);
+export const HOTKEY_MODIFIER_REQUIRED_KEYS: ReadonlySet<string> = Object.freeze(new Set(['enter']));
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                  */
@@ -377,6 +461,7 @@ interface NavWalkState {
 interface MutableNavigationNode {
   id: string;
   label: string;
+  icon?: string;
   badgeCount?: number;
   children?: readonly NavigationNode[];
 }
@@ -610,6 +695,21 @@ function normalizeNavigationNode(
 
   // Optional fields treat an explicit `undefined` as absent, matching how a
   // hand-written JS plugin is likely to spell "no value".
+  //
+  // `icon` is held to exactly what `RibbonAction.icon` is held to — a non-blank
+  // string within `MAX_TEXT_LENGTH` — because it is the same kind of value: an
+  // UNTRUSTED lookup key into the host's own icon table, read once here and
+  // stored as the resulting primitive. The registry does not know which keys the
+  // table publishes and deliberately does not check: the vocabulary is a
+  // rendering concern that can grow without a registry change, and an unknown
+  // key resolves to the host's fallback glyph rather than to nothing. See
+  // `NavigationNode.icon` in `types.ts` and the icon table in
+  // `src/components/ui/shellIcons.tsx`.
+  const icon = value['icon'];
+  if (icon !== undefined) {
+    node.icon = validateText(icon, `${path}.icon`, REGISTRY_LIMITS.MAX_TEXT_LENGTH);
+  }
+
   const badgeCount = value['badgeCount'];
   if (badgeCount !== undefined) {
     if (typeof badgeCount !== 'number' || !Number.isSafeInteger(badgeCount) || badgeCount < 0) {

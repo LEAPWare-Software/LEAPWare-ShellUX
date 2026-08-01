@@ -341,14 +341,17 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
    * clear the per-extension context in the same patch.
    *
    * ==========================================================================
-   * WHY `selectedItemId` AND `activeNavNodeId` GO WITH IT
+   * WHY THE SELECTION AND `activeNavNodeId` GO WITH IT
    * ==========================================================================
    * This used to patch `activeExtensionId` alone, which leaked one extension's
-   * state into the next one's. Both leaked fields belong to whichever extension
-   * is in the foreground and to nothing else: `selectedItemId` is a row key in
-   * that extension's own list, and `activeNavNodeId` names a node in that
-   * extension's own navigation tree. Neither means anything to the extension
-   * that replaces it.
+   * state into the next one's. Every leaked field belongs to whichever extension
+   * is in the foreground and to nothing else: the selection is a set of row keys
+   * in that extension's own list, `activeNavNodeId` names a node in that
+   * extension's own navigation tree, and `contextKeys` is a record that extension
+   * published about its own panes. None of them means anything to the extension
+   * that replaces it, and `contextKeys` is the case where that would be worst —
+   * a predicate is a pure function of the context, so a stale key from the
+   * previous vendor is indistinguishable to it from one this vendor set.
    *
    * The consequence was not cosmetic. A newly activated extension was handed a
    * selection id belonging to a different vendor, so its `isVisible` predicates
@@ -399,7 +402,31 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         store.patchContext({ activeExtensionId });
         return;
       }
-      store.patchContext({ activeExtensionId, activeNavNodeId: null, selectedItemId: null });
+      // Two halves of one handover, and the order is load-bearing.
+      //
+      // FIRST the bookkeeping: `clearContextKeys` drops every extension's
+      // context-key namespace and deliberately neither patches nor notifies.
+      // SECOND the publication: one patch carrying the new foreground, an empty
+      // selection, no nav node and an empty context-key record. Doing the
+      // bookkeeping inside the patch is impossible — it is store state, not
+      // context state — and doing it after would leave a window in which the
+      // published record said "empty" while the namespaces behind it did not.
+      //
+      // `selectedItemIds` is the field that carries the selection since GitHub
+      // issue #14, and it is cleared HERE rather than left to be inferred from
+      // `selectedItemId`. Naming both in the one patch is not belt and braces:
+      // `applyPatch` resolves the pair with `selectedItemIds` winning, so this
+      // says exactly what it means, and the alternative — clearing only the
+      // derived shorthand — would have worked by accident through the very
+      // precedence rule that exists to stop the two disagreeing.
+      store.clearContextKeys();
+      store.patchContext({
+        activeExtensionId,
+        activeNavNodeId: null,
+        selectedItemIds: [],
+        selectedItemId: null,
+        contextKeys: {},
+      });
     },
     [store],
   );

@@ -1,0 +1,21 @@
+# Code owners for LEAPWare-ShellUX.
+#
+# This file exists so that review is ROUTED rather than noticed. Without it,
+# a pull request waits for whoever happens to look; with it, GitHub requests a
+# review from the owner of every changed path the moment the pull request opens,
+# and a branch protection rule can require that review before merge.
+#
+# One owner, one line, because the project currently has one maintainer. That is
+# a fact about today and not a decision to keep. THIS FILE NEEDS UPDATING WHEN
+# THE TEAM GROWS: a single catch-all owner across a growing team stops being
+# routing and becomes a bottleneck, and then a rubber stamp, which is worse than
+# no rule at all. Split it by path at the point where more than one person can
+# genuinely review each area — for example src/core/** to whoever owns the
+# extension contract, docs/adr/** to whoever must approve an architectural
+# decision, and scripts/** to whoever maintains the portability and citation
+# gates.
+#
+# Note that the last matching pattern wins, so any future per-path line must be
+# written BELOW this catch-all, not above it.
+
+* @LEAPWare-HQ

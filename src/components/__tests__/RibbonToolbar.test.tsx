@@ -43,8 +43,9 @@ import type { HostRibbonAction } from '../ui/RibbonToolbar';
 const CONTEXT: Readonly<RibbonContext> = Object.freeze({
   activeExtensionId: 'sample-ext',
   activeNavNodeId: null,
+  selectedItemIds: Object.freeze([]),
   selectedItemId: null,
-  focusedPane: null,
+  contextKeys: Object.freeze(Object.create(null) as Record<string, never>),
 });
 
 /** The d-attribute of the host's fallback glyph, used for unknown icon keys. */

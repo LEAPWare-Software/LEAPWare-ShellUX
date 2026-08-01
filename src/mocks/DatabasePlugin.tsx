@@ -83,11 +83,25 @@ import type {
  */
 const RECORD_ID_PREFIX = 'rec-';
 
-/** Top-level categories, in pane-1 order. Each owns the leaves below it. */
-const TOP_LEVEL_CATEGORIES: readonly { readonly id: string; readonly label: string }[] = [
-  { id: 'components', label: 'Components' },
-  { id: 'assemblies', label: 'Assemblies' },
-  { id: 'consumables', label: 'Consumables' },
+/**
+ * Top-level categories, in pane-1 order. Each owns the leaves below it.
+ *
+ * **The `icon` keys are why this module has three distinguishable rows in the
+ * collapsed 48px track.** Components, Assemblies and Consumables begin C, A and
+ * C, so the monogram pane 1 drew before GitHub issue #19 read "C A C" and two of
+ * the three were the same glyph. Each key is one the host publishes in
+ * `SHELL_ICONS` — `box`, `layers`, `droplet` — and this module resolves none of
+ * them itself: it supplies a string and the host does the lookup, which is the
+ * whole of the contract for an icon.
+ */
+const TOP_LEVEL_CATEGORIES: readonly {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: string;
+}[] = [
+  { id: 'components', label: 'Components', icon: 'box' },
+  { id: 'assemblies', label: 'Assemblies', icon: 'layers' },
+  { id: 'consumables', label: 'Consumables', icon: 'droplet' },
 ];
 
 interface LeafCategory {

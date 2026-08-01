@@ -1,0 +1,100 @@
+name: Bug report
+description: The host does something that contradicts what this repository says it does.
+title: 'bug: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not use this form for a suspected vulnerability.** Report it privately
+        instead — SECURITY.md at the repository root says how. A public issue
+        publishes a finding before there is anything to update to.
+
+        This project argues from specific lines, and a report that does the same is
+        triaged far faster than one that describes a feeling. Two fields below are
+        the ones that decide whether this can be acted on: the evidence, and how you
+        reproduced it.
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: >-
+        The commit SHA you observed this on. There is no release and no tag, so a
+        version number identifies nothing — the commit is the only thing that does.
+      placeholder: 0a6596b
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what promised it
+      description: >-
+        Not just what you wanted — what in this repository led you to expect it.
+        Quote the sentence and say where it lives (README.md, DEVELOPER.md, an ADR,
+        a docblock). If nothing promised it, say that; a wrong expectation is worth
+        knowing about too, and usually means a document is unclear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: >-
+        The observed behaviour, and the exact error text if there was one. Paste it
+        rather than paraphrasing it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence, as file and line
+      description: >-
+        Name every file and line your claim rests on, in `path:line` form, one per
+        line, each with a sentence saying what it shows. If your claim is about
+        something that is absent, say where you looked for it.
+      placeholder: |
+        src/core/RegistryContext.tsx:412 - the bounds check runs before the rebuild
+        src/core/ShellAPI.ts:88 - the handle is minted without consulting liveness
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How you reproduced it
+      description: >-
+        Exact steps, the exact commands you ran, and what you ran them against. A
+        failing test written with the public contract is the best possible form of
+        this and is worth more than any description — paste it if you have one. If
+        you saw this once and cannot reproduce it, say so plainly rather than
+        guessing at steps; an honest "seen once, not reproduced" is a usable report
+        and an invented recipe is not.
+    validations:
+      required: true
+
+  - type: textarea
+    id: not-wrong
+    attributes:
+      label: What is NOT wrong
+      description: >-
+        What you checked that behaved correctly, and what you are deliberately not
+        claiming. This bounds the finding so it is not read wider than the evidence
+        supports, which is the failure mode this project has actually had.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you submit
+      options:
+        - label: This is not a suspected vulnerability. (If it is, close this and use SECURITY.md.)
+          required: true
+        - label: I checked the accepted limits in README.md's security posture section and in SECURITY.md, and this is not one of them.
+          required: true
+        - label: Every claim above names the file and line it rests on.
+          required: true

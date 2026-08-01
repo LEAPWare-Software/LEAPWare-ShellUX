@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { ariaKeyShortcuts } from '../../core/hotkeys';
 import { execute, isVisible } from '../../core/ribbonAction';
 import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
+import { FALLBACK_ICON, OVERFLOW_ICON, SHELL_ICONS } from './shellIcons';
 
 /**
  * ============================================================================
@@ -25,7 +26,7 @@ import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
  *    plug-in label as a text node, not as markup".
  *
  * 2. A plug-in `icon` is a LOOKUP KEY, never markup and never a URL. It is
- *    resolved through `RIBBON_ICONS`, a host-owned `Map` of inline SVGs, and an
+ *    resolved through `SHELL_ICONS`, a host-owned `Map` of inline SVGs, and an
  *    unknown key falls back to a host glyph. A `Map` rather than an object
  *    literal, for the same reason `ExtensionRegistryProvider` uses one: the key
  *    comes from an untrusted manifest, and `Map` has no prototype chain, so
@@ -33,6 +34,12 @@ import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
  *    React as a child. *Test:* "resolves an unknown icon key through the host
  *    fallback rather than through the key" and "does not resolve a
  *    prototype-shaped icon key to anything inherited".
+ *
+ *    **The table itself is no longer in this file.** It lives in
+ *    `src/components/ui/shellIcons.tsx`, because `NavigationNode.icon` (GitHub
+ *    issue #19) gave the collapsed pane-1 track a second reason to resolve one
+ *    and two copies of a lookup table drift. Both the `Map` semantics and the
+ *    reason for them moved with it, unaltered.
  *
  * 3. A predicate or a handler that THROWS is contained, and so is a report about
  *    one. `isVisible` is called inside a guard: a throw means "not visible", is
@@ -168,66 +175,6 @@ import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
  */
 
 /**
- * Inline SVG built from one or more path commands.
- *
- * Host-authored geometry only. Nothing a plug-in supplies ever reaches `d`; the
- * plug-in's contribution is a key into the map below and nothing else.
- */
-function glyph(paths: readonly string[]): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      viewBox="0 0 16 16"
-      className="h-3.5 w-3.5 flex-none"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {paths.map((d) => (
-        <path key={d} d={d} />
-      ))}
-    </svg>
-  );
-}
-
-/**
- * The host's icon vocabulary. An extension names one of these keys; anything
- * else gets `FALLBACK_ICON`.
- *
- * A `Map`, not a `Record`, and not because the lookup is faster. The key is
- * untrusted, and an object literal answers `icons['__proto__']` with
- * `Object.prototype` — an object React refuses to render, from a key that
- * reaches no own property. A `Map` has no prototype chain to inherit from.
- */
-const RIBBON_ICONS: ReadonlyMap<string, ReactElement> = new Map<string, ReactElement>([
-  ['save', glyph(['M3 3h7l3 3v7H3z', 'M6 3v3h3', 'M5.5 13V9.5h5V13'])],
-  ['open', glyph(['M2 4.5h4L7.5 6.5H14V13H2z'])],
-  ['edit', glyph(['M11 2.5 13.5 5l-7.5 7.5H3.5V10z'])],
-  ['delete', glyph(['M3 4.5h10', 'M6.5 4.5V2.5h3v2', 'M4.5 4.5 5.5 13.5h5l1-9'])],
-  ['refresh', glyph(['M13 8a5 5 0 1 1-1.6-3.7', 'M13 2v3h-3'])],
-  ['search', glyph(['M7 11.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9z', 'M10.5 10.5 14 14'])],
-  ['add', glyph(['M8 3v10', 'M3 8h10'])],
-  ['settings', glyph(['M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z', 'M8 1.5v2', 'M8 12.5v2', 'M1.5 8h2', 'M12.5 8h2'])],
-  ['navigation', glyph(['M2.5 4h11', 'M2.5 8h11', 'M2.5 12h11'])],
-  ['drawer', glyph(['M2.5 3h11v10h-11z', 'M10 3v10'])],
-  ['close', glyph(['M4 4l8 8', 'M12 4l-8 8'])],
-]);
-
-/** Shown for any icon key the host does not publish. */
-const FALLBACK_ICON: ReactElement = glyph(['M3.5 3.5h9v9h-9z']);
-
-/**
- * The overflow-menu glyph. Deliberately NOT an entry in `RIBBON_ICONS`: that map
- * is the vocabulary offered to extensions, this button is host chrome, and
- * looking it up through the map would add a fallback branch that no input can
- * ever reach.
- */
-const OVERFLOW_ICON: ReactElement = glyph(['M4 8h.01', 'M8 8h.01', 'M12 8h.01']);
-
-/**
  * How many contextual actions stay on the bar before the rest move into the
  * overflow menu.
  *
@@ -309,7 +256,7 @@ function keyShortcutsOf(action: RibbonAction): string | undefined {
 interface ActionButtonProps {
   /** UNTRUSTED when it comes from a plug-in. Rendered as a text node only. */
   readonly label: string;
-  /** UNTRUSTED lookup key. Resolved through `RIBBON_ICONS`. */
+  /** UNTRUSTED lookup key. Resolved through `SHELL_ICONS`. */
   readonly icon: string;
   readonly isDisabled: boolean;
   /**
@@ -379,7 +326,7 @@ function ActionButton({
       }}
       className={`${ACTION_CHROME} max-w-[9rem] flex-none`}
     >
-      {RIBBON_ICONS.get(icon) ?? FALLBACK_ICON}
+      {SHELL_ICONS.get(icon) ?? FALLBACK_ICON}
       <span className="truncate">{label}</span>
     </button>
   );
@@ -420,7 +367,7 @@ function OverflowMenuItem({
       }}
       className={`${ACTION_CHROME} w-full justify-start outline-none focus:border-neutral-200 dark:focus:border-neutral-800`}
     >
-      {RIBBON_ICONS.get(icon) ?? FALLBACK_ICON}
+      {SHELL_ICONS.get(icon) ?? FALLBACK_ICON}
       <span className="truncate">{label}</span>
     </DropdownMenu.Item>
   );

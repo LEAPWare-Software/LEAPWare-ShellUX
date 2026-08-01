@@ -754,10 +754,11 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
  * Five actions, one always visible and four gated on this extension's own
  * selection.
  *
- * Every `icon` is a key from the host's published vocabulary in
- * `RibbonToolbar`; an unknown key would resolve to the host fallback glyph
- * rather than to anything this module controls, which is the point of the icon
- * being a key at all.
+ * Every `icon` is a key from the host's published vocabulary — `SHELL_ICONS` in
+ * `src/components/ui/shellIcons.tsx`, listed for extension authors in
+ * `DEVELOPER.md` since GitHub issue #18. An unknown key resolves to the host
+ * fallback glyph rather than to anything this module controls, which is the
+ * point of the icon being a key at all.
  *
  * The two hotkeys carry `ctrl`, because the registry refuses a bare
  * character-key chord under WCAG 2.2 §2.1.4 — and because a bare `J`/`K`-style

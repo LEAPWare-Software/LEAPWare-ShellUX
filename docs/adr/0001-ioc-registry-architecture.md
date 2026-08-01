@@ -594,7 +594,8 @@ member of `ShellUXErrorCode` and is pinned in the exhaustiveness record in
 `createRevocableShellAPI(store, extensionId)` returns `{ api, revoke }` as two
 separate objects. `revoke` closes over a variable only that factory's scope can
 reach and is a property of the wrapper the host keeps — never of `api`.
-`Object.keys(api)` is exactly the three `IShellAPI` members. `createShellAPI(store)`
+`Object.keys(api)` is exactly the `IShellAPI` members and nothing else — three of
+them when this amendment was written, seven since Amendment K. `createShellAPI(store)`
 is unchanged for existing callers: it is the unscoped host-side facade and simply
 discards the `revoke` handle. *Tests:* `src/core/__tests__/dataflow.test.tsx` — "does not
 expose revoke to the plugin"; and for what that does *not* buy,
@@ -916,11 +917,14 @@ without someone deciding what a legal value for it is:
 |---|---|
 | `selectedItemId` | `string` or `null`. Type only — it is the extension's own item key, not a host lookup key. |
 | `activeExtensionId`, `activeNavNodeId` | `EXTENSION_ID_PATTERN`, not reserved, or `null` — the registry's own rule, imported rather than restated. |
-| `focusedPane` | a member of `PANE_IDS`, or `null`. |
+| `focusedPane` | a member of `PANE_IDS`, or `null`. **Superseded by Amendment K Decision 6: the field is removed, and so is this row and its validator.** |
 
 `PANE_IDS` is new in `types.ts`: `PaneId` is a type union and vanishes at runtime,
 so it is pinned to a `Record<PaneId, true>` exhaustiveness record in the same idiom
-as `SHELL_UX_ERROR_CODES`. The validators reuse `describeUntrusted` and never read
+as `SHELL_UX_ERROR_CODES`. (`PANE_IDS` outlived the field it was built for: since
+Amendment K it is what `HydrationEngine`'s pane-size record is checked against, and
+the reason it was kept rather than deleted with `assertValidPaneId` is written on it
+in `types.ts`.) The validators reuse `describeUntrusted` and never read
 an untrusted value — `typeof` only, with interpolation reserved for a value already
 proven to be a primitive string. Rejection is **all-or-nothing**: the draft is a
 local and the context is replaced only after the loop, so a patch whose second
@@ -2507,6 +2511,290 @@ every prose site citing either was re-pointed in the same change: `README.md`,
   actions and calls `matchesHotkey`, because Decision 6 of Amendment H means there
   is no unambiguous table to look a token up in. The token's second use, forecast in
   Amendment H Decision 7, did not arrive and is not needed.
+
+---
+
+## Amendment K — The contract-hardening wave: multi-selection, context keys, and one deliberate removal
+
+**Date:** 2026-08-01 · **Status:** Accepted · **Amends:** Amendment C
+(`Object.keys(api)` is "exactly the three `IShellAPI` members"), Amendment D (the
+`patchContext` validation table, whose `focusedPane` row is removed) and
+Amendment G (which is the rule this amendment is written to satisfy, not one it
+changes)
+
+### What changed
+
+`IShellAPI` went from **three members to seven**: `setSelectedItems`,
+`setActiveNavNode`, `getBadgeCount` and `setContextKey` join `setSelectedItem`,
+`setBadgeCount` and `getContext`. `RibbonContext` gained `selectedItemIds` and
+`contextKeys`, made `selectedItemId` a derived read, and **lost `focusedPane`**.
+`NavigationNode` gained an optional `icon`. The ribbon's icon table moved to
+`src/components/ui/shellIcons.tsx` as `SHELL_ICONS` and is now published in
+`DEVELOPER.md`. Every host constant is frozen. Seven GitHub issues (#10, #12,
+#13, #14, #15, #18, #19) land as one change, because five of them touch the shape
+of `IShellAPI` and doing the "three members" documentation sweep once is
+materially safer than doing it five times.
+
+### Decision 1 — multi-selection is a first-class field, and the two alternatives are recorded so they are not re-proposed
+
+`RibbonContext.selectedItemId: string | null` cannot express a multi-selection. A
+list pane whose user has shift-clicked six rows had exactly one thing it could
+tell the ribbon, and a plug-in had no way to make the ribbon re-evaluate from its
+own state at all. Two designs were considered and **both were rejected**:
+
+1. **An `invalidateRibbon()` signal**, letting a predicate read mutable plug-in
+   module state and asking the host to re-render when that state moved.
+   **Rejected: predicates run during render.** A predicate reading mutable
+   external state reintroduces exactly the tearing `useSyncExternalStore` exists
+   to prevent — two panes evaluating the same predicate at two points in one
+   commit can read two different values, and the contract requires pure
+   predicates for that reason. The signal would also have made "pure" mean
+   "does not write", when the problem is reading something that is not the
+   argument.
+2. **A generic opaque `extensionState` blob on the context.** **Rejected on two
+   grounds.** It becomes a dumping ground — there is no answer to "what may go in
+   it?", so everything does. And an unvalidated opaque field is against the grain
+   of a codebase that validates every untrusted value once, at the door, and
+   stores a host-owned copy; a blob has no validation story, and an object in it
+   carries getters that fire inside a render-phase predicate read and a prototype
+   chain one extension can reach through into another's code.
+
+What landed instead: `selectedItemIds: readonly string[]` as the **single source
+of truth**, with `selectedItemId` becoming the LAST element or `null`. One
+writer — `applyPatch` — recomputes the derived field inside the same draft, so no
+notification can ever carry the two disagreeing. `selectedItemId` stays on the
+interface and stays writable as a shorthand for a selection of one, because a
+great deal of code and documentation reads it and single selection is the common
+case; a patch naming both is resolved by precedence rather than refused, because
+`patchContext(store.getContext())` names both and must be an exact round trip.
+
+The array is untrusted input and is handled in this codebase's established idiom:
+length captured once, each element read exactly once into a host-owned array, and
+that array validated, frozen and stored — the discipline `normalizeNavigationNode`
+already applies to a registered tree, so a `Proxy` reporting one length while it
+is measured and another afterwards cannot grow what the host holds.
+`REGISTRY_LIMITS.MAX_SELECTED_ITEMS` bounds it.
+
+**Duplicates are REJECTED, not collapsed**, and the choice is recorded because
+either would have been defensible. Deduplicating silently returns a selection of a
+different length from the one the caller asked for, which is the same class of
+failure `assertValidSelectedItemId` refuses to create by coercing a bad id to
+`null`: a selection that mysteriously differs from the one you set is worse to
+find than an exception at the call site.
+
+`publishForeground` clears `selectedItemIds` in the SAME single patch that clears
+`selectedItemId` and `activeNavNodeId`, so no subscriber observes a torn state.
+
+*Tests:* the "setSelectedItems validates its argument" group in
+`src/core/__tests__/shellApi.test.ts`; "patchContext rejects what setSelectedItems
+rejects", "derives selectedItemId from the last element of selectedItemIds", "lets
+selectedItemIds outrank selectedItemId in one patch" and "does not notify when a
+selection is rewritten with the ids it already holds" in
+`src/core/__tests__/contextPatch.test.ts`.
+
+### Decision 2 — context keys are the general mechanism, and `selectedItemIds` is deliberately not an instance of it
+
+Decision 1 answers selection. It does not answer the question underneath it:
+**every time a plug-in needs the ribbon to react to something the host does not
+model, does the host grow another `RibbonContext` field?** That does not scale,
+and `selectedItemIds` would have been the first of many.
+
+The prior art is named plainly because the shape is deliberately the same one:
+**VS Code's `when` clauses over context keys**. An extension publishes named
+values through the host; visibility expressions read them. That preserves the
+purity guarantee which killed `invalidateRibbon()` — the predicate is still a pure
+function of its argument, because the value went through the store and is part of
+the same snapshot every other subscriber holds.
+
+`IShellAPI.setContextKey(key, value)` writes one, and
+`RibbonContext.contextKeys` publishes them. The design turns on four constraints:
+
+- **The value type is `string | number | boolean | null` and nothing else.** This
+  is what distinguishes a context key from the opaque `extensionState` blob
+  rejected in Decision 1, and it is not a limitation waiting to be lifted. A
+  primitive costs one `typeof` to validate, invokes nothing when it is read,
+  carries no prototype another extension can reach through, and compares with
+  `Object.is` — which is what makes the unchanged-write bail-out possible at all.
+  A `number` must be finite: `NaN` and `Infinity` are values a predicate cannot
+  branch on usefully.
+- **The key is a host lookup key** and is held to `EXTENSION_ID_PATTERN` and
+  `RESERVED_IDS`, exactly as a badge node id is. The published record is built on
+  `Object.create(null)` regardless, so there is nothing to pollute even if that
+  filter were wrong — the same belt-and-braces relationship Amendment F describes
+  between the registry's `RESERVED_IDS` check and its `Map` stores.
+- **The scope is closure-captured**, exactly as `setBadgeCount`'s is. An extension
+  writes only into its own namespace and has no parameter with which to name
+  another's. **That is collision-resistance, not confinement**, in the same
+  register Amendment C uses for badges: the published record is the FOREGROUND
+  extension's, and anything holding a context can read it. Stated in
+  `DEVELOPER.md` in those words, because the honest version of this is the useful
+  one.
+- **Notification follows the store's existing discipline.** A key that moves
+  notifies, so the ribbon re-evaluates; a key rewritten with the value it already
+  holds does not, and neither does a background extension's write, because only
+  the foreground's namespace is published and the context therefore did not move.
+
+Keys are cleared on every real foreground handover, in the same single patch as
+the selection and the nav node, and every namespace is dropped rather than only
+the outgoing one. This is the bug class `publishForeground` was fixed for and it
+would have been worst here: a predicate is a pure function of the context, so a
+stale key from the previous vendor is indistinguishable to it from one this vendor
+set. The clearing is split into a store-state half (`clearContextKeys`, which
+deliberately neither patches nor notifies) and a published half (`contextKeys: {}`
+inside the handover patch), because store state cannot be cleared from inside a
+context patch and doing it afterwards would leave a window where the two
+disagreed.
+
+**`selectedItemIds` is NOT re-expressed as a context key, and that is the line
+between the two.** Selection is a host concept: the shell renders it, hands it to
+`onExecute`, clears it on handover and reasons about it. A context key is
+plug-in-private state the host stores and republishes without understanding.
+Collapsing the first into the second would make the host unable to say anything
+about selection at all.
+
+*Tests:* `src/core/__tests__/contextKeys.test.tsx` — "setContextKey validates its
+value", "patchContext rejects what setContextKey rejects", "keeps two extensions'
+context keys apart, and publishes only the foreground's", "clears every
+extension's context keys on a foreground handover", "does not notify when a
+context key is rewritten with the value it already holds", "does not notify for a
+background extension's own context key" and "carries the cleared record in the
+same single notification as the rest of the handover".
+
+### Decision 3 — `setActiveNavNode`, and one path rather than two
+
+`activeNavNodeId` was writable only by the host's pane-1 click handler, through a
+raw `patchContext`. An extension could not navigate at all. The new member and
+that handler now both go through **one** store member, `setActiveNavNode`, which
+is Amendment J Decision 1's argument about `isVisible` applied to a field: two
+routes to one thing must not be two copies of one rule.
+
+`nodeId` **is** a host lookup key, unlike `setSelectedItem`'s `id`, so it is held
+to the registry's allowlist and reserved words. It is deliberately **not** checked
+against the calling extension's own tree: `activeNavNodeId` is one host-wide
+field, the host clears it on every handover, and an extension naming a node it
+does not own gets a value none of its own rendering will match — the same posture
+`setSelectedItem` takes toward an invented item id. *Test:* "setActiveNavNode
+validates its argument" in `src/core/__tests__/shellApi.test.ts`.
+
+### Decision 4 — `getBadgeCount` is scoped by the closure, because a scoped write with an unscoped read is not a scope
+
+`setBadgeCount` existed and `getBadgeCount` did not, so an extension that wanted
+to increment its own count had to keep a shadow copy. The read half is scoped by
+the same closure-captured `extensionId` the write half is, and takes no scope
+parameter. A read half that took one would have handed every extension every other
+extension's badges **through the documented API** — a strictly wider capability
+than the write half it mirrors, and a widening nobody asked for. *Test:* "reads
+back only its own scope, and offers no parameter to name another" in
+`src/core/__tests__/dataflow.test.tsx`.
+
+### Decision 5 — freezing the host constants, and exactly what a frozen `Set` is worth
+
+`EXTENSION_ID_PATTERN`, `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS` and
+`HOTKEY_MODIFIER_REQUIRED_KEYS` are the rules every untrusted payload is measured
+against, and all five were runtime-mutable. `REGISTRY_LIMITS` was `as const`,
+which is a **compile-time** assertion binding nobody who is not being compiled.
+All five are now `Object.freeze`d.
+
+**The claim is stated narrowly on purpose, because the obvious wider version is
+false.** Freezing buys, unconditionally, that no own property can be added,
+replaced or deleted: `REGISTRY_LIMITS` becomes genuinely immutable, and for the
+`Set`s and the `RegExp` it means `has` and `test` cannot be **shadowed** by an own
+property — which was the interesting attack, since a plug-in owning
+`HOTKEY_KEYS.has` owned the hotkey allowlist for the whole page.
+
+It does **not** make a `Set` immutable. `Set` state lives in internal slots rather
+than in properties, so `Object.freeze(set)` leaves `add`, `delete` and `clear`
+working, and `HOTKEY_KEYS.add('tab')` still widens the allowlist. Closing that
+would mean shipping a `Set` whose mutators throw — a different object from the one
+`ReadonlySet` describes — and it was not done. This is the same register as "No
+sandbox": hardened against replacement, not against a determined caller. Both
+halves are asserted rather than one, by "freezes the host constants against
+replacement" and "does not claim more than a frozen Set delivers" in
+`src/core/__tests__/hostConstants.test.ts`, the second of which demonstrates the
+mutability on a throwaway `Set` so that no real allowlist is left widened behind
+it.
+
+### Decision 6 — `focusedPane` is deleted, not populated
+
+`RibbonContext.focusedPane` was declared `PaneId | null`, was validated, and was
+written by nothing: permanently `null` for the whole life of the field. ISSUE-002
+recorded that as a known limit and `DEVELOPER.md` warned authors about it, which
+is documentation of a defect rather than a fix for one.
+
+**A field that is permanently null is worse than an absent one, because it looks
+available.** It invites predicates that can never fire, and the author gets no
+error — just an action that never shows. The alternative was to populate it, which
+needs focus tracking the shell deliberately does not do (it would be a second
+ambient listener, against the invariant Amendment J went to some trouble to keep
+narrow). So it is removed: from `RibbonContext`, from the `CONTEXT_FIELDS`
+validator table, from `assertValidPaneId`, and from every document that described
+it.
+
+**Two things survive it, and the second was nearly deleted by mistake.** `PaneId`
+remains as a layout type — `PaneWrapper`, `ShellLayout`'s resize bookkeeping,
+`HydrationEngine.PaneSizes`. And `PANE_IDS`, the runtime membership set, turned
+out to have a second consumer unrelated to the field it was built for: "covers
+exactly the pane ids the host declares" in
+`src/core/services/__tests__/hydrationEngine.test.ts` checks the engine's
+pane-size record against it. Deleting it would have forced that test to restate
+the union in its own words, which is exactly the drift the pin exists to prevent,
+so it stays and its docblock now says why.
+
+The `focusedPane` cases in `contextPatch.test.ts` were **re-pointed rather than
+deleted**. The properties they held — a patch value is validated before it reaches
+the snapshot, and a rejection never stringifies what it is rejecting — are
+unchanged; they now hold against `selectedItemIds`, which is a strictly harder
+case, because a collection can refuse to report its length, refuse to yield an
+element, and carry a hostile value at any index.
+
+### Decision 7 — `NavigationNode.icon`, one icon table, and a published vocabulary
+
+The collapsed 48px pane-1 track drew a monogram — the first letter of the label —
+so `DatabasePlugin`'s Components / Assemblies / Consumables rendered as "C A C".
+`NavigationNode.icon` is optional, validated in the nav-node normaliser beside
+`badgeCount` and held to exactly what `RibbonAction.icon` is held to.
+
+The icon table was module-private in `RibbonToolbar.tsx`. It moved to
+`src/components/ui/shellIcons.tsx` as `SHELL_ICONS` **with its `Map` semantics
+intact** — a `Map` specifically so a prototype-shaped key cannot resolve to
+something inherited — because two surfaces resolve an icon key now and two copies
+of a lookup table drift the way two copies of a validation rule do.
+
+Three outcomes are kept distinct, deliberately: a known key draws its glyph, an
+**unknown** key draws the host fallback, and **no key at all** keeps the monogram.
+A mistyped key and an undeclared icon are different situations and must not render
+identically.
+
+The vocabulary is published in `DEVELOPER.md` (issue #18). The fallback stays —
+guessing wrong should not break a ribbon — but a soft landing with no way to
+discover the real keys is a vendor guessing forever. The list is machine-checked
+against the map in both directions by "publishes every icon key in DEVELOPER.md,
+and no key it does not have" in
+`src/components/__tests__/ShellLayoutIcons.test.tsx`, so it cannot go stale by
+omission and cannot document a key that does not exist.
+
+### Consequences
+
+- **Positive.** A plug-in can express a multi-selection, navigate, read its own
+  badges, and drive ribbon visibility from its own state — the last through a
+  mechanism rather than through a bespoke field per need.
+- **Positive.** `selectedItemId` can no longer disagree with the selection,
+  because it is not stored beside it.
+- **Positive.** The host constants can no longer have their interrogation methods
+  replaced, and the limit of that is written down rather than assumed away.
+- **Negative — accepted.** `IShellAPI` is more than twice the size it was, and
+  every member is a capability handed to untrusted code. The mitigation is that
+  each of the four additions was argued for individually above, and that
+  `dataflow.test.tsx` asserts the LITERAL member list rather than a count, so an
+  eighth cannot arrive quietly.
+- **Negative — accepted.** `contextKeys` published in a single host-wide snapshot
+  means a backgrounded extension can READ the foreground extension's keys. It
+  cannot write them. This is the badge posture and it is documented as
+  collision-resistance rather than confinement.
+- **Negative — accepted.** A frozen `Set` is still `add`-able. See Decision 5.
+- **Neutral.** `PANE_IDS` outlived the field it was created for and is now
+  justified by a different consumer. Its docblock says so, rather than leaving a
+  reader to assume it is dead.
 
 ---
 

@@ -18,6 +18,7 @@ import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { FaultBoundary } from '../error/FaultBoundary';
 import { RibbonToolbar } from '../ui/RibbonToolbar';
 import type { HostRibbonAction, RibbonExtensionActions } from '../ui/RibbonToolbar';
+import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
 import { PaneWrapper } from './PaneWrapper';
 
 /**
@@ -360,6 +361,12 @@ function clampPanePercent(value: number): number {
 interface ShellNavButtonProps {
   /** UNTRUSTED plug-in text. Rendered as a text node in both pane-1 states. */
   readonly label: string;
+  /**
+   * UNTRUSTED icon key, or `undefined` for none. Resolved through the host's own
+   * `SHELL_ICONS` table and never interpolated anywhere. See the collapsed-track
+   * paragraph below.
+   */
+  readonly icon: string | undefined;
   /** Registry-validated non-negative integer, or `undefined` for no badge. */
   readonly badgeCount: number | undefined;
   readonly isCollapsed: boolean;
@@ -370,11 +377,32 @@ interface ShellNavButtonProps {
 /**
  * One selectable row in pane 1, in whichever of the two states pane 1 is in.
  *
- * Collapsed, the row becomes a 32px square showing a monogram derived from the
- * label — and the label itself stays in the accessible tree as an `sr-only` text
- * node rather than being dropped. That is the "accessible names preserved" half
- * of the 48px icon track: the same `getByRole('button', { name })` query finds
- * the same button in both states.
+ * Collapsed, the row becomes a 32px square — and the label itself stays in the
+ * accessible tree as an `sr-only` text node rather than being dropped. That is
+ * the "accessible names preserved" half of the 48px icon track: the same
+ * `getByRole('button', { name })` query finds the same button in both states.
+ *
+ * WHAT THE SQUARE SHOWS, SINCE GITHUB ISSUE #19. A declared `NavigationNode.icon`
+ * is resolved through `SHELL_ICONS` and drawn; a node that declares none keeps
+ * the monogram — the first letter of its label — which is what every row used to
+ * get. The monogram is not a fallback for a BAD key: an icon key the host does
+ * not publish resolves to `FALLBACK_ICON`, the same host glyph the ribbon shows,
+ * because a vendor who mistyped a key and a vendor who declared none are two
+ * different situations and should not look identical. The monogram was the whole
+ * of the problem this fixes: `DatabasePlugin`'s roots are Components,
+ * Assemblies and Consumables, so the collapsed rail read "C A C" and two of the
+ * three rows were indistinguishable.
+ *
+ * The extension rows above the tree take `icon={undefined}` and keep their
+ * monograms deliberately — `LEAPExtensionBlueprint` has no `icon` field, an
+ * extension is not a navigation node, and inventing one from the first nav node
+ * would be the host guessing.
+ *
+ * *Tests:* `src/components/__tests__/ShellLayoutIcons.test.tsx` — "renders a
+ * declared node icon in the collapsed track instead of the monogram", "falls back
+ * to the host glyph for an icon key the host does not publish", "keeps the
+ * monogram for a node that declares no icon" and "keeps the monogram on the
+ * extension rows, which declare no icon at all".
  *
  * THE SELECTED STATE IS A RULE AND A WEIGHT, NOT ONLY A FILL. `aria-current` was
  * always set, so a screen-reader user was always told which extension was
@@ -398,6 +426,7 @@ interface ShellNavButtonProps {
  */
 function ShellNavButton({
   label,
+  icon,
   badgeCount,
   isCollapsed,
   isCurrent,
@@ -422,8 +451,18 @@ function ShellNavButton({
       }
     >
       {isCollapsed ? (
-        <span aria-hidden="true" className="font-semibold">
-          {label.trim().slice(0, 1).toUpperCase()}
+        <span aria-hidden="true" className="flex font-semibold">
+          {/*
+            A lookup, never an interpolation. `icon` is untrusted and reaches
+            nothing but `Map.prototype.get`; the element that comes back is
+            host-authored SVG. An unpublished key gets the host fallback, and no
+            icon at all gets the monogram.
+          */}
+          {icon === undefined ? (
+            label.trim().slice(0, 1).toUpperCase()
+          ) : (
+            <>{SHELL_ICONS.get(icon) ?? FALLBACK_ICON}</>
+          )}
         </span>
       ) : null}
       <span className={isCollapsed ? 'sr-only' : 'truncate'}>{label}</span>
@@ -482,6 +521,7 @@ function NavNodeButton({
   return (
     <ShellNavButton
       label={node.label}
+      icon={node.icon}
       // `??`, not `||`: a badge written down to `0` is a value, and a truthiness
       // test would silently fall back to the blueprint's stale number for it.
       badgeCount={liveBadge ?? node.badgeCount}
@@ -715,7 +755,14 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     (nodeId: string): void => {
       // Registry-validated ids only — every node in a stored blueprint passed
       // `EXTENSION_ID_PATTERN` — so this cannot be rejected for its argument.
-      store.patchContext({ activeNavNodeId: nodeId });
+      //
+      // `setActiveNavNode`, not `patchContext({ activeNavNodeId })`, since GitHub
+      // issue #15. There are two writers of this field now — this handler and
+      // `IShellAPI.setActiveNavNode` — and they go through ONE store member, so
+      // the rule deciding what the field may hold is applied once and reported
+      // once. That is Amendment J Decision 1's argument about `isVisible`, in a
+      // second place: two routes to one field must not be two copies of one rule.
+      store.setActiveNavNode(nodeId);
     },
     [store],
   );
@@ -888,6 +935,9 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
             <li key={extension.id} className="min-w-0">
               <ShellNavButton
                 label={extension.name}
+                // A blueprint declares no icon; only its nav nodes do. See the
+                // `ShellNavButton` docblock for why the host does not invent one.
+                icon={undefined}
                 badgeCount={undefined}
                 isCollapsed={isNavCollapsed}
                 isCurrent={active !== null && active.id === extension.id}

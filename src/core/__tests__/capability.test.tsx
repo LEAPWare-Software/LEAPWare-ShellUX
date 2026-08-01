@@ -1060,7 +1060,7 @@ describe('the store handed out by useShellStore is frozen', () => {
         try {
           (store as unknown as Record<string, unknown>)[member] = (): unknown => ({
             selectedItemId: { injected: true },
-            focusedPane: 'pane9',
+            selectedItemIds: [{ injected: true }],
             activeExtensionId: null,
             activeNavNodeId: null,
           });
@@ -1097,8 +1097,9 @@ describe('the store handed out by useShellStore is frozen', () => {
     expect(victimSnapshot).toEqual({
       activeExtensionId: null,
       activeNavNodeId: null,
+      selectedItemIds: [],
       selectedItemId: null,
-      focusedPane: null,
+      contextKeys: {},
     });
     expect(victimSnapshot).toBe(harness.store.getContext());
   });

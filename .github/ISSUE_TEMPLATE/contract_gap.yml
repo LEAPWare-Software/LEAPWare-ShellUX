@@ -1,0 +1,133 @@
+name: Contract gap
+description: Something a third-party extension author cannot do through the public contract.
+title: 'contract-gap: '
+# The `contract-gap` label has to exist in the repository before this applies it;
+# GitHub does not create a label on demand, it just does not apply one it cannot
+# find. Create it if issues from this form arrive unlabelled.
+labels: ['contract-gap']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **This is the most valuable kind of issue this repository receives.**
+
+        The contract is the product. Its gaps are not found by reading it — they are
+        found by writing an extension against it and hitting the place where it
+        stops. The mocks under `src/mocks/` exist for exactly that, and the last
+        pass over them produced eight findings that no amount of reviewing the types
+        had surfaced.
+
+        A contract gap is not always a bug. Some of what you cannot do here you are
+        not supposed to be able to do, and the reason is written down. Telling those
+        apart is what the last two fields are for, and getting it wrong costs you
+        nothing — say you are not sure.
+
+        **Do not use this form for a suspected vulnerability.** Report it privately —
+        SECURITY.md at the repository root says how.
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The commit SHA you wrote against. There is no release, so the commit is the only identifier.
+      placeholder: 0a6596b
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What you were trying to do, as an extension author
+      description: >-
+        The extension-author's goal in their own terms, before it is translated into
+        host vocabulary — "show an unread count on a nav node while my extension is
+        in the background", not "call setBadgeCount". The translation is where the
+        gap usually hides, and if you do it for us we cannot see it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: blocked
+    attributes:
+      label: What you could not do
+      description: >-
+        The specific thing the public contract does not let you do. Name the member,
+        type or behaviour that is missing, that refuses, or that exists but is
+        unreachable from where extension code runs. If a workaround exists, describe
+        it here and say what it costs — a gap with an ugly workaround is still a gap.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >-
+        The code you wrote, and what happened to it — the compiler error, the thrown
+        `ShellUXError` and its code, or the silent no-op. Plus every host file and
+        line your claim rests on, in `path:line` form. If your claim is that
+        something is absent, say where you looked.
+      placeholder: |
+        src/core/types.ts:214 - IShellAPI declares three members and no persistence one
+        my extension code, and the type error it produced
+    validations:
+      required: true
+
+  - type: textarea
+    id: not-wrong
+    attributes:
+      label: What is NOT wrong
+      description: >-
+        Required, and not a formality. Name what you tried that worked, and state
+        what you are deliberately NOT claiming. Seven consecutive review rounds on
+        this project found sound code and a conclusion written one step wider than
+        the evidence licensing it — that is the failure mode this field exists to
+        stop, and it applies to issues exactly as it applies to documentation. A
+        narrower true finding is worth more than a wider one nobody can check.
+      placeholder: >-
+        Registration itself works and the type error is clear. I am not claiming the
+        validation is wrong, and I am not claiming this is reachable by any other
+        extension.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: classification
+    attributes:
+      label: Which of these do you think it is?
+      description: >-
+        Your read, not a commitment. Getting it wrong is free and useful; guessing
+        confidently at something you have not checked is neither.
+      options:
+        - A bug - the contract says this works and it does not
+        - A contract gap - nothing says it works, and an extension author reasonably needs it
+        - An architectural decision working as designed, but undocumented or badly explained
+        - An architectural decision I want revisited, and I have said why below
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: argument
+    attributes:
+      label: If this is a decision you want revisited, argue for it
+      description: >-
+        What the current decision costs an extension author in practice, what you
+        think should replace it, and what your replacement costs. A decision here is
+        usually recorded in an ADR with the alternatives that were rejected and why
+        — read that first and engage with the reasoning rather than restating the
+        preference it already considered. Leave blank if this is not that.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you submit
+      options:
+        - label: I read DEVELOPER.md, and this is not something it already documents how to do.
+          required: true
+        - label: I checked the accepted limits in README.md and SECURITY.md, and this is not one of them being reported as a defect.
+          required: true
+        - label: This is not a suspected vulnerability. (If it is, close this and use SECURITY.md.)
+          required: true

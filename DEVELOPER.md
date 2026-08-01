@@ -139,7 +139,46 @@ the four modifier flags on `Hotkey`.
 | `views` | `{ pane2: ExtensionView; pane3: ExtensionView }` | Your two pane components. Both are required; there is no blueprint-level Pane 1 view, because Pane 1 is the host's navigation chrome rendering *your* `navigationTree`. |
 
 There is **no `icon` field on the blueprint.** Earlier drafts of this guide
-described one; it does not exist. Icons are per ribbon action only.
+described one; it does not exist. Icons are per ribbon action and per navigation
+node — the extension rows above the navigation tree keep their monogram, because
+the host will not invent an icon for you from one of your nodes.
+
+### The icon vocabulary
+
+These are the keys `RibbonAction.icon` and `NavigationNode.icon` may name. Any
+other string renders the host's fallback glyph — a plain square — which is a
+deliberate soft landing and not an error, so a key you got wrong will not break
+your ribbon. It will also not tell you it was wrong, which is why the list is
+here.
+
+<!-- icon-vocabulary:start -->
+
+| Key | Glyph |
+|---|---|
+| `save` | floppy disk |
+| `open` | open folder |
+| `edit` | pencil |
+| `delete` | waste bin |
+| `refresh` | circular arrow |
+| `search` | magnifier |
+| `add` | plus |
+| `settings` | cog |
+| `navigation` | three stacked rules |
+| `drawer` | split panel |
+| `close` | cross |
+| `folder` | closed folder |
+| `box` | isometric box |
+| `layers` | stacked sheets |
+| `droplet` | droplet |
+
+<!-- icon-vocabulary:end -->
+
+The table lives in `src/components/ui/shellIcons.tsx`, and the comment markers
+around the list above are load-bearing: "publishes every icon key in
+DEVELOPER.md, and no key it does not have" in
+`src/components/__tests__/ShellLayoutIcons.test.tsx` reads both this list and the
+map, and fails if either one has a key the other does not. So the list cannot go
+stale by omission, and it cannot document a key that does not exist.
 
 ### `NavigationNode`
 
@@ -147,6 +186,7 @@ described one; it does not exist. Icons are per ribbon action only.
 |---|---|---|
 | `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique **within your own tree** — a duplicate anywhere in the tree, at any depth, rejects the whole blueprint. |
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
+| `icon?` | `string` | Optional. **Untrusted icon key.** Non-blank, at most 256 characters. An explicit `undefined` is treated as absent. Resolved through the same host-owned table `RibbonAction.icon` uses — a **lookup key only**, never interpolated into a URL or into markup. It is drawn in the collapsed 48px pane-1 track, which otherwise shows a monogram taken from the first letter of your `label`; a node that declares no icon keeps that monogram, and a key the host does not publish gets the host's fallback glyph rather than the monogram. The published key list is in "The icon vocabulary" below. *Tests:* `src/components/__tests__/ShellLayoutIcons.test.tsx` — "renders a declared node icon in the collapsed track instead of the monogram", "falls back to the host glyph for an icon key the host does not publish", "keeps the monogram for a node that declares no icon" and "does not resolve a prototype-shaped node icon key to anything inherited". |
 | `badgeCount?` | `number` | Optional. Non-negative safe integer. An explicit `undefined` is treated as absent. **This is the value the node is BORN with, and it is frozen at registration.** To change a badge at runtime call `IShellAPI.setBadgeCount(nodeId, count)`; pane 1 reads the store first and falls back to this field only when the store holds nothing for that node, so a runtime write of `0` really does clear a badge this field declared as `3`. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the blueprint badge for a node the store has never been written for" and "overrides a blueprint badge with the store value, including down to zero". |
 | `children?` | `readonly NavigationNode[]` | Optional. An explicit `undefined` is treated as absent. Counts against the 512-node and 8-level limits. |
 
@@ -156,7 +196,7 @@ described one; it does not exist. Icons are per ribbon action only.
 |---|---|---|
 | `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique within your own `ribbonActions`. |
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
-| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the ribbon resolves it through `RIBBON_ICONS`, a host-owned `Map` of inline SVGs, and an unrecognised key renders a host fallback glyph. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "resolves a known icon key through the host table", "resolves an unknown icon key through the host fallback rather than through the key", "does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
+| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the ribbon resolves it through `SHELL_ICONS`, a host-owned `Map` of inline SVGs shared with the pane-1 navigation track, and an unrecognised key renders a host fallback glyph. **The key list is published** — see "The icon vocabulary" below; before GitHub issue #18 it was not, so a vendor who guessed wrong got a silent fallback and no way to find the real keys. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "resolves a known icon key through the host table", "resolves an unknown icon key through the host fallback rather than through the key", "does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
 | `isDisabled?` | `boolean` | Optional. When present it must be a boolean. Renders the action greyed out but still visible. |
 | `hotkey?` | `Hotkey` | Optional keyboard chord for this action. Validated at registration — allowlisted key, boolean modifiers, the two bare-chord rules (WCAG 2.1.4 for a single-character key; activation for `enter`), unique within your own `ribbonActions`. **Dispatched since ISSUE-006**, but only while your extension is in the foreground and only for an action that is visible and not disabled. See the `Hotkey` section below for all four conditions. |
 | `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** The ribbon evaluates it on every render and shows the action only when it returns the boolean `true`; a throwing predicate is treated as "not visible". See "How `ribbonActions` visibility predicates work" below for the tests. |
@@ -443,12 +483,32 @@ views. It is a real closed interface, not `any`:
 
 ```ts
 interface RibbonContext {
-  readonly activeExtensionId: string | null;  // owner of panes 2/3, or null
-  readonly activeNavNodeId: string | null;    // selected pane-1 node, or null
-  readonly selectedItemId: string | null;     // selection inside the view, or null
-  readonly focusedPane: PaneId | null;        // 'pane1' | 'pane2' | 'pane3', or null
+  readonly activeExtensionId: string | null;   // owner of panes 2/3, or null
+  readonly activeNavNodeId: string | null;     // selected pane-1 node, or null
+  readonly selectedItemIds: readonly string[]; // the WHOLE selection, in order
+  readonly selectedItemId: string | null;      // derived: the last of those, or null
+  readonly contextKeys: Readonly<Record<string, string | number | boolean | null>>;
 }
 ```
+
+**`selectedItemIds` is the selection; `selectedItemId` is derived from it.** The
+array is the source of truth and `selectedItemId` is its last element, or `null`
+when it is empty. There is one writer, so the two can never disagree — you will
+never be handed a `selectedItemId` that is not in `selectedItemIds`. If your
+extension only ever selects one row, go on reading `selectedItemId` and calling
+`setSelectedItem`; nothing about that case changed. If it supports
+shift-clicking, read `selectedItemIds` and call `setSelectedItems`.
+
+**`contextKeys` is your own extension's context keys** — see `setContextKey` in
+the member list below. It is a plain record of primitives, frozen, and it is
+cleared whenever the foreground moves.
+
+**`focusedPane` is gone.** It used to be declared here as `PaneId | null` and no
+host code ever wrote it, so it was permanently `null`: a predicate branching on
+it could not fire, and a field that is permanently null is worse than an absent
+one because it looks available. It was removed rather than populated, because
+populating it needs focus tracking the shell deliberately does not do. `PaneId`
+itself still exists as a layout type. ADR-0001 Amendment K Decision 6.
 
 **Do not hand-write a type declaration matching these tables.** Import the real
 types from the host's `src/core/types.ts` and let the compiler tell you what you
@@ -732,14 +792,21 @@ foreground revokes nothing" and "revokes when the extension is unregistered" in
 
 ### The member list
 
-As landed in `src/core/types.ts`, `IShellAPI` has exactly three members. It is
+As landed in `src/core/types.ts`, `IShellAPI` has exactly seven members. It is
 deliberately small — every addition is a new capability handed to untrusted
-code.
+code — and it **grew from three to seven** in the contract-hardening wave
+recorded as ADR-0001 Amendment K. If you are reading an older copy of this guide
+that says "exactly three", the four new members are `setSelectedItems`,
+`setActiveNavNode`, `getBadgeCount` and `setContextKey`.
 
 ```ts
 interface IShellAPI {
   setSelectedItem(id: string | null): void;
+  setSelectedItems(ids: readonly string[]): void;
+  setActiveNavNode(nodeId: string | null): void;
   setBadgeCount(nodeId: string, count: number): void;
+  getBadgeCount(nodeId: string): number | undefined;
+  setContextKey(key: string, value: string | number | boolean | null): void;
   getContext(): Readonly<RibbonContext>;
 }
 ```
@@ -748,16 +815,73 @@ interface IShellAPI {
 |---|---|
 | `setSelectedItem(id)` | Sets — or clears, with `null` — the currently selected item, which surfaces as `RibbonContext.selectedItemId`. **This one throws.** The value is opaque to the host — it is your own item identifier, not a registry key, so it is *not* held to `EXTENSION_ID_PATTERN` and may be a GUID, a path or a number-as-string. Its **type** is enforced: anything that is neither a `string` nor `null` raises `ShellUXError` with code `INVALID_FIELD` and field `"id"`, and the context is left unchanged. |
 | `setBadgeCount(nodeId, count)` | Sets the badge count for one of your navigation nodes, **in your own scope** — see property 2 above. **This one throws.** It raises `ShellUXError` with code `INVALID_ID` when `nodeId` is not a string, or does not match the same allowlist and reserved-word rules the registry applied to your node ids, and code `INVALID_FIELD` when `count` is not a non-negative safe integer. Call it with values you control, or wrap it. **Since issue #12 it is also RENDERED.** The value used to reach no renderer at all — pane 1 drew the frozen blueprint field and nothing else — so a write appeared to do nothing. It now changes the sidebar for as long as your extension holds the foreground, in the expanded pane and in the collapsed 48px icon track alike, and it does so without a re-render of any other row. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a setBadgeCount write through a live IShellAPI change what the sidebar renders" and "shows a runtime badge in the collapsed 48px icon track too". |
+| `setSelectedItems(ids)` | Replaces the **whole** selection, which surfaces as `RibbonContext.selectedItemIds`; `selectedItemId` is recomputed from the last element in the same patch. **This one throws.** `ids` must be an array of distinct strings, at most `REGISTRY_LIMITS.MAX_SELECTED_ITEMS` of them; each element is opaque and type-checked exactly as `setSelectedItem`'s `id` is. **A repeated id is rejected, not deduplicated** — a selection holding the same row twice is your bug, and quietly returning a shorter selection than you asked for would hide it. The array is read once and stored as a frozen host-owned copy, so editing the array you passed afterwards changes nothing. `INVALID_FIELD` for a bad shape or a repeat, `PAYLOAD_TOO_LARGE` for the bound. *Tests:* `src/core/__tests__/shellApi.test.ts` — the "setSelectedItems validates its argument" group. |
+| `setActiveNavNode(nodeId)` | Sets — or clears, with `null` — the selected pane-1 navigation node, which surfaces as `RibbonContext.activeNavNodeId`. **This one throws.** Before issue #15 your extension could not navigate at all: the field was writable only by the host's own pane-1 click handler. Unlike `setSelectedItem`'s `id`, `nodeId` **is** a host lookup key and is held to the same allowlist and reserved words the registry applied to your node ids — `INVALID_ID` otherwise. It is **not** checked against your own tree, deliberately: name a node you do not own and you get a field none of your own rendering will match, which is the same posture `setSelectedItem` takes. *Tests:* `src/core/__tests__/shellApi.test.ts` — "setActiveNavNode validates its argument". |
+| `getBadgeCount(nodeId)` | Reads back the badge count for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure `setBadgeCount` is scoped by, so it reads back exactly what this handle can write and offers no parameter through which to name another extension's scope. Before issue #12 you could write a badge and had no way to read one, so a module wanting to increment its own count had to keep a shadow copy. *Test:* `src/core/__tests__/dataflow.test.tsx` — "reads back only its own scope, and offers no parameter to name another". |
+| `setContextKey(key, value)` | Publishes one named primitive fact about your extension, which surfaces as `RibbonContext.contextKeys[key]` for your own predicates to branch on. **This one throws.** See "Context keys" below — it is a mechanism rather than a field, and it is worth reading before you reach for it. |
 | `getContext()` | Returns a frozen snapshot of the current `RibbonContext`. A snapshot, not a live view: hold the result only for the duration of the work you are doing, and call again rather than caching it across renders. |
 
-`setSelectedItem` and `setBadgeCount` reject a bad argument; `getContext` takes no
-argument to reject. **None of the three is total, and `getContext` is not an
-exception:** all three throw `REVOKED` once your extension is released or unregistered
-(pinned in `dataflow.test.tsx`), and the two writers can additionally deliver whatever a
+Every member but `getContext` rejects a bad argument; `getContext` takes no
+argument to reject. **None of the seven is total, and `getContext` is not an
+exception:** all seven throw `REVOKED` once your extension is released or unregistered
+(pinned in `dataflow.test.tsx`, which walks the whole member list rather than a
+representative one), and the five writers can additionally deliver whatever a
 store listener throws — see "Where that stops" near the end of this guide. Note the
 asymmetry with `register`, which never throws: `IShellAPI` is called by *you*, so a bad
 argument is your bug and is reported as an exception, whereas `register` is called by the
 *host* on your data, where an exception would take the shell down.
+
+### Context keys — how to make the ribbon react to state the host does not model
+
+Your `isVisible` predicate is a pure function of `RibbonContext` and is handed no
+capability. That is deliberate and it will not be relaxed — see "Rules for
+writing predicates" — but it used to leave you with no way to make the ribbon
+re-evaluate from state the host does not know about. A mail module that wants
+"Reply" hidden until the message body has loaded had nothing to say so with:
+`selectedItemId` says a row is selected, not that its body arrived.
+
+`setContextKey` is the answer, and the shape is deliberately **VS Code's**: named
+host-owned values that visibility expressions read, the same idea as a `when`
+clause over a context key.
+
+```ts
+// In your pane view, when the body finishes loading:
+shell.setContextKey('message-loaded', true);
+
+// In your ribbon action:
+isVisible: (ctx) => ctx.contextKeys['message-loaded'] === true,
+```
+
+Five things to know:
+
+- **Primitives only: `string`, `number`, `boolean` or `null`.** Nothing else,
+  ever, and the narrowness is the design rather than a limitation waiting to be
+  lifted. An object would put a getter you wrote inside a render-phase predicate
+  read, hand another extension a live prototype chain into your code, and defeat
+  the equality check that keeps an unchanged write from waking every subscriber
+  in the shell. A `number` must be finite. Anything else is `INVALID_FIELD`.
+- **`key` is a host lookup key** and is held to the registry's allowlist and
+  reserved words, exactly as `setBadgeCount`'s `nodeId` is. You may hold at most
+  `REGISTRY_LIMITS.MAX_CONTEXT_KEYS` distinct keys, and a `string` value may be at
+  most `REGISTRY_LIMITS.MAX_CONTEXT_VALUE_LENGTH` characters.
+- **There is no delete.** Spell "unset" `null`; the key still occupies a slot.
+  A key that vanished would be indistinguishable, to a predicate reading it, from
+  one that was never set.
+- **Your keys are cleared whenever the foreground moves**, in the same single
+  patch that clears the selection and the nav node — including when you are the
+  one leaving. Publish them from your view's mount, the way you would publish an
+  opening badge.
+- **This is collision-resistance, not confinement.** You write only into your own
+  namespace and have no parameter with which to name another's. But the published
+  record is whatever the FOREGROUND extension put there, and anything holding a
+  context can read it. Do not put anything in a context key that would matter if
+  another extension read it.
+
+*Tests:* `src/core/__tests__/contextKeys.test.tsx` — "setContextKey validates its
+value", "keeps two extensions' context keys apart, and publishes only the
+foreground's", "clears every extension's context keys on a foreground handover",
+"does not notify when a context key is rewritten with the value it already holds"
+and "does not notify for a background extension's own context key".
 
 **Why `setSelectedItem` checks a value it otherwise treats as opaque.**
 `RibbonContext.selectedItemId` is declared `string | null`, and the host hands
@@ -860,7 +984,7 @@ write, the orphaned store, and `release` and `unregister` each still ending a ha
 ### There is no `revoke` on your `IShellAPI`, and the controller is not handed to you
 
 There is no `revoke` member on your `IShellAPI`. `Object.keys(shell)` is exactly
-the three members above, `revoke` lives on a wrapper object the host keeps, and it
+the seven members above, `revoke` lives on a wrapper object the host keeps, and it
 closes over a variable no other scope can reach. That part is unconditional.
 
 **What this section used to claim beyond that was false, twice over.** It first
@@ -1036,6 +1160,22 @@ view component and change what it renders. This has been reproduced; it is not
 theoretical. Freezing is not the fix, and the host does not do it. Pinned by "pins the
 accepted limit: the view components and callbacks take new properties" in
 `src/core/__tests__/capability.test.tsx`.
+
+**It has now been reproduced END TO END, in the assembled shell, against a real
+extension.** The unit test above proves the function object takes a property; the
+integration case proves a hostile extension turning that into a rendered
+consequence. From inside its own pane, one extension calls the public
+`useRegistry().getExtension('inventory-db')`, reaches the sibling's pane-3 view
+component, and writes to its `prototype`. React reads that property to decide
+whether to CALL the component or to CONSTRUCT it — so the sibling's detail pane
+throws on its next render and degrades to the host's fault surface, while its list
+pane, one subtree away, is untouched. That last part is the shell behaving
+correctly about something it could not prevent. Pinned by "PINS A KNOWN LIMIT — the
+IShellAPI deep-freeze does not reach plug-in-supplied functions: a sibling view
+component obtained from the public registry is mutable, and the sibling rendered
+output changes (no issue filed; ADR-0001 records it as accepted, because freezing a
+component breaks memo and forwardRef)" in
+`src/__tests__/IntegrationSuite.test.tsx`.
 
 **And the reach is not bounded.** This section used to say it "is bounded by who can
 obtain an `ActiveExtension` — only the host-only `ActivationController` hands one
@@ -1247,14 +1387,21 @@ The signature is settled — `isVisible(ctx: RibbonContext): boolean`, with
 should write against it. Everything describing what the *host* does with the
 result is now implemented behaviour and names its test.
 
-One field of `RibbonContext` is worth calling out before you branch on it:
-**`focusedPane` is `null` unless something in the page writes it, and no host code
-ever does.** It initialises to `null` and ISSUE-002 left it that way — populating
-it needs focus tracking the host does not do yet. It is a real, validated field of
-the declared contract, so it will start carrying a value later; a predicate that
-requires it to be non-null shows nothing at all in the meantime. (`patchContext`
-on the public store does accept it, so a plug-in can set it — but nothing about
-the *host* will, and you should not depend on another extension having done so.)
+One field of `RibbonContext` used to be worth calling out before you branched on
+it, and it is now worth calling out because it is **gone**. `focusedPane` was
+declared `PaneId | null` and no host code ever wrote it, so it was permanently
+`null` and a predicate requiring it to be non-null showed nothing, ever. This
+guide's advice was to be aware of that and route around it, which is advice about
+a defect rather than a fix for one: **a field that is permanently null is worse
+than an absent one, because it looks available.** It has been removed from the
+contract (GitHub issue #13, ADR-0001 Amendment K Decision 6). If you branched on
+it, your predicate was already dead code; delete the branch.
+
+What you should reach for instead depends on what you meant. For "is anything
+selected", read `selectedItemIds` or `selectedItemId`. For state the host does not
+model at all, publish a **context key** and branch on `ctx.contextKeys[...]` —
+that is the mechanism the removal leaves you with, and it is described in full
+under "Context keys" above.
 
 **Your predicate gets the context and nothing else. `onExecute` gets the
 context and your `shell`.** That asymmetry is deliberate and it will not be
@@ -1359,6 +1506,29 @@ Consequences for your Pane 2 view:
   focus parked on one of them lands on `<body>` mid-scroll.
 - **There is no scroll anchoring.** Prepending items above the current scroll
   position moves the content under the viewport.
+- **In an environment with no `ResizeObserver`, a pane resize does not re-window
+  the list until something else re-renders it.** The list re-measures on every
+  render, which is the documented fallback; what it cannot do without an observer
+  is notice a resize on its own, and a divider move re-renders the PANEL rather
+  than your subtree inside it. So the window is briefly stale and corrects on the
+  next interaction — a keystroke, a scroll, new items. That is jsdom, older
+  embedded WebViews, and nothing a modern browser does. Pinned by "PINS A KNOWN
+  LIMIT — with no ResizeObserver in the environment, moving a divider does not
+  re-window the list: it corrects on the next render the list performs for any
+  other reason (no issue filed; VirtualizedList decision 4 records the fallback as
+  accepted)" in `src/__tests__/IntegrationSuite.test.tsx`.
+
+> **Neither shipped verification remote uses this component, and that is a gap
+> rather than a recommendation.** `src/mocks/MailPlugin.tsx` lists a dozen messages
+> and `src/mocks/DatabasePlugin.tsx` maps all 280 of its records into a plain
+> `<ul>` — so as things stand `VirtualizedList` has no consumer anywhere under
+> `src/` outside the integration suite's own test-authored extension. If you are
+> looking for a worked example to copy, there is not one yet; the props table above
+> and `src/components/__tests__/VirtualizedList.test.tsx` are what exist. Pinned by
+> "PINS A KNOWN LIMIT — neither shipped verification remote renders
+> VirtualizedList, so ISSUE-004 has no consumer in src/ outside this suite (no
+> issue filed; reported with this change)" in
+> `src/__tests__/IntegrationSuite.test.tsx`.
 
 ---
 
@@ -1411,6 +1581,29 @@ tidy contained pane. The same list is in the docblock at the top of
 `src/components/error/FaultBoundary.tsx`, and the two are kept in step by
 "documents in both the source and DEVELOPER.md what a boundary cannot catch" in
 `src/components/__tests__/FaultBoundary.test.tsx`.
+
+**Two entries on that list are no longer only a list.** The `setTimeout` case and
+the unhandled-rejection case are now reproduced through the assembled shell by an
+extension that really throws from a timer and one that really rejects a promise: in
+both, the pane goes on rendering its normal content, **no fallback appears at all**,
+and the failure goes wherever an uncaught failure goes in the host environment. If
+you were hoping the boundary would quietly absorb these, it does not, and now there
+is a test that says so out loud. Pinned by "PINS A KNOWN LIMIT — a FaultBoundary
+does not catch a plug-in throw from a setTimeout callback: it escapes to the host
+environment and no fallback is rendered (no issue filed; this is React
+error-boundary semantics and the FaultBoundary banner records it)" and "PINS A KNOWN
+LIMIT — a FaultBoundary does not catch a plug-in rejected promise: the rejection is
+delivered to the promise and no fallback is rendered (no issue filed; this is React
+error-boundary semantics and the FaultBoundary banner records it)" in
+`src/__tests__/IntegrationSuite.test.tsx`.
+
+The **event-handler** entry is the one that cuts the other way, and it is worth
+knowing which side of the line you are on: a throw from your `onExecute` IS
+contained, by the ribbon's own guard rather than by a boundary — reported, and the
+shell stays interactive. Pinned by "contains a throwing ribbon action inside the
+ribbon own guard, without taking the shell down" in the same file. A throw from a
+click handler you wrote inside your own pane is not covered by that guard and is
+yours.
 
 ---
 
@@ -1563,8 +1756,9 @@ import type { IShellAPI, RibbonContext } from '../../../core/types';
 const context: Readonly<RibbonContext> = Object.freeze({
   activeExtensionId: 'my-ext',
   activeNavNodeId: null,
+  selectedItemIds: Object.freeze([]),
   selectedItemId: null,
-  focusedPane: null,
+  contextKeys: Object.freeze({}),
 });
 
 export function makeShellStub(): IShellAPI {
@@ -1572,11 +1766,24 @@ export function makeShellStub(): IShellAPI {
   // will let code pass that fails against the host.
   return deepFreeze<IShellAPI>({
     setSelectedItem: vi.fn(),
+    setSelectedItems: vi.fn(),
+    setActiveNavNode: vi.fn(),
     setBadgeCount: vi.fn(),
+    getBadgeCount: vi.fn(() => undefined),
+    setContextKey: vi.fn(),
     getContext: vi.fn(() => context),
   });
 }
 ```
+
+> **This stub grew with the contract, and that is the mechanism working rather
+> than a breaking change to apologise for.** `IShellAPI` went from three members
+> to seven in ADR-0001 Amendment K. Because the stub is typed as `IShellAPI`
+> rather than as a structural literal, the compiler failed on the old
+> three-member version the moment the interface widened — which is exactly the
+> signal the paragraph above promises, arriving exactly when it was supposed to.
+> If you copied the old stub, the four members to add are the four in the snippet
+> that are not `setSelectedItem`, `setBadgeCount` or `getContext`.
 
 If you prefer a real implementation over spies, `createShellStateStore()` and
 `createShellAPI(store)` from `src/core/ShellAPI.ts` build a working, deep-frozen
@@ -1657,6 +1864,61 @@ extension degrades the whole application.
 **7. Do not test against the host's internals.** If a test needs to import
 something from the host that is not part of the public contract, that test is
 testing the wrong thing — or the contract has a genuine gap worth reporting.
+
+### Four traps this repository walked into first, so you do not have to
+
+These were all found writing `src/__tests__/IntegrationSuite.test.tsx`, which
+drives the assembled shell through the two extensions in `src/mocks/`. They are
+about the *test environment*, not about the contract, and none of them is
+discoverable by reading a docblock.
+
+**Your module state outlives a mount, and that is correct.** A well-written
+extension keeps its cache, its selection and its event log in module scope, so two
+pane views in unrelated subtrees can share it through `useSyncExternalStore` — the
+only shape that works, because the host mounts your `pane2` and your `pane3` in
+subtrees neither of which is an ancestor of the other. The consequence for your
+tests is that one case leaks into the next. **Do not add a `resetForTests()` export
+to fix that.** A test-only door in shipping plug-in code is a second way in, and it
+is exactly what the two verification remotes here refuse to have. Use
+`vi.resetModules()` followed by a dynamic `import()` of your own module: it is the
+only reset that is not also a hole. It is safe for React, which is externalised
+rather than transformed and so is not re-evaluated by the reset.
+
+**`@testing-library/user-event` deadlocks against Vitest's fake timers, and the
+documented fix does not fix it.** The usual advice is
+`userEvent.setup({ advanceTimers: vi.advanceTimersByTime })`. That handles
+`user-event`'s own inter-event wait and not the deadlock that actually bites, which
+is one layer up: `@testing-library/react` installs an `asyncWrapper` that drains
+the microtask queue after every async interaction by awaiting a real
+`setTimeout(resolve, 0)`, and advances the clock only `if
+(jestFakeTimersAreEnabled())` — a helper that begins `typeof jest !== 'undefined'`.
+Vitest defines no global `jest`, so the detection is false, the awaited timer is
+faked, and every `await user.click(...)` hangs until the case times out. Measured
+in this environment: `jest` is `undefined` while `setTimeout` does carry sinon's
+`clock`. If your extension owns a timer, use `fireEvent` — synchronous, no async
+wrapper — and advance the clock yourself inside `act`. Avoid `waitFor` under fake
+timers for the same reason: its own timeout is faked while it waits for it.
+
+**A timer that fires outside `act()` is a warning, not a mystery.** The inventory
+mock runs a 200ms interval that writes badges through `IShellAPI`. Under real
+timers it fires between assertions and React complains. Fake timers plus
+`act(() => { vi.advanceTimersByTime(n); })` makes the whole thing deterministic,
+including the interval's own cleanup: `vi.getTimerCount()` returning to its
+pre-mount baseline after unmount is the cleanest assertion available for trap 6
+above.
+
+**jsdom cannot do three things you may be about to test for.**
+`Element.prototype.scrollIntoView` does not exist, `ResizeObserver` and
+`IntersectionObserver` do not exist, and there is no `PointerEvent` — so a
+`fireEvent.pointerMove` degrades to a plain `Event` carrying no `clientX` and any
+drag you build on it silently does nothing. Assert the narrower thing and say so in
+the test's name, rather than asserting the wider thing against a no-op. The
+virtualizer, for instance, deliberately assigns `scrollTop` rather than calling
+`scrollIntoView`, and that assignment is observable. *Tests:*
+`src/__tests__/IntegrationSuite.test.tsx` — "asks for the selected row to be
+scrolled into view by assigning scrollTop, which is what jsdom can observe" and
+"cannot be driven by a POINTER drag at all, because this jsdom implements no
+PointerEvent".
 
 ---
 
