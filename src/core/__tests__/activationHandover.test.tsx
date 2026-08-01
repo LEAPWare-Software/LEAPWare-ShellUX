@@ -324,8 +324,8 @@ describe('the handover is one coherent context, not a torn one', () => {
 
     activate(host, 'crm-ext');
 
-    // Four fields moved and one notification carried all four. A separate write
-    // per field would be four passes, and the first three would publish exactly
+    // Five fields moved and one notification carried all five. A separate write
+    // per field would be five passes, and the first four would publish exactly
     // the torn snapshot the test above forbids.
     expect(seen).toHaveLength(1);
     expect(seen[0]).toEqual({

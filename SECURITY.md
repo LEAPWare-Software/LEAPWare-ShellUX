@@ -104,18 +104,47 @@ evidence there.
   from the very next statement, and unregistering then re-registering the same id
   in one commit does not hand the previous vendor a live handle into the new
   one's scope.
+- **The host constants cannot be replaced.** `EXTENSION_ID_PATTERN`,
+  `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS` and
+  `HOTKEY_MODIFIER_REQUIRED_KEYS` — the rules every untrusted payload is measured
+  against — together with `PANE_IDS` are exported from modules a plug-in can
+  import, and every one of them used to be runtime-mutable: `REGISTRY_LIMITS` was
+  `as const`, which binds nobody who is not being compiled, and assigning
+  `EXTENSION_ID_PATTERN.test` shadowed the method every id check calls. All of
+  them are frozen, so no own property can be added, replaced or deleted on any of
+  them. **The obvious wider reading is false, and the repository asserts against
+  it rather than leaving it to be discovered.** `Object.freeze` on a `Set` does
+  not stop `.add()` — a `Set` keeps its state in internal slots rather than in
+  properties, so `HOTKEY_KEYS.add('tab')` still widens the allowlist. What
+  freezing closes is own-property shadowing of `has` and `test`, which was the
+  interesting attack. The claim is that these cannot be **replaced**, never that
+  they cannot be **changed**, and a test demonstrates the mutability that remains
+  — on a throwaway `Set`, so no live allowlist is left widened behind it.
 
 ### Entry-point validation — real at the door, bypassable elsewhere
 
 - **Identifier hygiene.** Every plug-in-supplied id — extension id, navigation
   node ids, ribbon action ids, badge node ids, badge scopes — must match a strict
-  allowlist and is refused if it is a prototype-pollution key. Rejection messages
-  describe an untrusted value by its `typeof` and never stringify it, so a hostile
-  `toJSON`, a `Symbol.toPrimitive` or a reference cycle cannot run code or throw a
-  raw `TypeError` out of the host.
+  allowlist and is refused if it is a prototype-pollution key. **A context key is
+  held to that same rule.** `setContextKey(key, value)` takes a plug-in-supplied
+  `key`, and it is checked against the same allowlist and the same reserved words,
+  because it is a host lookup key in exactly the way a badge node id is; the
+  record it lands in is built on `Object.create(null)` as well, so there is nothing
+  to pollute even if that filter were wrong. Rejection messages describe an
+  untrusted value by its `typeof` and never stringify it, so a hostile `toJSON`, a
+  `Symbol.toPrimitive` or a reference cycle cannot run code or throw a raw
+  `TypeError` out of the host.
 - **Bounds on oversized payloads.** Text lengths, navigation node count,
   navigation depth and ribbon action count are all capped, and the cap applies to
-  what is stored rather than to a number the payload can revise afterwards.
+  what is stored rather than to a number the payload can revise afterwards. Three
+  of the bounds are on a runtime call rather than on a registered blueprint, and
+  they sit in the same table so that there is one place to look for the limit on
+  anything: a selection carries at most `MAX_SELECTED_ITEMS` (4096) item ids, an
+  extension holds at most `MAX_CONTEXT_KEYS` (64) distinct context keys, and a
+  `string` context-key value is at most `MAX_CONTEXT_VALUE_LENGTH` (256)
+  characters. There is deliberately no way to delete a context key — unsetting one
+  means writing `null`, which still occupies a slot — so that key bound is what
+  stops the record growing without limit.
 - **Argument validation on every door into shell state.** The members of
   `IShellAPI` and the members of the unscoped store are held to the same standard,
   field by field, and a rejected patch applies none of its fields.
@@ -173,7 +202,24 @@ repository *claims* otherwise is genuinely valuable — see below.
   E). Two extensions that both name a node `inbox` cannot overwrite each other,
   and an extension cannot name the scope it writes to through its own facade. That
   is the whole of what it buys. The unscoped store is public, so any scope can be
-  read and written directly, host badges included.
+  read and written directly, host badges included. **The read half is scoped the
+  same way, and that does not make it a boundary either.**
+  `IShellAPI.getBadgeCount` closes over the same validated id and takes no scope
+  parameter, so a handle reads back exactly what it can write and nothing more —
+  which stops the read being a wider capability than the write it mirrors, and is
+  the only thing it does. The unscoped `getBadgeCount` behind the facade still
+  takes a scope and still reads anyone's.
+- **Context-key scoping is collision-resistance, not confinement, in the same
+  register.** `setContextKey` writes into a namespace keyed by the extension id
+  the facade closed over, so two extensions that both publish a key called
+  `loaded` keep their own and neither has a parameter with which to name the
+  other's. Reading is the half that is not scoped at all:
+  `RibbonContext.contextKeys` publishes the FOREGROUND extension's whole record
+  into the one host-wide snapshot, so anything holding a context — a backgrounded
+  extension calling `getContext()` included — reads it, and the unscoped store
+  behind the facade is public exactly as it is for badges. Every namespace is
+  dropped on a foreground handover, which bounds how long a key stays readable and
+  does not make it private. **Nothing confidential belongs in a context key.**
 - **Persisted-state namespacing is collision-resistance, not confinement.**
   Weaker than badge scoping, for two independent reasons: the scope is an
   **argument, not a closure**, so any holder of the engine can name any scope; and
