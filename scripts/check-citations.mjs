@@ -50,6 +50,28 @@
  *     invisible to it, and so is unchecked rather than reported.
  *   - **It reads comments in `.ts`/`.tsx`, never code.** A citation inside a
  *     string literal is not seen.
+ *   - **A parameterised title resolves through a deliberately narrow pattern.**
+ *     A `%s`, a `$key` or a `${…}` hole matches one whitespace-free value, never
+ *     a run of words — see `patternFor` for why the looser reading made this
+ *     checker green through the renames it exists to catch. The price is paid in
+ *     the other direction: where a row's value contains a space, the
+ *     interpolated spelling of that one emitted title does not resolve and would
+ *     be reported. For a `%s` template written as a string literal there is a
+ *     remedy — the template's own spelling is indexed exactly beside the
+ *     pattern, so prose can cite that instead. For a `${…}` template literal
+ *     there is not: such a title has no literal spelling, so the pattern is the
+ *     only route to it and a multi-word hole value is simply out of reach.
+ *     `scripts/__tests__/check-portability.test.mjs` builds titles of exactly
+ *     that shape; none are cited today, and the gap was measured before it was
+ *     accepted rather than assumed away.
+ *   - **It does not read the `it.each` table.** Which values a template is
+ *     actually given is not consulted, so the pattern admits any single value
+ *     rather than only the rows that exist. A citation of `"rejects nulls"`
+ *     against a template `rejects %s` whose table never contains `nulls` still
+ *     resolves. Narrowing this further means evaluating the table, which for a
+ *     table built by a `.map()` or held in an imported constant is not something
+ *     a parser can do; generating titles the suite does not emit would be a
+ *     false negative that hides permanently, which is worse than the gap.
  *
  * Under-reporting is the deliberate bias throughout. Every heuristic below that
  * could go either way is set to stay silent: a quoted fragment that does not
@@ -344,6 +366,47 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * What one placeholder is allowed to stand for: a single substituted value.
+ *
+ * Not "the rest of the title". `it.each` fills the hole with one cell of one
+ * row; it does not fill it with an arbitrary continuation of the sentence, and a
+ * pattern that lets it is not a pattern for that template any more.
+ *
+ * Compiling a placeholder to `.+?` got this wrong in the one position where it
+ * mattered. A placeholder in the *middle* of a title is fenced on its right by
+ * the literal text after it, so the trailing `$` anchor does real work. A
+ * placeholder at the *end* has nothing on its right but `$`, so `rejects %s`
+ * compiled to `^rejects .+?$` — a prefix match on every title in the suite
+ * beginning "rejects". Measured against this suite on the day that was fixed:
+ * 26 patterns ended in a placeholder, between them matching 118 concrete titles
+ * they do not name, and 16 titles actually cited in prose were shadowed that
+ * way. Renaming any of those 16 would have left its citation resolving against a
+ * wildcard and this checker green — silence in exactly the case it exists to
+ * catch, which is the failure mode that retires a checker.
+ *
+ * `\S+` is the whole fix, and it applies to every placeholder rather than only
+ * to the trailing one, because the degeneracy is symmetric — a *leading*
+ * placeholder compiled to `.+?` is a suffix match on the same argument — and one
+ * rule stays true more easily than two. It buys three things at once:
+ *
+ *   - non-empty, so a placeholder never stands for nothing and `rejects %s`
+ *     does not resolve a citation reading "rejects";
+ *   - whitespace-free, so it cannot swallow a tail of further words;
+ *   - and so, unable to cross the ` > ` joining a describe to its case, which
+ *     stops a pattern reaching out of the segment chain it was built from.
+ *
+ * The cost is under-approximation, and it is deliberate: a row whose value
+ * contains a space no longer resolves in its interpolated spelling. Where the
+ * template is written as a string literal that costs nothing in practice, since
+ * `buildIndex` also puts the template's own spelling in the exact set, so prose
+ * can cite `rejects %s as a hotkey key` and resolve without the pattern at all.
+ * Where the template is a `${…}` template literal it costs more, because such a
+ * title has no literal spelling to fall back on and the pattern is the only way
+ * it is reachable. That residue is stated in LIMITS rather than worked around.
+ */
+const SUBSTITUTED_VALUE = '\\S+';
+
 /** A title containing placeholders, as the regular expression its emitted titles match. */
 function patternFor(title) {
   let source = '';
@@ -352,11 +415,13 @@ function patternFor(title) {
   let match;
   while ((match = PLACEHOLDER.exec(title)) !== null) {
     source += escapeRegExp(title.slice(last, match.index));
-    source += match[0] === '%%' ? '%' : '.+?';
+    source += match[0] === '%%' ? '%' : SUBSTITUTED_VALUE;
     last = match.index + match[0].length;
   }
   source += escapeRegExp(title.slice(last));
-  return new RegExp(`^${source}$`, 's');
+  // No `s` flag: every literal run is escaped and every hole is `\S+`, so no `.`
+  // survives into the source for the flag to govern.
+  return new RegExp(`^${source}$`);
 }
 
 /**
