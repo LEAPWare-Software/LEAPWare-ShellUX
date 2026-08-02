@@ -90,6 +90,66 @@ from so a reader can check it.
 
 ### Changed
 
+- **THE SHELL LOOKS HEAVIER, AND THAT IS THE FIX RATHER THAN A BUG.** Every pane
+  edge, the ribbon's bottom edge, the overflow menu's border, every slot divider
+  and the fault surface's boundary are now `--border-default`, which resolves to
+  `#7e8085` in the light theme. They were `border-neutral-200`, `#e5e5e5`. That is
+  **1.26:1 against the pane it bounds, replaced by 3.95:1** — roughly three times
+  the ink, visible at a glance, and the reason it is announced here in advance is
+  that it will otherwise be filed as a rendering regression.
+
+  It is a WCAG 2.2 §1.4.11 correction: a control's visual boundary must clear 3:1,
+  and a 1.26:1 hairline is not a boundary anyone with low vision can find. **There
+  is no version of this that is invisible.** 3:1 on white alone would have landed
+  at exactly `#949494`; the token is darker than that because the manifest
+  measures it against every surface it is actually drawn on, and the binding
+  constraint is `--surface-sunken` at 3.47:1 rather than the pane.
+
+  Two smaller changes ride along, both in the same direction. `--text-muted` moves
+  from `#737373` to `#5c5f64`, 4.74:1 to 6.41:1 on white — bought so that muted
+  text clears 4.5:1 on **all eight** surfaces rather than only on the pane, which
+  is what removes the hand-written dark-theme patch that used to sit beside every
+  muted string. And the selected-row indicator is now carried by a 2px
+  `--border-selected` rule and a semibold label, with the fill demoted to a hint
+  and the 1px outline demoted to `--border-subtle`; no fill reaches 3:1 on white
+  without reading as a different control entirely.
+
+  Decorative rules are deliberately **not** dragged along: the `--border-subtle`
+  tier exists to keep the weight off separation that is not a control boundary,
+  and in-pane section rules use it. The numbers are measured rather than asserted
+  — `design/check-contrast.mjs` over 165 declared pairs in three themes, and now
+  `npm run tokens:check` over the shipped stylesheet as well.
+- **Every colour in the shell is a design token, and all 51 `dark:` variants are
+  gone.** 118 raw colour literals across seven modules — 114 Tailwind palette
+  classes plus four `theme(colors.neutral.*)` spellings inside arbitrary shadow
+  values, which no colour search in this repository had ever found — became
+  `var(--token)` utilities driven by `src/styles/tokens.generated.css`.
+
+  **The `dark:` variants were deleted rather than made testable, and that is the
+  answer to the "exercised by nothing whatsoever" finding.** When a colour is a
+  token whose *value* swaps on `[data-theme]`, `dark:border-neutral-800` beside
+  `border-border-default` is an override of something that already changed. The
+  untested surface is removed instead of tested. `darkMode` stays configured as
+  `['selector', '[data-theme="dark"]']` for the genuinely appearance-conditional
+  cases that will arrive with per-document theme injection; the allowlist in
+  `src/__tests__/noRawColor.test.ts` is **empty**, and the one known future member
+  — the shadow tier, which is black at fixed alphas in every theme and elevates
+  nothing on a near-black pane — is named there with the note that the fix belongs
+  in `design/` rather than in a hand-written variant.
+
+  **What this weakens, stated rather than buried:** the 43 `toHaveClass`
+  assertions that pinned colours now assert against a `TOKEN_CLASS` record the
+  components import, so they can no longer catch a component pointed at the wrong
+  token. `scripts/check-tokens.mjs` measures the values and `e2e/theme.spec.ts`
+  measures the compiled stylesheet; the full account is in
+  `src/core/theme/tokenClasses.ts`.
+- **Tailwind's `content` glob no longer matches test files.** The scanner is a
+  regular expression over raw text with no idea what a file is for, so every
+  planted-violation fixture and every density-scan control string was compiling
+  into the shipped stylesheet — measured, not suspected: seven `.dark\:` rules
+  survived in the built CSS after the last `dark:` utility had been deleted from
+  the shell. A component cannot depend on a class only a test spells, so nothing
+  real is lost.
 - **`getExtension(id)` no longer returns the caller's object.** Validation and
   normalisation became one pass, and what is stored is a fresh host-owned record.
   A breaking change to the registry's read contract, made deliberately; the correct
@@ -128,6 +188,17 @@ from so a reader can check it.
 
 ### Fixed
 
+- **The density scan silently stopped measuring anything it could not parse.**
+  `typeSizeOffenders` returned "clean" for any arbitrary type size it failed to
+  read as a length, so `text-[var(--type-body)]` sailed through contributing
+  nothing while `paddingOffenders` beside it treated the same ambiguity as a
+  violation. Tokenising font size before fixing this would have replaced a
+  measured type scale with values the scan waves through, and every run would
+  have stayed green. Now only Tailwind's explicit `color:`-style data-type hint
+  earns an exemption — that is *proof* the value is not a length — and anything
+  else the scan cannot convert is reported, matching padding. Padding and font
+  size remain deliberately untokenised for this reason, so the scan survives
+  byte for byte.
 - **A registration hijack through a multi-read id getter.** A value the plug-in can
   still reach is a value the plug-in can still edit, so reading each field once was
   necessary and not sufficient; the host now owns the stored record. Single-read

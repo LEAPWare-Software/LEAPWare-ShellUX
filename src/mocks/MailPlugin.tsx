@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ReactElement } from 'react';
+import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
   LEAPExtensionBlueprint,
@@ -603,7 +604,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-1 p-1">
-      <p className="px-1 text-[11px] uppercase tracking-wide text-neutral-500">
+      <p className={`px-1 text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>
         {folderId} — {String(messages.length)} messages
       </p>
       <ul className="flex min-w-0 flex-col gap-px" data-mail-list={folderId}>
@@ -617,10 +618,9 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                 aria-current={context.selectedItemId === message.id ? 'true' : undefined}
                 className={
                   'flex w-full min-w-0 flex-col items-start gap-px rounded-sm border p-1 ' +
-                  'border-transparent text-left text-[12px] leading-4 ' +
-                  'aria-[current]:border-neutral-200 aria-[current]:bg-neutral-100 ' +
-                  'hover:border-neutral-200 dark:aria-[current]:border-neutral-800 ' +
-                  'dark:aria-[current]:bg-neutral-900 dark:hover:border-neutral-800'
+                  'text-left text-[12px] leading-4 ' +
+                  `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
+                  `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
                 }
                 onClick={() => {
                   // Module state first, host second. Both are synchronous, so
@@ -636,7 +636,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                 <span className={isUnread ? 'truncate font-semibold' : 'truncate'}>
                   {message.subject}
                 </span>
-                <span className="truncate text-[11px] text-neutral-500">
+                <span className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
                   {message.from} — {message.receivedAt}
                   {isUnread ? ' — unread' : ''}
                 </span>
@@ -697,7 +697,7 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2 p-1">
       {message === undefined ? (
-        <p className="text-[12px] leading-5 text-neutral-500">
+        <p className={`text-[12px] leading-5 ${TOKEN_CLASS.mutedText}`}>
           {messageId === null
             ? 'No message selected. Choose one in the list.'
             : 'That message is no longer in this mailbox.'}
@@ -705,7 +705,7 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
       ) : (
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="truncate text-[12px] font-semibold">{message.subject}</h3>
-          <p className="truncate text-[11px] text-neutral-500">
+          <p className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
             {message.from} — {message.receivedAt}
           </p>
           <p className="text-[12px] leading-5">
@@ -716,8 +716,8 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
             data-mail-action="mark-read"
             disabled={snapshot.readIds.has(message.id)}
             className={
-              'w-fit rounded-sm border border-neutral-200 p-1 text-[12px] leading-none ' +
-              'disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-800'
+              `w-fit rounded-sm border ${TOKEN_CLASS.chipBorder} p-1 text-[12px] leading-none ` +
+              'disabled:cursor-not-allowed disabled:opacity-40'
             }
             onClick={() => {
               markRead(message.id);
@@ -732,11 +732,13 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-col gap-px border-t border-neutral-200 pt-1 dark:border-neutral-800">
-        <h4 className="text-[11px] uppercase tracking-wide text-neutral-500">Activity</h4>
+      <div
+        className={`flex min-w-0 flex-col gap-px border-t ${TOKEN_CLASS.sectionEdge} pt-1`}
+      >
+        <h4 className={`text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>Activity</h4>
         <ol className="flex flex-col gap-px" data-mail-activity="">
           {snapshot.events.slice(-6).map((event) => (
-            <li key={event.seq} className="truncate text-[11px] text-neutral-500">
+            <li key={event.seq} className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
               {String(event.seq)}. {event.label}
             </li>
           ))}

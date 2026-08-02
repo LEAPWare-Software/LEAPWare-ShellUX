@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShellHostProvider, useExtensionActivation } from '../../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
 import { createHydrationEngine } from '../../core/services/HydrationEngine';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { makeBlueprint } from '../../core/__tests__/fixtures';
 import type { ExtensionViewProps } from '../../core/types';
 import { ShellLayout } from '../layout/ShellLayout';
@@ -473,28 +474,64 @@ describe('ShellLayout — pane 1 collapse', () => {
     expect(button.querySelector('.sr-only')?.textContent).toBe('Root B');
   });
 
+  /**
+   * WHAT THIS CASE CAN REACH, MEASURED RATHER THAN ASSUMED.
+   *
+   * **No pointer drag is possible in this jsdom, and the sequence below is inert.**
+   * `fireEvent.pointerDown` falls back to a plain `Event` when
+   * `window.PointerEvent` is missing — it is missing here, and that is asserted
+   * rather than believed — and a plain `Event` carries no `clientX`, so
+   * `react-resizable-panels` is never handed a coordinate and never leaves the
+   * handle's `inactive` state. `src/__tests__/IntegrationSuite.test.tsx` states
+   * the same fact about the same mechanism in "cannot be driven by a POINTER
+   * drag at all, because this jsdom implements no PointerEvent", and the two
+   * files agree: neither claims a jsdom pointer moves a divider. A REAL pointer
+   * drag interrupted by a collapse is driven in `e2e/pane-dividers.spec.ts`,
+   * where `dragHorizontally`'s `sawDragState` proves the drag was in flight.
+   *
+   * So what this case pins is the half that needs no pointer, and it is the half
+   * the edge case is really about: **unmounting the handle mid-gesture leaves no
+   * half-applied layout**, because the library re-normalises the panels that
+   * remain. That is asserted as the exact resulting pair — 36 and 40 of the old
+   * group become 47.4 and 52.6 of the new one — rather than as a sum to 100,
+   * which is true of almost every layout including a wrong one.
+   */
   it('survives a collapse toggled while a divider drag is in flight', async () => {
+    // Real geometry, so the library's own arithmetic runs against a measurable
+    // group rather than against the 0x0 fallback.
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 0, 1000, 800),
+    );
     const { container } = render(<Harness blueprints={[sampleBlueprint()]} />);
     const [handle] = screen.getAllByRole('separator');
     expect(handle).toBeDefined();
+    expect((globalThis as { PointerEvent?: unknown }).PointerEvent).toBeUndefined();
+    // 240px and 360px of a measured 1000px group, and pane 3 takes the remainder.
+    const before = panelSizes(container);
+    expect(before).toEqual([24, 36, 40]);
 
-    // Begin a drag, then collapse without ever releasing the pointer. The handle
-    // being dragged is unmounted mid-gesture, which is the case the edge-case
-    // list names.
+    // Begin the gesture, then collapse without ever releasing the pointer. The
+    // handle being unmounted mid-gesture is the case the edge-case list names.
     fireEvent.pointerDown(handle as Element, { pointerId: 1, clientX: 300, clientY: 10 });
+    // THE LIMIT, PINNED ON THE LIBRARY'S OWN STATE ATTRIBUTE. `pointerdown` did
+    // not start a drag and did not move a pane, so nothing below may be read as
+    // evidence that a drag was interrupted — only that the unmount is clean.
+    expect((handle as HTMLElement).getAttribute('data-resize-handle-state')).toBe('inactive');
+    expect(panelSizes(container)).toEqual(before);
+
     fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     fireEvent.pointerMove(document, { pointerId: 1, clientX: 40, clientY: 10 });
     fireEvent.pointerUp(document, { pointerId: 1, clientX: 40, clientY: 10 });
 
-    // The layout is intact: a 48px track, one divider, and panes that still sum
-    // to the whole rather than to whatever the abandoned drag last computed.
+    // The layout is intact: a 48px track, pane 1's panel and its divider gone
+    // from the group, and the two survivors holding exactly their re-normalised
+    // share — not whatever an abandoned gesture last computed.
     expect(
       (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).style.width,
     ).toBe('48px');
+    expect(container.querySelector('[data-panel-id="pane1"]')).toBeNull();
     expect(screen.getAllByRole('separator')).toHaveLength(1);
-    const sizes = panelSizes(container);
-    expect(sizes).toHaveLength(2);
-    expect(sizes.reduce((total, size) => total + size, 0)).toBeCloseTo(100, 1);
+    expect(panelSizes(container)).toEqual([47.4, 52.6]);
   });
 });
 
@@ -614,11 +651,36 @@ describe('ShellLayout — extensions', () => {
  * **Unmeasurable is treated as a violation, for padding.** An arbitrary padding
  * this scan cannot convert to pixels — `p-[max(2rem,4vw)]`, `p-[calc(…)]` — is
  * reported rather than skipped, because "the scan could not tell" is exactly
- * where a violation would choose to sit. Type sizes are the other way round, and
- * have to be: `text-` is also the prefix for colour and alignment, so an
- * arbitrary value that is not a length at all (`text-[color:var(--x)]`) is not a
- * type size and is not this rule's business. An arbitrary value that IS
- * length-shaped in a unit with no fixed pixel equivalent is still reported.
+ * where a violation would choose to sit.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TYPE-SIZE RULE HAD THE OPPOSITE POSTURE, AND THAT WAS A HOLE. (PLAN R8.)
+ * ---------------------------------------------------------------------------
+ * `typeSizeOffenders` used to return `false` for ANY arbitrary value it could
+ * not read as a length, on the stated grounds that `text-` is also the prefix
+ * for colour and alignment. The grounds are sound; the rule drawn from them was
+ * one step too wide. It made `text-[var(--type-body)]` — a genuine type size,
+ * simply one this scan cannot resolve — pass in silence.
+ *
+ * That is the reason `design/README.md` and the pivot plan both refuse to
+ * tokenise font size: tokenising it BEFORE this hole was closed would have made
+ * the density scan quietly stop measuring type while every run stayed green.
+ * Padding fails loud, type size failed silent, and the plan calls it the most
+ * fragile thing in the repository.
+ *
+ * The hole is closed by splitting the two cases the old rule conflated:
+ *
+ *  - `text-[color:var(--x)]` carries Tailwind's own explicit data-type hint. It
+ *    is PROVABLY not a type size, so it is not this rule's business and it is
+ *    still skipped. `ARBITRARY_TYPE_HINT` is what recognises it.
+ *  - `text-[var(--x)]`, `text-[calc(…)]` and anything else length-shaped that
+ *    this scan cannot convert are UNMEASURABLE rather than provably-not-a-length,
+ *    and are now reported — the same posture `paddingOffenders` has always had,
+ *    for the same reason.
+ *
+ * Blast radius, measured before the change: `text-[64px]`, `text-[0.625rem]` and
+ * `text-[2vw]` still report; `text-[11px]`, `text-[12px]`, `text-center` and
+ * every colour utility stay clean. Nothing the shell renders moved.
  * ============================================================================
  */
 
@@ -688,6 +750,18 @@ const SPACING_STEP = /^\d+(?:\.\d+)?$/;
 /** An arbitrary value, `[…]`. */
 const ARBITRARY_VALUE = /^\[(.+)\]$/;
 
+/**
+ * Tailwind's explicit data-type hint inside an arbitrary value.
+ *
+ * `text-[color:var(--x)]` and `text-[image:…]` say, in the class itself, that
+ * the value is not a length. That is the ONLY evidence strong enough to skip a
+ * `text-[…]` utility: everything else is a value the scan merely failed to read,
+ * which is a violation and not an exemption. `length:` is deliberately absent
+ * from the alternation — a hint that the value IS a length does not tell this
+ * scan how many pixels it is, so it still has to be measured or reported.
+ */
+const ARBITRARY_TYPE_HINT = /^(?:color|image|url|position|family-name|generic-name):/;
+
 /** Every token that declares padding this shell is not allowed to use. */
 function paddingOffenders(tokens: readonly string[]): string[] {
   return tokens.filter((token) => {
@@ -726,14 +800,23 @@ function typeSizeOffenders(tokens: readonly string[]): string[] {
     }
     const arbitrary = ARBITRARY_VALUE.exec(value);
     if (arbitrary === null) {
-      // A colour or an alignment. Not a type size, so not this rule's business.
+      // A named colour, an alignment, a weight. Not a type size, so not this
+      // rule's business — and not an arbitrary value either, so nothing was
+      // hidden from the scan here.
       return false;
     }
-    const pixels = arbitrary[1] === undefined ? null : arbitraryPx(arbitrary[1]);
-    if (pixels === null) {
+    const raw = arbitrary[1] ?? '';
+    if (ARBITRARY_TYPE_HINT.test(raw)) {
+      // `text-[color:var(--x)]`. Tailwind's own hint says this is not a length,
+      // and that is proof rather than a guess. Skipped.
       return false;
     }
-    return Number.isNaN(pixels) || pixels < TYPE_BAND_PX.min || pixels > TYPE_BAND_PX.max;
+    const pixels = arbitraryPx(raw);
+    // UNMEASURABLE IS A VIOLATION. `text-[var(--type-body)]` reaches here, and
+    // it used to return `false` — a type size the scan could not read, passing
+    // silently. It is reported now, matching `paddingOffenders`. See R8 in the
+    // banner above for why this one branch was the most fragile line in the file.
+    return pixels === null || Number.isNaN(pixels) || pixels < TYPE_BAND_PX.min || pixels > TYPE_BAND_PX.max;
   });
 }
 
@@ -865,6 +948,26 @@ describe('ShellLayout — density contract', () => {
     expect(densityOffenders(['dark:hover:p-8'])).toEqual(['dark:hover:p-8']);
     expect(densityOffenders(['aria-[current]:text-lg'])).toEqual(['aria-[current]:text-lg']);
 
+    // R8. AN UNMEASURABLE TYPE SIZE IS REPORTED, NOT SKIPPED.
+    //
+    // Every one of these used to pass in silence, and `text-[var(--type-body)]`
+    // is the exact spelling the plan names: tokenising font size before this
+    // branch was fixed would have replaced a measured type scale with values
+    // this scan waves through, so the whole density contract would have gone on
+    // reporting nothing while looking green.
+    expect(densityOffenders(['text-[var(--type-body)]'])).toEqual(['text-[var(--type-body)]']);
+    expect(densityOffenders(['text-[calc(1rem_-_2px)]'])).toEqual(['text-[calc(1rem_-_2px)]']);
+    expect(densityOffenders(['text-[clamp(11px,1vw,13px)]'])).toEqual([
+      'text-[clamp(11px,1vw,13px)]',
+    ]);
+    expect(densityOffenders(['hover:text-[var(--x)]'])).toEqual(['hover:text-[var(--x)]']);
+
+    // ...and the ONE case that stays exempt, which is what stops the widened
+    // rule from swallowing colour. Tailwind's `color:` hint is proof that the
+    // value is not a length; nothing else is.
+    expect(densityOffenders(['text-[color:var(--text-muted)]'])).toEqual([]);
+    expect(densityOffenders(['text-[color:#123456]'])).toEqual([]);
+
     // The tokens the shell actually uses stay clean, so the rules are not
     // simply reporting everything.
     expect(
@@ -877,8 +980,8 @@ describe('ShellLayout — density contract', () => {
         'text-[11px]',
         'text-[12px]',
         'text-xs',
-        'text-neutral-500',
-        'dark:text-neutral-400',
+        TOKEN_CLASS.mutedText,
+        TOKEN_CLASS.paneText,
         'text-center',
         '[contain:paint]',
         'max-w-[9rem]',
@@ -888,18 +991,40 @@ describe('ShellLayout — density contract', () => {
     ).toEqual([]);
   });
 
-  it('uses the specified 1px neutral border tokens in both themes', () => {
+  it('uses one 1px token border on every pane edge and on the ribbon', () => {
     render(<Harness />);
     for (const label of ['Navigation', 'List', 'Detail']) {
       const pane = screen.getByRole('region', { name: label });
       expect(pane).toHaveClass('border');
-      expect(pane).toHaveClass('border-neutral-200');
-      expect(pane).toHaveClass('dark:border-neutral-800');
+      expect(pane).toHaveClass(TOKEN_CLASS.paneBorder);
     }
     const ribbon = screen.getByRole('toolbar', { name: 'Shell ribbon' });
     expect(ribbon).toHaveClass('border-b');
-    expect(ribbon).toHaveClass('border-neutral-200');
-    expect(ribbon).toHaveClass('dark:border-neutral-800');
+    expect(ribbon).toHaveClass(TOKEN_CLASS.ribbonBorder);
+  });
+
+  it('renders no dark: variant anywhere in the assembled shell, in any state', async () => {
+    // ISSUE-67 IN ITS ENTIRETY, ANSWERED BY SUBTRACTION.
+    //
+    // The shell used to carry 51 `dark:` variants and the issue's own wording is
+    // that they "are exercised by nothing whatsoever": jsdom implements no
+    // `matchMedia`, applies no stylesheet and resolves no variant, so every one
+    // of them was untested and untestable in this lane. The fix is not a test
+    // for them. It is that a colour is now a token whose VALUE swaps on
+    // `[data-theme]`, which leaves `dark:border-neutral-800` with nothing to say.
+    //
+    // This walks every state `shellStates` reaches — including the portalled
+    // overflow menu, which is not in the render container — so it covers the
+    // same surface the density scan does, and it is guarded by the same
+    // did-we-reach-every-state control that scan already has.
+    const states = await shellStates();
+    expect([...states.keys()]).toEqual([...STATE_MARKERS.keys()]);
+    for (const [state, tokens] of states) {
+      expect(
+        tokens.filter((token) => token.startsWith('dark:')),
+        `dark: variants while ${state}`,
+      ).toEqual([]);
+    }
   });
 });
 
@@ -914,35 +1039,58 @@ describe('ShellLayout — density contract', () => {
  * the initial value for every property and a test built on it would assert
  * nothing while looking rigorous.
  *
- * So each case below pins the CLASS TOKEN that carries the fix, and states the
- * ratio that token was measured at in a real engine so the number is recoverable
- * from the test rather than only from a commit message. A token can be deleted
- * and these fail; a token can be present while the compiled stylesheet says
- * something else, and these would not notice. That second gap is what the
+ * So each case below pins the CLASS TOKEN that carries the fix. A token can be
+ * deleted and these fail; a token can be present while the compiled stylesheet
+ * says something else, and these would not notice. That second gap is what the
  * headless-Chrome pass over the compiled CSS covers, and it is not runnable
  * from vitest.
  *
- * The failing values are named alongside the fixed ones on purpose: `neutral-400`
- * is the FIX in dark and would be a REGRESSION in light — 7.85:1 on
- * `neutral-950` against 2.52:1 on white — so "did the light value change" is a
- * thing worth asserting in its own right.
+ * ---------------------------------------------------------------------------
+ * WHAT THE TOKEN MIGRATION TOOK AWAY FROM THIS BLOCK. SAY IT, DO NOT BURY IT.
+ * ---------------------------------------------------------------------------
+ * These cases used to assert literal colours — `border-neutral-200`,
+ * `dark:text-neutral-400` — and quote the ratio each was measured at, so the
+ * number was recoverable from the test rather than only from a commit message.
+ * That was two independent spellings of one intent, and it caught a component
+ * repointed at the wrong colour.
+ *
+ * They now assert `TOKEN_CLASS.*`, which the component imports too. **A
+ * component pointed at the wrong token can no longer be caught here**, because
+ * both sides move together. `src/core/theme/tokenClasses.ts` carries the full
+ * account and names the two things that are the compensation:
+ * `scripts/check-tokens.mjs` re-measures every declared pair in all three
+ * themes, and `e2e/theme.spec.ts` proves the compiled stylesheet applies them.
+ *
+ * The ratios are no longer quoted here either, and that is deliberate rather
+ * than lazy. A token resolves to a different value per theme and is measured
+ * against every surface it is drawn on; the honest place for those numbers is
+ * `design/contrast-manifest.json`, where a checker reads them, and not a comment
+ * where they rot. What survives in this block is the structural half — the right
+ * ROLE is on the right element, and there is no appearance-conditional variant
+ * beside it — which is the half jsdom can actually see.
  * ============================================================================
  */
 describe('ShellLayout — contrast and target size', () => {
-  it('gives every muted body string a dark-mode value that clears 4.5:1', async () => {
+  it('routes every muted body string through one token instead of a per-theme patch', async () => {
     const { user, container } = await renderActivated();
     await user.click(screen.getByRole('button', { name: 'Show utility drawer' }));
 
-    const muted = Array.from(container.querySelectorAll('[class*="text-neutral-500"]'));
+    const muted = Array.from(container.querySelectorAll(`[class*="${TOKEN_CLASS.mutedText}"]`));
+    // The scan's own control: a filter over an empty harvest is green.
     expect(muted.length).toBeGreaterThan(0);
     for (const element of muted) {
-      // `#737373` on the pane's `dark:bg-neutral-950` (`#0a0a0a`) is 4.18:1 —
-      // under 4.5:1, with no large-text allowance at 11px and 12px.
-      // `#a3a3a3` on the same background is 7.85:1.
-      expect(element).toHaveClass('dark:text-neutral-400');
-      // ...and the light value is untouched, because `neutral-400` on white is
-      // 2.52:1 and would be a worse failure than the one being fixed.
-      expect(element).toHaveClass('text-neutral-500');
+      expect(element).toHaveClass(TOKEN_CLASS.mutedText);
+      // AND NOTHING BESIDE IT. This is the case that used to require
+      // `dark:text-neutral-400` on every muted string, because `#737373`
+      // measured 4.18:1 on the dark pane — under the 4.5:1 WCAG 1.4.3 asks of
+      // 12px body text — while measuring fine in light. Every one of those
+      // overrides had to be written, and remembered, by hand. `--text-muted`
+      // is resolved per theme and validated against all eight surfaces in all
+      // three, so the override is not merely untested now: it is unnecessary,
+      // and its absence is the assertion.
+      for (const token of element.className.split(/\s+/)) {
+        expect(token.startsWith('dark:'), `${token} is an untestable variant`).toBe(false);
+      }
     }
   });
 
@@ -955,29 +1103,40 @@ describe('ShellLayout — contrast and target size', () => {
     // defect — it was a sighted and low-vision one.
     expect(selected).toHaveAttribute('aria-current', 'true');
 
-    // The fill stays but cannot be the indicator: `#f5f5f5` on `#ffffff` is
-    // 1.09:1 and the border beside it 1.26:1, against the 3:1 WCAG 1.4.11 asks
-    // of a non-text state indicator.
-    expect(selected).toHaveClass('aria-[current]:bg-neutral-100');
-    // What actually carries it: a 2px leading rule at `neutral-500` (4.74:1 on
-    // white, 4.35:1 on the fill) / `neutral-400` in dark (7.85:1 on
-    // `neutral-950`), plus a semibold label.
-    expect(selected).toHaveClass('aria-[current]:shadow-[inset_2px_0_0_0_theme(colors.neutral.500)]');
-    expect(selected).toHaveClass(
-      'dark:aria-[current]:shadow-[inset_2px_0_0_0_theme(colors.neutral.400)]',
-    );
+    // The fill stays but cannot be the indicator: no fill reaches the 3:1 WCAG
+    // 1.4.11 asks of a non-text state indicator without going dark enough to
+    // read as a different control entirely.
+    expect(selected).toHaveClass(TOKEN_CLASS.navSelectedSurface);
+    // What actually carries it: a 2px leading rule at `--border-selected`, plus
+    // a semibold label. Two channels, neither of them the fill.
+    expect(selected).toHaveClass(TOKEN_CLASS.navSelectedRule);
     expect(selected).toHaveClass('aria-[current]:font-semibold');
+
+    // The rule and the outline are DIFFERENT tokens, which is the part a
+    // constant-versus-constant assertion can still prove. Before this change
+    // both were `neutral-200`-family values and the outline was as heavy as the
+    // rule; `design/README.md` flags the split and declines to resolve it, and
+    // it is resolved as decoration-versus-indicator here.
+    expect(TOKEN_CLASS.navSelectedRule).not.toEqual(TOKEN_CLASS.navSelectedBorder);
+    expect(selected).toHaveClass(TOKEN_CLASS.navSelectedBorder);
   });
 
-  it('draws the dividers dark enough to read as controls rather than as pane borders', () => {
+  it('draws the dividers from the control tier rather than from the border tier', () => {
     render(<Harness />);
-    for (const separator of screen.getAllByRole('separator')) {
-      // `bg-neutral-200` was the SAME token as the pane borders it abuts —
-      // 1.26:1 against them. `neutral-500` is 4.74:1 on white and 4.54:1 on the
-      // `neutral-50` behind the group; `neutral-400` is 7.85:1 on `neutral-950`.
-      expect(separator).toHaveClass('bg-neutral-500');
-      expect(separator).toHaveClass('dark:bg-neutral-400');
-      expect(separator).not.toHaveClass('bg-neutral-200');
+    const separators = screen.getAllByRole('separator');
+    expect(separators.length).toBeGreaterThan(0);
+    for (const separator of separators) {
+      // The divider once used the same value as the pane borders it abuts, at
+      // 1.26:1 against them, so it read as one more border rather than as a
+      // control. It now has its own token group — see `design/README.md`
+      // "Honest limits" item 9 for why a filled 4px bar with hover and drag
+      // states could not share `--border-*` and stay measurable.
+      expect(separator).toHaveClass(TOKEN_CLASS.dividerIdle);
+      expect(separator).toHaveClass(TOKEN_CLASS.dividerHover);
+      expect(separator).toHaveClass(TOKEN_CLASS.dividerDrag);
+      // ...and it is NOT the pane border, which is the property that regressed
+      // last time and the one worth restating structurally.
+      expect(separator).not.toHaveClass(TOKEN_CLASS.paneBorder);
     }
   });
 

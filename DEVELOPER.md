@@ -1249,7 +1249,8 @@ it is the visual contract.
 |---|---|
 | Padding | `p-1` to `p-3`. Nothing looser. |
 | Base type | 11px – 13px. |
-| Borders | 1px, `border-neutral-200` (light) / `border-neutral-800` (dark). |
+| Borders | 1px, `border-border-default`. One declaration, in every theme. |
+| Colour | A semantic token, always. Never a palette literal, never a `dark:` variant. |
 | Row height | Compact. Assume many rows visible at once. |
 | Spacing | Tight. Explicitly **not** airy mobile-web spacing. |
 
@@ -1260,6 +1261,27 @@ Concretely, for extension authors:
   information hierarchy, not spacing.
 - **Do not** introduce your own font sizes above the 11px–13px band for body
   content. A heading may be slightly larger; a data row may not.
+- **Do not** write a colour literal of any kind — not `bg-neutral-50`, not
+  `#7e8085`, not `theme(colors.neutral.400)` inside an arbitrary value. Every
+  colour in the shell is a `var(--token)` utility whose value swaps per theme.
+  `src/__tests__/noRawColor.test.ts` fails the build on all of those spellings,
+  and `scripts/check-tokens.mjs` measures the tokens' contrast against
+  `design/contrast-manifest.json` in all three built-in themes.
+- **Do not** write a `dark:` variant. There is nothing left for one to say: the
+  token's *value* changes on `[data-theme]`, so `dark:border-neutral-800` beside
+  `border-border-default` overrides something that already changed. `darkMode`
+  stays configured for the genuinely appearance-conditional cases, and the
+  allowlist that would permit one is empty.
+- **Do not** apply an opacity modifier to a token colour. `bg-surface-pane/50`
+  compiles to **no rule at all** — the tokens are complete `oklch()` functions
+  rather than the bare channels Tailwind's modifier needs, so the class lands in
+  the DOM and no declaration is emitted. The same scan rejects it, because
+  nothing else in the toolchain would notice.
+- **Do** read the token names from `src/core/theme/tokens.generated.ts`, which is
+  the public contract, and the painted roles from
+  `src/core/theme/tokenClasses.ts`. The generated file also carries the two
+  reference tables worth knowing: `SEMANTIC_TOKEN_NAME_LIST` is every name an
+  extension may use, and `BUILT_IN_THEME_IDS` is every theme they resolve in.
 - **Do** use the same neutral border tokens as the host. A different border
   colour reads as a rendering bug to users, not as branding.
 - **Do** support both light and dark. Both tokens above are part of the contract;

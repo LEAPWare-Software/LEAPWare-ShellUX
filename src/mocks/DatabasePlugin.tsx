@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ReactElement } from 'react';
+import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
   IShellAPI,
@@ -593,15 +594,16 @@ function InventoryRecordRow({
       onClick={onSelect}
       className={
         'flex w-full min-w-0 flex-row items-center gap-1 rounded-sm border p-1 ' +
-        'border-transparent text-left text-[12px] leading-4 ' +
-        'aria-[current]:border-neutral-200 aria-[current]:bg-neutral-100 ' +
-        'hover:border-neutral-200 dark:aria-[current]:border-neutral-800 ' +
-        'dark:aria-[current]:bg-neutral-900 dark:hover:border-neutral-800'
+        'text-left text-[12px] leading-4 ' +
+        `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
+        `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
       }
     >
-      <span className="w-20 flex-none truncate text-[11px] text-neutral-500">{record.sku}</span>
+      <span className={`w-20 flex-none truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
+        {record.sku}
+      </span>
       <span className="min-w-0 flex-1 truncate">{record.name}</span>
-      <span className={isLow ? 'flex-none font-semibold' : 'flex-none text-neutral-500'}>
+      <span className={isLow ? 'flex-none font-semibold' : `flex-none ${TOKEN_CLASS.mutedText}`}>
         {String(stock)}
       </span>
     </button>
@@ -655,7 +657,7 @@ function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactEleme
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-1 p-1">
-      <p className="px-1 text-[11px] uppercase tracking-wide text-neutral-500">
+      <p className={`px-1 text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>
         {categoryId ?? 'all categories'} — {String(records.length)} records
         {snapshot.showLowStockOnly ? ' — low stock only' : ''}
       </p>
@@ -703,7 +705,7 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2 p-1">
       {record === undefined ? (
-        <p className="text-[12px] leading-5 text-neutral-500">
+        <p className={`text-[12px] leading-5 ${TOKEN_CLASS.mutedText}`}>
           {recordId === null
             ? 'No record selected. Choose one in the list.'
             : 'That record is no longer in the catalogue.'}
@@ -711,7 +713,7 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
       ) : (
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="truncate text-[12px] font-semibold">{record.name}</h3>
-          <p className="truncate text-[11px] text-neutral-500">
+          <p className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
             {record.sku} — {record.categoryId}
           </p>
           <p className="text-[12px] leading-5">
@@ -724,8 +726,8 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
             data-inventory-action="reserve"
             disabled={stockOf(snapshot, record.id) === 0}
             className={
-              'w-fit rounded-sm border border-neutral-200 p-1 text-[12px] leading-none ' +
-              'disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-800'
+              `w-fit rounded-sm border ${TOKEN_CLASS.chipBorder} p-1 text-[12px] leading-none ` +
+              'disabled:cursor-not-allowed disabled:opacity-40'
             }
             onClick={() => {
               reserveStock(record.id);
@@ -740,14 +742,16 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-col gap-px border-t border-neutral-200 pt-1 dark:border-neutral-800">
-        <h4 className="text-[11px] uppercase tracking-wide text-neutral-500">Stock movements</h4>
+      <div className={`flex min-w-0 flex-col gap-px border-t ${TOKEN_CLASS.sectionEdge} pt-1`}>
+        <h4 className={`text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>
+          Stock movements
+        </h4>
         <ol className="flex flex-col gap-px" data-inventory-history="">
           {ticks.length === 0 ? (
-            <li className="text-[11px] text-neutral-500">No movements recorded yet.</li>
+            <li className={`text-[11px] ${TOKEN_CLASS.mutedText}`}>No movements recorded yet.</li>
           ) : (
             ticks.map((tick) => (
-              <li key={tick.seq} className="truncate text-[11px] text-neutral-500">
+              <li key={tick.seq} className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
                 {String(tick.seq)}. {tick.recordId} — {String(tick.level)}
               </li>
             ))

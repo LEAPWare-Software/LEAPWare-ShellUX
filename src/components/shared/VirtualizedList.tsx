@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { KeyboardEvent, ReactElement, ReactNode, UIEvent } from 'react';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { FaultBoundary } from '../error/FaultBoundary';
 import {
   buildOffsets,
@@ -357,11 +358,8 @@ export function VirtualizedList<T>({
           }
         }}
         className={
-          'flex min-w-0 items-center overflow-hidden px-1 ' +
-          'aria-selected:bg-neutral-100 aria-selected:font-semibold ' +
-          'aria-selected:shadow-[inset_2px_0_0_0_theme(colors.neutral.500)] ' +
-          'dark:aria-selected:bg-neutral-900 ' +
-          'dark:aria-selected:shadow-[inset_2px_0_0_0_theme(colors.neutral.400)]'
+          'flex min-w-0 items-center overflow-hidden px-1 aria-selected:font-semibold ' +
+          `${TOKEN_CLASS.rowSelectedSurface} ${TOKEN_CLASS.rowSelectedRule}`
         }
       >
         <FaultBoundary boundaryLabel="This row" extensionId={extensionId} variant="row">
@@ -381,7 +379,7 @@ export function VirtualizedList<T>({
       data-virtualized-list=""
       onScroll={handleScroll}
       onKeyDown={handleKeyDown}
-      className="h-full min-h-0 overflow-y-auto outline-none focus-visible:ring-1"
+      className={`h-full min-h-0 overflow-y-auto outline-none ${TOKEN_CLASS.listFocusRing}`}
     >
       {/*
         The spacer carries the FULL height of the list, so the scrollbar is the

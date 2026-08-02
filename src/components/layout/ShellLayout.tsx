@@ -5,6 +5,7 @@ import { ExtensionHostBoundary, useActivation } from '../../core/ActivationConte
 import type { ActiveExtension } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
 import { useBadgeCount, useShellContext, useShellStore } from '../../core/ShellAPI';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { useHotkeyDispatch } from '../../core/hotkeyDispatch';
 import {
   DEFAULT_SHELL_STATE,
@@ -469,14 +470,27 @@ interface ShellNavButtonProps {
  *
  * THE SELECTED STATE IS A RULE AND A WEIGHT, NOT ONLY A FILL. `aria-current` was
  * always set, so a screen-reader user was always told which extension was
- * active. A sighted user was not: `bg-neutral-100` on white is 1.09:1 and the
- * `border-neutral-200` beside it 1.26:1, against the 3:1 that WCAG 1.4.11 asks
- * of a non-text state indicator. Both are far below it, and no fill reaches 3:1
- * against white without going dark enough to read as a different control
- * entirely. So the fill stays — it is a pleasant hint for anyone who can see it —
- * and the state is actually CARRIED by two things that clear the bar on their
- * own: a 2px leading rule at `neutral-500` (4.74:1 on white, 4.35:1 on the fill)
- * or `neutral-400` in dark (7.85:1 on `neutral-950`), and a semibold label.
+ * active. A sighted user was not: the fill measured 1.09:1 against white and the
+ * outline beside it 1.26:1, against the 3:1 that WCAG 1.4.11 asks of a non-text
+ * state indicator. Both were far below it, and no fill reaches 3:1 against white
+ * without going dark enough to read as a different control entirely. So the fill
+ * stays — it is a pleasant hint for anyone who can see it — and the state is
+ * actually CARRIED by two things that clear the bar on their own: a 2px leading
+ * rule at `--border-selected`, and a semibold label.
+ *
+ * The rule and the fill are now `TOKEN_CLASS.navSelectedRule` and
+ * `navSelectedSurface`, so there is one declaration per affordance instead of a
+ * light one and a `dark:` twin. The ratios above are no longer restated per
+ * theme here on purpose: they are measured for all three themes, against every
+ * surface each token is drawn on, by `design/check-contrast.mjs` and by
+ * `npm run check:tokens`. A number copied into a comment is a number that goes
+ * stale silently, and this file had three such paragraphs before this change.
+ *
+ * The 1px outline is the decorative tier, `--border-subtle`, and that is a
+ * decision `design/README.md` explicitly declined to make for us — see its "For
+ * whoever wires this" section. `--border-default` would make a selected row's
+ * edge as heavy as a pane's; the outline is not what carries the state, so it
+ * gets the tier that keeps weight off decoration.
  *
  * The rule is an inset `box-shadow` rather than a left border. A border would
  * have to grow from 1px to 2px on selection and shift the label sideways by a
@@ -503,13 +517,10 @@ function ShellNavButton({
       onClick={onSelect}
       className={
         'flex min-h-6 items-center gap-1 rounded-sm border p-1 text-[12px] leading-none ' +
-        'border-transparent aria-[current]:border-neutral-200 ' +
-        'aria-[current]:bg-neutral-100 aria-[current]:font-semibold ' +
-        'aria-[current]:shadow-[inset_2px_0_0_0_theme(colors.neutral.500)] ' +
-        'hover:border-neutral-200 ' +
-        'dark:aria-[current]:border-neutral-800 dark:aria-[current]:bg-neutral-900 ' +
-        'dark:aria-[current]:shadow-[inset_2px_0_0_0_theme(colors.neutral.400)] ' +
-        'dark:hover:border-neutral-800 ' +
+        'aria-[current]:font-semibold ' +
+        `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
+        `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.navSelectedRule} ` +
+        `${TOKEN_CLASS.controlHoverBorder} ` +
         (isCollapsed ? 'relative h-8 w-8 justify-center' : 'w-full min-w-0 justify-start')
       }
     >
@@ -532,8 +543,7 @@ function ShellNavButton({
       {badgeCount === undefined ? null : (
         <span
           className={
-            'flex-none rounded-sm bg-neutral-200 px-1 text-[11px] leading-4 ' +
-            'dark:bg-neutral-800 ' +
+            `flex-none rounded-sm ${TOKEN_CLASS.badgeSurface} px-1 text-[11px] leading-4 ` +
             (isCollapsed ? 'absolute -right-1 -top-1' : 'ml-auto')
           }
         >
@@ -677,17 +687,17 @@ function ExtensionPane({ active, pane, label, context }: ExtensionPaneProps): Re
 /**
  * Body text for a pane with nothing to show.
  *
- * `dark:text-neutral-400` is not decoration. `text-neutral-500` is `#737373`,
- * and every one of these sits inside a `PaneWrapper`, whose dark background is
- * `neutral-950` (`#0a0a0a`) — 4.18:1, under the 4.5:1 that WCAG 1.4.3 requires
- * of 12px body text. `neutral-400` on the same background is 7.85:1. The LIGHT
- * value is deliberately left alone: `neutral-400` on white is 2.52:1 and would
- * trade one failure for a worse one.
+ * This used to be `text-neutral-500` with a `dark:text-neutral-400` beside it,
+ * and that pair is the clearest single illustration of what the token set
+ * replaces. `#737373` measured 4.18:1 on the dark pane — under the 4.5:1 WCAG
+ * 1.4.3 requires of 12px body text — while measuring fine in light, so the fix
+ * had to be a per-theme override written by hand at every muted string in the
+ * shell. `--text-muted` is resolved per theme by the generator and validated
+ * against all eight surfaces in all three themes, so the override has nothing
+ * left to correct and one declaration replaces two.
  */
 function EmptyPane({ children }: { readonly children: string }): ReactElement {
-  return (
-    <p className="p-1 text-[12px] leading-5 text-neutral-500 dark:text-neutral-400">{children}</p>
-  );
+  return <p className={`p-1 text-[12px] leading-5 ${TOKEN_CLASS.mutedText}`}>{children}</p>;
 }
 
 interface ShellResizeHandleProps {
@@ -701,14 +711,22 @@ interface ShellResizeHandleProps {
  * THREE THINGS HERE ARE ACCESSIBILITY FIXES, AND ALL THREE ARE EASY TO UNDO BY
  * ACCIDENT.
  *
- * COLOUR. `bg-neutral-200` was the SAME token as the 1px border on the panes
- * either side of it, so the divider did not read as a control at all — it read
- * as one more pane border, at 1.26:1 against the panes it separates. WCAG 1.4.11
- * wants 3:1 for a control's visual boundary. `neutral-500` is 4.74:1 on white
- * and 4.54:1 on the `neutral-50` behind the group; `neutral-400` in dark is
- * 7.85:1 on `neutral-950`. The hover and drag states move AWAY from the page
- * background in each theme — darker in light, lighter in dark — which is why
- * they are not simply the old values.
+ * COLOUR. The divider once used the SAME value as the 1px border on the panes
+ * either side of it, so it did not read as a control at all — it read as one
+ * more pane border, at 1.26:1 against the panes it separates. WCAG 1.4.11 wants
+ * 3:1 for a control's visual boundary.
+ *
+ * It now uses `--control-divider` and `--control-divider-hover`, which are their
+ * own token group rather than a shade of `--border-*`. `design/README.md`
+ * "Honest limits" item 9 records why: this is a filled 4px bar with hover and
+ * drag states, not a border, and folding it into `--border-strong` would have
+ * made one token answer to two different measurements. `--control-divider`
+ * measures 5.94:1 on `--surface-app` in light and 8.10:1 in dark.
+ *
+ * The hover and drag states still move AWAY from the page background in each
+ * theme — darker in light, lighter in dark — but that direction now lives in the
+ * token values rather than in a `dark:` variant here, which is why there are two
+ * declarations where there were six.
  *
  * TARGET SIZE. The visual divider stays 4px, because a 24px bar between two
  * panes would look broken. `hitAreaMargins` widens the region the library's own
@@ -730,12 +748,9 @@ function ShellResizeHandle({ label }: ShellResizeHandleProps): ReactElement {
       aria-orientation="vertical"
       hitAreaMargins={{ coarse: 15, fine: 12 }}
       className={
-        'w-1 flex-none cursor-col-resize bg-neutral-500 outline-none ' +
-        'hover:bg-neutral-700 focus-visible:bg-neutral-700 ' +
-        'data-[resize-handle-state=drag]:bg-neutral-700 ' +
-        'dark:bg-neutral-400 dark:hover:bg-neutral-200 ' +
-        'dark:focus-visible:bg-neutral-200 ' +
-        'dark:data-[resize-handle-state=drag]:bg-neutral-200'
+        'w-1 flex-none cursor-col-resize outline-none ' +
+        `${TOKEN_CLASS.dividerIdle} ${TOKEN_CLASS.dividerHover} ` +
+        `${TOKEN_CLASS.dividerFocus} ${TOKEN_CLASS.dividerDrag}`
       }
     />
   );
@@ -1015,7 +1030,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
           className={
             isNavCollapsed
               ? 'sr-only'
-              : 'px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400'
+              : `px-1 text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`
           }
         >
           Extensions
@@ -1051,7 +1066,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
             className={
               isNavCollapsed
                 ? 'sr-only'
-                : 'px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400'
+                : `px-1 text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`
             }
           >
             Navigation
@@ -1081,8 +1096,8 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     <div
       data-shell-region="root"
       className={
-        'flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-50 ' +
-        'text-[12px] text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100'
+        'flex h-full min-h-0 w-full flex-col overflow-hidden text-[12px] ' +
+        `${TOKEN_CLASS.appSurface} ${TOKEN_CLASS.appText}`
       }
     >
       <FaultBoundary boundaryLabel="The ribbon" extensionId={activeId} resetKey={activeId}>
@@ -1186,10 +1201,12 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                   trailing={
                     isDrawerOpen ? (
                       <div className="flex flex-col gap-1">
-                        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                        <h2
+                          className={`text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}
+                        >
                           Utilities
                         </h2>
-                        <p className="text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
+                        <p className={`text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}>
                           Reserved for extension-supplied utilities.
                         </p>
                       </div>

@@ -2,6 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import type { ReactElement } from 'react';
 import { ariaKeyShortcuts } from '../../core/hotkeys';
 import { execute, isVisible } from '../../core/ribbonAction';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
 import { FALLBACK_ICON, OVERFLOW_ICON, SHELL_ICONS } from './shellIcons';
 
@@ -283,10 +284,9 @@ interface ActionButtonProps {
  * natively disabled; see `ActionButton` below for why.
  */
 const ACTION_CHROME =
-  'flex min-h-6 min-w-0 items-center gap-1 rounded-sm border border-transparent p-1 ' +
-  'text-[12px] leading-none text-neutral-900 hover:border-neutral-200 ' +
-  'aria-disabled:cursor-not-allowed aria-disabled:opacity-40 dark:text-neutral-100 ' +
-  'dark:hover:border-neutral-800';
+  'flex min-h-6 min-w-0 items-center gap-1 rounded-sm border p-1 ' +
+  'text-[12px] leading-none aria-disabled:cursor-not-allowed aria-disabled:opacity-40 ' +
+  `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.ribbonText} ${TOKEN_CLASS.controlHoverBorder}`;
 
 /**
  * One ribbon button. The only element in this module that renders plug-in text.
@@ -365,7 +365,7 @@ function OverflowMenuItem({
         }
         onSelect();
       }}
-      className={`${ACTION_CHROME} w-full justify-start outline-none focus:border-neutral-200 dark:focus:border-neutral-800`}
+      className={`${ACTION_CHROME} w-full justify-start outline-none ${TOKEN_CLASS.controlFocusBorder}`}
     >
       {SHELL_ICONS.get(icon) ?? FALLBACK_ICON}
       <span className="truncate">{label}</span>
@@ -430,10 +430,8 @@ export function RibbonToolbar({
       data-shell-region="ribbon"
       className={
         'flex w-full flex-none flex-nowrap items-center justify-between gap-1 ' +
-        'overflow-x-auto overflow-y-hidden [contain:paint] ' +
-        'border-b border-neutral-200 bg-neutral-50 p-1 ' +
-        'text-[12px] text-neutral-900 dark:border-neutral-800 ' +
-        'dark:bg-neutral-900 dark:text-neutral-100'
+        'overflow-x-auto overflow-y-hidden [contain:paint] border-b p-1 text-[12px] ' +
+        `${TOKEN_CLASS.ribbonBorder} ${TOKEN_CLASS.ribbonSurface} ${TOKEN_CLASS.ribbonText}`
       }
     >
       <div data-ribbon-side="host" className="flex flex-none flex-nowrap items-center gap-1">
@@ -487,10 +485,10 @@ export function RibbonToolbar({
                 type="button"
                 title="More actions"
                 className={
-                  'flex min-h-6 flex-none items-center gap-1 rounded-sm border ' +
-                  'border-transparent p-1 text-[12px] leading-none text-neutral-900 ' +
-                  'hover:border-neutral-200 dark:text-neutral-100 ' +
-                  'dark:hover:border-neutral-800'
+                  'flex min-h-6 flex-none items-center gap-1 rounded-sm border p-1 ' +
+                  'text-[12px] leading-none ' +
+                  `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.ribbonText} ` +
+                  TOKEN_CLASS.controlHoverBorder
                 }
               >
                 {OVERFLOW_ICON}
@@ -512,9 +510,9 @@ export function RibbonToolbar({
                 collisionPadding={4}
                 className={
                   'z-50 flex max-h-[var(--radix-dropdown-menu-content-available-height)] ' +
-                  'w-44 flex-col gap-1 overflow-y-auto rounded-sm border ' +
-                  'border-neutral-200 bg-white p-1 text-[12px] text-neutral-900 shadow-md ' +
-                  'dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100'
+                  'w-44 flex-col gap-1 overflow-y-auto rounded-sm border p-1 text-[12px] ' +
+                  `${TOKEN_CLASS.menuBorder} ${TOKEN_CLASS.menuSurface} ` +
+                  `${TOKEN_CLASS.menuText} ${TOKEN_CLASS.menuElevation}`
                 }
               >
                 {overflow.map((action) => (

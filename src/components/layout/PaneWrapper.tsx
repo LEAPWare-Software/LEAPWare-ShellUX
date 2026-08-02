@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import type { PaneId } from '../../core/types';
 
 /**
@@ -8,10 +9,17 @@ import type { PaneId } from '../../core/types';
  * Every pane in the shell is this component. It owns three things and nothing
  * else, so that a pane's own code never has to re-decide any of them:
  *
- * BORDER. One pixel, `border-neutral-200` in light and `border-neutral-800` in
- * dark, exactly as the density contract in `DEVELOPER.md` requires. A pane that
+ * BORDER. One pixel, `TOKEN_CLASS.paneBorder`, in every theme. A pane that
  * picked its own border colour would read as a rendering bug rather than as
  * branding.
+ *
+ * It used to be two declarations — `border-neutral-200` with a
+ * `dark:border-neutral-800` beside it — and it is now one, because the token's
+ * VALUE swaps on `[data-theme]` and there is nothing left for a variant to say.
+ * That is also the change that makes it heavier: `border-neutral-200` measured
+ * 1.26:1 against the pane it bounded and `--border-default` measures 3.95:1,
+ * which is the 3:1 WCAG 1.4.11 asks of a control's visual boundary and roughly
+ * three times the ink. Visible, intended, and recorded in `CHANGELOG.md`.
  *
  * OVERFLOW DISCIPLINE. This is the part that is easy to get wrong and expensive
  * to debug. The outer element is `overflow-hidden` and carries `min-w-0` and
@@ -51,14 +59,21 @@ import type { PaneId } from '../../core/types';
  * ============================================================================
  */
 
-/** Shared chrome for every pane: 1px neutral border in both themes. */
+/**
+ * Shared chrome for every pane: one 1px token border, in every theme.
+ *
+ * `text-[12px]` stays a literal on purpose. Padding and font size are the two
+ * things this token set deliberately does not cover — the density scan in
+ * `ShellLayout.test.tsx` parses them out of the class list, and
+ * `typeSizeOffenders` cannot measure a `var()`. Tokenising type here would
+ * silently stop that scan measuring anything.
+ */
 const PANE_CHROME =
   'flex h-full min-h-0 min-w-0 flex-col overflow-hidden border ' +
-  'border-neutral-200 bg-white text-[12px] text-neutral-900 ' +
-  'dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-100';
+  `${TOKEN_CLASS.paneBorder} ${TOKEN_CLASS.paneSurface} text-[12px] ${TOKEN_CLASS.paneText}`;
 
-/** Divider between a slot and the body. Same 1px tokens, one edge only. */
-const SLOT_EDGE = 'border-neutral-200 dark:border-neutral-800';
+/** Divider between a slot and the body. Same token, one edge only. */
+const SLOT_EDGE = TOKEN_CLASS.paneSlotEdge;
 
 export interface PaneWrapperProps {
   /** Which shell pane this is. Published as `data-pane` for tests and CSS. */

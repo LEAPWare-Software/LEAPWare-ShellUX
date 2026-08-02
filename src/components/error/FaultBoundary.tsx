@@ -1,5 +1,6 @@
 import { Component, Fragment } from 'react';
 import type { ReactNode } from 'react';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 
 /**
  * ============================================================================
@@ -229,15 +230,23 @@ function clip(message: string): string {
   return `${trimmed.slice(0, MAX_MESSAGE_LENGTH)}…`;
 }
 
+/**
+ * The pane-level error surface.
+ *
+ * `border-neutral-400` was 2.52:1 against the white it sat on, which is below
+ * the 3:1 WCAG 1.4.11 asks of a control's visual boundary — and an alert box IS
+ * a boundary somebody has to find. `TOKEN_CLASS.faultBorder` is
+ * `--border-default` at 3.95:1, and it needs no dark-theme twin because the
+ * token resolves per theme.
+ */
 const SURFACE =
-  'flex flex-col gap-1 rounded-sm border border-neutral-400 bg-neutral-50 p-1 ' +
-  'text-[12px] leading-4 text-neutral-900 ' +
-  'dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100';
+  'flex flex-col gap-1 rounded-sm border p-1 text-[12px] leading-4 ' +
+  `${TOKEN_CLASS.faultBorder} ${TOKEN_CLASS.faultSurface} ${TOKEN_CLASS.faultText}`;
 
 const RETRY_BUTTON =
-  'self-start rounded-sm border border-neutral-400 px-1 min-h-6 text-[12px] leading-4 ' +
-  'hover:bg-neutral-200 focus-visible:bg-neutral-200 ' +
-  'dark:border-neutral-600 dark:hover:bg-neutral-800 dark:focus-visible:bg-neutral-800';
+  'self-start rounded-sm border px-1 min-h-6 text-[12px] leading-4 ' +
+  `${TOKEN_CLASS.faultButtonBorder} ${TOKEN_CLASS.faultButtonHover} ` +
+  TOKEN_CLASS.faultButtonFocus;
 
 export class FaultBoundary extends Component<FaultBoundaryProps, FaultBoundaryState> {
   constructor(props: FaultBoundaryProps) {
@@ -318,7 +327,7 @@ export class FaultBoundary extends Component<FaultBoundaryProps, FaultBoundarySt
       // row would flood the assistive-technology queue during a scroll. The row
       // recovers when recycling remounts it, or when `resetKey` changes.
       return (
-        <span data-fault-boundary="row" className="text-neutral-700 dark:text-neutral-300">
+        <span data-fault-boundary="row" className={TOKEN_CLASS.faultRowText}>
           {boundaryLabel} could not be displayed. {message}
         </span>
       );

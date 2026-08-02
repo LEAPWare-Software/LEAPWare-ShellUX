@@ -555,7 +555,8 @@ deliberate, enforced constraint, not a stylistic preference.
 |---|---|
 | Padding | `p-1` to `p-3`. Nothing looser in shell chrome. |
 | Base type | 11px – 13px. |
-| Borders | 1px. `border-neutral-200` light, `border-neutral-800` dark. |
+| Borders | 1px, `border-border-default`. One declaration, every theme. |
+| Colour | Always a semantic token. No palette literal, no `dark:` variant. |
 | Pane 1 | 240px default, collapses to a 48px icon track. |
 | Pane 2 | 360px default. Virtualized by the extension's own view, with the host's `VirtualizedList`. |
 | Pane 3 | Flex. Own header, own scroll container, utility drawer slot. |
@@ -695,11 +696,23 @@ that eight specific, reproducible defects that had been found are no longer pres
   failed 4.5:1 in dark mode, selection shown by fill alone, dividers too faint to
   read as controls, and rows below a 24px minimum. *Tests:*
   `src/components/__tests__/ShellLayout.test.tsx` — the whole of "ShellLayout —
-  contrast and target size", including "gives every muted body string a dark-mode
-  value that clears 4.5:1", "carries the selected navigation state on a rule and a
-  weight, not only a fill", "draws the dividers dark enough to read as controls rather
-  than as pane borders", "gives every navigation row a 24px minimum height" and "gives
-  every ribbon control a 24px minimum height".
+  contrast and target size", including "routes every muted body string through one
+  token instead of a per-theme patch", "carries the selected navigation state on a
+  rule and a weight, not only a fill", "draws the dividers from the control tier
+  rather than from the border tier", "gives every navigation row a 24px minimum
+  height" and "gives every ribbon control a 24px minimum height".
+
+  The first and third titles were renamed when the colours became design tokens,
+  and the rename is the finding rather than a tidy-up: the muted-text case named a
+  **dark-mode value**, and there is no longer a per-theme value for it to name —
+  `--text-muted` resolves per theme and clears 4.5:1 on all eight surfaces, so the
+  hand-written override beside every muted string is gone. What each case can
+  still prove in jsdom is structural, and the titles now say so. **The ratio half
+  moved to a lane that can measure it**: `npm run tokens:check` re-measures every
+  declared pair against the shipped stylesheet, and `e2e/theme.spec.ts` — "clears
+  the declared contrast ratios on rendered pixels in the light (the default)
+  theme" and "keeps muted body text above 4.5:1 on the pane it is drawn on, in
+  every theme" — computes the ratio from the colours a browser actually painted.
 - A badge count folded a **bare digit into the button's accessible name**, and
   dividers were not reported as vertical separators. *Tests:* same file — "names the
   badge count instead of folding a bare digit into the button name" and "reports every
@@ -769,13 +782,21 @@ and it is currently contradicted by the design system in specific, concrete
 ways:
 
 - **Contrast, 1.4.6 Contrast (Enhanced).** AAA requires a 7:1 contrast ratio for
-  text. The specified border token `border-neutral-200` on a white background is
-  roughly **1.2:1**. That is not a near miss; it is an order of magnitude away
-  from AAA and it also sits below the 3:1 AA threshold for non-text UI
-  boundaries. Borders in this system are decorative separators, and any boundary
-  that must be *perceived* to be operated — a pane divider, a focus ring, a
-  control edge — needs a stronger token than `neutral-200`. Resolving that is AA
-  work, and it is open.
+  text. **The AA half of this is now closed and the AAA half is not.** The border
+  token was `border-neutral-200`, roughly **1.2:1** on white — not a near miss
+  but an order of magnitude from AAA, and below the 3:1 AA threshold for non-text
+  UI boundaries as well. `--border-default` replaces it at **3.95:1** on the pane,
+  and the boundaries that must be *perceived* to be operated each got a token
+  chosen for that job: `--control-divider` at 5.94:1 on the app background for
+  the pane divider, `--focus-ring` at 6.41:1 on its offset, `--border-selected`
+  for the selection rule. Measured across three themes by
+  `npm run tokens:check`, and measured again on rendered pixels by
+  `e2e/theme.spec.ts`.
+
+  **This made the shell visibly heavier, and that was the point.** CHANGELOG.md
+  announces it. What remains open is AAA itself: 7:1 for text is met by
+  `--text-primary` and not by `--text-muted`, which is specified at 4.5:1 across
+  all eight surfaces rather than at 7:1 on one.
 - **Visual presentation, 1.4.8.** AAA calls for user-adjustable line spacing of
   at least 1.5× and block spacing of 2.25×, plus text blocks no wider than 80
   characters. A high-density shell built on `p-1`–`p-3` padding and 11px–13px
@@ -785,8 +806,9 @@ ways:
   icon track can accommodate this; 11px-type ribbon actions at `p-1` cannot,
   without redesigning the ribbon.
 
-Anyone who tells you a `border-neutral-200`-on-white interface is WCAG 2.2 AAA
-compliant is mistaken. This project does not make that claim.
+Anyone who tells you a 1.2:1-hairline interface is WCAG 2.2 AAA compliant is
+mistaken. This project has never made that claim, and clearing the 3:1 AA
+boundary threshold does not bring it any closer to making one.
 
 ---
 

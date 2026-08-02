@@ -1,14 +1,25 @@
 # The design-token source of truth
 
 This directory is the **source** for every colour, radius, shadow, duration and
-dimension in LEAPWare-ShellUX. Nothing here is wired into the running shell yet.
+dimension in LEAPWare-ShellUX.
 
-> **Nothing in `src/` reads any of this.** `tailwind.config.js` still has an
-> empty `theme.extend`, `src/index.css` still has no `:root`, and the shell still
-> paints ~115 raw `neutral-*` literals across 51 `dark:` variants. This directory
-> makes the wiring change mechanical and reviewable; it does not perform it. Do
-> not read a passing `check-contrast.mjs` run as a statement about the shipped
-> shell — see **Honest limits**, item 1.
+> **This is wired in, and the blockquote that used to live here is gone because
+> every clause of it became false.** It read: "Nothing in `src/` reads any of
+> this… the shell still paints ~115 raw `neutral-*` literals across 51 `dark:`
+> variants." The measured count today is **0 colour literals and 0 `dark:`
+> variants** in non-test `src/`, enforced by `src/__tests__/noRawColor.test.ts`,
+> which reports a planted palette class by file and line.
+>
+> `tailwind.config.js` maps every semantic token, `src/index.css` imports
+> `src/styles/tokens.generated.css`, and `scripts/check-tokens.mjs` runs inside
+> `npm run verify`.
+>
+> **What still must not be read into a passing `check-contrast.mjs` run.** It is a
+> statement about the pairs the manifest declares, in the three built-in themes,
+> as WCAG 2.x ratios and CIEDE2000 distances. It is not an accessibility audit, it
+> is not a conformance claim, and it says nothing about whether a token reached a
+> pixel — that second gap is what `e2e/theme.spec.ts` covers, because jsdom
+> applies no stylesheet and cannot. See **Honest limits**.
 
 ---
 
