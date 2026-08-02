@@ -170,6 +170,38 @@ import { PaneWrapper } from './PaneWrapper';
  *    a different width" and "persists no drawer state, so a reload opens with the
  *    drawer shut".
  *
+ *    **NOR THE SIZES PANE 1 COMING BACK PRODUCES, AND THAT OMISSION USED TO BE
+ *    MISSING.** Re-adding pane 1's `Panel` makes the library renormalise a
+ *    two-panel group into a three-panel one and report the result on every
+ *    panel. Panes 2 and 3 report a real previous size, so the collapsed refusal
+ *    above did not cover them — and what they reported was their share of the
+ *    width that excluded the 48px track, written into a three-pane record. The
+ *    layout the user had chosen was discarded by a collapse and a re-expansion
+ *    that changed nothing, and what replaced it did not divide the whole.
+ *    `persistPaneSize` refuses it now, by the one rule stated on that function.
+ *
+ *    **A WRITE IS THE WHOLE LAYOUT, NOT ONE SLOT.** One divider moves exactly
+ *    two panes, so patching only the panes that reported left the third holding
+ *    whatever it held last — for a shell nobody had resized, the engine's
+ *    1360px-reference default beside two percentages measured at this width, and
+ *    three numbers that did not add up. *Tests:* same file — "records one
+ *    three-pane layout, so the persisted percentages divide the whole", "leaves
+ *    the persisted layout exactly as it was across a collapse and a
+ *    re-expansion", "leaves it alone even when the collapsed group was resized
+ *    before pane 1 came back" and "records a whole layout for the first resize
+ *    after a shell that opened collapsed"; `e2e/shell-layout.spec.ts` — "leaves
+ *    the stored layout alone, so a reload still opens on the dragged widths".
+ *
+ *    **"A RECORD EXISTS" IS NOT "THE USER CHOSE A LAYOUT", AND CONFUSING THE TWO
+ *    THREW `PANE_PX` AWAY.** Any slot write produces a record, and a record that
+ *    is read back is a parsed object whatever it holds. See
+ *    `isEngineDefaultLayout` for the sentinel that used to infer the answer from
+ *    that object's identity, what it cost at a 1920px viewport, and what
+ *    comparing the three numbers instead trades away. *Tests:* same file —
+ *    "keeps the pixel intent after a write nobody made about the panes, at a
+ *    width where the two differ"; `e2e/shell-layout.spec.ts` — "survives a reload
+ *    whose stored record was written for another slot entirely".
+ *
  *    **THE READ IS A MOUNT-TIME SNAPSHOT, AND THAT IS WHAT MAKES `defaultSize`
  *    HONEST.** `restoredSizes` comes from a lazy `useState` initializer, so it is
  *    the engine's state as of this mount and never moves again. `defaultSize` is
@@ -204,9 +236,10 @@ import { PaneWrapper } from './PaneWrapper';
  *    change the library commits calls `onResize` on each panel — once per frame
  *    of a drag — and each of those is a `setSlot`; the engine holds them in one
  *    debounce window and performs a single `setItem`. The mount notification is
- *    skipped, because `onResize` reports `undefined` for the previous size
- *    exactly when the group is announcing its own initial layout rather than a
- *    change somebody made: a shell nobody has resized therefore writes nothing.
+ *    skipped, because `onResize` reports `undefined` for the previous size when
+ *    the group is announcing its own initial layout, and `undefined` is not a
+ *    size this shell ever saw — the same one rule that refuses the re-expansion
+ *    pass: a shell nobody has resized therefore writes nothing.
  *    *Tests:* same file — "coalesces a keyboard-driven resize into one storage
  *    write rather than one per frame" and "writes nothing at all for a mount
  *    nobody resized".
@@ -356,6 +389,36 @@ function clampPanePercent(value: number): number {
     HYDRATION_LIMITS.MIN_PANE_PERCENT,
     HYDRATION_LIMITS.MAX_PANE_PERCENT,
   );
+}
+
+/**
+ * Whether a restored record's pane sizes are the engine's own untouched
+ * defaults.
+ *
+ * BY VALUE, AND THE IDENTITY TEST THIS REPLACES WAS A FALSE SENTINEL. It read
+ * `restoredSizes !== DEFAULT_SHELL_STATE.paneSizes` and called the answer
+ * "somebody chose a layout". Identity only survives the paths that hand the one
+ * shared frozen default straight back — an absent or discarded record. A record
+ * that was PARSED gets a fresh `paneSizes` object whatever it holds, so a shell
+ * whose record exists only because the user collapsed pane 1, or opened an
+ * extension, answered "somebody chose a layout" for a record holding nothing but
+ * defaults, and `PANE_PX` was never consulted again on that machine. Comparing
+ * the three numbers is the fact the sentinel was reaching for.
+ *
+ * What that trades away, stated rather than glossed: a user who drags the panes
+ * to exactly the engine's default percentages and reloads gets the pixel intent
+ * for this width instead of those percentages back. The two are the same layout
+ * at the 1360px reference width `PANE_FALLBACK_PERCENT` was written for and
+ * differ elsewhere, so that user's reload can move the dividers. It is the
+ * narrower error of the two, and it needs a coincidence to reach.
+ *
+ * The keys come from the defaults themselves rather than from a list written
+ * here, so a fourth pane cannot be added to the record and quietly skipped, and
+ * `every` rather than a chain of `||` so there is one exit.
+ */
+function isEngineDefaultLayout(sizes: PaneSizes): boolean {
+  const defaults = DEFAULT_SHELL_STATE.paneSizes;
+  return (Object.keys(defaults) as PaneId[]).every((pane) => sizes[pane] === defaults[pane]);
 }
 
 interface ShellNavButtonProps {
@@ -729,11 +792,11 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // panel starts"; see decision 6 for why binding it live would feed the value
   // being dragged back in as the starting point.
   const [restoredSizes] = useState<PaneSizes>(() => engine.getState().paneSizes);
-  // Identity, not equality. Every discard path in the engine returns the one
-  // shared frozen `DEFAULT_SHELL_STATE`, and every restore and every write build
-  // a fresh record — so this is exactly "somebody chose a layout", and it stays
-  // true for a user who happens to have dragged back to the default numbers.
-  const hasRestoredLayout = restoredSizes !== DEFAULT_SHELL_STATE.paneSizes;
+  const hasRestoredLayout = !isEngineDefaultLayout(restoredSizes);
+
+  // The three-pane layout as the group last ANNOUNCED it, which is not the same
+  // fact as the layout this shell has persisted. See `persistPaneSize`.
+  const announcedLayout = useRef<Record<PaneId, number>>({ ...restoredSizes });
 
   // Whether a persisted foreground extension is still waiting to be restored.
   // Read once, at mount, and cleared by the effect below the moment the restore
@@ -774,29 +837,56 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   const activeId = active === null ? null : active.id;
 
   /**
-   * Record one pane's new size, or decide that this is not a size worth
-   * recording. See decision 6 in the banner for both refusals.
+   * Learn one pane's new size, and decide separately whether it is a size worth
+   * recording. See decision 6 in the banner for both halves.
    *
-   * `previousSize` is `undefined` exactly when the group is announcing its own
-   * initial layout, so a mount nobody has resized writes nothing at all.
+   * KNOWING THE LAYOUT AND RECORDING IT ARE TWO DIFFERENT THINGS, AND SPLITTING
+   * THEM IS WHAT MAKES THE RECORD A LAYOUT RATHER THAN A PILE OF SLOTS. One
+   * divider moves exactly two panes, so the third never reports and its slot
+   * keeps whatever it held — which, for a shell nobody had resized, is the
+   * engine's 1360px-reference default beside two percentages measured at THIS
+   * width. `announcedLayout` therefore takes every report the group makes about
+   * a three-pane group, including the announcements below that are refused, and
+   * a write sends all three panes at once.
+   *
+   * THE REFUSAL IS ONE RULE: a report whose `previousSize` is not the size this
+   * shell last saw for that pane did not come out of the layout this shell
+   * knows about, so it is not a change the user made to it. That covers both
+   * cases exactly, and the second is the one the identity test above used to
+   * miss:
+   *
+   *   - The group announcing its own initial layout reports `undefined`, which
+   *     is never a size — so a mount nobody resized writes nothing at all.
+   *   - Re-adding pane 1 after a collapse makes the library renormalise a
+   *     two-panel group into a three-panel one. Panes 2 and 3 report a real
+   *     previous size, but it is their share of a width that EXCLUDED the 48px
+   *     track — a ratio against a different denominator, and one this shell
+   *     deliberately never learned. Writing it discarded the layout the user had
+   *     actually chosen and left a record whose percentages did not divide the
+   *     whole.
+   *
+   * The collapsed group is refused before either, and refused from LEARNING as
+   * well: those two panes divide the different denominator, so the numbers are
+   * not this layout's at all.
    */
   const persistPaneSize = useCallback(
     (pane: PaneId, size: number, previousSize: number | undefined): void => {
-      if (previousSize === undefined || isNavCollapsed) {
+      if (isNavCollapsed) {
         return;
       }
-      // Re-read rather than closed over: three panels report their new sizes one
-      // after another inside one layout pass, and each has to build on the one
-      // before it rather than on the record as it stood when this callback was
-      // created.
-      const current = engine.getState().paneSizes;
-      const next: Record<PaneId, number> = {
-        pane1: current.pane1,
-        pane2: current.pane2,
-        pane3: current.pane3,
-      };
-      next[pane] = clampPanePercent(size);
-      engine.setSlot('paneSizes', next);
+      const known = announcedLayout.current;
+      const isKnownChange = previousSize === known[pane];
+      const next: Record<PaneId, number> = { ...known };
+      next[pane] = size;
+      announcedLayout.current = next;
+      if (!isKnownChange) {
+        return;
+      }
+      engine.setSlot('paneSizes', {
+        pane1: clampPanePercent(next.pane1),
+        pane2: clampPanePercent(next.pane2),
+        pane3: clampPanePercent(next.pane3),
+      });
     },
     [engine, isNavCollapsed],
   );

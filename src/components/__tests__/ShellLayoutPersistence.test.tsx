@@ -337,6 +337,37 @@ describe('ShellLayout — restoring a persisted layout', () => {
     expect(panelSizes()).toEqual([40, 24, 36]);
   });
 
+  it('keeps the pixel intent after a write nobody made about the panes, at a width where the two differ', async () => {
+    // 1920px, because that is where the engine's default record and the pixel
+    // table disagree loudest: 240px of 1920px is 12.5%, and the record's own
+    // default pane 1 is 18% — 345.6px, 105.6px wider than the intent.
+    measureAt(1920);
+    const user = userEvent.setup();
+    const recorder = memoryStorage();
+    const first = createHydrationEngine({ storage: recorder.storage });
+
+    const view = render(<Harness engine={first} blueprints={[makeBlueprint()]} />);
+    // Activating an extension writes the foreground slot and nothing else. The
+    // panes are untouched, so the record it produces still holds the defaults.
+    await user.click(await screen.findByRole('button', { name: 'Sample Extension' }));
+    act(() => {
+      first.flush();
+    });
+    expect(first.getState().paneSizes).toBe(DEFAULT_SHELL_STATE.paneSizes);
+    expect(recorder.raw()).not.toBeNull();
+    view.unmount();
+    recorded.renders.length = 0;
+
+    // A fresh engine over the same entry: a reload. The record is restored, but
+    // nobody ever chose a layout, so the pixel intent is still what should open.
+    const second = createHydrationEngine({ storage: recorder.storage });
+    expect(second.getLastLoad()).toBe('restored');
+    render(<Harness engine={second} blueprints={[makeBlueprint()]} />);
+
+    expect(defaultSizesFor('pane1')[0]).toBe(12.5);
+    expect(defaultSizesFor('pane1')).not.toContain(DEFAULT_SHELL_STATE.paneSizes.pane1);
+  });
+
   it('discards a hand-edited record whose pane size is outside the engine band, and renders the measured defaults', () => {
     measureAt(1000);
     // 95% is outside `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]`. The collapsed flag
@@ -453,6 +484,90 @@ describe('ShellLayout — writing a persisted layout', () => {
     await narrowFirstPane(user);
 
     expect(engine.getState().paneSizes).toBe(beforeCollapse);
+  });
+
+  it('records one three-pane layout, so the persisted percentages divide the whole', async () => {
+    measureAt(1000);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({ storage: memoryStorage().storage });
+
+    render(<Harness engine={engine} />);
+    // One divider moves TWO panes and leaves the third alone. A record patched
+    // one reported slot at a time therefore keeps whatever the untouched slot
+    // held — which, for a shell nobody had resized yet, is the engine's own
+    // 1360px-reference default rather than anything this width produced.
+    await narrowFirstPane(user);
+
+    const stored = engine.getState().paneSizes;
+    expect([stored.pane1, stored.pane2, stored.pane3]).toEqual(panelSizes());
+    expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
+  });
+
+  it('leaves the persisted layout exactly as it was across a collapse and a re-expansion', async () => {
+    measureAt(1000);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({ storage: memoryStorage().storage });
+
+    render(<Harness engine={engine} />);
+    await narrowFirstPane(user);
+    const chosen = engine.getState().paneSizes;
+    expect(chosen).not.toBe(DEFAULT_SHELL_STATE.paneSizes);
+
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
+
+    // Re-adding pane 1 makes the library re-normalise a group that had two
+    // panels into one that has three, and every panel reports the result. None
+    // of it is a size the user chose, so identity: not one slot moved.
+    expect(engine.getState().paneSizes).toBe(chosen);
+  });
+
+  it('leaves it alone even when the collapsed group was resized before pane 1 came back', async () => {
+    measureAt(1000);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({ storage: memoryStorage().storage });
+
+    render(<Harness engine={engine} />);
+    await narrowFirstPane(user);
+    const chosen = engine.getState().paneSizes;
+
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    // Two more layouts while collapsed, which is what drives the LIBRARY's idea
+    // of each pane's previous size further from the last one this shell saw.
+    // The refusal is stated as "a previous size this shell never saw", so this
+    // is the case that says the two do not have to be one step apart.
+    await nudgeFirstDivider(user, '{ArrowLeft}{ArrowRight}');
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
+
+    expect(engine.getState().paneSizes).toBe(chosen);
+  });
+
+  it('records a whole layout for the first resize after a shell that opened collapsed', async () => {
+    // The path where pane 1 has never once reported inside this mount: its
+    // panel does not exist while the track is showing, so until the user
+    // expands, the restored record is the only thing the shell knows about it.
+    //
+    // THE SEED HAS TO BE ONE THIS WIDTH CORRECTS, or this case cannot fail. A
+    // shell that opens collapsed mounts panes 1 and 2 at their RESTORED sizes
+    // when it expands, so for a restorable record the layout on screen and the
+    // record agree by construction and any bookkeeping at all looks right.
+    // 88/5/7 is legal for the engine and illegal at 1000px — clamped to 40/24
+    // and a 36 remainder — so the two disagree and the bookkeeping shows.
+    measureAt(1000);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({
+      storage: memoryStorage(
+        record({ paneSizes: { pane1: 88, pane2: 5, pane3: 7 }, isPane1Collapsed: true }),
+      ).storage,
+    });
+
+    render(<Harness engine={engine} />);
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
+    await narrowFirstPane(user);
+
+    const stored = engine.getState().paneSizes;
+    expect([stored.pane1, stored.pane2, stored.pane3]).toEqual(panelSizes());
+    expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
   });
 
   it('persists the pane-1 collapsed flag, and a second shell over the same storage opens collapsed', async () => {

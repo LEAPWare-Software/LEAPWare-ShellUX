@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import {
   PERSIST_DEBOUNCE_MS,
   STORAGE_KEY,
@@ -227,5 +228,130 @@ test.describe('layout persistence across a real reload', () => {
     await expect(
       page.getByRole('region', { name: 'Detail' }).getByText('Inventory Database').first(),
     ).toBeVisible();
+  });
+});
+
+/**
+ * The shape of the one entry the shell writes, as far as these two cases read
+ * it. Narrower than the engine's own type on purpose: this lane asserts against
+ * the bytes in the browser's storage, not against a type the shell shares with
+ * itself.
+ */
+interface StoredRecord {
+  readonly paneSizes: { readonly pane1: number; readonly pane2: number; readonly pane3: number };
+  readonly isPane1Collapsed: boolean;
+}
+
+/** The stored record, parsed, or a failure naming the entry that was missing. */
+async function storedRecord(page: Page): Promise<StoredRecord> {
+  const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
+  expect(raw, `nothing is stored under ${STORAGE_KEY}`).not.toBeNull();
+  return JSON.parse(raw as string) as StoredRecord;
+}
+
+/**
+ * ============================================================================
+ * TWO DATA-DESTROYING DEFECTS, AS SPECIFICATIONS RATHER THAN AS UNIT TESTS.
+ * ============================================================================
+ * Both were found and fixed with jsdom cases in
+ * `src/components/__tests__/ShellLayoutPersistence.test.tsx`, and both are
+ * restated here because these two are BEHAVIOURAL statements about a user's
+ * saved layout surviving a real reload — the kind that should outlive whatever
+ * `ShellLayout` is rewritten into, while a test that mocks `Panel` and reads a
+ * render log cannot.
+ *
+ * Each also gets something the jsdom lane cannot give it. The first drags with a
+ * real pointer and measures real pane rectangles either side of a real document
+ * reload. The second needs a viewport wide enough for the pixel intent and the
+ * engine's percentage defaults to disagree loudly, and jsdom has no viewport at
+ * all.
+ * ============================================================================
+ */
+
+test.describe('a collapse and a re-expansion of pane 1', () => {
+  test('leaves the stored layout alone, so a reload still opens on the dragged widths', async ({
+    page,
+  }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+
+    const handle = page.getByRole('separator', { name: 'Resize the navigation pane' });
+    const { sawDragState } = await dragHorizontally(page, handle, 120);
+    expect(sawDragState, 'the resize never actually happened, so nothing was persisted').toBe(true);
+
+    const dragged = {
+      pane1: await paneWidth(page, 'pane1'),
+      pane2: await paneWidth(page, 'pane2'),
+    };
+    await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
+    const chosen = await storedRecord(page);
+
+    await page.getByRole('button', { name: 'Collapse navigation' }).click();
+    await expect(page.locator('[data-shell-region="nav-track"]')).toBeVisible();
+    await page.getByRole('button', { name: 'Expand navigation' }).click();
+    await expect(page.locator('[data-shell-region="nav-track"]')).toHaveCount(0);
+    await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
+
+    // Re-adding pane 1 makes the library renormalise a two-panel group into a
+    // three-panel one, and every panel reports the result. None of it is a size
+    // the user chose, and the record is where that distinction has to hold.
+    const after = await storedRecord(page);
+    expect(after.isPane1Collapsed).toBe(false);
+    expect(after.paneSizes).toEqual(chosen.paneSizes);
+
+    // And what survived is a layout rather than a pile of slots. One divider
+    // moves two panes and leaves the third alone, so a record patched one
+    // reported pane at a time keeps a third number that belongs to a width this
+    // one never had, and the three stop dividing the whole.
+    const total = after.paneSizes.pane1 + after.paneSizes.pane2 + after.paneSizes.pane3;
+    expect(total, `the stored percentages are ${JSON.stringify(after.paneSizes)}`).toBeCloseTo(
+      100,
+      3,
+    );
+
+    // The half a stored record cannot prove on its own: the widths really come
+    // back, through a fresh document and the browser's own storage.
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Navigation' })).toBeVisible();
+    expect(await paneWidth(page, 'pane1')).toBeCloseTo(dragged.pane1, 0);
+    expect(await paneWidth(page, 'pane2')).toBeCloseTo(dragged.pane2, 0);
+  });
+});
+
+test.describe('the 240px navigation intent at a wide viewport', () => {
+  // 1920px is where the pixel table and the engine's percentage defaults
+  // disagree loudest: 240px is 12.5% of it, and the record's own default pane 1
+  // is 18%, which is 345.6px. At Playwright's usual 1280 the two are 240 and
+  // 230.4 and this case would prove almost nothing.
+  test.use({ viewport: { width: 1920, height: 900 } });
+
+  test('survives a reload whose stored record was written for another slot entirely', async ({
+    page,
+  }) => {
+    await openShell(page);
+    const opened = await paneWidth(page, 'pane1');
+    // A BAND RATHER THAN 240 EXACTLY, AND THE REASON IS NOT SLOPPINESS. The 12.5%
+    // the shell computes from `PANE_PX.navDefault` is 12.5% of what the panels
+    // divide, which is the group less its two 4px dividers — so the pane measures
+    // 238.8px here, not 240. Measured, not guessed. The number that matters is
+    // the one this is NOT: the record's own 18% default is 344px at this width,
+    // nowhere near the band, so this cannot pass for the wrong reason.
+    expect(opened, 'the navigation pane does not open on its 240px intent').toBeGreaterThan(230);
+    expect(opened, 'the navigation pane does not open on its 240px intent').toBeLessThan(250);
+
+    // Activating an extension writes the foreground slot. Nobody has touched a
+    // divider, so the pane sizes in the record it produces are the engine's
+    // untouched defaults — and a shell that reads "a record exists" as "the user
+    // chose a layout" never consults its own pixel table again on this machine.
+    await activateExtension(page, 'Mail');
+    await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
+    await storedRecord(page);
+
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Navigation' })).toBeVisible();
+
+    const restored = await paneWidth(page, 'pane1');
+    expect(restored, 'the reload moved a divider nobody dragged').toBeCloseTo(opened, 0);
+    expect(restored, 'the navigation pane no longer opens on its 240px intent').toBeLessThan(250);
   });
 });

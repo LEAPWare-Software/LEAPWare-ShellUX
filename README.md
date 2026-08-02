@@ -34,8 +34,8 @@ What that means for a reader:
 | Area | State |
 |---|---|
 | IoC extension registry (ISSUE-001) | **Landed.** `src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`, `src/core/ActivationContext.tsx`, `src/core/hotkeys.ts`, under a 100% coverage gate |
-| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 120 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx`, `RibbonToolbar.test.tsx`, `ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 28 of which are the ISSUE-003 persistence and issue-#12 badge cases, all inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
-| State hydration and persistence (ISSUE-003) | **Engine implemented, green, and now consumed by the shell — not yet merged.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`, with 146 tests in `src/core/services/__tests__/hydrationEngine.test.ts` and `src/hooks/__tests__/useLocalStorageState.test.tsx`, plus 20 tests in `src/components/__tests__/ShellLayoutPersistence.test.tsx` driving the assembled shell over a real storage, inside the same 100% coverage gate. `ShellLayout.tsx` restores and writes **three** slots — pane sizes, the pane-1 collapsed flag and the foreground extension id — and the utility drawer is deliberately not one of them |
+| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 125 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx`, `RibbonToolbar.test.tsx`, `ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 33 of which are the ISSUE-003 persistence and issue-#12 badge cases, all inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
+| State hydration and persistence (ISSUE-003) | **Engine implemented, green, and now consumed by the shell — not yet merged.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`, with 146 tests in `src/core/services/__tests__/hydrationEngine.test.ts` and `src/hooks/__tests__/useLocalStorageState.test.tsx`, plus 25 tests in `src/components/__tests__/ShellLayoutPersistence.test.tsx` driving the assembled shell over a real storage, inside the same 100% coverage gate. `ShellLayout.tsx` restores and writes **three** slots — pane sizes, the pane-1 collapsed flag and the foreground extension id — and the utility drawer is deliberately not one of them |
 | Row virtualizer and fault boundaries (ISSUE-004) | **Implemented and green, not yet merged.** `src/components/error/FaultBoundary.tsx`, `src/components/shared/VirtualizedList.tsx` and its pure arithmetic in `src/components/shared/virtualWindow.ts`, with 76 tests in `src/components/__tests__/FaultBoundary.test.tsx` and `src/components/__tests__/VirtualizedList.test.tsx`, inside the same 100% coverage gate. The virtualizer is a component an extension's own Pane 2 view renders — the host does not window your pane for you |
 | Verification remotes and integration suite (ISSUE-005) | **Implemented and green, not yet merged.** The two verification remotes `src/mocks/MailPlugin.tsx` and `src/mocks/DatabasePlugin.tsx`, driven by 60 tests in `src/__tests__/IntegrationSuite.test.tsx` — the first place in this repository where an operational plug-in is mounted at all. It runs the assembled shell, not a double of it, and nine of its cases are `PINS A KNOWN LIMIT` characterisations of behaviour the architecture has accepted rather than prevented. It is outside the coverage `include` list on purpose: it exercises code the gate already covers, and adding an integration file to a 100% gate measures nothing new. See [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 
@@ -77,14 +77,30 @@ the opposite assumption:**
   foreground handover by design, and the width is a fact about this window rather
   than about you. Pane sizes changed *while pane 1 is collapsed* are also not
   written: the two panes then in the group divide a width that excludes the 48px
-  track, so their percentages are a ratio against a different denominator.
+  track, so their percentages are a ratio against a different denominator. Nor
+  are the sizes that come out of pane 1 coming *back*: re-adding it makes the
+  layout library renormalise a two-panel group into a three-panel one, and none
+  of the numbers that fall out of that is a width you chose — writing them used
+  to discard the layout you had, over a collapse and a re-expansion that changed
+  nothing. What is written is always all three panes at once, so the record is a
+  layout rather than three slots patched at different moments. And **a record
+  existing is not the same fact as you having chosen a layout**: one written
+  because you collapsed pane 1 or opened an extension carries the engine's
+  default pane sizes, and the shell keeps its own 240px navigation intent for
+  those rather than reading them back as your choice.
   *Tests:* `src/components/__tests__/ShellLayoutPersistence.test.tsx` — "persists a
   pane size the user changed, and a second shell over the same storage opens into
   it", "persists the pane-1 collapsed flag, and a second shell over the same
   storage opens collapsed", "brings the persisted extension back to the foreground
   once it registers", "persists no drawer state, so a reload opens with the drawer
-  shut" and "does not persist a pane size while pane 1 is collapsed, because the
-  two panes divide a different width".
+  shut", "does not persist a pane size while pane 1 is collapsed, because the
+  two panes divide a different width", "records one three-pane layout, so the
+  persisted percentages divide the whole", "leaves the persisted layout exactly as
+  it was across a collapse and a re-expansion" and "keeps the pixel intent after a
+  write nobody made about the panes, at a width where the two differ";
+  `e2e/shell-layout.spec.ts` — "leaves the stored layout alone, so a reload still
+  opens on the dragged widths" and "survives a reload whose stored record was
+  written for another slot entirely".
 - **A runtime badge write is now rendered, and it was not.** `IShellAPI.setBadgeCount`
   has been implemented and validated since ISSUE-001, and until issue #12 the value
   it wrote reached no renderer: pane 1 drew `NavigationNode.badgeCount` off the
