@@ -125,12 +125,36 @@ part of clause 7 for free.
   to find out later.
 - **A Rust toolchain is local setup, and ADR-0002 forbids local setup.** The
   acceptance test is `npm ci && npm run verify` with no local setup and no edits.
-  Electron's binary is downloaded by `npm ci`, so it is inside the sentence, and
-  §7 of the pivot plan already argues that the desktop *packaging* lane sits
-  outside `verify` for the same reason Playwright's browser download does. A Rust
-  toolchain sits outside `npm ci` entirely, is installed per platform by a
+  A Rust toolchain sits outside `npm ci` entirely, is installed per platform by a
   different mechanism on each, and would have to be added to the README's
   Getting Started — which is the acceptance test, written out.
+
+  > **CORRECTION, 2026-08-02, on wiring the dependency up.** This clause used to
+  > continue: "Electron's binary is downloaded by `npm ci`, so it is inside the
+  > sentence." **That is false for Electron 43.** The published package declares
+  > `"scripts": {}` — there is no `postinstall` — and ships an `install-electron`
+  > bin instead, so `npm install` completes in seconds leaving
+  > `node_modules/electron` at 3.6 MB with no `dist/`. Verified twice: a
+  > `npm rebuild electron --foreground-scripts` reported success and restored
+  > nothing. `ELECTRON_SKIP_BINARY_DOWNLOAD` is likewise read by nothing in the
+  > installed tree.
+  >
+  > **The conclusion survives and the reasoning changes.** Electron's binary is
+  > *outside* `npm ci` too — so on this axis the two runtimes are closer than this
+  > clause claimed, and the honest distinction is narrower: Electron's fetch is one
+  > `npm` bin invocation on every platform, where a Rust toolchain is a different
+  > installer per platform plus a README change. The three clauses above —
+  > `WebContentsView` stability, one rendering engine across Windows and macOS, and
+  > the desktop test lane — are what actually carry the decision, and none of them
+  > depends on this one.
+  >
+  > **What it costs in practice**, and why the fix is a script rather than a
+  > `postinstall`: `npm ci` alone leaves a fresh clone unable to launch a window,
+  > which is precisely issue #39's failure mode. So `dev:desktop` runs
+  > `install-electron` first, and `install.js` exits immediately when the binary is
+  > already present. A root `postinstall` was rejected: with the opt-out gone it
+  > would impose an unavoidable ~120 MB on the Linux `verify` leg, which has no
+  > desktop lane and never launches a window.
 - **The desktop test lane exists on one side and not the other.** Playwright's
   `_electron.launch()` is a supported harness for driving a real Electron
   application on Windows and macOS, and the six assertions in the plan's
@@ -374,10 +398,18 @@ Phase 7: the `WebContentsView`s must not set a material of their own.
 
 **What it costs.**
 
-- **Roughly 120 MB downloaded by `npm ci` on every fresh clone and every CI
-  leg.** Mitigated on the Linux `verify` leg by `ELECTRON_SKIP_BINARY_DOWNLOAD`,
-  which is itself an ADR-0002 clause 6 event and is declared in
-  `docs/signing.md`.
+- **Roughly 120 MB fetched before a window can open — but NOT by `npm ci`.**
+  This consequence was written the wrong way round and is corrected here rather
+  than quietly edited. Electron 43 has no `postinstall`, so `npm ci` downloads
+  nothing and `ELECTRON_SKIP_BINARY_DOWNLOAD` mitigates nothing; both facts are
+  recorded against the clause they falsify above and in `docs/signing.md`.
+  The fetch is one `install-electron` invocation, run by `npm run dev:desktop`
+  and skipped when the binary is present. **The cost lands on whoever opens a
+  window, and on nobody else** — which is better than the arrangement this bullet
+  described, and was arrived at by discovering the bullet was false.
+  The residual cost is real and is the one to watch: `npm ci` alone leaves a
+  fresh clone unable to launch, so the gap between "the suite is green" and "the
+  application runs" is one command wide and has to stay documented in the README.
 - **Installer size and per-renderer memory**, which a system-webview runtime
   would not pay. Accepted under force 1.
 - **A hand-written IPC permission surface**, which clause 2 concedes Tauri would

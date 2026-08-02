@@ -155,7 +155,16 @@ const TEST_MODIFIERS = new Set([
 ]);
 
 /** Directories a walk never descends into. */
-const SKIPPED_DIRECTORIES = new Set(['node_modules', '.git', 'dist', 'coverage', 'build', '.vite', '.next']);
+const SKIPPED_DIRECTORIES = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'dist-electron',
+  'coverage',
+  'build',
+  '.vite',
+  '.next',
+]);
 
 const TEST_FILE = /\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs|cjs)$/;
 const PROSE_FILE = /\.(?:md|ts|tsx)$/;

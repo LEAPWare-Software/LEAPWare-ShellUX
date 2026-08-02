@@ -5,7 +5,12 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules'] },
+  // `dist-electron` joins `dist` for the same reason `dist` is here: it is
+  // compiler output, not source. `npm run build:desktop` writes emitted `.js` and
+  // `.js.map` into it, and `npm run lint` runs with `--max-warnings 0` — so
+  // whether a generated artifact happens to trip a rule today is not a question
+  // this repository should be leaving to chance on a lane it does not own.
+  { ignores: ['dist', 'dist-electron', 'coverage', 'node_modules'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
@@ -44,6 +49,23 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
+      globals: globals.node,
+    },
+  },
+  // -------------------------------------------------------------------------
+  // The native host. TypeScript, so the `**/*.{ts,tsx}` block above already
+  // matches it and supplies its rules — but that block also supplies
+  // `globals.browser`, which is the wrong environment for a main process. These
+  // files run in Electron's main process under Node: there is no `document`, no
+  // `window` and no `localStorage`, and `process` is a global rather than an
+  // undeclared name. `electron/tsconfig.json` makes exactly the same statement to
+  // the compiler with `lib: ["ES2023"]` and `types: ["node"]`, and this block is
+  // that statement made to the linter. Overriding `globals` alone is enough; the
+  // rules from the block above are inherited and are not restated here.
+  // -------------------------------------------------------------------------
+  {
+    files: ['electron/**/*.ts'],
+    languageOptions: {
       globals: globals.node,
     },
   },
