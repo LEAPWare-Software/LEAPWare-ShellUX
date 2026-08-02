@@ -11,7 +11,15 @@ import type { Locator, Page } from '@playwright/test';
  * produce and therefore what no helper under `src/` can be reused for.
  */
 
-/** The fixture document. See `src/dev/main.dev.tsx` for why it is not `/`. */
+/**
+ * The fixture document, by name.
+ *
+ * The dev server now serves this same fixture at `/` too — see `vite.config.ts`
+ * and `e2e/dev-routing.spec.ts`. This lane keeps navigating to the explicit path
+ * on purpose: a helper that went through `/` would make every spec in this
+ * directory depend on the routing middleware, so a broken rewrite would present
+ * as thirty unrelated failures instead of the three cases written to catch it.
+ */
 export const FIXTURE_PATH = '/dev.html';
 
 /** The one entry `HydrationEngine` writes, and its debounce window. */

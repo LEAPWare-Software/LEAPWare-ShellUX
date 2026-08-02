@@ -235,11 +235,14 @@ project actually cares about, not before.
 
 **The fixture.** `src/App.tsx` registers no extension, so the production shell
 has nothing for a browser test to drive. `dev.html` and `src/dev/` mount the same
-shell with the two verification remotes in `src/mocks/` registered. It is
-dev-server-only by construction — Vite's build input is `index.html` alone, so
-`dev.html` is never emitted into `dist/` — and it uses **no environment
-variable**, because ADR-0002 forbids one without a working default. What the
-production bundle renders is unchanged.
+shell with the two verification remotes in `src/mocks/` registered, and the dev
+server serves that fixture at **`/`** as well as at `/dev.html` — a middleware in
+`vite.config.ts` rewrites the one path. It is dev-server-only by construction
+twice over: the middleware is installed under `configureServer`, which `vite
+build` never calls, and Vite's build input is `index.html` alone, so `dev.html` is
+never emitted into `dist/`. It uses **no environment variable**, because ADR-0002
+forbids one without a working default. What the production bundle renders is
+unchanged, and `/index.html` still serves it on the dev server.
 
 **When you add a case here, make it one jsdom could not have made.** Assert
 measured pixels, real clipping, a real pointer, or a real reload. A case that

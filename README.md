@@ -293,18 +293,28 @@ npm run dev
 ```
 
 `npm run dev` starts the Vite dev server on its default port, 5173, and prints the
-URL. What renders today is the real three-pane shell with an **empty registry**:
-`src/App.tsx` registers no extensions, so you get the ribbon's host actions, a
-resizable and collapsible pane 1 with nothing in it, and two empty panes. See
-Project Status above.
+URL. Opening it renders the three-pane shell **with ISSUE-005's two verification
+remotes from `src/mocks/` registered** — a navigation tree with entries in it,
+rows to select, contextual ribbon actions, and live badges. That is the working
+demo, and it is what the browser test lane drives.
 
-To see the shell with something in it, open **`/dev.html`** on that same dev
-server. It mounts the identical shell with ISSUE-005's two verification remotes
-from `src/mocks/` registered, and it is what the browser test lane drives. It is
-a **dev-server-only fixture**: Vite's production input is `index.html` alone, so
-`dev.html` is never emitted into `dist/`, and what the production bundle renders
-is unchanged by its existence. There is no flag to set and no environment
-variable — see `src/dev/DevShell.tsx`.
+This is a **dev-server-only rewrite, not a change to what ships.** A middleware in
+`vite.config.ts` resolves `/` to `dev.html`; it is installed under
+`configureServer`, which `vite build` never calls, and `build.rollupOptions.input`
+is still at its default of `index.html` alone. So `dist/` contains exactly what it
+contained before, and `dev.html`, `src/dev/` and `src/mocks/` remain unreachable
+from anything a user installs. There is no flag to set and no environment
+variable — ADR-0002 forbids one without a working default; see
+`src/dev/DevShell.tsx`.
+
+**The production shell is still reachable by name.** Open **`/index.html`** on the
+same dev server for the real composition root: `src/App.tsx` registers no
+extensions, so you get the ribbon's host actions, a resizable and collapsible pane
+1 with nothing in it, and two empty panes. See Project Status above.
+*Tests:* `e2e/dev-routing.spec.ts` — "serves the fixture shell at the bare root,
+with both remotes registered", "keeps the URL at / rather than redirecting the
+browser to /dev.html" and "leaves /index.html on the production shell, whose
+registry is empty".
 
 ### Scripts
 

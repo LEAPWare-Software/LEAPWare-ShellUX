@@ -44,10 +44,57 @@ Verified directly against the repository and the worktrees at the time of writin
 - **Until this merges, the quality doctrine lives only in §9 of this file.** Neither file
   exists on `origin/main` — re-checked.
 
-### Route the working demo to `/` — **not started, no issue, highest value-to-effort**
+### THE DIRECTION CHANGED ON 2026-08-02. Read this before §4.
 
-See §6.3. `src/dev/DevShell.tsx` is now committed but wired to `dev.html`, so
-`npm run dev` still renders an empty shell. **The CPO's top recommendation is half done.**
+The owner has redirected the project: **ShellUX must become a native host application**,
+must **leapfrog** rather than reproduce the Outlook three-pane standard, must support
+**graphical visualization in all three panes**, must make **pane 3 both a visualization
+surface and an input surface**, must be **visually stunning with multiple themes**, and
+must **auto-update to a new release**.
+
+The approved plan is a nine-phase evolution of this codebase, not a rewrite. Decisions
+already taken, which are **not** open for re-litigation:
+
+| Decision | Answer |
+|---|---|
+| Runtime | **Electron 43.x**. Rejected Tauri: its multi-webview-in-one-window API is behind an `unstable` flag, and Win+macOS under Tauri means two rendering engines (WebView2/Blink, WKWebView) for a graphics-heavy app |
+| Targets | Windows 11 primary, macOS. **No Linux requirement** |
+| Panes | Their own `WebContentsView` processes — **but see the correction below** |
+| Ribbon | **Deleted.** One command registry with four views: a 32px context bar, a browsable Cmd-K palette, a selection-triggered floating toolbar, a docked omnibox composer |
+| Third parties | Still undecided (§4 stands) → the isolation boundary must stay swappable |
+
+**A correction that matters, because the word "isolation" was doing unearned work.**
+`ExtensionViews` declares `pane2` and `pane3` on ONE blueprint and `ActiveExtension`
+carries one blueprint, so **panes 2 and 3 are always the same extension**. Splitting per
+pane puts one extension in two processes and yields **zero** boundary between different
+extensions. What it really buys is **crash containment** (a wedged or leaking pane-3
+renderer leaves nav and pane 2 alive, which a React `FaultBoundary` cannot do), per-pane
+memory accounting, and a swappable boundary. It does **not** discharge ADR-0001
+Amendment E's trigger. Call it crash containment in the ADR, not isolation.
+
+**The three-process topology is gated, not settled.** Phase 6 ends with a topology gate: a
+real NVDA + VoiceOver spike decides three-process vs two-process (host chrome + one
+extension process holding both panes). The open question is whether Electron exposes N
+`WebContentsView`s as N separate platform accessibility trees — if it does, the WCAG 2.2 AA
+keyboard commitment in `README.md` breaks in a way a focus ring does not fix. **Nobody has
+verified this.** Two-process also dissolves the shared-module-state problem below, so the
+thumb is on the scale for it unless the spike comes back clean.
+
+**A consequence to handle in Phase 5, before any split.** Both verification remotes keep
+module-scope stores (`MailPlugin.tsx:315-341`, `DatabasePlugin.tsx:299-323`) because the
+host carries only the id, never the item. Under a pane2/pane3 split the module loads twice:
+static seed lookups still resolve, so it *looks* fine while every `commit` in pane 2 becomes
+invisible to pane 3. Migrate both remotes onto the new structured payload channel first.
+
+**Auto-update has a blocker that is the same one as §5.** `electron-updater`'s GitHub
+provider on a private repo needs a token in the shipped client, which anyone can extract.
+The recommendation is a static `generic` feed published to by a release workflow. **Making
+the repository public would resolve §5, §6.2 and this at once** — all three share one root
+cause, so it deserves a real decision rather than a default.
+
+The full plan — the ADR-0002 amendment shape, the token architecture, the three contract
+additions and thirteen ranked risks — is tracked at
+[`docs/plans/native-host-pivot.md`](docs/plans/native-host-pivot.md).
 
 ---
 
@@ -228,13 +275,19 @@ integrity. Each finding is tagged **[reproduced]** where confirmed by execution 
 
 ### 6.3 Production readiness
 
-- **`npm run dev` still renders an empty shell. The CPO's top recommendation is only half
-  done.** **[reproduced]** `src/dev/DevShell.tsx` landed with PR #70, but it is wired to
-  `dev.html` → `src/dev/main.dev.tsx`. `npm run dev` is bare `vite`, which serves
-  `index.html` → `src/main.tsx` → `App`, and `App.tsx` says in its own docblock that
-  nothing is registered there. The recommendation was to make the working demo the
-  **default at `/`**. **Still open, still the highest value-to-effort item in the
-  repository, and it now has no issue.** Do not read PR #70 as having solved it.
+- ~~**`npm run dev` still renders an empty shell.**~~ **CLOSED 2026-08-02.**
+  `vite.config.ts` now installs a `configureServer` middleware rewriting `/` to `dev.html`,
+  so `npm run dev` opens the shell with both verification remotes registered.
+  `/index.html` still serves the empty-registry production shell by name.
+  **Two things were measured rather than asserted.** `dist/` is **SHA-256 identical**
+  before and after the change — all three artifacts, verified by building both ways — so
+  "the production bundle is unchanged" is now a measurement. And the four new cases in
+  `e2e/dev-routing.spec.ts` were mutation-probed: with the middleware removed by hand, the
+  two load-bearing cases fail and the two deliberate control cases still pass.
+  **One of those four was vacuous on the first draft** — it asserted only that the URL was
+  still `/`, which the production shell also satisfies, so it passed with the middleware
+  gone. It now asserts the fixture arrived *and* the URL did not move. Worth recording as
+  another instance of §11's "a green test is not a test".
 - **No runtime plug-in delivery exists at all.** Nothing on `window`, no manifest fetch,
   no dynamic import. The model is compile-time only — deploying today means deploying an
   empty frame. **[reproduced]**
@@ -388,20 +441,23 @@ but this file.** Creating the labels would be cheap and would make it survive.
 
 ## 8. Recommended sequence
 
-Cheap and high-value first; and the decisions gate everything downstream.
+**Superseded in part by the native-host pivot at the top of §1.** The nine-phase plan in
+[`docs/plans/native-host-pivot.md`](docs/plans/native-host-pivot.md) is the sequence now;
+what follows is the pre-pivot list with its still-live items marked, because several are
+prerequisites the plan folds in rather than replaces.
 
-| # | Work | Why here |
+| # | Work | Status |
 |---|---|---|
-| 1 | **Answer §4: are third parties real customers in the next 12 months?** | It decides whether roughly half the open documentation and contract issues are worth doing at all. Doing them first risks polishing work the answer deletes. |
-| 2 | **Answer §5: pay for the plan tier that allows branch protection, or make the repository public?** | Until one of those, no doctrine in §9 can be *enforced* — only asked for. It also unblocks §6.2, which shares the root cause. |
-| 3 | **Route the working demo to `/`** — file an issue first | Roughly a one-line change to what `npm run dev` serves. Until then nobody can run the product, nothing can be validated by a human, and #39 — the sole tracked Blocker — cannot even be started. **PR #70 landed the component but not the routing.** |
-| 4 | **Merge PR #71** (`quality-first-agreement`) | Already green. It is what §9 should point at instead of restating, and everything after this benefits from having the doctrine written down. |
-| 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | The only findings that destroy user data. Both reproduced. Both small. **The browser lane can now see them.** |
-| 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | Two lines each. One makes a live `SECURITY.md` claim false. Add the exports-walking test in the same change so it cannot regress a third time. |
-| 7 | **Root error boundary** | One component. Turns every unhandled throw from a white screen into something diagnosable — which every later step benefits from. |
-| 8 | Fix the two vacuous tests and the `patternFor` hole | §6.5 and §6.6. Do it before the hole is load-bearing. |
-| 9 | Triage the three red Dependabot PRs | #34, #35, #38 are red. #35 and #38 cross a major. |
-| 10 | Everything else, by milestone priority | — |
+| 1 | **Answer §4: are third parties real customers in the next 12 months?** | **STILL OPEN.** The pivot does not answer it — it designs the isolation boundary to stay swappable so the answer can arrive late. Still decides half the documentation scope. |
+| 2 | **Answer §5: pay for the tier that allows branch protection, or go public?** | **STILL OPEN, and now larger.** Auto-update needs a release feed, and the GitHub provider on a private repo would mean shipping an extractable token. Public would resolve §5, §6.2 and the update feed together. |
+| 3 | ~~Route the working demo to `/`~~ | **DONE 2026-08-02.** See §6.3. |
+| 4 | **Merge PR #71** (`quality-first-agreement`) | Still open, still green. Larger stakes now: the pivot is the biggest change in this repo's history and §5 means nothing enforces review. |
+| 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | **Phase 0b, in flight.** Kept ahead of the pivot deliberately: item 3 makes this an artifact a human is now asked to run, and two data-destroying defects in a demo is not acceptable. The pivot later deletes the code they live in — the value is one correct release plus a browser-lane regression test that survives as a behavioural spec. |
+| 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | Still open. Do it with the exports-walking test, or it regresses a third time. |
+| 7 | **Root error boundary** | Still open, and the pivot raises its value — an Electron main process with no top-level boundary turns a renderer throw into a blank native window. |
+| 8 | Fix the two vacuous tests and the `patternFor` hole | **Phase 0c, in flight** for the `patternFor` half. It is a hard prerequisite for Phase 4: deleting the ribbon renames many cited titles at once, which is exactly when a prefix-match hole stops being theoretical. The two vacuous tests are still open. |
+| 9 | Triage the three red Dependabot PRs | #34, #35, #38 are red. #35 and #38 cross a major. Unchanged. |
+| 10 | Everything else, by milestone priority | Re-triage against the pivot — the ribbon's deletion closes or moots several documentation issues. |
 
 ---
 
