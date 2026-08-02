@@ -1541,6 +1541,53 @@ Consequences for your Pane 2 view:
 > catches nothing; it severs host context, which is a different job. The fault
 > boundary sits OUTSIDE it.
 
+### Two tiers, and why one was not enough
+
+Containment is arranged in **two tiers**, and the second one exists because the
+first cannot reach the failure that hurts most.
+
+| Tier | Component | Wrapped around | Fallback | Recovery |
+| --- | --- | --- | --- | --- |
+| Pane | `FaultBoundary` | every pane, every extension subtree, the ribbon | a contained surface inside the failing pane; the rest of the shell stays interactive | **Retry**, bounded at three consecutive failures, plus a reset when the active extension changes |
+| Root | `RootBoundary` | the whole application, outermost in `App` | a full-window host surface; nothing below it is running | **Reload**, and no in-place retry at all |
+
+A boundary never catches itself or a parent. `ShellLayout` composes its
+`FaultBoundary` instances *inside* itself, so until `RootBoundary` landed there
+was a band of code no boundary covered: `ExtensionRegistryProvider`'s own render,
+`ShellHostProvider`'s own render, and `ShellLayout`'s own render above its inner
+boundaries. A throw anywhere in that band unmounted the entire React root and
+left an empty `<div id="root">` — a white page in a browser, and a blank native
+window with no address bar and no reachable devtools under Electron.
+`src/components/error/RootBoundary.tsx` is what stands there instead, wired as
+the outermost element of `App`. *Tests:*
+`src/components/__tests__/RootBoundary.test.tsx` — "contains a provider that
+throws in its own render, and announces the failure"; `src/__tests__/App.test.tsx`
+— "composes RootBoundary as the outermost element, above both providers".
+
+The root fallback is styled with **inline styles rather than class names**, which
+is the only surface in the repository that is. It is the one surface that must
+stay legible when the reason nothing works is that nothing loaded, so it owns
+both sides of the contrast pair — an opaque background and its own text colour —
+instead of depending on a stylesheet that may have 404'd or a theme that may not
+have been applied yet. Pinned by "owns both sides of the contrast pair inline, so
+it is legible with no stylesheet" in the same file.
+
+**The root verb is Reload, not Retry, and that is a decision rather than an
+omission.** A pane can plausibly recover from a transient render failure while the
+shell around it keeps its registry, its host store and its layout. A root failure
+cannot: what threw is a provider's own render, so there is nothing below to
+preserve and a remount in place would rebuild the registry and the host store
+empty — a reload that lies about itself by keeping the module graph. So the root
+retry bound is **zero**: no timer, no interval, no automatic re-arm, no bounded
+in-place retry. Pinned by "never retries the failed subtree on its own — the bound
+is zero" and "offers exactly one control, and it says Reload rather than Retry",
+same file. The reload goes through `window.location.reload()`, which works in a
+browser tab and in an Electron renderer alike; **no Electron API is called,
+because none is wired up in this repository yet**, and a fallback that reached for
+a preload bridge that does not exist would throw a `TypeError` in the one place a
+throw has nowhere to go. Pinned by "invents no Electron API, because none is wired
+up yet".
+
 A view of yours that throws during render now degrades to a contained error
 surface inside its own pane. The pane keeps its border, its accessible name and
 its header; the body becomes host-authored text naming the surface, your
@@ -1572,8 +1619,9 @@ in render, in lifecycle methods and in constructors. They do **not** catch:
 - errors thrown during **server-side rendering**,
 - anything thrown by the fallback surface itself, or by a component ABOVE the
   boundary. A boundary never catches itself, which is why the host composes
-  several of them rather than one at the root, and why the fallback renders no
-  plug-in component and no plug-in markup at all.
+  several `FaultBoundary` instances at pane granularity **and** one
+  `RootBoundary` above everything, and why neither fallback renders any plug-in
+  component or plug-in markup at all.
 
 Those are yours to handle. Wrap your own async work and your own handlers. An
 unhandled rejection in your extension will surface as a global error, not as a
@@ -1581,6 +1629,32 @@ tidy contained pane. The same list is in the docblock at the top of
 `src/components/error/FaultBoundary.tsx`, and the two are kept in step by
 "documents in both the source and DEVELOPER.md what a boundary cannot catch" in
 `src/components/__tests__/FaultBoundary.test.tsx`.
+
+**`RootBoundary` does not widen that list. It only widens what "below it" means.**
+It is an ordinary React error boundary, so it catches render, lifecycle and
+constructor errors and nothing else. Every entry above applies to it unchanged —
+an **event handler** that throws, a **setTimeout** callback, an unhandled
+**promise rejection**, a **server-side** render — and two more apply only to it,
+because there is no third tier:
+
+- **Anything thrown in `App`'s own render body, or in module scope.** The
+  boundary is composed *inside* the tree `App` returns, so `App`'s own body is
+  above it; and a throw in module scope happens while `src/main.tsx` is still
+  evaluating its imports, before any React code runs at all. Neither is reachable
+  by any boundary, **including one wrapped around `createRoot(...).render(...)`**,
+  which is why `src/main.tsx` composes no second boundary — it would catch exactly
+  the same set and imply a coverage it does not have. `App`'s body is a bare
+  `return` with no hooks and no expressions today, so there is nothing in it that
+  can throw; keep it that way.
+- **Anything thrown by the root fallback itself.** There is no boundary above it.
+  That is why the root fallback is built from host elements, host text and inline
+  style objects only, with no `dangerouslySetInnerHTML`, no URL-bearing attribute
+  and no render prop. Pinned by "the outermost fallback reaches no markup sink of
+  any kind" and "the outermost fallback names no URL-bearing attribute at all" in
+  `src/components/__tests__/RootBoundary.test.tsx`.
+
+The root list is kept in step with its own source docblock by "documents in both
+the source and DEVELOPER.md what the root boundary cannot catch", same file.
 
 **Two entries on that list are no longer only a list.** The `setTimeout` case and
 the unhandled-rejection case are now reproduced through the assembled shell by an

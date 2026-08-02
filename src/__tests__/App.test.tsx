@@ -1,6 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../core/services/HydrationEngine';
+import { RootBoundary } from '../components/error/RootBoundary';
+import { ExtensionRegistryProvider } from '../core/RegistryContext';
 import App from '../App';
 
 /**
@@ -54,6 +56,34 @@ function panelSizes(container: HTMLElement): number[] {
 }
 
 describe('App', () => {
+  it('composes RootBoundary as the outermost element, above both providers', () => {
+    // A boundary that exists but is not wired is the failure mode most likely to
+    // ship, so this asserts the SHAPE rather than a behaviour that a boundary
+    // one level lower would also produce. `App` is a plain function with no
+    // hooks, so calling it returns the element tree directly and the nesting is
+    // readable without a renderer.
+    //
+    // Both halves matter. `RootBoundary` outermost is what makes a throw in
+    // either provider's own render catchable at all; `ExtensionRegistryProvider`
+    // immediately inside it is the order `ShellHostProvider` depends on, and
+    // wrapping the boundary INSIDE a provider would put that provider's render
+    // back above every boundary in the tree.
+    const tree = App();
+    expect(tree.type).toBe(RootBoundary);
+    expect((tree.props as { children: { type: unknown } }).children.type).toBe(
+      ExtensionRegistryProvider,
+    );
+  });
+
+  it('leaves no error surface standing when nothing throws', () => {
+    // The boundary is transparent on the healthy path: it renders its children
+    // and nothing of its own. Without this, the case above would be satisfied by
+    // a boundary that is permanently latched.
+    render(<App />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull();
+  });
+
   it('mounts the registry and host providers, so the shell renders at all', () => {
     // Both hooks the shell calls on its first line — `useRegistry` and
     // `useActivation` — throw when their provider is missing, so a shell that
