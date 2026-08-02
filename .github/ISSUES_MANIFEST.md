@@ -606,8 +606,16 @@ independently.
 
 **Design system.** High-density desktop, explicitly not airy mobile-web
 spacing. Padding stays in the `p-1`–`p-3` range. Base type is 11px–13px.
-Borders are 1px, `border-neutral-200` in light theme and `border-neutral-800`
-in dark.
+Borders are 1px. **The spelling above is superseded:** this said
+`border-neutral-200` in light theme and `border-neutral-800` in dark, and neither
+survives. Every colour under `src/` is now a semantic design token — one
+declaration, resolved per theme, with no palette literal and no `dark:` variant
+anywhere — so the border is `border-border-default`, and the light-theme
+`--border-default` is a value chosen to clear the 3:1 non-text threshold rather
+than the hairline the two neutrals were. The rule is enforced, not documented:
+*Tests:* `src/__tests__/noRawColor.test.ts` — "finds no raw palette colour or
+theme() call in any module, with no exemptions at all" and "finds no dark: variant
+in any module outside the allowlist, which is empty".
 
 ### Explicit File Paths
 
@@ -796,16 +804,32 @@ the status is `IN PROGRESS`. The gates were checked by running
   says the 48px icon track is "a distinct state, not merely a small width", so a
   collapsed pane 1 renders outside the panel group as a fixed `w-12` track — 48px in
   CSS on every viewport — and its `Panel` and adjacent divider leave the group
-  entirely. This also answers "collapse toggled while a drag is in flight": the drag
-  is owned by the library's handle, and collapsing unmounts that handle, which ends
-  the drag with no half-applied layout, because the library re-normalises the
-  remaining panels to 100%. Accessible names survive the transition — the label stays
+  entirely. This also answers "collapse toggled while a drag is in flight" — and the
+  answer is split across two lanes, because **jsdom cannot produce the drag half of
+  it.** Measured against `react-resizable-panels` 2.1.9: `getResizeEventCoordinates`
+  reads `clientX`/`clientY` only when the event reports `isPrimary`, and jsdom's
+  plain-`Event` fallback carries neither, so the library is handed
+  `{x: Infinity, y: Infinity}` and the handle never leaves
+  `data-resize-handle-state="inactive"`. Supplying a `PointerEvent` constructor does
+  not rescue it; that was probed directly. **The jsdom case therefore pins the limit,
+  not the drag.** It fires the pointer sequence, asserts in its own body that the
+  handle is still `inactive` and that no pane moved, and then pins what the unmount
+  really does: collapsing removes the handle with no half-applied layout, because the
+  library re-normalises the remaining panels to 100% — asserted as the exact pair
+  `[47.4, 52.6]`, not as a sum. **The drag half is pinned in the browser lane**,
+  where a real pointer puts the handle into its `drag` state — observed *before* the
+  collapse, so an interruption that never interrupted anything fails rather than
+  passes — and where the collapse is dispatched rather than clicked, because
+  `locator.click()` performs its own mouse down and up and would end the very gesture
+  the case is holding open. Accessible names survive the transition — the label stays
   in the tree as an `sr-only` text node rather than being dropped — so the same
   `getByRole('button', { name })` query finds the same button in both states.
   *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "collapses to a 48px
   icon track and expands back", "keeps the accessible name of every pane-1 entry in
   both states", "shows a monogram in place of the label in the icon track", and
-  "survives a collapse toggled while a divider drag is in flight".
+  "survives a collapse toggled while a divider drag is in flight";
+  `e2e/pane-dividers.spec.ts` — "ends a drag that is genuinely in flight when the
+  pane collapses under it".
 
 ### Not built by this issue — do not read them in
 
