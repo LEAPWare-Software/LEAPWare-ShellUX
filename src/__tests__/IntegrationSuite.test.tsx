@@ -970,23 +970,75 @@ describe('navigation badges, written at runtime by an operational module', () =>
     expect(screen.getByRole('button', { name: 'Sensors badge 41' })).toBeInTheDocument();
   });
 
+  /**
+   * WHY THE NUMBERS BELOW ARE EXACT, AND WHY THAT IS THE ONLY HONEST SHAPE.
+   *
+   * The badge is `lowStockCount`, and the only thing that moves it here is the
+   * module's own 200ms interval: no click, no keystroke, no host call happens
+   * between the two reads. So a shape-only assertion — "it is still some number"
+   * — is true whether the interval fires or not, and an earlier version of this
+   * case asserted exactly that and survived having the interval body emptied.
+   *
+   * `tickStock` is deterministic ON PURPOSE and says so in its own docblock: the
+   * records that move are chosen by a rotating cursor and their deltas come from
+   * the seeded `nextRandom`, never from `Math.random`. Combined with
+   * `loadRemotes()`'s `vi.resetModules()`, which hands this case a pristine
+   * catalogue, the whole trajectory is fixed and can be named rather than
+   * described.
+   *
+   * **The direction is NOT a law, and is not asserted as one.** The measured
+   * Components trajectory over the first forty ticks is 35 → 34 (tick 3) → 33
+   * (tick 13) → back to 34 (tick 17), where it stays: a random walk with a
+   * reflecting floor at zero stock, not a drift. What is guaranteed is that the
+   * timer moves the count and that it moves it to a specific place, so the
+   * assertions name the specific place and the direction of that one step.
+   */
   it('drives the badges from the module timer, without the user doing anything', async () => {
     const remotes = await loadRemotes();
     injected.engine = createHydrationEngine({ storage: null });
     render(<Harness blueprints={[remotes.database]} engine={injected.engine} />);
     click('Inventory Database');
 
-    const badgeOf = (label: string): string => {
+    /** The number inside a top-level badge, read off the rendered button. */
+    const badgeOf = (label: string): number => {
       const button = screen.getByRole('button', { name: new RegExp(`^${label} badge `) });
-      return button.textContent ?? '';
+      const digits = /badge (\d+)$/.exec(button.textContent ?? '');
+      if (digits === null) {
+        throw new Error(`${label} rendered no badge: ${String(button.textContent)}`);
+      }
+      return Number(digits[0].slice('badge '.length));
     };
+
+    // Read BEFORE the clock moves. `publishBadges` already ran once from the
+    // pane-2 mount effect, so these are the opening low-stock counts.
     const opening = badgeOf('Components');
-    // Twelve ticks of the 200ms stock ticker, all inside `act`.
+    const openingAssemblies = badgeOf('Assemblies');
+    const openingConsumables = badgeOf('Consumables');
+    expect(opening).toBe(35);
+    expect(openingAssemblies).toBe(19);
+    expect(openingConsumables).toBe(21);
+
+    // Twelve ticks of the 200ms stock ticker, all inside `act`. Nothing else is
+    // touched between here and the next read.
     advance(12 * 200);
-    // The module republished only what moved, so the assertion is that the badge
-    // is still a rendered, well-formed number after a timer nobody touched.
-    expect(badgeOf('Components')).toMatch(/^Componentsbadge \d+$/);
-    expect(opening).toMatch(/^Componentsbadge \d+$/);
+
+    // THE ASSERTION THIS CASE IS NAMED FOR: the count moved, and it moved to
+    // where the interval puts it. One component record climbed back above its
+    // reorder level, so the low-stock count fell by exactly one.
+    const afterTwelve = badgeOf('Components');
+    expect(afterTwelve).toBe(34);
+    expect(afterTwelve).toBeLessThan(opening);
+
+    // Twenty-eight more ticks, and a SECOND category moves — so the case does not
+    // rest on one record crossing one threshold.
+    advance(28 * 200);
+    const afterForty = badgeOf('Assemblies');
+    expect(afterForty).toBe(17);
+    expect(afterForty).toBeLessThan(openingAssemblies);
+
+    // And the third is untouched across all forty ticks, which is the other half
+    // of `publishBadges`: it republishes only what moved.
+    expect(badgeOf('Consumables')).toBe(openingConsumables);
   });
 });
 
