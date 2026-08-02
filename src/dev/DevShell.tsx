@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { ShellLayout } from '../components/layout/ShellLayout';
 import { ShellHostProvider } from '../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext';
-import type { LEAPExtensionBlueprint } from '../core/types';
+import type { LEAPExtensionBlueprintInput } from '../core/types';
 import { DatabasePlugin } from '../mocks/DatabasePlugin';
 import { MailPlugin } from '../mocks/MailPlugin';
 
@@ -50,7 +50,7 @@ import { MailPlugin } from '../mocks/MailPlugin';
  */
 
 /** The two verification remotes, in the order pane 1 lists them. */
-const FIXTURE_EXTENSIONS: readonly LEAPExtensionBlueprint[] = Object.freeze([
+const FIXTURE_EXTENSIONS: readonly LEAPExtensionBlueprintInput[] = Object.freeze([
   MailPlugin,
   DatabasePlugin,
 ]);

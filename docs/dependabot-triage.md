@@ -235,7 +235,7 @@ typed. Root `tsconfig.json` sets `"types": ["node"]` and
 so Node types **are** in scope for `npm run typecheck`. **[reproduced — tsconfig read]**
 Actual Node API surface inside that scope is thin but real: several test files import
 `node:fs`, `node:path` and `node:url` (e.g. `src/components/__tests__/FaultBoundary.test.tsx:1-3`,
-`src/components/__tests__/RibbonToolbar.test.tsx:1-3`), and `playwright.config.ts` reads
+`src/components/command/__tests__/commandSurfaces.test.tsx:1-3`), and `playwright.config.ts` reads
 `process.env.CI`. `scripts/**` is `.mjs` and **outside** the program entirely — it is
 lint-checked, never typechecked. **[reproduced — grepped]**
 

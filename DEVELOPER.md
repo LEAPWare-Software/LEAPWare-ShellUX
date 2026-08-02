@@ -86,7 +86,7 @@ module) is a contract violation that will break without warning.
                  revocable)                             │          ← BUILT
                                                         │
    host renders your Pane 1 entry, Pane 2 view,  ◄──────┤          ← BUILT
-   Pane 3 view, and your ribbon actions                 │
+   Pane 3 view, and your commands                 │
    the shell restores its layout and your foreground  ◄──┤          ← BUILT
    position across reloads                              │
    ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄
@@ -97,7 +97,7 @@ module) is a contract violation that will break without warning.
 Everything above the dashed line exists today: registration, activation, a real
 per-extension `IShellAPI` that reaches you, and — since ISSUE-002 — a host that
 actually renders your navigation entries, mounts both your pane views, and
-evaluates and invokes your ribbon actions.
+evaluates and invokes your commands.
 
 Since ISSUE-004, the fault boundaries and the row virtualizer are there too: a
 view of yours that throws during render degrades to a contained surface inside its
@@ -135,7 +135,8 @@ the four modifier flags on `Hotkey`.
 | `name` | `string` | Human-readable extension name. Non-blank, at most 256 characters. **Untrusted display text** — see the security section. |
 | `version` | `string` | Your version string, e.g. `"1.0.0"`. Non-blank, at most 32 characters. Completely opaque to the host: it is not parsed, compared or range-checked. |
 | `navigationTree` | `readonly NavigationNode[]` | Your Pane 1 contribution. May be empty. At most 512 nodes in total across the whole tree, nested at most 8 deep (roots are depth 1). |
-| `ribbonActions` | `readonly RibbonAction[]` | Your contextual ribbon commands. May be empty. At most 128. |
+| `commands` | `readonly Command[]` | Your commands. May be empty. At most 128. **Declare this OR `ribbonActions`, never both** — see "One collection, two names" below. |
+| `ribbonActions` | `readonly Command[]` | **Deprecated spelling of `commands`.** Identical in every respect; kept so existing manifests keep working. |
 | `views` | `{ pane2: ExtensionView; pane3: ExtensionView }` | Your two pane components. Both are required; there is no blueprint-level Pane 1 view, because Pane 1 is the host's navigation chrome rendering *your* `navigationTree`. |
 
 There is **no `icon` field on the blueprint.** Earlier drafts of this guide
@@ -196,15 +197,15 @@ stale by omission, and it cannot document a key that does not exist.
 |---|---|---|
 | `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique within your own `ribbonActions`. |
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
-| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the ribbon resolves it through `SHELL_ICONS`, a host-owned `Map` of inline SVGs shared with the pane-1 navigation track, and an unrecognised key renders a host fallback glyph. **The key list is published** — see "The icon vocabulary" below; before GitHub issue #18 it was not, so a vendor who guessed wrong got a silent fallback and no way to find the real keys. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "resolves a known icon key through the host table", "resolves an unknown icon key through the host fallback rather than through the key", "does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
+| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the shared command row resolves it through `SHELL_ICONS`, a host-owned `Map` of inline SVGs shared with the pane-1 navigation track, and an unrecognised key renders a host fallback glyph. **The key list is published** — see "The icon vocabulary" below; before GitHub issue #18 it was not, so a vendor who guessed wrong got a silent fallback and no way to find the real keys. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "resolves a known icon key through the host table on every surface", "the context bar resolves an unknown icon key through the host fallback rather than through the key", "the context bar does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
 | `isDisabled?` | `boolean` | Optional. When present it must be a boolean. Renders the action greyed out but still visible. |
 | `hotkey?` | `Hotkey` | Optional keyboard chord for this action. Validated at registration — allowlisted key, boolean modifiers, the two bare-chord rules (WCAG 2.1.4 for a single-character key; activation for `enter`), unique within your own `ribbonActions`. **Dispatched since ISSUE-006**, but only while your extension is in the foreground and only for an action that is visible and not disabled. See the `Hotkey` section below for all four conditions. |
-| `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** The ribbon evaluates it on every render and shows the action only when it returns the boolean `true`; a throwing predicate is treated as "not visible". See "How `ribbonActions` visibility predicates work" below for the tests. |
-| `onExecute` | `(ctx: RibbonContext, shell: IShellAPI) => void` | Required. Invoked when the user activates the action, with **your own shell handle** as the second argument — that is what lets an action actually change shell state. The host ribbon calls it inside a guard, so a handler that throws is reported and does not unmount the shell. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "hands onExecute the context and the extension shell", "survives an onExecute that throws, leaving the ribbon interactive". |
+| `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** The registry evaluates it on every render and shows the action only when it returns the boolean `true`; a throwing predicate is treated as "not visible". See "How `ribbonActions` visibility predicates work" below for the tests. |
+| `onExecute` | `(ctx: RibbonContext, shell: IShellAPI) => void` | Required. Invoked when the user activates the action, with **your own shell handle** as the second argument — that is what lets an action actually change shell state. The command registry calls it inside a guard, so a handler that throws is reported and does not unmount the shell. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "hands onExecute the context and the extension shell", "the context bar survives an onExecute that throws, leaving the surface interactive". |
 
 > **Contract change — `onExecute` gained a second parameter.** It used to be
 > `(ctx: RibbonContext) => void`, which handed the handler four nullable strings
-> and no capability, so a ribbon action provably could not change anything. It is
+> and no capability, so a command provably could not change anything. It is
 > now `(ctx, shell)`. This is **source-compatible**: a handler that ignores the
 > second argument still satisfies the type, so nothing you have written breaks.
 > To act on the shell, name the parameter:
@@ -221,7 +222,96 @@ stale by omission, and it cannot document a key that does not exist.
 > and it is revocable — see "What a released `IShellAPI` does" below. Use the one
 > you are handed; do not stash it beyond the life of the call.
 
-### `Hotkey` — a keyboard chord on a ribbon action
+### One collection, two names — and the four surfaces it feeds
+
+**The ribbon is gone.** Where there was one ribbon there are now four command
+surfaces, and your commands are projected onto all four through one registry:
+
+| Surface | What it is |
+|---|---|
+| **Context bar** | A 32px strip above the panes. Host commands left, your contextual commands right, at most four inline with the rest in a portalled overflow menu. This is what stands where the ribbon stood. |
+| **Command palette** | Cmd-K / Ctrl-K. **Browsable on an empty query** — recents, commands suggested by the current selection, then everything else grouped by `category`. It lists the FOREGROUND extension's commands, the host's own, and a "switch extension" verb, and nothing else. |
+| **Floating toolbar** | Appears inside pane 3 while something is selected, and disappears when nothing is. It supplements the context bar; it never replaces it. |
+| **Omnibox composer** | Docked at the bottom of pane 3. Typing `>` or `/` turns it into a command surface; the detected intent is shown in words before you press Enter. |
+
+**`RibbonAction` is now an alias of `Command`.** The type did not change under
+you: `id`, `label`, `icon`, `isDisabled`, `hotkey`, `isVisible` and `onExecute`
+mean exactly what they meant, and every rule in the table above still holds. Four
+optional fields are added, and nothing is removed.
+
+**Declare `commands` OR `ribbonActions`, never both.** A blueprint carrying both
+is rejected with `INVALID_FIELD` on `commands`, whether or not the two agree. Two
+sources for one collection drift, and which one the host used would be invisible
+from your manifest. Rejections name the field you actually wrote — `commands[3].id`
+if you wrote `commands`, `ribbonActions[3].id` if you wrote the old name.
+*Tests:* `src/core/__tests__/commandContract.test.ts` — "accepts commands on its
+own, and publishes it as ribbonActions too", "rejects a blueprint that declares
+BOTH, rather than merging or preferring one" and "names the field the caller
+actually wrote in every rejection path".
+
+#### `when?: string` — a declarative sibling of `isVisible`
+
+An expression over `RibbonContext`, in the language documented in
+`src/core/commands/when.ts`. It is parsed **once, at registration**, so a
+malformed expression is a rejection naming `commands[n].when` rather than a
+command that silently never appears.
+
+**`when` and `isVisible` are ANDed, and both are consulted.** A command is offered
+only when `isVisible(ctx) === true` *and* — if you declared one — the expression is
+also true. That means adding a `when` to an existing command can only ever NARROW
+where it appears; it can never reveal something a predicate was hiding.
+
+```ts
+{
+  id: 'reply',
+  label: 'Reply',
+  icon: 'edit',
+  category: 'edit',
+  when: "selectedItemId startsWith 'msg-'",
+  isVisible: () => true,
+  onExecute: (ctx, shell) => { /* … */ },
+}
+```
+
+Why bother, when `isVisible` already works? Because `isVisible` is a **closure**,
+and a closure cannot cross a process boundary. Three of the four surfaces above
+are host chrome, and when the panes become separate processes they will be
+evaluating visibility for commands whose code lives elsewhere. An expression over
+primitives travels; a function does not. `when` is optional today and will become
+**required for a command that appears in host chrome** when that split lands;
+`isVisible` narrows to a pane-local fast path for the floating toolbar. Write
+`when` now if you can.
+*Tests:* `src/core/commands/__tests__/CommandRegistry.test.ts` — "ANDs `when` with
+`isVisible`, so a when can only ever narrow" and "evaluates `when` against the live
+context, so a context key turns a command on".
+
+#### `category?: CommandCategory` — the palette bucket
+
+One of exactly `file`, `edit`, `view`, `navigate`, `select`, `insert`, `tools`,
+`help`. **There is no fallback.** An unknown category is `INVALID_FIELD` on
+`commands[n].category`, and that is deliberately unlike `icon`, where an unknown
+key gets a host glyph: a wrong picture still leaves your command labelled and
+reachable, and a guessed bucket is a statement about *where your command lives*
+that you never made and the user cannot correct. Omitting `category` is fine — the
+palette groups those under "Uncategorised", which is honest.
+*Test:* `src/core/__tests__/commandContract.test.ts` — "rejects an unknown
+category with NO FALLBACK, and says why".
+
+#### `surfaces?: readonly CommandSurface[]` — where you want it
+
+Members of `context-bar`, `palette`, `floating-toolbar`, `omnibox`. Omitting the
+field means every surface. **It only ever narrows**: a surface decides what it
+asks for, and this field cannot widen that. An empty array is legal and means "no
+surface at all" — a command reachable only by its chord. A repeated member is
+rejected rather than collapsed.
+
+#### `priority?: number` — ordering within a surface
+
+A safe integer; higher comes first; `undefined` sorts as 0. Ties keep declaration
+order, so a manifest that declares no priorities gets exactly the order it wrote —
+which is what decides your first four commands on the 32px context bar.
+
+### `Hotkey` — a keyboard chord on a command
 
 > ### Declared, validated and — since ISSUE-006 — dispatched.
 >
@@ -302,7 +392,7 @@ blueprint-level `hotkeys` collection, and that is deliberate: a hotkey is a seco
 way to fire *that action's* `onExecute`, gated by the same `isVisible` and the
 same `isDisabled`, and it inherits the 128-action bound and the duplicate walk
 that already visit every action. The accepted cost is that you cannot declare a
-shortcut that is not also a ribbon action. Amendment H, Decision 1.
+shortcut that is not also a command. Amendment H, Decision 1.
 
 | Field | Rules |
 |---|---|
@@ -326,7 +416,7 @@ as oversights:
   Focus Order.
 - **`space`** — Space activates the focused control. Claiming it globally means
   the focused button stops responding to the key that presses it.
-- **`escape`** — Escape is the shell's dismissal key. It closes the ribbon's
+- **`escape`** — Escape is the shell's dismissal key. It closes the context bar's
   overflow menu, cancels a drag, leaves fullscreen and dismisses a Radix dialog —
   and this project ships `@radix-ui/react-dialog`. An extension owning it globally
   would break dismissal for the whole shell at once. It was removed outright
@@ -453,10 +543,7 @@ UI Events `KeyboardEvent.key` values, where the control key is `Control`, and
 `Ctrl` is not one — which is why these are two functions and not one. The ribbon
 emits the attribute only on a chord-bearing action that is **not disabled**,
 because the dispatcher skips a disabled action and advertising it would be a lie.
-*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "advertises a
-chord-bearing action with aria-keyshortcuts, in key values rather than display
-spelling" and "omits aria-keyshortcuts from a disabled action, because the chord
-will not fire". `matchesHotkey` takes only the five fields of a keyboard
+*Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "advertises a chord-bearing command with aria-keyshortcuts, in key values rather than display spelling" and "omits aria-keyshortcuts from a disabled command, because the chord will not fire". `matchesHotkey` takes only the five fields of a keyboard
 event it reads (`key`, `ctrlKey`, `altKey`, `shiftKey`, `metaKey`), so a plain
 record is enough and it holds no reference to anything live. It matches
 **exactly**: a modifier your chord does not declare must also not be held, so
@@ -555,7 +642,7 @@ is field-specific, the dotted `field` path that caused it — for example
 | `INVALID_ID` | An id failed the allowlist pattern. |
 | `RESERVED_ID` | An id was `__proto__`, `constructor` or `prototype`. |
 | `DUPLICATE_ID` | The id is already registered by a different blueprint, or an id repeats inside your own tree or action list. |
-| `DUPLICATE_HOTKEY` | Two of **your own** ribbon actions declared the same chord. Scoped to your blueprint on purpose — two *different* extensions claiming one chord is not a conflict, because only the foreground extension's chords are live. See the `Hotkey` section above and ADR-0001 Amendment H. |
+| `DUPLICATE_HOTKEY` | Two of **your own** commands declared the same chord. Scoped to your blueprint on purpose — two *different* extensions claiming one chord is not a conflict, because only the foreground extension's chords are live. See the `Hotkey` section above and ADR-0001 Amendment H. |
 | `PAYLOAD_TOO_LARGE` | A string or a collection exceeded its declared bound. |
 | `REVOKED` | The `IShellAPI` you called has been revoked — your extension was released, unregistered, or **re-registered under the same id with a different blueprint** — so the call reached nothing and changed nothing. Never produced by `register`. **Provider teardown is not on that list**, and an earlier version of this row said it was; ADR-0001 Amendment F removed teardown revocation, and a write through a handle retained past its provider's unmount now succeeds against an orphaned store nothing can read. Do not park a handle that long. Pinned by "does not revoke, and the write it lets through cannot reach a live shell" in `src/core/__tests__/capability.test.tsx`. |
 | `REENTRANT_NOTIFY` | A shell-store listener wrote back to the store and the notification cascade hit its depth limit. A listener is a signal to *re-read* the context, never a place to write to it. Never produced by `register`. |
@@ -1300,9 +1387,9 @@ extension that ignores this makes the whole application feel inconsistent.
 
 > ### Implemented in ISSUE-002 — this section describes running code
 >
-> **The host evaluates `isVisible` on every ribbon render.** The call site is
-> `RibbonToolbar` in `src/components/ui/RibbonToolbar.tsx`, and the behaviour
-> below is asserted by `src/components/__tests__/RibbonToolbar.test.tsx` rather
+> **The host evaluates `isVisible` on every command-surface render.** The call site is
+> `ContextBar` in `src/components/command/ContextBar.tsx`, and the behaviour
+> below is asserted by `src/components/command/__tests__/ContextBar.test.tsx` rather
 > than promised. Where a sentence here states a containment property, it names
 > the test that holds it, per ADR-0001 Amendment G.
 >
@@ -1315,11 +1402,11 @@ extension that ignores this makes the whole application feel inconsistent.
 >
 > **Do not read more into the guard than is there.** It is not a guard around
 > your *component's* render; see "Fault containment" below. And it now runs on two
-> routes rather than one — the ribbon button and the keyboard chord both call the
+> routes rather than one — a command surface and the keyboard chord both call the
 > same `isVisible` through the same guard, which is deliberate: a chord must never
 > reach an action the button would have hidden.
 
-The ribbon is split: **global host actions on the left, your contextual actions
+The context bar is split: **global host actions on the left, your contextual actions
 on the right.** Contextual means the set changes with context — and *you* define
 what context means, because the host cannot.
 
@@ -1334,12 +1421,11 @@ The predicate is the interesting one. On each render the host evaluates your
 predicate against the current `RibbonContext` and shows the action only if it
 returns `true`. That is the mechanism by which "Reply" appears when a message is
 selected and disappears when nothing is, without the host knowing what a message
-or a reply is. *Test:* "renders only the actions whose predicate returns true for
-this context", which also asserts your predicate is handed the very context
+or a reply is. *Test:* "hides a command whose predicate returns false, on every projection", which also asserts your predicate is handed the very context
 object the host holds.
 
 ```
-  ISSUE-002 — the ribbon render loop, as implemented
+  ISSUE-002 — the command projection, as implemented
   ──────────────────────────────────────────────────
   host renders ribbon
         │
@@ -1364,12 +1450,10 @@ visible".
 
 **Only visible actions compete for the four inline slots.** The predicate filter
 runs before the overflow split, so an action you hid does not silently occupy a
-slot on the bar and push a visible one into the menu. *Test:* "counts only
-visible actions toward the inline limit".
+slot on the bar and push a visible one into the menu. *Test:* "counts only visible commands toward the inline limit".
 
 **With no extension in the foreground the contextual side is simply empty**, and
-the ribbon and the panes are still valid. *Test:* "renders no contextual action
-when there is no active extension".
+the ribbon and the panes are still valid. *Test:* "renders no contextual command when there is no active extension".
 
 **Your action behaves the same whether it lands on the bar or in the overflow
 menu**, and you cannot tell which from inside `isVisible` or `onExecute` — the
@@ -1379,16 +1463,15 @@ that the menu is a real menu rather than a styled `div`: it is built on
 items with the arrow keys, closes on Escape and on an outside pointer-down, and
 returns focus to the trigger afterwards — including after your action runs, so a
 keyboard user is never dropped onto `document.body`. It is portalled out of the
-ribbon, which is what stops the ribbon's own clipping from hiding it. It is
+ribbon, which is what stops the context bar's own clipping from hiding it. It is
 deliberately **not modal**: the rest of the shell stays reachable to assistive
 technology while the menu is open.
-*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — the whole of
-"RibbonToolbar — the overflow menu keyboard model", specifically "moves focus into
+*Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — the whole of
+"ContextBar — the overflow menu keyboard model", specifically "moves focus into
 the menu when it opens", "walks the items with the arrow keys, which is what the
 role promises", "closes on Escape and puts focus back on the trigger", "returns
 focus to the trigger after an item is activated, not to document.body", "closes when
-the pointer goes down outside it", "renders the menu outside the ribbon, which is
-what un-clips it", and "does not modally hide the rest of the shell while the menu is
+the pointer goes down outside it", "renders the menu outside the context bar, which is what un-clips it", and "does not modally hide the rest of the shell while the menu is
 open".
 
 **An action you make unavailable stays in the tab order rather than vanishing from
@@ -1397,9 +1480,7 @@ attribute, so a screen-reader user can still reach it and hear that it exists an
 currently unavailable — a disabled native button is skipped by keyboard navigation
 entirely, which silently hides the action rather than explaining it. It does not
 execute while unavailable.
-*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "marks an unavailable
-action aria-disabled rather than removing it from the tab order", "still runs an
-action that is not disabled", and "leaves a disabled menu item focusable, announced,
+*Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "marks an unavailable command aria-disabled rather than removing it from the tab order, on every surface", "leaves a host command that is not disabled announced as available", and "leaves a disabled menu item focusable, announced,
 and inert".
 
 ### Rules for writing predicates
@@ -1456,9 +1537,7 @@ the handle to do it with.
   the remaining actions — yours and the host's — still render. The report path is
   itself guarded, so a page that has replaced `console.error` with a throwing
   function cannot turn the containment back into an escape. *Tests:*
-  `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
-  isVisible predicate throws and still renders the rest" and "survives a
-  console.error that itself throws while reporting a bad predicate".
+  `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar hides a command whose isVisible predicate throws and still renders the rest" and "the context bar survives a console.error that itself throws while reporting a bad predicate".
 
   **Containment is not permission.** This exists so one buggy predicate cannot
   blank the ribbon, not so that throwing becomes a supported way to hide an
@@ -1479,9 +1558,7 @@ the handle to do it with.
 - **Labels are rendered as text nodes.** See below — this matters for security,
   and it also means markup in a label is shown literally, not rendered. A very
   long label is truncated with an ellipsis rather than widening the row. *Tests:*
-  `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
-  plug-in label as a text node, not as markup", "truncates a very long label
-  instead of widening the ribbon".
+  `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar renders a markup-shaped plug-in label as a text node, not as markup", "truncates a very long label instead of widening the surface, on every surface".
 - **Test your predicates directly anyway.** The host now exercises them, but your
   own unit tests are still the only place their *logic* is checked — the host's
   tests assert containment and filtering, not that your rule is the rule you
@@ -1618,8 +1695,7 @@ extension id as a text node, a guarded message read off whatever you threw, and 
 text — nothing retries automatically, because a component that throws
 deterministically plus an automatic retry is an unbounded render loop. Switching
 extension clears the surface, so yesterday's failure does not sit over today's
-view. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a
-throwing pane-2 view to pane 2, leaving the ribbon and pane 3 interactive",
+view. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing pane-2 view to pane 2, leaving the context bar and pane 3 interactive",
 "contains a throwing pane-3 view to pane 3, leaving pane 2 interactive" and
 "clears a pane error surface when the active extension changes";
 `src/components/__tests__/FaultBoundary.test.tsx` — "stops offering a retry after
@@ -1695,9 +1771,8 @@ error-boundary semantics and the FaultBoundary banner records it)" in
 
 The **event-handler** entry is the one that cuts the other way, and it is worth
 knowing which side of the line you are on: a throw from your `onExecute` IS
-contained, by the ribbon's own guard rather than by a boundary — reported, and the
-shell stays interactive. Pinned by "contains a throwing ribbon action inside the
-ribbon own guard, without taking the shell down" in the same file. A throw from a
+contained, by the context bar's own guard rather than by a boundary — reported, and the
+shell stays interactive. Pinned by "contains a throwing command inside the shared command guard, without taking the shell down" in the same file. A throw from a
 click handler you wrote inside your own pane is not covered by that guard and is
 yours.
 
@@ -1754,9 +1829,8 @@ text the moment a correct renderer is put in front of it.
 
 **Where the host now holds this rule under test, and where it does not.** ISSUE-002
 gave the host its first render sites for plug-in strings. **One of them is tested:**
-the ribbon renders `RibbonAction.label` as a text node. *Tests:*
-`src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped plug-in
-label as a text node, not as markup" and "the module source contains no
+the context bar renders `RibbonAction.label` as a text node. *Tests:*
+`src/components/command/__tests__/ContextBar.test.tsx` — "the context bar renders a markup-shaped plug-in label as a text node, not as markup" and "the module source contains no
 HTML-injection sink at all", the second of which parses the component with the
 TypeScript compiler, so it still holds if a second render path is added later.
 
@@ -2090,8 +2164,8 @@ PointerEvent".
 | `src/core/ShellAPI.ts` | `createShellAPI`, `createRevocableShellAPI`, `createShellStateStore`, `useShellContext`, `useShellStore`, `ShellStoreContext`, `deepFreeze`. Landed. |
 | `src/core/ActivationContext.tsx` | `ShellHostProvider`, `ExtensionHostBoundary`, `useActivation` (host-only *by guardrail* — read the second banner in that file), `useExtensionActivation`, the two-state activation model and revocation. Landed. |
 | `src/core/hotkeys.ts` | `hotkeyToken`, `describeHotkey`, `ariaKeyShortcuts`, `matchesHotkey`. Four pure functions over a chord — no DOM, no listener, no dispatcher. Landed. |
-| `src/core/hotkeyDispatch.ts` | `useHotkeyDispatch`. The shell's one `keydown` listener, called once by `ShellLayout`: foreground-scoped, bubble phase, gated by the same `isVisible`/`isDisabled` as the ribbon button. Landed. |
-| `src/core/ribbonAction.ts` | `isVisible`, `execute`, `report`. The two guards every route to a plug-in action goes through, in one copy so the button and the chord cannot drift apart. Landed. |
+| `src/core/hotkeyDispatch.ts` | `useHotkeyDispatch`. The shell's one `keydown` listener, called once by `ShellLayout`: foreground-scoped, bubble phase, gated by the same `isVisible`/`isDisabled` as the command button. Landed. |
+| `src/core/command.ts` | `isVisible`, `execute`, `report`. The two guards every route to a plug-in command goes through, in one copy so four surfaces and the chord dispatcher cannot drift apart. Landed. |
 
 `useShellStore` and `ShellStoreContext` are in that list deliberately, and their
 omission from an earlier version of it was a documentation defect rather than a

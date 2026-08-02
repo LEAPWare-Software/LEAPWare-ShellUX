@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { WhenExpression } from './commands/when';
 
 /**
  * ============================================================================
@@ -37,24 +38,33 @@ import type { ComponentType } from 'react';
  * Pinned by "register — a shifting id cannot smuggle a reserved key into the store"
  * in `src/core/__tests__/registrySecurity.test.tsx`.
  *
- * The render-boundary rule above now has a render site, and it is no longer stated
- * only as an obligation on future work. `src/components/ui/RibbonToolbar.tsx` is the
- * first place in `src/` where an untrusted plug-in string reaches the DOM, and it
- * renders `RibbonAction.label` as a JSX text node and resolves `RibbonAction.icon`
- * through a host-owned `Map` rather than into markup or a URL. Two tests hold the
- * rule, and they hold deliberately different things: *tests:*
- * `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
- * plug-in label as a text node, not as markup", which is a statement about one
- * hostile input, and "the module source contains no HTML-injection sink at all",
- * which parses the component with the TypeScript compiler and is a statement about
- * the module, so it still holds if someone adds a second render path tomorrow.
+ * The render-boundary rule above has a render site, and it is no longer stated
+ * only as an obligation on future work. **The ribbon was that site and the ribbon
+ * is deleted; there are four command surfaces where there was one, and there is
+ * still exactly one place a plug-in string reaches the DOM.**
+ * `src/components/command/commandListItem.tsx` is that place. The context bar, the
+ * command palette, the floating toolbar and the omnibox composer lay rows out and
+ * group them; not one of them touches `Command.label` or `Command.icon` itself.
+ * The row renders the label as a JSX text node and resolves the icon through a
+ * host-owned `Map` rather than into markup or a URL.
  *
- * **That is one render site, not a host-wide property, and this paragraph must not
- * be read as the wider claim.** The row virtualizer that will render plug-in row
- * content is ISSUE-004 and does not exist, so for that surface the rule remains an
- * untested obligation on future work — exactly what it was for the ribbon until
- * ISSUE-002. Per ADR-0001 Amendment G, the ribbon's tests license a sentence about
- * the ribbon and nothing beyond it.
+ * Two kinds of test hold the rule, and they hold deliberately different things.
+ * *Tests:* `src/components/command/__tests__/commandSurfaces.test.tsx` — "the
+ * context bar renders a markup-shaped plug-in label as a text node, not as
+ * markup", which is a statement about one hostile input on one surface and has
+ * three siblings naming the other three; and "the shared command row module source
+ * contains no HTML-injection sink at all", which parses the module with the
+ * TypeScript compiler and is a statement about the MODULE, so it still holds if
+ * somebody adds a second render path tomorrow. That second claim is asserted five
+ * times over — once for the shared row and once for each surface — because a
+ * surface that grew its own render path would be outside the row's guarantee and
+ * inside its own.
+ *
+ * **That is five render sites, not a host-wide property, and this paragraph must
+ * not be read as the wider claim.** `src/components/shared/VirtualizedList.tsx`
+ * renders plug-in row content and is held by its own tests, not by these. Per
+ * ADR-0001 Amendment G, the command surfaces' tests license a sentence about the
+ * command surfaces and nothing beyond them.
  * ============================================================================
  */
 
@@ -292,8 +302,104 @@ export interface Hotkey {
   readonly meta?: boolean;
 }
 
-/** A single command contributed to the shell ribbon by an extension. */
-export interface RibbonAction {
+/**
+ * The bucket a command is filed under when a surface groups commands.
+ *
+ * **A CLOSED HOST VOCABULARY WITH NO FALLBACK, and the asymmetry with `icon` is
+ * the decision.** An unknown `icon` key resolves to `FALLBACK_ICON`, because a
+ * wrong glyph is a cosmetic disappointment and the command is still there, still
+ * labelled, still reachable. An unknown `category` has no honest fallback: every
+ * candidate — a "Other" bucket, the first category, no bucket at all — is a
+ * statement about *where the command lives* that the extension did not make and
+ * the user cannot correct. A palette that files "Delete mailbox" under "View"
+ * because the host guessed is worse than one that refused the manifest. So the
+ * registry rejects an unknown category with `INVALID_FIELD` at the door, in the
+ * same register `HOTKEY_KEYS` refuses an unknown key.
+ *
+ * Named for what a command DOES rather than for any vendor's domain, for the
+ * reason `SHELL_ICONS` names its glyphs for shapes: a vocabulary named after one
+ * vendor's nouns is a vocabulary the next vendor cannot use.
+ */
+export type CommandCategory =
+  | 'file'
+  | 'edit'
+  | 'view'
+  | 'navigate'
+  | 'select'
+  | 'insert'
+  | 'tools'
+  | 'help';
+
+/**
+ * Exhaustiveness pin for `COMMAND_CATEGORIES`, in the same shape as
+ * `PANE_ID_MEMBERS` above: `Record<CommandCategory, true>` makes the compiler
+ * reject both a missing member and an invented one, so the runtime allowlist
+ * cannot drift away from the union.
+ */
+const COMMAND_CATEGORY_MEMBERS: Readonly<Record<CommandCategory, true>> = Object.freeze({
+  file: true,
+  edit: true,
+  view: true,
+  navigate: true,
+  select: true,
+  insert: true,
+  tools: true,
+  help: true,
+});
+
+/**
+ * `CommandCategory` as a runtime allowlist, and as the ORDER categories are
+ * presented in.
+ *
+ * An array rather than a `Set`, unlike `PANE_IDS` and `HOTKEY_KEYS`, because this
+ * one has a second job: `CommandRegistry.listByCategory` walks it to build its
+ * groups, and a `Set`'s iteration order would be an accident of declaration
+ * rather than a decision. Membership is `COMMAND_CATEGORIES.includes(...)`, which
+ * is a linear scan over eight entries.
+ */
+export const COMMAND_CATEGORIES: readonly CommandCategory[] = Object.freeze(
+  Object.keys(COMMAND_CATEGORY_MEMBERS) as CommandCategory[],
+);
+
+/**
+ * A surface a command asks to appear on.
+ *
+ * **A REQUEST, NOT A GRANT.** `surfaces` narrows where a command may be offered;
+ * it can never widen what a surface shows past what that surface decides. The
+ * palette lists foreground commands, host commands and the switch-extension verb
+ * and nothing else, whatever a background extension declares here — see
+ * `CommandRegistry`. Omitting the field means "every surface", which is what a
+ * `RibbonAction` written before this field existed meant and still means.
+ */
+export type CommandSurface = 'context-bar' | 'palette' | 'floating-toolbar' | 'omnibox';
+
+/** Exhaustiveness pin for `COMMAND_SURFACES`. Same shape, same reason. */
+const COMMAND_SURFACE_MEMBERS: Readonly<Record<CommandSurface, true>> = Object.freeze({
+  'context-bar': true,
+  palette: true,
+  'floating-toolbar': true,
+  omnibox: true,
+});
+
+/** `CommandSurface` as a runtime allowlist. */
+export const COMMAND_SURFACES: ReadonlySet<string> = Object.freeze(
+  new Set(Object.keys(COMMAND_SURFACE_MEMBERS)),
+);
+
+/**
+ * A single command contributed by an extension.
+ *
+ * **This is `RibbonAction`, generalised rather than replaced.** `isVisible`,
+ * `onExecute`, the structured `Hotkey` and the 60-key `HOTKEY_KEYS` allowlist all
+ * survive unaltered; `when`, `category`, `surfaces` and `priority` are added. The
+ * ribbon is gone and the guards that stood in front of it are not: `isVisible`
+ * and `execute` in `src/core/command.ts` are still the only route to a plug-in
+ * predicate or handler, now for four surfaces instead of two.
+ *
+ * `export type RibbonAction = Command` below is a DEPRECATED ALIAS, kept so that
+ * mocks, fixtures and tests migrate a file at a time rather than in one diff.
+ */
+export interface Command {
   /** Must match `EXTENSION_ID_PATTERN`; unique within the owning extension. */
   readonly id: string;
   /** UNTRUSTED display text. Render as a text node only. */
@@ -353,6 +459,81 @@ export interface RibbonAction {
    */
   readonly hotkey?: Hotkey;
   /**
+   * A DECLARATIVE sibling of `isVisible`, as an expression over `RibbonContext`.
+   *
+   * **The two are tiers, not alternatives, and both are consulted.** A command is
+   * offered only when `isVisible(ctx) === true` AND — if a `when` was declared —
+   * the expression is also true. That AND is what makes adding `when` to an
+   * existing command incapable of WIDENING where it appears: the predicate that
+   * already hid it still hides it.
+   *
+   * The reason the field exists is `src/core/commands/when.ts`'s banner and
+   * §3.5 of the native-host plan: `isVisible` is a synchronous render-phase
+   * boolean and cannot cross a process boundary, while three of the four command
+   * surfaces are host chrome evaluating predicates for commands whose code lives
+   * in a pane process. An expression over primitives can be evaluated by the host
+   * against its own replica; a closure cannot. `ContextKeyValue`'s primitives-only
+   * union — written for render-phase-getter reasons — is what makes that
+   * transport free.
+   *
+   * **Optional today, and the succession is written down rather than assumed.**
+   * There is one process, so `isVisible` still reaches every surface and a
+   * command declaring no `when` is not thereby invisible anywhere. When the panes
+   * become separate processes, `when` becomes REQUIRED for a command that appears
+   * in host chrome and `isVisible` narrows to a pane-local fast path for the
+   * floating toolbar. Requiring it now would empty the context bar for every
+   * extension written against the old contract, including both verification
+   * remotes.
+   *
+   * Parsed ONCE, at registration, by `parseWhen`, which is why a malformed
+   * expression is a registration rejection rather than a per-render surprise. The
+   * parsed tree is carried on `whenExpression` below.
+   */
+  readonly when?: string;
+  /**
+   * The parsed form of `when`. **HOST-DERIVED. An extension never declares it.**
+   *
+   * The registry parses `when` and assigns this field on the frozen host-owned
+   * record; a `whenExpression` supplied by a plug-in is not read, not copied and
+   * not validated — it simply does not survive normalisation, exactly as an
+   * undeclared field on any other normalised record does not.
+   *
+   * It lives on the record rather than in a side table because the record is
+   * already a host-owned copy, and because four surfaces evaluate it on every
+   * render: re-parsing 512 characters per command per surface per keystroke is
+   * not a cost worth paying to keep a field off an interface. Same posture as
+   * `normalizeHotkey` materialising all four modifiers.
+   */
+  readonly whenExpression?: WhenExpression;
+  /**
+   * Which bucket this command is filed under when a surface groups commands.
+   *
+   * Held to `COMMAND_CATEGORIES` with **no fallback** — see the docblock there.
+   * A command with no category is not an error: it is uncategorised, and
+   * `listByCategory` reports it in its own trailing group rather than guessing.
+   */
+  readonly category?: CommandCategory;
+  /**
+   * The surfaces this command asks to appear on. Omitted means all of them.
+   *
+   * A REQUEST, not a grant — see `CommandSurface`. Members are held to
+   * `COMMAND_SURFACES`, an empty array is legal and means "no surface at all"
+   * (a command reachable only by its chord), and a repeated member is rejected
+   * rather than collapsed, for the reason `setSelectedItems` rejects a repeated
+   * id: a list containing the same entry twice is the caller's bug.
+   */
+  readonly surfaces?: readonly CommandSurface[];
+  /**
+   * Ordering hint within a surface and within a category. Higher comes first.
+   *
+   * A safe integer, and `undefined` sorts as 0. Ties keep declaration order,
+   * because every projection sorts with a STABLE comparator over an array built
+   * in declaration order — so a manifest that declares no priorities at all gets
+   * exactly the order it wrote, which is what `INLINE_ACTION_LIMIT` used to
+   * depend on and still does.
+   */
+  readonly priority?: number;
+  /**
    * Pure predicate deciding whether the action appears at all.
    *
    * It is handed the context and NOTHING ELSE — deliberately no `IShellAPI`.
@@ -371,17 +552,20 @@ export interface RibbonAction {
    *
    * As a guardrail it still has **no test**, and per ADR-0001 Amendment G that is
    * stated rather than glossed. The reason is no longer "no call site": since
-   * ISSUE-002, `src/components/ui/RibbonToolbar.tsx` calls `isVisible` on every
-   * render, inside a guard. What that guard contains is MISBEHAVIOUR, not impurity.
+   * ISSUE-002 there has been one, and since the ribbon's deletion it is
+   * `CommandRegistry` in `src/core/commands/CommandRegistry.ts`, which calls
+   * `isVisible` through the guard in `src/core/command.ts` on every projection. What that guard contains is MISBEHAVIOUR, not impurity.
    * A predicate that throws is treated as not visible and reported, and the
    * remaining actions still render; the report itself is wrapped, so a plug-in that
    * replaced `console.error` with a throwing function cannot turn containment into
    * an escape. A non-boolean return is treated as not visible too, because the call
    * site compares `=== true` rather than testing truthiness. *Tests:*
-   * `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
-   * isVisible predicate throws and still renders the rest", "treats a non-boolean
-   * isVisible result as not visible" and "survives a console.error that itself
-   * throws while reporting a bad predicate".
+   * `src/components/command/__tests__/commandSurfaces.test.tsx` — "the context bar
+   * hides a command whose isVisible predicate throws and still renders the rest",
+   * "treats a non-boolean isVisible result as not visible, on every surface" and
+   * "the context bar survives a console.error that itself throws while reporting a
+   * bad predicate", each of the first and last with three siblings naming the
+   * other three surfaces.
    *
    * **None of that is a purity test.** A predicate that writes through a captured
    * store rather than throwing returns cleanly, so the guard never sees it and no
@@ -408,6 +592,20 @@ export interface RibbonAction {
   onExecute(ctx: RibbonContext, shell: IShellAPI): void;
 }
 
+/**
+ * The old name for `Command`. **Deprecated; it is the same type.**
+ *
+ * Kept as an alias rather than removed so that the migration is incremental: a
+ * mock, a fixture or a test that still says `RibbonAction` compiles unchanged and
+ * means exactly what it meant before. A rename that touched every declaration
+ * site in one diff would have buried the contract change — the four new optional
+ * fields and the two-source rule on the blueprint — inside five hundred lines of
+ * mechanical churn.
+ *
+ * @deprecated Use `Command`.
+ */
+export type RibbonAction = Command;
+
 /** Props the host passes into an extension-supplied pane view. */
 export interface ExtensionViewProps {
   /** Deep-frozen host API. */
@@ -428,6 +626,12 @@ export interface ExtensionViews {
 /**
  * The manifest object a plugin module exports. This is the entire contract a
  * plugin has with the host; nothing outside this shape is read.
+ *
+ * **This shape describes a HOST-OWNED, NORMALISED record**, which is why both
+ * `commands` and `ribbonActions` are required on it: the registry always
+ * populates both, with **the same frozen array**, so no reader has to know which
+ * name the manifest used. What a plug-in DECLARES is
+ * `LEAPExtensionBlueprintInput` below, where exactly one of the two is supplied.
  */
 export interface LEAPExtensionBlueprint {
   /** Must match `EXTENSION_ID_PATTERN`. Unique across the whole registry. */
@@ -437,9 +641,44 @@ export interface LEAPExtensionBlueprint {
   /** UNTRUSTED version string, e.g. `"1.0.0"`. Opaque to the host. */
   readonly version: string;
   readonly navigationTree: readonly NavigationNode[];
-  readonly ribbonActions: readonly RibbonAction[];
+  /**
+   * The extension's commands, under the old name.
+   *
+   * **The identical array object as `commands`**, not a copy of it — reference
+   * equality holds, so `blueprint.ribbonActions === blueprint.commands`. One
+   * collection with two names cannot drift; two collections with two names is the
+   * drift `src/core/command.ts` exists to prevent, one level up.
+   *
+   * @deprecated Read `commands`.
+   */
+  readonly ribbonActions: readonly Command[];
+  /** The extension's commands. The identical array object as `ribbonActions`. */
+  readonly commands: readonly Command[];
   readonly views: ExtensionViews;
 }
+
+/**
+ * What a plug-in module actually WRITES.
+ *
+ * **Exactly one of `commands` and `ribbonActions`, and the compiler says so.** A
+ * manifest declaring both is refused at registration with `INVALID_FIELD` rather
+ * than merged or preferred, for the reason `src/core/command.ts` exists: two
+ * sources for one collection drift, and the drift is silent. Which one wins would
+ * be a rule nobody could see from the manifest, and "they must agree" is a rule
+ * nothing enforces.
+ *
+ * `register` takes `unknown`, so this type is a courtesy to an author writing in
+ * TypeScript and never the thing the host trusts. Every rule it expresses is
+ * enforced again at the door, over plain JavaScript.
+ */
+export type LEAPExtensionBlueprintInput = Omit<
+  LEAPExtensionBlueprint,
+  'ribbonActions' | 'commands'
+> &
+  (
+    | { readonly commands: readonly Command[]; readonly ribbonActions?: never }
+    | { readonly ribbonActions: readonly Command[]; readonly commands?: never }
+  );
 
 /**
  * The contract the host passes DOWN to a plugin.

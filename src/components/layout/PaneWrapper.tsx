@@ -55,7 +55,7 @@ import type { PaneId } from '../../core/types';
  * above is the whole of what this component is allowed to decide. See decision 5
  * in `ShellLayout.tsx`'s banner. *Test:*
  * `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing pane-2
- * view to pane 2, leaving the ribbon and pane 3 interactive".
+ * view to pane 2, leaving the context bar and pane 3 interactive".
  * ============================================================================
  */
 

@@ -89,7 +89,7 @@ describe('App', () => {
     // `useActivation` — throw when their provider is missing, so a shell that
     // renders is proof that both providers are above it and in the right order.
     render(<App />);
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
   });
 
   it('renders all three panes with an empty registry', () => {
@@ -99,9 +99,9 @@ describe('App', () => {
     expect(screen.getByRole('region', { name: 'Detail' })).toBeInTheDocument();
   });
 
-  it('leaves the ribbon contextual side empty when nothing is registered', () => {
+  it('leaves the context bar contextual side empty when nothing is registered', () => {
     const { container } = render(<App />);
-    const contextual = container.querySelector('[data-ribbon-side="extension"]');
+    const contextual = container.querySelector('[data-command-side="extension"]');
     expect(contextual).not.toBeNull();
     expect(contextual?.querySelectorAll('button')).toHaveLength(0);
   });

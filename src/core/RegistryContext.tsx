@@ -1,14 +1,23 @@
 import { createContext, useCallback, useContext, useMemo, useReducer, useRef } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import type {
+  Command,
+  CommandCategory,
+  CommandSurface,
   ExtensionView,
   Hotkey,
   LEAPExtensionBlueprint,
   NavigationNode,
-  RibbonAction,
   ShellUXErrorCode,
 } from './types';
-import { SHELL_UX_ERROR_CODES, ShellUXError } from './types';
+import {
+  COMMAND_CATEGORIES,
+  COMMAND_SURFACES,
+  SHELL_UX_ERROR_CODES,
+  ShellUXError,
+} from './types';
+import type { WhenExpression } from './commands/when';
+import { parseWhen } from './commands/when';
 import { hotkeyToken } from './hotkeys';
 
 /**
@@ -466,15 +475,20 @@ interface MutableNavigationNode {
   children?: readonly NavigationNode[];
 }
 
-/** Builder shape for a normalised action; frozen into a `RibbonAction`. */
-interface MutableRibbonAction {
+/** Builder shape for a normalised command; frozen into a `Command`. */
+interface MutableCommand {
   id: string;
   label: string;
   icon: string;
   isDisabled?: boolean;
   hotkey?: Hotkey;
-  isVisible: RibbonAction['isVisible'];
-  onExecute: RibbonAction['onExecute'];
+  when?: string;
+  whenExpression?: WhenExpression;
+  category?: CommandCategory;
+  surfaces?: readonly CommandSurface[];
+  priority?: number;
+  isVisible: Command['isVisible'];
+  onExecute: Command['onExecute'];
 }
 
 /**
@@ -750,12 +764,110 @@ function normalizeNavigationNode(
   return Object.freeze(node);
 }
 
-function normalizeRibbonAction(
+/**
+ * Validate an optional `category` against the closed host vocabulary.
+ *
+ * **No fallback, deliberately, and the asymmetry with `icon` is the point.** An
+ * unknown icon key resolves to a host glyph because a wrong picture still leaves
+ * the command labelled and reachable. An unknown category has no fallback that is
+ * not a lie about where the command lives: filing it under the first bucket, or
+ * under an invented "Other", tells the user something the manifest never said and
+ * they have no way to correct. See the `CommandCategory` docblock in `types.ts`.
+ */
+function normalizeCategory(value: unknown, path: string): CommandCategory {
+  if (typeof value !== 'string') {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be a string; received ${describeType(value)}.`,
+      path,
+    );
+  }
+  const match = COMMAND_CATEGORIES.find((candidate) => candidate === value);
+  if (match === undefined) {
+    // `value` is a proven primitive string, so stringifying it invokes nothing.
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be one of ${COMMAND_CATEGORIES.join(', ')}; received ` +
+        `${JSON.stringify(value)}. There is deliberately no fallback category: an unknown ` +
+        `bucket would file the command somewhere its author never asked for.`,
+      path,
+    );
+  }
+  return match;
+}
+
+/**
+ * Validate an optional `surfaces` array into a host-owned frozen copy.
+ *
+ * Read once into a host array before anything is checked, exactly as
+ * `setSelectedItems` does, so a `length` that shifts between the measurement and
+ * the walk cannot grow what is stored. A repeated surface is rejected rather than
+ * collapsed, for the same reason a repeated selected id is: a list naming the same
+ * entry twice is the caller's bug and quietly fixing it returns a different list
+ * from the one that was declared.
+ */
+function normalizeSurfaces(value: unknown, path: string): readonly CommandSurface[] {
+  if (!isArrayValue(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be an array; received ${describeType(value)}.`,
+      path,
+    );
+  }
+  const count = value.length;
+  if (count > COMMAND_SURFACES.size) {
+    throw new ShellUXError(
+      'PAYLOAD_TOO_LARGE',
+      `Field "${path}" exceeds the maximum of ${COMMAND_SURFACES.size} surfaces.`,
+      path,
+    );
+  }
+  const seen = new Set<string>();
+  const surfaces: CommandSurface[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const entryPath = `${path}[${index}]`;
+    const entry: unknown = value[index];
+    if (typeof entry !== 'string' || !COMMAND_SURFACES.has(entry)) {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `Field "${entryPath}" must be one of ${[...COMMAND_SURFACES].join(', ')}; received ` +
+          `${describeType(entry)}.`,
+        entryPath,
+      );
+    }
+    if (seen.has(entry)) {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `Field "${entryPath}" repeats surface "${entry}".`,
+        entryPath,
+      );
+    }
+    seen.add(entry);
+    surfaces.push(entry as CommandSurface);
+  }
+  return Object.freeze(surfaces);
+}
+
+/** Validate an optional `priority`. A safe integer; higher sorts first. */
+function normalizePriority(value: unknown, path: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be a safe integer; received ${describeType(value)}.`,
+      path,
+    );
+  }
+  // `-0` compares equal to `0` but stringifies differently, and a sort key that
+  // is not the one that was written is a small lie the host does not need to tell.
+  return Object.is(value, -0) ? 0 : value;
+}
+
+function normalizeCommand(
   value: unknown,
   path: string,
   seenIds: Set<string>,
   seenChords: Set<string>,
-): RibbonAction {
+): Command {
   if (!isRecord(value)) {
     throw new ShellUXError(
       'INVALID_FIELD',
@@ -797,14 +909,14 @@ function normalizeRibbonAction(
   const onExecute = requireField(value, 'onExecute', onExecutePath);
   validateFunction(onExecute, onExecutePath);
 
-  const action: MutableRibbonAction = {
+  const command: MutableCommand = {
     id,
     label,
     icon,
     // Carried by reference, never cloned: these must stay callable and keep
     // their identity. They are the plugin's objects and are left unfrozen.
-    isVisible: isVisible as RibbonAction['isVisible'],
-    onExecute: onExecute as RibbonAction['onExecute'],
+    isVisible: isVisible as Command['isVisible'],
+    onExecute: onExecute as Command['onExecute'],
   };
 
   const isDisabled = value['isDisabled'];
@@ -816,15 +928,43 @@ function normalizeRibbonAction(
         `${path}.isDisabled`,
       );
     }
-    action.isDisabled = isDisabled;
+    command.isDisabled = isDisabled;
   }
 
   const hotkey = value['hotkey'];
   if (hotkey !== undefined) {
-    action.hotkey = normalizeHotkey(hotkey, `${path}.hotkey`, seenChords);
+    command.hotkey = normalizeHotkey(hotkey, `${path}.hotkey`, seenChords);
   }
 
-  return Object.freeze(action);
+  // Parsed HERE, once, at the door — not on every render of every surface. A
+  // malformed expression is therefore a registration rejection naming the field,
+  // in the two codes `parseWhen` raises, rather than a command that silently
+  // never appears. `whenExpression` is host-derived: whatever a plug-in put in
+  // that field is not read, so declaring it is not a way to smuggle a tree past
+  // the parser.
+  const when = value['when'];
+  if (when !== undefined) {
+    const expression = parseWhen(when, `${path}.when`);
+    command.when = expression.source;
+    command.whenExpression = expression;
+  }
+
+  const category = value['category'];
+  if (category !== undefined) {
+    command.category = normalizeCategory(category, `${path}.category`);
+  }
+
+  const surfaces = value['surfaces'];
+  if (surfaces !== undefined) {
+    command.surfaces = normalizeSurfaces(surfaces, `${path}.surfaces`);
+  }
+
+  const priority = value['priority'];
+  if (priority !== undefined) {
+    command.priority = normalizePriority(priority, `${path}.priority`);
+  }
+
+  return Object.freeze(command);
 }
 
 /**
@@ -924,22 +1064,59 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
     );
   }
 
-  const ribbonActions = requireField(candidate, 'ribbonActions', 'ribbonActions');
-  if (!isArrayValue(ribbonActions)) {
+  // ONE COLLECTION, TWO POSSIBLE NAMES, AND BOTH TOGETHER IS A REJECTION.
+  //
+  // Read raw rather than through `requireField`, because "absent" is not an error
+  // for either field on its own — it is an error only for both at once, and
+  // `requireField` would have thrown on a legal `commands`-only manifest before
+  // this rule could run.
+  //
+  // Merging them, or preferring one, would make two sources of truth for one
+  // collection. That is exactly the drift `src/core/command.ts` exists to prevent
+  // one level down, and the failure mode is identical: the two disagree, nothing
+  // says which won, and the answer is invisible from the manifest.
+  const declaredCommands: unknown = candidate['commands'];
+  const declaredActions: unknown = candidate['ribbonActions'];
+  if (declaredCommands !== undefined && declaredActions !== undefined) {
     throw new ShellUXError(
       'INVALID_FIELD',
-      `Field "ribbonActions" must be an array; received ${describeType(ribbonActions)}.`,
+      'A blueprint declares its commands as EITHER "commands" or the deprecated ' +
+        '"ribbonActions", never both. Two sources for one collection drift, and nothing ' +
+        'in the manifest would say which one the host used.',
+      'commands',
+    );
+  }
+  if (declaredCommands === undefined && declaredActions === undefined) {
+    // The legacy field name is what a missing collection is reported as, because
+    // that is the name every existing manifest and every existing rejection
+    // message uses.
+    throw new ShellUXError(
+      'MISSING_FIELD',
+      'Required field "ribbonActions" is missing.',
       'ribbonActions',
+    );
+  }
+  // The path every rejection below names is the field the CALLER actually wrote,
+  // so an author reading `commands[3].isVisible` can find line 3 of the array
+  // they declared rather than one they did not.
+  const commandsField = declaredCommands === undefined ? 'ribbonActions' : 'commands';
+  const declaredCollection: unknown =
+    declaredCommands === undefined ? declaredActions : declaredCommands;
+  if (!isArrayValue(declaredCollection)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${commandsField}" must be an array; received ${describeType(declaredCollection)}.`,
+      commandsField,
     );
   }
   // Captured once, then used for the bound check, the walk AND the size of the
   // host-owned array, so all three agree on one number.
-  const actionCount = ribbonActions.length;
+  const actionCount = declaredCollection.length;
   if (actionCount > REGISTRY_LIMITS.MAX_RIBBON_ACTIONS) {
     throw new ShellUXError(
       'PAYLOAD_TOO_LARGE',
-      `Field "ribbonActions" exceeds the maximum of ${REGISTRY_LIMITS.MAX_RIBBON_ACTIONS} actions.`,
-      'ribbonActions',
+      `Field "${commandsField}" exceeds the maximum of ${REGISTRY_LIMITS.MAX_RIBBON_ACTIONS} actions.`,
+      commandsField,
     );
   }
   const actionIds = new Set<string>();
@@ -949,12 +1126,12 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
   // registration would make load order semantically load-bearing in a lazily
   // loaded shell. ADR-0001 Amendment H.
   const actionChords = new Set<string>();
-  const actions: RibbonAction[] = [];
+  const actions: Command[] = [];
   for (let index = 0; index < actionCount; index += 1) {
     actions.push(
-      normalizeRibbonAction(
-        ribbonActions[index],
-        `ribbonActions[${index}]`,
+      normalizeCommand(
+        declaredCollection[index],
+        `${commandsField}[${index}]`,
         actionIds,
         actionChords,
       ),
@@ -974,12 +1151,17 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
   const pane3 = requireField(views, 'pane3', 'views.pane3');
   validateViewComponent(pane3, 'views.pane3');
 
+  // ONE frozen array, referenced twice. `record.commands === record.ribbonActions`
+  // is a property callers may rely on, and it is what makes "two names, one
+  // collection" true of the stored record rather than merely intended.
+  const commands: readonly Command[] = Object.freeze(actions);
   const record: LEAPExtensionBlueprint = Object.freeze({
     id,
     name,
     version,
     navigationTree: Object.freeze(nodes),
-    ribbonActions: Object.freeze(actions),
+    ribbonActions: commands,
+    commands,
     views: Object.freeze({ pane2: pane2 as ExtensionView, pane3: pane3 as ExtensionView }),
   });
 

@@ -133,7 +133,8 @@ export function describeHotkey(hotkey: Hotkey): string {
  *
  * Pure, like the other three. It renders nothing and reads nothing ambient; the
  * one module that puts the result in the DOM is
- * `src/components/ui/RibbonToolbar.tsx`. Pinned by "ariaKeyShortcuts" in
+ * `src/components/command/commandListItem.tsx`, the shared row every command
+ * surface renders. Pinned by "ariaKeyShortcuts" in
  * `src/core/__tests__/hotkeys.test.ts`.
  */
 export function ariaKeyShortcuts(hotkey: Hotkey): string {

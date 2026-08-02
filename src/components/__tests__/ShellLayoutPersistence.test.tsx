@@ -609,9 +609,30 @@ describe('ShellLayout — writing a persisted layout', () => {
       first.flush();
     });
     // The drawer is a transient inspection of pane 3, not a layout the user
-    // arranged. Nothing about it is in the record — asserted on the record
-    // itself, so a slot added later without a decision fails here.
-    expect(recorder.raw()).toBeNull();
+    // arranged. Nothing about it is in the record — asserted on the record TEXT,
+    // so a slot added later without a decision fails here.
+    //
+    // **This used to assert that the record was absent entirely, and that stopped
+    // being the right assertion when the command registry landed.** Toggling the
+    // drawer is now running a HOST COMMAND, and a command that runs is recorded
+    // in the recents slot — so a record exists, and the case has to say what it
+    // really means rather than relying on emptiness. `drawer` is asserted absent
+    // by name in both directions: the field is not there, and the only thing that
+    // moved is the recents entry naming the command the user invoked.
+    const record = JSON.parse(recorder.raw() ?? '') as Record<string, unknown>;
+    // The KEYS of the record, exhaustively, so a slot added later without a
+    // decision fails here — which is what the old `toBeNull()` was buying.
+    expect(Object.keys(record).sort()).toEqual([
+      'activeExtensionId',
+      'extensions',
+      'isPane1Collapsed',
+      'paneSizes',
+      'recentCommandIds',
+      'v',
+    ]);
+    // And the one thing that DID move is the recents entry naming the command the
+    // user invoked — not the drawer's own state, which is nowhere in the record.
+    expect(record['recentCommandIds']).toEqual(['host:host-toggle-drawer']);
     view.unmount();
 
     const second = createHydrationEngine({ storage: recorder.storage });
@@ -704,7 +725,7 @@ describe('ShellLayout — the persisted active extension', () => {
 
     // The restore runs from a passive effect, where an escaping throw reaches no
     // error boundary and unmounts the whole root. The shell is still here.
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Navigation' })).toBeInTheDocument();
     expect(
       reported.mock.calls.some(
@@ -736,7 +757,7 @@ describe('ShellLayout — the persisted active extension', () => {
     );
     await screen.findByRole('button', { name: 'Sample Extension' });
 
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
     expect(screen.getAllByRole('separator')).toHaveLength(2);
   });
 });
@@ -794,7 +815,7 @@ describe('ShellLayout — the process-wide engine', () => {
         </ShellHostProvider>
       </ExtensionRegistryProvider>,
     );
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
     expect(panelSizes()).toHaveLength(3);
   });
 });

@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
-  LEAPExtensionBlueprint,
+  LEAPExtensionBlueprintInput,
   NavigationNode,
   RibbonAction,
   RibbonContext,
@@ -62,7 +62,8 @@ import type {
  * ---------------------------------------------------------------------------
  * WHY NO RIBBON PREDICATE READS MODULE STATE
  * ---------------------------------------------------------------------------
- * `RibbonToolbar` evaluates `isVisible` while it renders, and it re-renders when
+ * `CommandRegistry` evaluates `isVisible` while a surface renders, and every
+ * surface re-renders when
  * the HOST context changes — it is not subscribed to this module. A predicate
  * that closed over `mailStore` would therefore be evaluated against whatever the
  * module state happened to be at the last host-driven render, which is a ribbon
@@ -532,7 +533,7 @@ async function fetchBody(message: MailMessage, signal: AbortSignal): Promise<Bod
  *    runs synchronously inside the write and is documented as not necessarily
  *    being a `ShellUXError`.
  *
- * `RibbonAction.onExecute` does NOT need this — `RibbonToolbar` already wraps it
+ * `Command.onExecute` does NOT need this — `execute` in `src/core/command.ts` already wraps it
  * — so it is used only where the host has no guard of its own: the views, which
  * have no fault boundary above them until ISSUE-004 lands one.
  */
@@ -798,12 +799,12 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
  *
  * The chord-bearing buttons also carry `aria-keyshortcuts` in UI Events key-value
  * spelling — `Control+Shift+N` and `Control+Delete`, not the `Ctrl+…` display
- * spelling the tooltip uses — and the attribute is omitted from a disabled action
+ * spelling the tooltip uses — and the attribute is omitted from a disabled command
  * because the chord is suppressed there too. *Tests:* "advertises a chord-bearing
- * action with aria-keyshortcuts, in key values rather than display spelling",
+ * command with aria-keyshortcuts, in key values rather than display spelling",
  * "advertises a chord on an overflow menu item too" and "omits aria-keyshortcuts
- * from a disabled action, because the chord will not fire" in
- * `src/components/__tests__/RibbonToolbar.test.tsx`.
+ * from a disabled command, because the chord will not fire" in
+ * `src/components/command/__tests__/ContextBar.test.tsx`.
  *
  * **The dispatcher's suppression list is a guardrail, not a boundary**, in the
  * same register as ADR-0001's "No sandbox". It skips auto-repeat, an event
@@ -946,7 +947,7 @@ const NAVIGATION_TREE: readonly NavigationNode[] = [
  * `eslint.config.js` is not a plug-in's to edit, so the export is shaped to the
  * rule rather than the rule to the export.
  */
-export const MailPlugin: LEAPExtensionBlueprint = Object.freeze({
+export const MailPlugin: LEAPExtensionBlueprintInput = Object.freeze({
   id: 'mail',
   name: 'Mail',
   version: '1.0.0',

@@ -16,6 +16,43 @@ from so a reader can check it.
 
 ### Added
 
+- **The command registry and its four surfaces — the ribbon is deleted.**
+  `src/core/commands/CommandRegistry.ts` holds one collection and four projections
+  — `listForSurface`, `listByCategory`, `recents` and `suggestedFor` — and every
+  one of them filters through the same `isVisible`/`when` guards. The surfaces are
+  `src/components/command/`: `ContextBar.tsx` (32px, replacing the ribbon at about
+  a third of the vertical cost), `CommandPalette.tsx` (Cmd-K, **browsable on an
+  empty query**), `FloatingToolbar.tsx` (selection-triggered, pane 3 only) and
+  `OmniboxComposer.tsx` (docked, with the detected intent labelled before submit).
+  `commandListItem.tsx` is the one row all four render, and the one place a plug-in
+  string reaches the DOM. See ADR-0001 Amendment N.
+- **`Command`, generalising `RibbonAction`.** Four optional fields — `when`,
+  `category`, `surfaces`, `priority` — and nothing removed. `RibbonAction` stays as
+  a deprecated alias of `Command`, so nothing an extension has written breaks.
+  `LEAPExtensionBlueprint` gains `commands` beside `ribbonActions`; **declaring
+  both is rejected** rather than merged.
+- **A host chord table.** Cmd-K / Ctrl-K opens the palette, and it is consulted
+  before the extension chord table, so an extension declaring `Ctrl+K` never
+  receives the keystroke while the host wants it. Host chrome is not
+  plug-in-declarable: `HostCommand` has no `hotkey` field and the palette glyph is
+  absent from `SHELL_ICONS`.
+- **A fourth `HydrationEngine` slot, `recentCommandIds`.** Host-minted, namespaced
+  keys, bounded at 16, and read tolerantly so a record written before the slot
+  existed still restores. `SCHEMA_VERSION` does not move.
+
+### Changed
+
+- **Behavioural regression to expect, stated in advance.** The 32px context bar
+  shows at most four contextual commands inline where the ribbon showed the same
+  four — the count is unchanged — but the bar is a third of the height, so a
+  command that used to be visible at a glance in a taller row is now one keystroke
+  (Cmd-K) or one click (the overflow menu) away. That is the trade the plan asks
+  for and somebody will file it as a bug.
+- **`src/core/ribbonAction.ts` is now `src/core/command.ts`**, with `isVisible`,
+  `execute` and `report` unchanged. The rename is the whole of the change: six
+  routes to a plug-in handler now share the two guards that two routes used to.
+
+
 - **The inversion-of-control extension contract** — `src/core/types.ts`
   (`LEAPExtensionBlueprint`, `IShellAPI`, `RibbonContext`, `ShellUXError` and its
   code enum), `src/core/RegistryContext.tsx` (validation, normalisation, the

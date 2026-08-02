@@ -14,24 +14,24 @@ import { ShellLayout } from '../layout/ShellLayout';
 /**
  * The ribbon, swapped for one that can be told to throw.
  *
- * `RibbonToolbar` renders validated primitive strings and host-owned callbacks,
+ * `ContextBar` renders validated primitive strings and host-owned callbacks,
  * so **there is no input reachable through the public contract that makes it
  * throw during render** — which is exactly why its fault boundary needs a test
  * of its own rather than a hopeful sentence. The real component is used
  * everywhere in this file except the one case that flips this flag, so nothing
  * else here is testing a double.
  */
-const ribbon = vi.hoisted(() => ({ shouldThrow: false }));
+const contextBar = vi.hoisted(() => ({ shouldThrow: false }));
 
-vi.mock('../ui/RibbonToolbar', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../ui/RibbonToolbar')>();
+vi.mock('../command/ContextBar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../command/ContextBar')>();
   return {
     ...actual,
-    RibbonToolbar: (props: Parameters<typeof actual.RibbonToolbar>[0]): ReactElement => {
-      if (ribbon.shouldThrow) {
-        throw new Error('the ribbon exploded');
+    ContextBar: (props: Parameters<typeof actual.ContextBar>[0]): ReactElement => {
+      if (contextBar.shouldThrow) {
+        throw new Error('the context bar exploded');
       }
-      return <actual.RibbonToolbar {...props} />;
+      return <actual.ContextBar {...props} />;
     },
   };
 });
@@ -88,6 +88,56 @@ function sampleBlueprint(overrides: Record<string, unknown> = {}): Record<string
     views: { pane2: makeProbe('pane2'), pane3: makeProbe('pane3') },
     ...overrides,
   });
+}
+
+/**
+ * A pane-3 view that can put the shell into a selected state from the UI.
+ *
+ * The density scan has to REACH the floating toolbar, and the toolbar renders
+ * only while something is selected. Selecting from the plug-in's own view — rather
+ * than writing to the shell store from the test — keeps the scan walking the
+ * states a user can actually be in, which is the property `STATE_MARKERS` exists
+ * to protect.
+ */
+function SelectingPane3({ shell }: ExtensionViewProps): ReactElement {
+  return (
+    <div data-testid="probe-pane3">
+      <button
+        type="button"
+        onClick={() => {
+          shell.setSelectedItems(['row-1']);
+        }}
+      >
+        Select a row
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The sample blueprint with a selectable pane 3 and one selection-gated command.
+ *
+ * The command declares a `when` rather than an `isVisible` closure, so the state
+ * the scan reaches is the one the floating toolbar is actually for.
+ */
+function selectingBlueprint(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const base = sampleBlueprint(overrides);
+  const actions = [
+    ...((base['ribbonActions'] as Record<string, unknown>[] | undefined) ?? []),
+    {
+      id: 'act-selected',
+      label: 'Act On Selection',
+      icon: 'edit',
+      when: 'selectedItemId != null',
+      isVisible: () => true,
+      onExecute: () => undefined,
+    },
+  ];
+  return {
+    ...base,
+    ribbonActions: actions,
+    views: { pane2: makeProbe('pane2'), pane3: SelectingPane3 },
+  };
 }
 
 interface RegistrarProps {
@@ -214,19 +264,19 @@ function classTokens(root: ParentNode): string[] {
 }
 
 afterEach(() => {
-  ribbon.shouldThrow = false;
+  contextBar.shouldThrow = false;
   vi.restoreAllMocks();
 });
 
 describe('ShellLayout — structure and focus order', () => {
-  it('renders the ribbon and three panes in ribbon → pane 1 → pane 2 → pane 3 order', () => {
+  it('renders the context bar and three panes in context bar → pane 1 → pane 2 → pane 3 order', () => {
     const { container } = render(<Harness />);
     const regions = Array.from(
-      container.querySelectorAll('[data-shell-region="ribbon"], [data-pane]'),
+      container.querySelectorAll('[data-shell-region="context-bar"], [data-pane]'),
     ).map(
       (element) => element.getAttribute('data-shell-region') ?? element.getAttribute('data-pane'),
     );
-    expect(regions).toEqual(['ribbon', 'pane1', 'pane2', 'pane3']);
+    expect(regions).toEqual(['context-bar', 'pane1', 'pane2', 'pane3']);
   });
 
   it('names all three panes as regions', () => {
@@ -536,14 +586,14 @@ describe('ShellLayout — pane 1 collapse', () => {
 });
 
 describe('ShellLayout — extensions', () => {
-  it('leaves the ribbon contextual side empty when no extension is active', () => {
+  it('leaves the context bar contextual side empty when no extension is active', () => {
     const { container } = render(<Harness blueprints={[sampleBlueprint()]} />);
-    const contextual = container.querySelector('[data-ribbon-side="extension"]');
+    const contextual = container.querySelector('[data-command-side="extension"]');
     expect(contextual?.querySelectorAll('button')).toHaveLength(0);
     // `aria-disabled`, not the native attribute: this is the shell's DEFAULT
     // state, so a natively disabled button would put "Close extension" outside
     // the tab order of every fresh session and a keyboard user would never learn
-    // the command existed. See the `ActionButton` docblock in `RibbonToolbar`.
+    // the command existed. See the `CommandButton` docblock in `commandListItem.tsx`.
     const close = screen.getByRole('button', { name: 'Close extension' });
     expect(close).toHaveAttribute('aria-disabled', 'true');
     expect(close).not.toBeDisabled();
@@ -563,7 +613,7 @@ describe('ShellLayout — extensions', () => {
 
   it('shows the active extension contextual actions, filtered by their predicates', async () => {
     const { container } = await renderActivated();
-    const contextual = container.querySelector('[data-ribbon-side="extension"]');
+    const contextual = container.querySelector('[data-command-side="extension"]');
     // The fixture's first action is visible; its second returns false.
     expect(contextual?.textContent).toContain('Act One');
     expect(contextual?.textContent).not.toContain('Act Two');
@@ -582,14 +632,14 @@ describe('ShellLayout — extensions', () => {
     expect(screen.getByTestId('probe-pane3')).toHaveTextContent('sample-ext|true|child-a');
   });
 
-  it('closes the active extension from the host ribbon', async () => {
+  it('closes the active extension from the host command', async () => {
     const { user, container } = await renderActivated();
     const close = screen.getByRole('button', { name: 'Close extension' });
     expect(close).not.toHaveAttribute('aria-disabled');
 
     await user.click(close);
     expect(screen.queryByTestId('probe-pane2')).toBeNull();
-    expect(container.querySelector('[data-ribbon-side="extension"]')?.querySelectorAll('button'))
+    expect(container.querySelector('[data-command-side="extension"]')?.querySelectorAll('button'))
       .toHaveLength(0);
     expect(screen.getByRole('button', { name: 'Close extension' })).toHaveAttribute(
       'aria-disabled',
@@ -825,7 +875,7 @@ function densityOffenders(tokens: readonly string[]): string[] {
   return [...paddingOffenders(tokens), ...typeSizeOffenders(tokens)];
 }
 
-/** Seven visible ribbon actions, so the shell really grows an overflow menu. */
+/** Seven visible commands, so the shell really grows an overflow menu. */
 function manyRibbonActions(): Record<string, unknown>[] {
   return Array.from({ length: 7 }, (_unused, index) => ({
     id: `act-${index}`,
@@ -853,6 +903,16 @@ const STATE_MARKERS: ReadonlyMap<string, string> = new Map([
   ['navigation collapsed', 'h-8'],
   // `DropdownMenu.Content`, which lives under `document.body`.
   ['overflow menu open', 'w-44'],
+  // `Dialog.Content`, which also lives under `document.body`. The palette is a
+  // separate state rather than a variant of the one above, because it is a
+  // different Radix primitive in a different portal and its own tokens are
+  // unreachable from every other state.
+  ['command palette open', 'w-[32rem]'],
+  // The selection-triggered floating toolbar inside pane 3. It needs a plug-in
+  // to have selected something, which is why `selectingBlueprint` exists. Both
+  // portalled surfaces are shut by this point, so `shadow-popover` in this state
+  // can only have come from the toolbar.
+  ['floating toolbar visible', 'shadow-popover'],
 ]);
 
 /**
@@ -867,13 +927,13 @@ const STATE_MARKERS: ReadonlyMap<string, string> = new Map([
  * shell: `PanelResizeHandle` tracks pointer events on the document, every
  * element in jsdom reports a 0×0 rect at the origin, and the handle's 12px hit
  * area therefore claims the pointer-down at (0, 0) before Radix sees it. That is
- * a jsdom artefact with no counterpart in a browser — `RibbonToolbar.test.tsx`
+ * a jsdom artefact with no counterpart in a browser — `src/components/command/__tests__/ContextBar.test.tsx`
  * opens the same menu by click, with no resize handles in the tree — and the
  * keyboard route exercises the same Radix trigger.
  */
 async function shellStates(): Promise<Map<string, string[]>> {
   const user = userEvent.setup();
-  render(<Harness blueprints={[sampleBlueprint({ ribbonActions: manyRibbonActions() })]} />);
+  render(<Harness blueprints={[selectingBlueprint({ ribbonActions: manyRibbonActions() })]} />);
   const states = new Map<string, string[]>();
 
   states.set('no extension active', classTokens(document.body));
@@ -894,9 +954,94 @@ async function shellStates(): Promise<Map<string, string[]>> {
   await user.keyboard('{Enter}');
   expect(screen.getByRole('menu', { name: 'More actions' })).toBeInTheDocument();
   states.set('overflow menu open', classTokens(document.body));
+  await user.keyboard('{Escape}');
+
+  // The palette is opened by the HOST's own chord, dispatched on `window`, which
+  // is the only route a user has to it and therefore the only honest one here.
+  fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+  expect(screen.getByRole('dialog', { name: 'Commands' })).toBeInTheDocument();
+  states.set('command palette open', classTokens(document.body));
+  await user.keyboard('{Escape}');
+
+  // The floating toolbar needs the plug-in to have selected something. The
+  // pane-3 probe offers a button for it rather than the host reaching into the
+  // shell store, so the state is reached the way a user reaches it.
+  await user.click(screen.getByRole('button', { name: 'Select a row' }));
+  expect(screen.getByRole('toolbar', { name: 'Selection commands' })).toBeInTheDocument();
+  states.set('floating toolbar visible', classTokens(document.body));
 
   return states;
 }
+
+/**
+ * ============================================================================
+ * THE COMMAND SURFACES, AS `ShellLayout` WIRES THEM.
+ * ============================================================================
+ * The surfaces have their own suites under `src/components/command/__tests__/`.
+ * What is here is the wiring `ShellLayout` owns and nothing else: the host chord
+ * reaching the palette, the host-only "switch extension" verb, and what the shell
+ * does with a composer submission it cannot consume yet.
+ * ============================================================================
+ */
+describe('ShellLayout — the command surfaces it wires', () => {
+  it('opens the command palette on the host chord and closes it on Escape', async () => {
+    const user = userEvent.setup();
+    render(<Harness blueprints={[sampleBlueprint()]} />);
+    expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
+
+    // Dispatched on `window`, which is where `useHotkeyDispatch` listens.
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    expect(screen.getByRole('dialog', { name: 'Commands' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
+  });
+
+  it('offers the switch-extension verb in the palette only, and it expands the navigation', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness blueprints={[sampleBlueprint()]} />);
+    await user.click(screen.getByRole('button', { name: 'Sample Extension' }));
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    expect(container.querySelector('[data-shell-region="nav-track"]')).not.toBeNull();
+
+    // Not on the 32px bar: a navigation verb must not spend a contextual slot.
+    expect(screen.queryByRole('button', { name: 'Switch extension' })).toBeNull();
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    await user.click(screen.getByRole('button', { name: 'Switch extension' }));
+
+    // It expands pane 1 rather than choosing an extension: the host does not know
+    // which one the user meant, and picking one would be the shell arguing.
+    expect(container.querySelector('[data-shell-region="nav-track"]')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Collapse navigation' })).toBeInTheDocument();
+  });
+
+  it('echoes a composer submission back rather than pretending to have consumed it', async () => {
+    const user = userEvent.setup();
+    render(<Harness blueprints={[sampleBlueprint()]} />);
+    await user.click(screen.getByRole('button', { name: 'Sample Extension' }));
+
+    // Driven from the KEYBOARD, for the reason `shellStates` opens the overflow
+    // menu that way: inside the assembled shell every element reports a 0x0 rect
+    // at the origin, so `PanelResizeHandle`'s document pointer tracking claims a
+    // pointer-down at (0, 0) before the target sees it. That is a jsdom artefact
+    // with no counterpart in a browser, and Enter is the gesture this surface is
+    // really built around.
+    const input = screen.getByRole('textbox', { name: 'Composer input' });
+    act(() => {
+      input.focus();
+    });
+    await user.keyboard('unread{Enter}');
+
+    // The host owns no filter and answers no question. Reaching into the active
+    // extension's view to apply one would be host chrome operating a plug-in's
+    // UI, which nothing in this repository grants — so the honest thing on screen
+    // is the intent and the text the user typed.
+    const echo = document.querySelector('[data-shell-region="omnibox-echo"]');
+    expect(echo?.textContent).toBe('filter: unread');
+    expect(input).toHaveValue('');
+  });
+});
 
 describe('ShellLayout — density contract', () => {
   it('reaches every rendered state of the shell, proven by a token unique to each', async () => {
@@ -991,16 +1136,16 @@ describe('ShellLayout — density contract', () => {
     ).toEqual([]);
   });
 
-  it('uses one 1px token border on every pane edge and on the ribbon', () => {
+  it('uses one 1px token border on every pane edge and on the context bar', () => {
     render(<Harness />);
     for (const label of ['Navigation', 'List', 'Detail']) {
       const pane = screen.getByRole('region', { name: label });
       expect(pane).toHaveClass('border');
       expect(pane).toHaveClass(TOKEN_CLASS.paneBorder);
     }
-    const ribbon = screen.getByRole('toolbar', { name: 'Shell ribbon' });
-    expect(ribbon).toHaveClass('border-b');
-    expect(ribbon).toHaveClass(TOKEN_CLASS.ribbonBorder);
+    const bar = screen.getByRole('toolbar', { name: 'Shell commands' });
+    expect(bar).toHaveClass('border-b');
+    expect(bar).toHaveClass(TOKEN_CLASS.ribbonBorder);
   });
 
   it('renders no dark: variant anywhere in the assembled shell, in any state', async () => {
@@ -1152,10 +1297,10 @@ describe('ShellLayout — contrast and target size', () => {
     expect(collapsed).toHaveClass('h-8');
   });
 
-  it('gives every ribbon control a 24px minimum height', async () => {
+  it('gives every context-bar control a 24px minimum height', async () => {
     const { container } = await renderActivated();
     const buttons = Array.from(
-      container.querySelectorAll<HTMLElement>('[data-shell-region="ribbon"] button'),
+      container.querySelectorAll<HTMLElement>('[data-shell-region="context-bar"] button'),
     );
     expect(buttons.length).toBeGreaterThan(0);
     for (const button of buttons) {
@@ -1202,7 +1347,7 @@ describe('ShellLayout — fault containment', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
-  it('contains a throwing pane-2 view to pane 2, leaving the ribbon and pane 3 interactive', async () => {
+  it('contains a throwing pane-2 view to pane 2, leaving the context bar and pane 3 interactive', async () => {
     const user = userEvent.setup();
     render(
       <Harness
@@ -1228,7 +1373,7 @@ describe('ShellLayout — fault containment', () => {
     // Pane 3 rendered its plug-in view, which means the sibling subtree was
     // never unmounted...
     expect(screen.getByTestId('probe-pane3')).toBeInTheDocument();
-    // ...and the ribbon is not merely present, it still works.
+    // ...and the context bar is not merely present, it still works.
     await user.click(screen.getByRole('button', { name: 'Show utility drawer' }));
     expect(screen.getByRole('button', { name: 'Hide utility drawer' })).toBeInTheDocument();
   });
@@ -1253,11 +1398,11 @@ describe('ShellLayout — fault containment', () => {
     );
   });
 
-  it('contains a throwing ribbon without taking the panes down', () => {
-    ribbon.shouldThrow = true;
+  it('contains a throwing context bar without taking the panes down', () => {
+    contextBar.shouldThrow = true;
     render(<Harness blueprints={[sampleBlueprint()]} />);
 
-    expect(screen.getByRole('alert')).toHaveTextContent('The ribbon could not be displayed.');
+    expect(screen.getByRole('alert')).toHaveTextContent('The context bar could not be displayed.');
     // The DoD asks for the ribbon and the other panes to stay interactive when
     // something fails. That is only guaranteed if the ribbon's own failure is
     // contained too, which is why it has a boundary of its own.

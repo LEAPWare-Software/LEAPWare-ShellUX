@@ -75,7 +75,7 @@ import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
  * 6. THE REPORT IS DOUBLE-GUARDED. `console` is no more the host's object than
  *    the component that just threw is; a plug-in that replaces `console.error`
  *    with a thrower would otherwise turn containment into an escape. Same shape
- *    and same reasoning as the guard in `RibbonToolbar.tsx` and the one in
+ *    and same reasoning as `report` in `src/core/command.ts` and the guard in
  *    `ShellHostProvider`'s registry sweep. Nothing is interpolated into the
  *    report either — the values are passed as arguments, so no `toString` runs.
  *    *Test:* "survives a console.error that itself throws".
@@ -85,10 +85,10 @@ import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
  * constructor errors on the subtree below them. They do not catch, and this
  * component must never be described as covering:
  *
- *   - **Errors thrown in event handlers.** A `RibbonAction.onExecute` that
- *     throws is caught by the ribbon's own `try`/`catch` in `RibbonToolbar.tsx`,
- *     not by this boundary, and a click handler inside a plug-in view that
- *     throws is caught by nobody here.
+ *   - **Errors thrown in event handlers.** A `Command.onExecute` that throws is
+ *     caught by `execute` in `src/core/command.ts` — the one guard every command
+ *     surface and the chord dispatcher share — not by this boundary, and a click
+ *     handler inside a plug-in view that throws is caught by nobody here.
  *   - **`setTimeout`, `setInterval` and `requestAnimationFrame` callbacks.**
  *     They run on a fresh task with no React stack above them.
  *   - **Unhandled promise rejections.** Async work is not part of any render.

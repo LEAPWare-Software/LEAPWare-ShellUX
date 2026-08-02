@@ -2305,6 +2305,12 @@ the two messages fails one of those two cases whichever direction it merges in.
 
 ## Amendment J — Hotkey dispatch, and narrowing the no-listener invariant to keep it
 
+> **Path note, added with Amendment N.** `src/core/ribbonAction.ts` named below was
+> RENAMED to `src/core/command.ts` when the ribbon was deleted; the three functions
+> and their behaviour are unchanged. The path is left as written here because this
+> amendment is a record of a decision as it was made, and Amendment N is where the
+> rename is decided.
+
 **Date:** 2026-07-31 · **Status:** Accepted · **Amends:** Amendment H (which
 recorded declaration and validation and deferred the dispatcher), Amendment H
 Decision 6 (foreground scoping, now the dispatcher's lookup rule) and Amendment G
@@ -2338,9 +2344,8 @@ the precondition for the dispatcher being defensible, and it was done and verifi
 green as its own step. This is Amendment I Decision 3's reasoning ("a rule
 evaluated twice is a rule that can disagree with itself") applied to a guard rather
 than to a validation. *Tests:* the existing ribbon cases still exercise both
-functions through the component — "hides an action whose isVisible predicate throws
-and still renders the rest", "treats a non-boolean isVisible result as not visible",
-"survives an onExecute that throws, leaving the ribbon interactive" — and the
+functions through the component — "the context bar hides a command whose isVisible predicate throws and still renders the rest", "treats a non-boolean isVisible result as not visible",
+"the context bar survives an onExecute that throws, leaving the surface interactive" — and the
 dispatcher exercises the same two through the chord: "does not fire a chord whose
 isVisible predicate throws, and reports it once" and "survives an onExecute that
 throws, leaving the dispatcher live" in `src/core/__tests__/hotkeyDispatch.test.tsx`.
@@ -2430,11 +2435,8 @@ The omission on a disabled action is not an oversight: the dispatcher skips a
 disabled action, so announcing a shortcut on it would be the same lie in the other
 direction as the one the pre-ISSUE-006 ribbon avoided by announcing nothing at all.
 *Tests:* "spells the control key Control, which describeHotkey deliberately does
-not" in `src/core/__tests__/hotkeys.test.ts`; "advertises a chord-bearing action
-with aria-keyshortcuts, in key values rather than display spelling", "omits
-aria-keyshortcuts from a disabled action, because the chord will not fire",
-"advertises a chord on an overflow menu item too" and "never advertises a chord on
-a host action" in `src/components/__tests__/RibbonToolbar.test.tsx`.
+not" in `src/core/__tests__/hotkeys.test.ts`; "advertises a chord-bearing command with aria-keyshortcuts, in key values rather than display spelling", "omits aria-keyshortcuts from a disabled command, because the chord will not fire",
+"advertises a chord on an overflow menu item too" and "never advertises a chord on a host command" in `src/components/command/__tests__/ContextBar.test.tsx`.
 
 ### Decision 7 — narrowing the no-listener scan beat deleting it, and beat pretending
 
@@ -2795,6 +2797,139 @@ omission and cannot document a key that does not exist.
 - **Neutral.** `PANE_IDS` outlived the field it was created for and is now
   justified by a different consumer. Its docblock says so, rather than leaving a
   reader to assume it is dead.
+
+---
+
+## Amendment N — The ribbon is deleted, and one command registry stands where it stood
+
+**Date:** 2026-08-02 · **Status:** Accepted · **Amends:** Amendment H Decision 1,
+Amendment J, and the render-boundary paragraph of `types.ts`
+
+### Context
+
+`docs/plans/native-host-pivot.md` §3.4 deletes the ribbon and replaces it with one
+command registry projected onto four surfaces: a 32px context bar, a Cmd-K
+palette, a selection-triggered floating toolbar inside pane 3, and a docked
+omnibox composer. §11 item 1 refuses a ribbon in any costume — "not classic, not
+simplified, not our own take" — and item 5 refuses "multiple competing,
+non-unified command surfaces. One registry or inherit the mess."
+
+That is a product decision with two contract consequences and one security
+consequence, and this amendment records all three.
+
+### Decision 1 — `RibbonAction` is GENERALISED, not replaced
+
+`Command` is `RibbonAction` with four optional fields added — `when`, `category`,
+`surfaces`, `priority` — and nothing removed. `isVisible`, `onExecute`, the
+structured `Hotkey` and the 60-key `HOTKEY_KEYS` allowlist are unchanged, and
+`export type RibbonAction = Command` stays as a deprecated alias so that mocks,
+fixtures and tests migrate a file at a time rather than in one diff.
+
+`LEAPExtensionBlueprint` gains `commands` beside `ribbonActions`, and **a manifest
+declaring both is rejected with `INVALID_FIELD`** whether or not the two agree.
+That is the same argument `src/core/command.ts` makes one level down: two sources
+for one collection drift, the drift is silent, and "they must agree" is a rule
+nothing enforces. The stored record carries both names referencing **one frozen
+array**, so no reader has to know which name the manifest used.
+
+`category` is validated against a closed set **with no fallback**, and the
+asymmetry with `icon` is the decision. An unknown icon key resolves to a host
+glyph because a wrong picture still leaves the command labelled and reachable. An
+unknown category has no fallback that is not a lie about where the command lives:
+every candidate — an invented "Other", the first bucket, no bucket — is a
+statement the author never made and the user cannot correct.
+
+### Decision 2 — Amendment H Decision 1's word *same*, applied to four routes
+
+Amendment H licensed a keyboard chord as "a second way to fire this action's
+`onExecute`, gated by the same `isVisible` and the same `isDisabled`". Amendment J
+extracted those guards into one module so the button and the chord could not
+drift. **There are now six routes, not two** — four surfaces, the chord
+dispatcher, and the shared row all of them render — and the answer is the same
+answer, once more: `isVisible` and `execute` in `src/core/command.ts` (renamed
+from `ribbonAction.ts`, unchanged in behaviour) are the only route to a plug-in
+predicate or handler, and `CommandRegistry` is the only caller of them.
+
+`when` is **ANDed** with `isVisible`, never ORed, and that direction is
+load-bearing: ANDing means adding a `when` to an existing command can only narrow
+where it appears, so the migration cannot reveal a command a predicate was hiding.
+
+### Decision 3 — Palette containment is structural, not a filter
+
+The palette lists the FOREGROUND extension's commands, the host's own commands,
+and a host-owned "switch extension" verb. Nothing else.
+
+Listing a background extension's commands would be a **wider route to a plug-in
+handler than the ribbon ever was**: its `onExecute` would receive a
+`RibbonContext` whose `contextKeys` belong to a different extension and whose
+`selectedItemIds` are rows in a list it does not own, at a moment the user
+believes they are operating on what is on screen. `DUPLICATE_HOTKEY` is scoped per
+blueprint for exactly this reason — Decision 6 of Amendment H — and a palette that
+reached across extensions would make that scoping arbitrary rather than principled.
+
+**It is enforced by the absence of a parameter, not by a filter.**
+`createCommandRegistry` takes ONE extension; the module imports no registry and
+performs no lookup. A filter is removed in one line; a missing parameter is not.
+Recents are the one place a stale cross-extension id could survive, so they are
+resolved against the CURRENT offered set on every read, and their keys are
+namespaced so a key from elsewhere cannot resolve at all.
+
+### Decision 4 — Host chrome is not plug-in-declarable
+
+Cmd-K is in `HOST_CHORDS` in `src/core/hotkeyDispatch.ts`, consulted **before**
+`activation.getActive()` is called. An extension declaring Ctrl+K is not rejected —
+rejecting it would make load order semantically load-bearing, which Decision 6 of
+Amendment H refuses — it simply never receives the keystroke while the host wants
+it. `HostCommand` carries no `hotkey` field, so there is no single table in which a
+host chord and a plug-in chord could be compared and one preferred: two tables, one
+order, no priority column.
+
+The palette's glyph is a module constant and is deliberately absent from
+`SHELL_ICONS`, for the reason `OVERFLOW_ICON` always was: that map is the
+vocabulary offered to extensions.
+
+### Decision 5 — The editable-target suppression applies to one table, not both
+
+`isSuppressed` used to fold five checks into one function. Four of them —
+`defaultPrevented`, `repeat`, `isComposing`, `keyCode === 229` — are about the
+EVENT and apply to both tables. The fifth, an editable target, exists because a
+plug-in chord would fire on top of what the user is typing; a host chord carrying
+Ctrl or Meta produces no character, and the omnibox composer is the surface a user
+is most likely to want the palette from. So the editable check is consulted for the
+extension walk only.
+
+**This is not the second suppression Amendment I Decision 3 refuses.** That refusal
+is about one rule evaluated twice, in two places, able to disagree with itself.
+This is one rule, written once, applied to one of two tables, with the other
+table's treatment stated rather than left to inference.
+
+### Consequences
+
+- **Positive.** One filter, four projections. A command hidden on one surface is
+  hidden on every surface, and the property is a structure rather than four
+  correct `filter` calls.
+- **Positive.** The palette is browsable on an empty query, which is what makes the
+  deletion defensible: the ribbon's real job was discovery, and a search-only
+  replacement would have regressed on the one thing it was good at.
+- **Positive.** One render boundary, not four. The four surfaces contain no render
+  of a plug-in string at all; `commandListItem.tsx` is the only place `label` and
+  `icon` meet the DOM, and the module-source scan is asserted five times over.
+- **Negative — accepted.** The palette's rows are Tab-navigable buttons, not a
+  `listbox` with arrow keys. Implementing the model means a key handler in `src/`
+  and an entry in `KEY_EVENT_ALLOWLIST`, and Amendment G's lesson from the old
+  `role="menu"` is that a role whose interaction model is not implemented is worse
+  than no role. Recorded as a known deviation, not as an absence.
+- **Negative — accepted.** Each of the palette's four projections runs the filter,
+  so a throwing predicate is reported once per projection rather than once per
+  render. Memoising would put a cache between a predicate and the context it is
+  contracted to be a pure function of.
+- **Negative — accepted.** `when` is optional in this phase. Requiring it now would
+  empty the context bar for every extension written against the old contract,
+  including both verification remotes. The succession is written into
+  `Command.when` rather than left to be rediscovered.
+- **Neutral.** `PersistedShellState` gains a fourth slot for recents, read
+  tolerantly so a record written before it existed still restores.
+  `SCHEMA_VERSION` does not move.
 
 ---
 

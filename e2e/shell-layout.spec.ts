@@ -55,12 +55,12 @@ test.describe('reflow at 320px', () => {
     expect(geometry.bodyScrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
   });
 
-  test('leaves every contextual ribbon action reachable', async ({ page }) => {
+  test('leaves every contextual command reachable', async ({ page }) => {
     await openShell(page);
     await activateExtension(page, 'Mail');
     await selectFirstMailMessage(page);
 
-    const actions = page.locator('[data-ribbon-side="extension"] button');
+    const actions = page.locator('[data-command-side="extension"] button');
     const count = await actions.count();
 
     // Mail shows four inline actions plus the overflow trigger once a message is
@@ -72,8 +72,8 @@ test.describe('reflow at 320px', () => {
       const action = actions.nth(index);
       const label = (await action.getAttribute('title')) ?? `action ${index}`;
 
-      // The ribbon is its own horizontal scroll container at this width, which
-      // is the design: controls stay reachable by scrolling the ribbon rather
+      // The context bar is its own horizontal scroll container at this width,
+      // which is the design: controls stay reachable by scrolling the bar rather
       // than by scrolling the page. "Reachable" therefore means reachable AFTER
       // that scroll, and unreachable at any scroll offset is the failure.
       await action.scrollIntoViewIfNeeded();
@@ -213,7 +213,7 @@ test.describe('layout persistence across a real reload', () => {
     await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
     await page.reload();
 
-    // The shell opens collapsed, and the ribbon offers the inverse action.
+    // The shell opens collapsed, and the context bar offers the inverse action.
     await expect(page.locator('[data-shell-region="nav-track"]')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
   });

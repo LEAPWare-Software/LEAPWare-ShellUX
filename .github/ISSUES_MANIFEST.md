@@ -299,12 +299,10 @@ None. This is the root of the dependency graph.
   predicates is ISSUE-002. That call site now exists, in
   `src/components/ui/RibbonToolbar.tsx`, which calls `isVisible` inside a guard and
   treats a throw as "not visible". *Test:*
-  `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
-  isVisible predicate throws and still renders the rest", which asserts all three
+  `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar hides a command whose isVisible predicate throws and still renders the rest", which asserts all three
   halves of the gate: the throwing action is absent, the sibling contextual action
   and the host action are both still in the document, and the failure is reported
-  once with the offending action id in the message. Beside it, "survives a
-  console.error that itself throws while reporting a bad predicate" closes the
+  once with the offending action id in the message. Beside it, "the context bar survives a console.error that itself throws while reporting a bad predicate" closes the
   report path, so a tampered `console` cannot convert the containment into an
   escape. What ISSUE-001 enforces on its own remains the narrower thing: that
   `isVisible` and `onExecute` are functions at registration.
@@ -581,8 +579,7 @@ ribbon **must** render plugin-supplied labels as **text nodes only** — no HTML
 injection path may exist in this component.
 
 **As implemented, that gate is met at this component.** *Tests:*
-`src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
-plug-in label as a text node, not as markup" and "the module source contains no
+`src/components/command/__tests__/ContextBar.test.tsx` — "the context bar renders a markup-shaped plug-in label as a text node, not as markup" and "the module source contains no
 HTML-injection sink at all", the latter parsing the module with the TypeScript
 compiler so the absence is asserted against the source rather than trusted to
 review, with "reports a planted sink, so the scan above cannot pass vacuously"
@@ -681,10 +678,7 @@ the status is `IN PROGRESS`. The gates were checked by running
   intact, because two copies of a lookup table drift the way two copies of a
   validation rule do. Nothing a
   plug-in supplies ever reaches an SVG `d` attribute, an `href` or a `src`.
-  *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "does not resolve a
-  prototype-shaped icon key to anything inherited", "resolves an unknown icon key
-  through the host fallback rather than through the key", "resolves a known icon
-  key through the host table", and "the module source names no URL-bearing
+  *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar does not resolve a prototype-shaped icon key to anything inherited", "the context bar resolves an unknown icon key through the host fallback rather than through the key", "resolves a known icon key through the host table on every surface", and "the module source names no URL-bearing
   attribute a plug-in value could reach".
 - **Ribbon overflow splits on a fixed inline count, not on measured width.** The
   edge case the specification names is that overflow "must not wrap into a second
@@ -696,12 +690,8 @@ the status is `IN PROGRESS`. The gates were checked by running
   fifth action inline and does not. The split runs on the *visible* set, after
   predicate filtering, so a hidden action cannot occupy an inline slot and push a
   visible one into the menu.
-  *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "moves actions past
-  the inline limit into an overflow menu rather than a second row", "never wraps:
-  the ribbon row is a single no-wrap line that scrolls on x only", "does not render an overflow
-  trigger when everything fits", "counts only visible actions toward the inline
-  limit", "closes the overflow menu and executes the action when a menu item is
-  chosen", and "closes the overflow menu when the trigger is toggled again".
+  *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "moves commands past the inline limit into an overflow menu rather than a second row", "never wraps: the bar is a single no-wrap line that scrolls on x only", "does not render an overflow
+  trigger when everything fits", "counts only visible commands toward the inline limit", "closes the overflow menu and executes the command when a menu item is chosen", and "closes the overflow menu when the trigger is toggled again".
 - **Pane sizes are percentages, and the group width is measured exactly once.**
   `react-resizable-panels` v2 has no pixel unit, and percentages are the right
   primitive for the narrow-viewport case. **The reason they cannot overflow is not
@@ -759,7 +749,7 @@ the status is `IN PROGRESS`. The gates were checked by running
   planted listener, however it is spelled" beside them, whose planted cases include a
   JSX `onKeyDown` attribute specifically; `src/components/__tests__/ShellLayout.test.tsx` — "makes
   every divider keyboard-reachable and actually resizes with the arrow keys", and
-  "renders the ribbon and three panes in ribbon → pane 1 → pane 2 → pane 3 order"
+  "renders the context bar and three panes in context bar → pane 1 → pane 2 → pane 3 order"
   for the required focus order.
 - **`RibbonContext.focusedPane` was left `null`, nothing in the shell ever wrote
   it, and it has since been REMOVED.** Populating it needed focus tracking — which
@@ -784,11 +774,7 @@ the status is `IN PROGRESS`. The gates were checked by running
   menu, and never on a host action. The value comes from `ariaKeyShortcuts`, not
   `describeHotkey`: ARIA wants UI Events key values, where the control key is
   `Control`.
-  *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "advertises a
-  chord-bearing action with aria-keyshortcuts, in key values rather than display
-  spelling", "omits aria-keyshortcuts from a disabled action, because the chord will
-  not fire", "advertises a chord on an overflow menu item too" and "never advertises
-  a chord on a host action"; that the ribbon module itself still attaches nothing is
+  *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "advertises a chord-bearing command with aria-keyshortcuts, in key values rather than display spelling", "omits aria-keyshortcuts from a disabled command, because the chord will not fire", "advertises a chord on an overflow menu item too" and "never advertises a chord on a host command"; that the ribbon module itself still attaches nothing is
   `src/__tests__/noEventListener.test.ts` — "finds no listener registration in any
   module outside the hotkey-dispatch allowlist" and "finds no key-event name in any
   module outside the key-event allowlist", neither of whose allowlists names it.
@@ -1215,8 +1201,7 @@ Every line met, with the test that meets it named. All titles below live in
   *Tests:* "contains a row renderer that throws for one item only" and "keeps the
   position of a failed row in the set".
 - **A throwing extension subtree is contained to its pane; the ribbon and other
-  panes remain interactive.** *Tests:* "contains a throwing pane-2 view to pane 2,
-  leaving the ribbon and pane 3 interactive" and "contains a throwing pane-3 view to
+  panes remain interactive.** *Tests:* "contains a throwing pane-2 view to pane 2, leaving the context bar and pane 3 interactive" and "contains a throwing pane-3 view to
   pane 3, leaving pane 2 interactive".
 - **The documented limits of `FaultBoundary` are stated in the source doc comment
   and in `DEVELOPER.md`.** *Test:* "documents in both the source and DEVELOPER.md
@@ -1512,8 +1497,7 @@ prevented. All are in `src/__tests__/IntegrationSuite.test.tsx`:
 The contained case is asserted beside the two uncontained ones, so that "a fault
 boundary catches nothing" is not the reading anyone takes away: a ribbon
 `onExecute` that throws IS guarded, by `RibbonToolbar`'s own wrapper. *Test:* same
-file — "contains a throwing ribbon action inside the ribbon own guard, without
-taking the shell down".
+file — "contains a throwing command inside the shared command guard, without taking the shell down".
 
 #### Two contract gaps this suite exposed that issues #12–#18 do not cover
 
@@ -1583,8 +1567,8 @@ These apply to every issue above and are not restated per ticket.
 
   **Met at one site.** `src/components/ui/RibbonToolbar.tsx` renders
   `RibbonAction.label` as a text node and resolves `RibbonAction.icon` through a
-  host-owned `Map`. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` —
-  "renders a markup-shaped plug-in label as a text node, not as markup" and "the
+  host-owned `Map`. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` —
+  "the context bar renders a markup-shaped plug-in label as a text node, not as markup" and "the
   module source contains no HTML-injection sink at all", the latter parsing the
   module with the TypeScript compiler, with "reports a planted sink, so the scan
   above cannot pass vacuously" beside it.

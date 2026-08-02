@@ -1,7 +1,8 @@
 # LEAPWare-ShellUX
 
 A local-first, pluggable application shell for web and desktop, built on the
-Microsoft Outlook three-pane-plus-ribbon paradigm.
+Microsoft Outlook three-pane paradigm — without its ribbon, which this shell
+deletes in favour of one command registry and four surfaces.
 
 The host is a **shell, not an application**. It owns layout, lifecycle, routing
 and persistence. It contains zero business logic. Everything a user actually
@@ -34,18 +35,16 @@ What that means for a reader:
 | Area | State |
 |---|---|
 | IoC extension registry (ISSUE-001) | **Landed.** `src/core/types.ts`, `src/core/RegistryContext.tsx`, `src/core/ShellAPI.ts`, `src/core/ActivationContext.tsx`, `src/core/hotkeys.ts`, under a 100% coverage gate |
-| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/ui/RibbonToolbar.tsx`, with 126 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx`, `RibbonToolbar.test.tsx`, `ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 33 of which are the ISSUE-003 persistence and issue-#12 badge cases, all inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
+| Three-pane resizable layout (ISSUE-002) | **Implemented and green, not yet merged.** `src/components/layout/ShellLayout.tsx`, `src/components/layout/PaneWrapper.tsx`, `src/components/command/ContextBar.tsx`, with 126 tests across `ShellLayout.test.tsx`, `PaneWrapper.test.tsx`, `ContextBar.test.tsx`, `ShellLayoutPersistence.test.tsx` and `ShellLayoutBadges.test.tsx` in `src/components/__tests__/` — five of which are ISSUE-004 fault-containment cases added to `ShellLayout.test.tsx`, and 33 of which are the ISSUE-003 persistence and issue-#12 badge cases, all inside the same 100% coverage gate. Not marked "landed" because it is unmerged — see [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 | State hydration and persistence (ISSUE-003) | **Engine implemented, green, and now consumed by the shell — not yet merged.** `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts`, with 146 tests in `src/core/services/__tests__/hydrationEngine.test.ts` and `src/hooks/__tests__/useLocalStorageState.test.tsx`, plus 25 tests in `src/components/__tests__/ShellLayoutPersistence.test.tsx` driving the assembled shell over a real storage, inside the same 100% coverage gate. `ShellLayout.tsx` restores and writes **three** slots — pane sizes, the pane-1 collapsed flag and the foreground extension id — and the utility drawer is deliberately not one of them |
 | Row virtualizer and fault boundaries (ISSUE-004) | **Implemented and green, not yet merged.** `src/components/error/FaultBoundary.tsx`, `src/components/shared/VirtualizedList.tsx` and its pure arithmetic in `src/components/shared/virtualWindow.ts`, with 76 tests in `src/components/__tests__/FaultBoundary.test.tsx` and `src/components/__tests__/VirtualizedList.test.tsx`, inside the same 100% coverage gate. The virtualizer is a component an extension's own Pane 2 view renders — the host does not window your pane for you |
 | Verification remotes and integration suite (ISSUE-005) | **Implemented and green, not yet merged.** The two verification remotes `src/mocks/MailPlugin.tsx` and `src/mocks/DatabasePlugin.tsx`, driven by 60 tests in `src/__tests__/IntegrationSuite.test.tsx` — the first place in this repository where an operational plug-in is mounted at all. It runs the assembled shell, not a double of it, and nine of its cases are `PINS A KNOWN LIMIT` characterisations of behaviour the architecture has accepted rather than prevented. It is outside the coverage `include` list on purpose: it exercises code the gate already covers, and adding an integration file to a 100% gate measures nothing new. See [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) |
 
 **What ISSUE-002 did change:** ribbon action `isVisible` predicates are now
-evaluated on every ribbon render, `onExecute` handlers are invoked on click, and
+evaluated on every command-surface render, `onExecute` handlers are invoked on click, and
 both are called inside a guard so that a plug-in throwing from either is reported
 and contained rather than taking the shell down. *Tests:*
-`src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose isVisible
-predicate throws and still renders the rest", "survives an onExecute that throws,
-leaving the ribbon interactive".
+`src/components/command/__tests__/ContextBar.test.tsx` — "the context bar hides a command whose isVisible predicate throws and still renders the rest", "the context bar survives an onExecute that throws, leaving the surface interactive".
 
 **What it did not change, stated plainly because a working-looking shell invites
 the opposite assumption:**
@@ -57,9 +56,7 @@ the opposite assumption:**
   extension subtree inside panes 2 and 3, and the ribbon, each in its own
   `FaultBoundary`. A view that throws during render degrades to a contained host
   surface inside its own pane, naming the extension, with a bounded retry.
-  *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing
-  pane-2 view to pane 2, leaving the ribbon and pane 3 interactive" and "contains a
-  throwing ribbon without taking the panes down".
+  *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing pane-2 view to pane 2, leaving the context bar and pane 3 interactive" and "contains a throwing context bar without taking the panes down".
 - **The host does not virtualize your pane for you.** Pane 2 is still a plain
   scroll container; `VirtualizedList` is a component an extension's `views.pane2`
   mounts, because the host does not know what a row is or how tall one should be.
@@ -114,7 +111,7 @@ the opposite assumption:**
   "overrides a blueprint badge with the store value, including down to zero",
   "shows a runtime badge in the collapsed 48px icon track too" and "renders the
   blueprint badge for a node the store has never been written for".
-- **Hotkey dispatch has landed, and it is narrow.** A ribbon action's optional
+- **Hotkey dispatch has landed, and it is narrow.** A command's optional
   `hotkey` now fires: `src/core/hotkeyDispatch.ts` holds the shell's one `keydown`
   listener, called once by `ShellLayout`, and a chord is live only for the
   **foreground** extension and only for an action that is visible and not disabled
@@ -158,8 +155,7 @@ catches nothing" is not the reading anybody takes away.
 into pane 3 through the host store, not through the module", "keeps each module
 pane-2 selection its own across Mail → Database → Mail", "releases the database
 module 200ms interval, so the timer count returns to its baseline", "brings back
-the layout and the foreground extension over the same storage" and "contains a
-throwing ribbon action inside the ribbon own guard, without taking the shell down".
+the layout and the foreground extension over the same storage" and "contains a throwing command inside the shared command guard, without taking the shell down".
 
 **What ISSUE-003 added, and what it does not yet touch:**
 `src/core/services/HydrationEngine.ts` owns the serialization and deserialization
@@ -265,7 +261,7 @@ mistake and not an enforced boundary**; see ADR-0001 Amendments D and E and the
 "Security posture" section below. The surface that *uses* all of it now exists:
 `ShellLayout` lists registered extensions in pane 1, activates one on selection,
 mounts its `views.pane2` and `views.pane3` inside `ExtensionHostBoundary`, and
-feeds its `ribbonActions` to the ribbon. *Test:*
+feeds its `commands` to the command registry. *Test:*
 `src/components/__tests__/ShellLayout.test.tsx` — "renders both plug-in views
 inside an ExtensionHostBoundary once activated".
 
@@ -311,7 +307,7 @@ npm run dev
 `npm run dev` starts the Vite dev server on its default port, 5173, and prints the
 URL. Opening it renders the three-pane shell **with ISSUE-005's two verification
 remotes from `src/mocks/` registered** — a navigation tree with entries in it,
-rows to select, contextual ribbon actions, and live badges. That is the working
+rows to select, contextual commands, and live badges. That is the working
 demo, and it is what the browser test lane drives.
 
 This is a **dev-server-only rewrite, not a change to what ships.** A middleware in
@@ -325,7 +321,7 @@ variable — ADR-0002 forbids one without a working default; see
 
 **The production shell is still reachable by name.** Open **`/index.html`** on the
 same dev server for the real composition root: `src/App.tsx` registers no
-extensions, so you get the ribbon's host actions, a resizable and collapsible pane
+extensions, so you get the context bar's host actions, a resizable and collapsible pane
 1 with nothing in it, and two empty panes. See Project Status above.
 *Tests:* `e2e/dev-routing.spec.ts` — "serves the fixture shell at the bare root,
 with both remotes registered", "keeps the URL at / rather than redirecting the
@@ -405,25 +401,26 @@ LEAPWare-ShellUX is the container. You bring the product.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  RIBBON   global actions ······················ contextual actions  │
+│  CONTEXT BAR (32px)  host commands ········ contextual commands     │
 ├───────────────┬───────────────────┬─────────────────────────────────┤
 │  PANE 1       │  PANE 2           │  PANE 3                         │
 │  navigation   │  master / list    │  detail                         │
-│  240px        │  360px            │  flex                           │
+│  240px        │  360px            │  floating toolbar (selection)   │
 │  ↕ collapses  │  virtualized      │  header + scroll + drawer slot  │
-│    to 48px    │                   │                                 │
+│    to 48px    │                   │  omnibox composer, docked       │
 └───────────────┴───────────────────┴─────────────────────────────────┘
+                   Cmd-K opens the command palette, over everything
         ⇕                   ⇕                       ⇕
               all dividers user-resizable
 ```
 
 An extension supplies a navigation entry, a Pane 2 list view, a Pane 3 detail
-view, and a set of ribbon actions. The host renders them. The host never knows
+view, and a set of commands. The host renders them. The host never knows
 whether it is showing email, inventory records, or something else entirely.
 
-### Keyboard shortcuts on ribbon actions
+### Keyboard shortcuts on commands
 
-A ribbon action may carry an optional `hotkey`: a **structured chord**, `key`
+A command may carry an optional `hotkey`: a **structured chord**, `key`
 plus the optional `ctrl`, `alt`, `shift` and `meta` booleans, rather than a string
 like `"Ctrl+Shift+K"` that would need a parser at the trust boundary.
 
@@ -471,7 +468,7 @@ What the host does enforce, at registration:
 - **`key` must name one of 60 keys on the `HOTKEY_KEYS` allowlist** — the 26
   letters, the 10 digits, `f1`–`f12`, the four arrows and eight named navigation
   and editing keys. `tab` (it owns focus order), `space` (it activates the focused
-  control), `escape` (it is the shell's dismissal key — it closes the ribbon's
+  control), `escape` (it is the shell's dismissal key — it closes the context bar's
   overflow menu, cancels a drag, leaves fullscreen and dismisses a Radix dialog,
   and this project ships `@radix-ui/react-dialog`) and every modifier named as a
   key are deliberately absent.
@@ -517,7 +514,7 @@ anything > exports only pure helpers — the dispatcher is a separate module" an
 deliberately does not".
 
 The author-facing contract in full is in [`DEVELOPER.md`](DEVELOPER.md) under
-"`Hotkey` — a keyboard chord on a ribbon action"; the decisions and what was
+"`Hotkey` — a keyboard chord on a command"; the decisions and what was
 rejected are ADR-0001 Amendment H.
 
 ### Architectural influences
@@ -603,11 +600,11 @@ Level AA work in scope:
 
 - 4.5:1 contrast for body text, 3:1 for large text and for UI component
   boundaries.
-- Full keyboard operability, including pane dividers, ribbon actions, and list
+- Full keyboard operability, including pane dividers, commands, and list
   navigation.
 - Visible focus indication that survives the high-density styling.
 - Accessible names preserved when Pane 1 collapses to its 48px icon track.
-- Correct landmark and region structure across ribbon and three panes.
+- Correct landmark and region structure across the context bar and three panes.
 
 **Partly delivered by ISSUE-002, and one deliberate deviation to record.** The last
 two items above now have code and tests behind them: pane-1 entries keep their
@@ -620,16 +617,16 @@ name of every pane-1 entry in both states", "names all three panes as regions",
 `src/components/__tests__/PaneWrapper.test.tsx` — "exposes the pane as a labelled
 region carrying its pane id".
 
-**The deviation:** the ribbon uses `role="toolbar"` with every button individually
+**The deviation:** the context bar uses `role="toolbar"` with every button individually
 tabbable, *not* the roving-tabindex pattern the ARIA authoring practices recommend
 for a toolbar. That was originally decided because a roving pattern needs an
 arrow-key handler and no module under `src/` was permitted to name one. ISSUE-004
 changed the second half of that: `src/components/shared/VirtualizedList.tsx` is now
-allowlisted for exactly that reason, so the ribbon's deviation stands on the
-narrower ground it always really had — the ribbon has not needed the pattern. And
+allowlisted for exactly that reason, so the context bar's deviation stands on the
+narrower ground it always really had — the bar has not needed the pattern. And
 ISSUE-006's dispatcher did **not** change it either: that listener is on `window`
 and routes declared chords, it puts no arrow-key handler on the toolbar, and every
-ribbon control remains individually reachable by Tab. Recorded here rather than
+context-bar control remains individually reachable by Tab. Recorded here rather than
 left for an auditor to find. *Tests:*
 `src/__tests__/noEventListener.test.ts` — "finds no key-event name in any module
 outside the key-event allowlist" and "holds the key-event allowlist to
@@ -645,7 +642,7 @@ keys and clamps at both ends", "moves by a viewport at a time with Page Up and P
 Down" and "scrolls the selected row into view by assigning scrollTop on its
 own container".
 
-**The ribbon's overflow menu is a second exception, and it is worth being precise
+**The context bar's overflow menu is a second exception, and it is worth being precise
 about why that is not a contradiction.** Inside the menu the arrow keys, Home/End,
 typeahead, Escape and outside-click dismissal all work, because the menu is
 `@radix-ui/react-dropdown-menu`. That handling lives in `node_modules`, not in
@@ -666,8 +663,7 @@ that eight specific, reproducible defects that had been found are no longer pres
 - The overflow menu was **clipped to zero height** by two `overflow-hidden`
   ancestors, which made it invisible and unclickable rather than merely awkward. It
   is now portalled under `document.body`, outside every clipping ancestor by
-  construction. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "renders
-  the menu outside the ribbon, which is what un-clips it".
+  construction. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "renders the menu outside the context bar, which is what un-clips it".
 - Activating a menu item **dropped focus onto `document.body`**, so the next Tab
   restarted from the top of the document (WCAG 2.4.3). Focus now returns to the
   trigger however the menu closed. *Tests:* same file — "returns focus to the trigger
@@ -677,8 +673,7 @@ that eight specific, reproducible defects that had been found are no longer pres
   nothing, Escape did not close, focus never entered, and an outside click left it
   open. Screen readers switch to application mode inside a menu and hand the arrow
   keys to the page, so the role actively misled the user. The full menu-button
-  pattern is now real. *Tests:* the whole of "RibbonToolbar — the overflow menu
-  keyboard model", including "moves focus into the menu when it opens", "walks the
+  pattern is now real. *Tests:* the whole of "ContextBar — the overflow menu keyboard model", including "moves focus into the menu when it opens", "walks the
   items with the arrow keys, which is what the role promises" and "closes when the
   pointer goes down outside it".
 - The menu is deliberately **not modal**, so opening it does not hide the rest of the
@@ -690,8 +685,7 @@ that eight specific, reproducible defects that had been found are no longer pres
 - An unavailable action used the native `disabled` attribute, which **removes it from
   the tab order entirely** — a screen-reader user could not discover that the action
   existed. It is now `aria-disabled`: reachable, announced, and still inert. *Tests:*
-  same file — "marks an unavailable action aria-disabled rather than removing it from
-  the tab order" and "leaves a disabled menu item focusable, announced, and inert".
+  same file — "marks an unavailable command aria-disabled rather than removing it from the tab order, on every surface" and "leaves a disabled menu item focusable, announced, and inert".
 - Contrast and target-size defects in the shell chrome: muted body strings that
   failed 4.5:1 in dark mode, selection shown by fill alone, dividers too faint to
   read as controls, and rows below a 24px minimum. *Tests:*
@@ -700,7 +694,7 @@ that eight specific, reproducible defects that had been found are no longer pres
   token instead of a per-theme patch", "carries the selected navigation state on a
   rule and a weight, not only a fill", "draws the dividers from the control tier
   rather than from the border tier", "gives every navigation row a 24px minimum
-  height" and "gives every ribbon control a 24px minimum height".
+  height" and "gives every context-bar control a 24px minimum height".
 
   The first and third titles were renamed when the colours became design tokens,
   and the rename is the finding rather than a tidy-up: the muted-text case named a
@@ -740,7 +734,7 @@ bare" beside it.
 This is one rule at one door, not an audit: it is **entry-point validation** in
 the vocabulary of "Security posture" below. It is enforced at the declaration door
 only, and there is deliberately no second suppression inside the dispatcher — see
-ADR-0001 Amendment I Decision 3, and "Keyboard shortcuts on ribbon actions" above.
+ADR-0001 Amendment I Decision 3, and "Keyboard shortcuts on commands" above.
 
 **A second bare-chord rule shares that door and is deliberately not this
 criterion.** `enter` is on the allowlist but may never be declared bare, because
@@ -767,9 +761,9 @@ it merges; with "rejects a bare enter, which activates the focused control",
 **This commitment constrains the architecture, and the constraint is recorded
 rather than discovered later.** ARIA IDREF attributes — `aria-labelledby`,
 `aria-describedby`, `aria-controls`, `aria-activedescendant`, `aria-owns` — resolve
-**within a single document**. A ribbon control cannot point at a listbox in another
+**within a single document**. A context-bar control cannot point at a listbox in another
 document, and focus order and roving-tabindex composite widgets stop at a document
-boundary. So full keyboard operability across ribbon and panes **cannot be
+boundary. So full keyboard operability across the context bar and panes **cannot be
 delivered if extensions render into separate documents**, which is what real
 per-extension isolation via iframes would require. That trade-off is the reason
 isolation was not chosen now, and it is written down in ADR-0001 Amendment E
@@ -803,8 +797,8 @@ ways:
   type is in direct tension with this. Meeting it would mean abandoning the
   density that is the product's reason for existing.
 - **Target size, 2.5.5.** AAA asks for 44×44 CSS pixel targets. A 48px collapsed
-  icon track can accommodate this; 11px-type ribbon actions at `p-1` cannot,
-  without redesigning the ribbon.
+  icon track can accommodate this; 11px-type commands at `p-1` cannot,
+  without redesigning the context bar.
 
 Anyone who tells you a 1.2:1-hairline interface is WCAG 2.2 AAA compliant is
 mistaken. This project has never made that claim, and clearing the 3:1 AA
@@ -836,7 +830,7 @@ reported with the date and commit it was measured at.
 than it sounds.** jsdom has no layout engine: every `getBoundingClientRect`
 answers 0×0, no ancestor clips anything, and no pointer ever hit-tests. Two of
 the worst defects this project has had were geometric, and the suite was green
-through both — the ribbon's overflow menu **clipped to zero visible pixels** by
+through both — the context bar's overflow menu **clipped to zero visible pixels** by
 two `overflow-hidden` ancestors while six tests asserted it worked, and a case
 named for surviving "a divider drag in flight" that **never started a drag**,
 because a 0×0 rect cannot intersect a 12px hit area. Both lines of code were
@@ -1081,7 +1075,7 @@ defending one extension from another.
   action count are all capped, and the cap applies to what is stored rather than
   to a number the payload can revise afterwards.
   *Tests:* `src/core/__tests__/validation.test.ts` — "validateBlueprint — text
-  fields", "— navigation tree", "— ribbon actions";
+  fields", "— navigation tree", "— commands";
   `registryNormalization.test.tsx` — "register — a lying `length` cannot grow the
   payload after it is measured"; `registrySecurity.test.tsx` — "validateBlueprint —
   collection lengths are read once".
@@ -1179,18 +1173,24 @@ a caller who reaches the objects behind them another way is not bound by them.
   promoted wholesale, because promoting it wholesale is exactly the error the rule
   above exists to catch.
 
-  **Delivered and tested at the ribbon.** `src/components/ui/RibbonToolbar.tsx`
-  renders `RibbonAction.label` as a JSX text node and resolves `RibbonAction.icon`
-  through a host-owned `Map` of inline SVGs, so an untrusted icon key cannot reach a
-  URL, markup, or an inherited `Object.prototype` value. *Tests:*
-  `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
-  plug-in label as a text node, not as markup"; "the module source contains no
-  HTML-injection sink at all", which parses the module with the TypeScript compiler
-  so the absence is asserted against the source rather than trusted to review;
-  "reports a planted sink, so the scan above cannot pass vacuously"; and "does not
-  resolve a prototype-shaped icon key to anything inherited". For this component,
-  and only this component, the claim is now backed the way "Integrity controls —
-  unconditional" above requires.
+  **Delivered and tested at the four command surfaces.** The ribbon is deleted and
+  the context bar, the command palette, the floating toolbar and the omnibox
+  composer stand where it stood — and **none of them renders a plug-in string
+  itself.** `src/components/command/commandListItem.tsx` is the one place
+  `Command.label` reaches the DOM, as a JSX text node, and the one place
+  `Command.icon` is resolved, through a host-owned `Map` of inline SVGs, so an
+  untrusted icon key cannot reach a URL, markup, or an inherited
+  `Object.prototype` value. *Tests:*
+  `src/components/command/__tests__/commandSurfaces.test.tsx` — "the context bar
+  renders a markup-shaped plug-in label as a text node, not as markup" and its
+  three siblings, one per surface; "the shared command row module source contains
+  no HTML-injection sink at all", which parses the module with the TypeScript
+  compiler so the absence is asserted against the source rather than trusted to
+  review, together with the same case named once per surface; "reports a planted
+  sink, so the five scans above cannot pass vacuously"; and "the context bar does
+  not resolve a prototype-shaped icon key to anything inherited", again once per
+  surface. For these five modules, and only these five, the claim is backed the way
+  "Integrity controls — unconditional" above requires.
 
   **Still intent, still untested, at every other site.**
   `src/components/layout/ShellLayout.tsx` renders `NavigationNode.label` and the
@@ -1208,8 +1208,8 @@ a caller who reaches the objects behind them another way is not bound by them.
   Round 10 found this entry restated as delivered at two sites while no renderer
   existed, and corrected both. The correction is preserved as history: the risk was
   never that the code was wrong, but that the sentence was wider than the premise
-  licensing it — which is why the ribbon's arrival buys a sentence about the ribbon
-  and nothing more.
+  licensing it — which is why the command surfaces' arrival buys a sentence about
+  the command surfaces and nothing more.
 
 Accepted limits — decided, not overlooked:
 
@@ -1302,14 +1302,13 @@ Specified but **not yet enforced** — do not read these as current guarantees:
   render unmounted the whole shell — a live exposure, correctly labelled as one,
   and it stopped being true in `cd52bbf`. `src/components/error/FaultBoundary.tsx`
   is a real error boundary, and `ShellLayout` composes one around every set of
-  children it hands a `PaneWrapper` — both plug-in panes, the ribbon, and pane 1's
+  children it hands a `PaneWrapper` — both plug-in panes, the context bar, and pane 1's
   navigation, which renders plug-in labels and badge counts and so was never
   incapable of failing. The boundary sits OUTSIDE `ExtensionHostBoundary`, which
   is still not an error boundary and still catches nothing: the inner one throws
   for a non-string `extensionId`, and a boundary nested beneath it could not catch
   its own parent. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` —
-  "contains a throwing pane-2 view to pane 2, leaving the ribbon and pane 3
-  interactive", "contains a throwing ribbon without taking the panes down" and
+  "contains a throwing pane-2 view to pane 2, leaving the context bar and pane 3 interactive", "contains a throwing context bar without taking the panes down" and
   "clears a pane error surface when the active extension changes".
 
   **Scope, so this is not over-read:** a boundary contains a throw during RENDER.
@@ -1318,20 +1317,19 @@ Specified but **not yet enforced** — do not read these as current guarantees:
 
 **Newly enforced by ISSUE-002 — moved out of this list:**
 
-- **Ribbon predicate and handler containment.** No longer "intended". The ribbon
-  calls `isVisible` inside a guard and treats a throw as "not visible", reporting it
-  and continuing to render the remaining actions; it calls `onExecute` inside the
-  same kind of guard, so a throwing handler does not reach React. The report path is
+- **Command predicate and handler containment.** No longer "intended". The command
+  registry calls `isVisible` inside a guard and treats a throw as "not visible",
+  reporting it and continuing to offer the remaining commands; it calls `onExecute`
+  inside the same kind of guard, so a throwing handler does not reach React. Since
+  the ribbon's deletion the same two functions serve four surfaces and the chord
+  dispatcher, which is six routes through one implementation. The report path is
   itself guarded, so a tampered `console.error` cannot turn the containment into an
   escape. A non-boolean return is treated as not visible, since the comparison is
-  `=== true`. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an
-  action whose isVisible predicate throws and still renders the rest", "survives a
-  console.error that itself throws while reporting a bad predicate", "survives an
-  onExecute that throws, leaving the ribbon interactive", "treats a non-boolean
+  `=== true`. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar hides a command whose isVisible predicate throws and still renders the rest", "the context bar survives a console.error that itself throws while reporting a bad predicate", "the context bar survives an onExecute that throws, leaving the surface interactive", "treats a non-boolean
   isVisible result as not visible".
 
   **Scope, so this is not over-read:** it contains what arrives through
-  `RibbonAction` — a buggy or hostile predicate or handler. It is not a sandbox, and
+  `Command` — a buggy or hostile predicate or handler. It is not a sandbox, and
   ADR-0001 "No sandbox" and Amendment E are untouched by it.
 
 Extension authors: see the security section of

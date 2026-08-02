@@ -16,9 +16,14 @@ import {
 import type { HydrationEngine, PaneSizes } from '../../core/services/HydrationEngine';
 import type { NavigationNode, PaneId, RibbonContext } from '../../core/types';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { createCommandRegistry, withRecent } from '../../core/commands/CommandRegistry';
+import type { ExtensionCommands, HostCommand } from '../../core/commands/CommandRegistry';
+import { CommandPalette } from '../command/CommandPalette';
+import { ContextBar } from '../command/ContextBar';
+import { FloatingToolbar } from '../command/FloatingToolbar';
+import { OmniboxComposer } from '../command/OmniboxComposer';
+import type { OmniboxSubmission } from '../command/OmniboxComposer';
 import { FaultBoundary } from '../error/FaultBoundary';
-import { RibbonToolbar } from '../ui/RibbonToolbar';
-import type { HostRibbonAction, RibbonExtensionActions } from '../ui/RibbonToolbar';
 import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
 import { PaneWrapper } from './PaneWrapper';
 
@@ -140,14 +145,14 @@ import { PaneWrapper } from './PaneWrapper';
  *    The ribbon has its own boundary for the same reason the panes do: "the
  *    ribbon and other panes stay interactive" is only guaranteed if the ribbon's
  *    own failure is contained too. Nothing an extension can register makes the
- *    ribbon or pane 1 throw during render — both render validated primitive
- *    strings — so those two boundaries are defence-in-depth, and the ribbon's is
- *    tested by substituting a throwing ribbon rather than by pretending a
- *    plug-in could cause it. *Tests:*
+ *    context bar or pane 1 throw during render — both render validated primitive
+ *    strings — so those two boundaries are defence-in-depth, and the context
+ *    bar's is tested by substituting a throwing context bar rather than by
+ *    pretending a plug-in could cause it. *Tests:*
  *    `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing
- *    pane-2 view to pane 2, leaving the ribbon and pane 3 interactive", "contains
- *    a throwing ribbon without taking the panes down" and "clears a pane error
- *    surface when the active extension changes".
+ *    pane-2 view to pane 2, leaving the context bar and pane 3 interactive",
+ *    "contains a throwing context bar without taking the panes down" and "clears
+ *    a pane error surface when the active extension changes".
  *
  * 6. PERSISTENCE IS READ ONCE PER MOUNT AND WRITTEN THROUGH THE ENGINE.
  *    ISSUE-003's `HydrationEngine` is consumed here, and this is the file that
@@ -787,12 +792,6 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   const store = useShellStore();
   const context = useShellContext();
 
-  // The shell's one keyboard listener. Called HERE — see decision 3 in the banner
-  // and decision 1 in `hotkeyDispatch.ts` — because this component is host
-  // territory above every `ExtensionHostBoundary` and already renders the ribbon,
-  // so the chord path and the button path read one source of truth.
-  useHotkeyDispatch();
-
   const engine = suppliedEngine ?? getDefaultHydrationEngine();
 
   const [groupWidth, setGroupWidth] = useState<number | null>(null);
@@ -802,6 +801,36 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // no-flash property.
   const [isNavCollapsed, setNavCollapsed] = useLocalStorageState('isPane1Collapsed', { engine });
   const [isDrawerOpen, setDrawerOpen] = useState(false);
+  // The fourth persisted slot. Bound live for the same reason the collapse flag
+  // is: a command run in one tab should be recent in the next render, not after
+  // a reload.
+  const [recentCommandIds, setRecentCommandIds] = useLocalStorageState('recentCommandIds', {
+    engine,
+  });
+  // NOT persisted, deliberately. A palette that was open when the app closed and
+  // is open again when it opens is a modal the user did not ask for.
+  const [isPaletteOpen, setPaletteOpen] = useState(false);
+  // The last thing the composer submitted that was not a command. Held so the
+  // surface is demonstrably wired end to end and its text is visible to the user
+  // who typed it; there is nothing else the host can honestly do with a `filter`
+  // or an `ask` until the structured payload channel exists. See the composer's
+  // `onSubmit` below.
+  const [lastSubmission, setLastSubmission] = useState<OmniboxSubmission | null>(null);
+
+  // The shell's one keyboard listener. Called HERE — see decision 3 in the banner
+  // and decision 1 in `hotkeyDispatch.ts` — because this component is host
+  // territory above every `ExtensionHostBoundary` and renders the context bar, so
+  // the chord path and the button path read one source of truth.
+  //
+  // **The host chord table is the dispatcher's, not this caller's.** All that is
+  // passed is what to DO about a host chord; there is no table to register into
+  // here, which is what keeps "host chrome is not plug-in-declarable" a structure
+  // rather than a lookup order. See `HOST_CHORDS` in `hotkeyDispatch.ts`.
+  useHotkeyDispatch((id) => {
+    if (id === 'open-command-palette') {
+      setPaletteOpen(true);
+    }
+  });
 
   // A mount-time SNAPSHOT, not a subscription. `defaultSize` means "where this
   // panel starts"; see decision 6 for why binding it live would feed the value
@@ -989,9 +1018,10 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     100 - navDefaultPercent - listDefaultPercent,
   );
 
-  const hostActions: readonly HostRibbonAction[] = [
+  const hostCommands: readonly HostCommand[] = [
     {
       id: 'host-toggle-navigation',
+      category: 'view',
       label: isNavCollapsed ? 'Expand navigation' : 'Collapse navigation',
       icon: 'navigation',
       onSelect: () => {
@@ -1005,6 +1035,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
       id: 'host-toggle-drawer',
       label: isDrawerOpen ? 'Hide utility drawer' : 'Show utility drawer',
       icon: 'drawer',
+      category: 'view',
       onSelect: () => {
         setDrawerOpen((open) => !open);
       },
@@ -1013,15 +1044,64 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
       id: 'host-close-extension',
       label: 'Close extension',
       icon: 'close',
+      category: 'navigate',
       isDisabled: active === null,
       onSelect: () => {
         activation.blur();
       },
     },
+    // THE "SWITCH EXTENSION" VERB. It is what makes cross-extension reach
+    // activate-then-execute — two visible steps — rather than a palette that
+    // lists a background extension's commands. See `CommandRegistry`'s
+    // containment block for why the second shape is refused.
+    //
+    // It is a HOST command, so it carries no predicate and no chord, and it is
+    // deliberately confined to the palette: a "switch extension" button on the
+    // 32px context bar would spend a contextual slot on navigation.
+    {
+      id: 'host-switch-extension',
+      label: 'Switch extension',
+      icon: 'navigation',
+      category: 'navigate',
+      surfaces: ['palette'],
+      isDisabled: extensions.length === 0,
+      onSelect: () => {
+        // Focus the navigation pane's own list rather than choosing for the
+        // user. The host does not know which extension they meant, and picking
+        // one would be the shell arguing.
+        setNavCollapsed(false);
+      },
+    },
   ];
 
-  const ribbonExtension: RibbonExtensionActions | null =
-    active === null ? null : { actions: active.blueprint.ribbonActions, shell: active.shell };
+  const commandExtension: ExtensionCommands | null =
+    active === null
+      ? null
+      : { extensionId: active.id, commands: active.blueprint.commands, shell: active.shell };
+
+  // ONE registry, four surfaces, and it is REBUILT ON EVERY RENDER RATHER THAN
+  // MEMOISED. That is a decision and not an omission.
+  //
+  // `createCommandRegistry` holds no subscription, no listener and no mutable
+  // state beyond the arrays it was handed; `hostCommands` and `commandExtension`
+  // are already rebuilt every render, because they close over the current labels
+  // and the live revocable handle; and none of the four surfaces is `React.memo`'d,
+  // so a stable identity would be compared by nothing. A `useMemo` here would have
+  // to list every value those two are built from — which is a dependency array
+  // spelling "everything" — and its only real effect would be a stale
+  // `recentCommandIds` inside `onExecuted` on the render where the list has moved
+  // and the memo has not. Building it fresh makes the recents list
+  // current-by-construction instead of current-by-dependency-list.
+  const commandRegistry = createCommandRegistry({
+    hostCommands,
+    extension: commandExtension,
+    recentKeys: recentCommandIds,
+    onExecuted: (key) => {
+      // Host state, bounded and persisted. `withRecent` is the one definition of
+      // "recent", shared with the tests and with the hydration validator.
+      setRecentCommandIds(withRecent(recentCommandIds, key));
+    },
+  });
 
   const navigation = (
     <div className="flex min-w-0 flex-col gap-2">
@@ -1100,8 +1180,16 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
         `${TOKEN_CLASS.appSurface} ${TOKEN_CLASS.appText}`
       }
     >
-      <FaultBoundary boundaryLabel="The ribbon" extensionId={activeId} resetKey={activeId}>
-        <RibbonToolbar hostActions={hostActions} extension={ribbonExtension} context={context} />
+      <FaultBoundary boundaryLabel="The context bar" extensionId={activeId} resetKey={activeId}>
+        <ContextBar registry={commandRegistry} context={context} />
+      </FaultBoundary>
+      <FaultBoundary boundaryLabel="The command palette" extensionId={activeId} resetKey={activeId}>
+        <CommandPalette
+          registry={commandRegistry}
+          context={context}
+          open={isPaletteOpen}
+          onOpenChange={setPaletteOpen}
+        />
       </FaultBoundary>
       <div
         data-shell-region="panes"
@@ -1213,22 +1301,72 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                     ) : undefined
                   }
                 >
-                  <FaultBoundary
-                    boundaryLabel="The Detail pane"
-                    extensionId={activeId}
-                    resetKey={activeId}
-                  >
-                    {active === null ? (
-                      <EmptyPane>No extension is active, so there is nothing to detail.</EmptyPane>
-                    ) : (
-                      <ExtensionPane
-                        active={active}
-                        pane="pane3"
-                        label="The detail view"
-                        context={context}
-                      />
+                  {/*
+                    PANE 3 IS THREE THINGS STACKED, AND THE ORDER IS THE DESIGN.
+                    The floating toolbar rides above the view because it is
+                    triggered by a selection made INSIDE the view; the composer is
+                    docked below it because it is persistent and must not move
+                    when the toolbar appears. Both are host chrome around a
+                    plug-in view, so both sit OUTSIDE the fault boundary: a
+                    plug-in render that throws must not take the shell's own input
+                    surface down with it, which is the whole point of putting a
+                    boundary there at all.
+                  */}
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+                    <FloatingToolbar registry={commandRegistry} context={context} />
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <FaultBoundary
+                        boundaryLabel="The Detail pane"
+                        extensionId={activeId}
+                        resetKey={activeId}
+                      >
+                        {active === null ? (
+                          <EmptyPane>
+                            No extension is active, so there is nothing to detail.
+                          </EmptyPane>
+                        ) : (
+                          <ExtensionPane
+                            active={active}
+                            pane="pane3"
+                            label="The detail view"
+                            context={context}
+                          />
+                        )}
+                      </FaultBoundary>
+                    </div>
+                    {lastSubmission === null ? null : (
+                      /*
+                        The submission, echoed back in the host's own words. It is
+                        the honest thing to draw: the user typed something, the
+                        host detected an intent, and nothing has consumed it yet.
+                        `text` is the USER's string, not a plug-in's, and it is
+                        rendered as a text node regardless.
+                      */
+                      <p
+                        data-shell-region="omnibox-echo"
+                        className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
+                      >
+                        <span className="font-semibold">{lastSubmission.intent}</span>
+                        {`: ${lastSubmission.text}`}
+                      </p>
                     )}
-                  </FaultBoundary>
+                    <OmniboxComposer
+                      registry={commandRegistry}
+                      context={context}
+                      onSubmit={(submission) => {
+                        // The host owns no filter and answers no question, and
+                        // says so rather than pretending. Reaching into the
+                        // active extension's view to apply a filter would be host
+                        // chrome operating a plug-in's UI, which nothing in this
+                        // repository grants; publishing the text as a context key
+                        // would write into a namespace that is the extension's.
+                        // The submission is recorded and the surface that will
+                        // consume it is the structured payload channel, which is
+                        // the next phase's work.
+                        setLastSubmission(submission);
+                      }}
+                    />
+                  </div>
                 </PaneWrapper>
               </Panel>
             </PanelGroup>

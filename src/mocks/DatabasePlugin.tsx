@@ -4,7 +4,7 @@ import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
   IShellAPI,
-  LEAPExtensionBlueprint,
+  LEAPExtensionBlueprintInput,
   NavigationNode,
   RibbonAction,
   RibbonContext,
@@ -46,7 +46,7 @@ import type {
  * `ExtensionHostBoundary`, so no provider written here could sit above both.
  * `useSyncExternalStore` over module state is the shape that spans them.
  *
- * **No ribbon predicate reads module state.** `RibbonToolbar` re-renders on host
+ * **No visibility predicate reads module state.** A command surface re-renders on host
  * context change, not on this module's changes, so a predicate closing over the
  * store would be evaluated against a stale snapshot and would produce a ribbon
  * that lies. Every predicate below is a pure function of `ctx`.
@@ -473,7 +473,7 @@ function setFaultedRecord(recordId: string | null): void {
  * throw `REVOKED` from a timer callback, where there is no frame to catch it and
  * nothing to attribute it to.
  *
- * `RibbonAction.onExecute` does not need this — `RibbonToolbar` guards it.
+ * `Command.onExecute` does not need this — `execute` in `src/core/command.ts` guards it.
  */
 function guarded(what: string, work: () => void): void {
   try {
@@ -812,10 +812,11 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
  * Each chord-bearing, enabled button carries `aria-keyshortcuts` in UI Events
  * key-value spelling — `Control+Alt+R`, `Control+Shift+L`, `F9`, not the `Ctrl+…`
  * display spelling the tooltip uses — and the attribute is omitted from a
- * disabled action because the chord is suppressed there too. *Tests:* "advertises
- * a chord-bearing action with aria-keyshortcuts, in key values rather than
- * display spelling" and "omits aria-keyshortcuts from a disabled action, because
- * the chord will not fire" in `src/components/__tests__/RibbonToolbar.test.tsx`.
+ * disabled command because the chord is suppressed there too. *Tests:*
+ * "advertises a chord-bearing command with aria-keyshortcuts, in key values
+ * rather than display spelling" and "omits aria-keyshortcuts from a disabled
+ * command, because the chord will not fire" in
+ * `src/components/command/__tests__/ContextBar.test.tsx`.
  *
  * **The dispatcher's suppression list is a guardrail, not a boundary**, in the
  * same register as ADR-0001's "No sandbox". It skips auto-repeat, an event
@@ -949,7 +950,7 @@ const NAVIGATION_TREE: readonly NavigationNode[] = TOP_LEVEL_CATEGORIES.map((cat
  * there rather than repeated here: `react-refresh/only-export-components` is a
  * build gate and classifies a `.tsx` export by its name.
  */
-export const DatabasePlugin: LEAPExtensionBlueprint = Object.freeze({
+export const DatabasePlugin: LEAPExtensionBlueprintInput = Object.freeze({
   id: 'inventory-db',
   name: 'Inventory Database',
   version: '1.0.0',

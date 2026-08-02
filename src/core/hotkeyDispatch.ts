@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useActivation } from './ActivationContext';
 import { useShellStore } from './ShellAPI';
 import { matchesHotkey } from './hotkeys';
-import { execute, isVisible } from './ribbonAction';
+import { execute, isVisible } from './command';
 
 /**
  * ============================================================================
@@ -96,10 +96,10 @@ import { execute, isVisible } from './ribbonAction';
  * `execute` from `./ribbonAction` — so the non-boolean-is-false rule, the
  * throw-is-false rule and the guarded report are one implementation, not two.
  *
- * **Placement is irrelevant.** `INLINE_ACTION_LIMIT` in `RibbonToolbar.tsx`
- * decides bar versus overflow menu and is a rendering decision about width. This
- * walks every action the extension declared and consults visibility, never the
- * inline slice. *Test:* "fires a chord belonging to an action that renders in the
+ * **Placement is irrelevant.** `INLINE_ACTION_LIMIT` in
+ * `src/components/command/ContextBar.tsx` decides bar versus overflow menu and is
+ * a rendering decision about width. This walks every command the extension
+ * declared and consults visibility, never the inline slice. *Test:* "fires a chord belonging to an action that renders in the
  * overflow menu".
  *
  * ---------------------------------------------------------------------------
@@ -163,9 +163,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Whether this event must not be looked up as a chord at all.
+ * Whether this event must not be looked up as a chord at all, on grounds that
+ * have nothing to do with where it landed.
  *
- * Consulted BEFORE any `matchesHotkey` call, so a suppressed event costs one
+ * Consulted BEFORE any lookup, host or plug-in, so a suppressed event costs one
  * cheap check and reaches no plug-in predicate.
  *
  *  - `defaultPrevented` — something below already handled this key. Firing on
@@ -175,16 +176,71 @@ function isEditableTarget(target: EventTarget | null): boolean {
  *  - `isComposing`/`keyCode === 229` — an IME composition is in flight and the
  *    keystrokes belong to it. Both are checked because they are two different
  *    signals for the same state and browsers do not agree on which they send.
- *  - an editable target — see the banner, and note what it does not cover.
+ *
+ * **The editable-target rule is deliberately NOT folded in here**, and the split
+ * is the decision — see `HOST_CHORDS` below. It used to be a fifth clause of this
+ * function, which was correct while every chord was a plug-in chord.
  */
 function isSuppressed(event: KeyboardEvent): boolean {
   return (
-    event.defaultPrevented ||
-    event.repeat ||
-    event.isComposing ||
-    event.keyCode === 229 ||
-    isEditableTarget(event.target)
+    event.defaultPrevented || event.repeat || event.isComposing || event.keyCode === 229
   );
+}
+
+/**
+ * A chord the HOST owns.
+ *
+ * **This table is the whole of "host chrome is not plug-in-declarable".** Cmd-K
+ * opens the command palette, and it is unreachable by an extension declaring
+ * `{ key: 'k', ctrl: true }` — not because that declaration is rejected, which it
+ * is not, but because this table is consulted FIRST and returns. An extension may
+ * still bind Ctrl+K; it simply never sees the keystroke while the host wants it.
+ * That is a structure rather than a precedence rule written down somewhere, which
+ * is the same reason `HostCommand` in `CommandRegistry.ts` has no `hotkey` field:
+ * one table for host chords and one for plug-in chords, never one table with a
+ * priority column.
+ *
+ * `Ctrl` OR `Meta`, because the plan spells this chord "Cmd-K" on macOS and
+ * "Ctrl-K" on Windows and both are the same command. `alt` and `shift` must be
+ * absent, so `Ctrl+Alt+K` is left free for whoever wants it.
+ *
+ * *Tests:* `src/core/__tests__/hotkeyDispatch.test.tsx` — "opens the command
+ * palette on the host own chord", "reaches the host chord before the extension
+ * chord table, so an extension declaring Ctrl+K never sees it" and "fires the
+ * host chord while the user is typing, which a plug-in chord may not do".
+ */
+export type HostChordId = 'open-command-palette';
+
+interface HostChord {
+  readonly id: HostChordId;
+  /** Compared against a lowercased `event.key`. */
+  readonly key: string;
+}
+
+const HOST_CHORDS: readonly HostChord[] = Object.freeze([
+  Object.freeze({ id: 'open-command-palette' as const, key: 'k' }),
+]);
+
+/**
+ * The host chord this event matches, or `null`.
+ *
+ * Host code over a host-owned frozen table; it reads four booleans and one string
+ * off the event and calls nothing.
+ */
+function matchHostChord(event: KeyboardEvent): HostChordId | null {
+  if (event.altKey || event.shiftKey) {
+    return null;
+  }
+  if (!event.ctrlKey && !event.metaKey) {
+    return null;
+  }
+  const key = event.key.toLowerCase();
+  for (const chord of HOST_CHORDS) {
+    if (chord.key === key) {
+      return chord.id;
+    }
+  }
+  return null;
 }
 
 /**
@@ -199,13 +255,41 @@ function isSuppressed(event: KeyboardEvent): boolean {
  *   and `useShellStore`. It is host-only and refuses inside an
  *   `ExtensionHostBoundary` for the same reason `useActivation` does.
  */
-export function useHotkeyDispatch(): void {
+export function useHotkeyDispatch(onHostChord: (id: HostChordId) => void): void {
   const activation = useActivation();
   const store = useShellStore();
+  // The callback is read through a ref rather than listed as a dependency, so
+  // that a caller passing an inline arrow — which every caller will — does not
+  // detach and reattach the shell's one listener on every render. Decision 3 says
+  // "attach once; read everything time-varying at DISPATCH time", and this is
+  // that rule applied to the callback itself.
+  const hostChordHandler = useRef(onHostChord);
+  hostChordHandler.current = onHostChord;
 
   useEffect(() => {
     const dispatchChord = (event: KeyboardEvent): void => {
       if (isSuppressed(event)) {
+        return;
+      }
+      // HOST FIRST, AND BEFORE THE EDITABLE-TARGET CHECK. Two things follow from
+      // the order, and both are deliberate:
+      //
+      //  - An extension declaring `{ key: 'k', ctrl: true }` never sees Cmd-K.
+      //    The host returns before `activation.getActive()` is even called.
+      //  - The palette opens while the user is typing in the omnibox composer.
+      //    `isEditableTarget` exists because a PLUG-IN chord fires on top of what
+      //    the user is typing; a host chord carrying Ctrl or Meta produces no
+      //    character, and the composer is the surface a user is most likely to
+      //    want the palette from. This is not a second copy of the suppression
+      //    rule — it is one rule, applied to one of the two tables, with the
+      //    other table stated here rather than left to inference.
+      const hostChord = matchHostChord(event);
+      if (hostChord !== null) {
+        event.preventDefault();
+        hostChordHandler.current(hostChord);
+        return;
+      }
+      if (isEditableTarget(event.target)) {
         return;
       }
       const active = activation.getActive();
@@ -215,7 +299,7 @@ export function useHotkeyDispatch(): void {
       // Read once, after the foreground is known, and shared by the predicate and
       // the handler. See decision 5.
       const context = store.getContext();
-      for (const action of active.blueprint.ribbonActions) {
+      for (const action of active.blueprint.commands) {
         // Matching first means a keystroke that is not one of this extension's
         // chords calls no plug-in code at all — `matchesHotkey` is host code over
         // a host-owned frozen chord. Visibility is then consulted per candidate,
