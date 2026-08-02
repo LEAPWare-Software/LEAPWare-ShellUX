@@ -1,0 +1,97 @@
+{
+  // ==========================================================================
+  // The main and preload targets. A SECOND program, not a second opinion.
+  //
+  // The root tsconfig.json describes a browser document: `jsx`, `DOM` and
+  // `DOM.Iterable` in `lib`, `vite/client` in `types`, and `moduleResolution:
+  // "bundler"` because a bundler resolves it. None of those are true here.
+  // These two files run in Electron's main process and in a preload realm, are
+  // resolved by Node's own resolver, and are compiled to disk rather than
+  // bundled. Sharing one config would mean either lying about the renderer or
+  // lying about the host, so there are two configs and this one is not an
+  // `extends` of the other.
+  //
+  // The strictness settings below are copied deliberately and not loosened. The
+  // root config's flags are the project's standard, and a host process that
+  // spawns windows and serves files is the wrong place to have a weaker one.
+  // Three flags differ, and each difference is stated where it is made.
+  // ==========================================================================
+  "compilerOptions": {
+    "target": "ES2022",
+
+    // No `DOM`. The main process has no `document` and no `window`, and a `lib`
+    // that says otherwise turns a real mistake into a clean compile. The
+    // preload realm does have a DOM, but this preload does not touch it; the
+    // day it does, `DOM` is added here with that reason attached.
+    "lib": ["ES2023"],
+
+    // `NodeNext`, because Node is what will actually resolve these files, and
+    // the emitted format is decided by the nearest `package.json`. The root one
+    // declares `"type": "module"`, so both the sources here and the artefacts in
+    // `dist-electron/` are ES modules — consistently, which is the property that
+    // matters. That is why `electron/main/index.ts` uses `import.meta.url` and
+    // not `__dirname`.
+    //
+    // THE CONSTRAINT THIS CREATES, AND IT IS NOT THEORETICAL: a sandboxed
+    // preload script cannot use ESM imports, and `sandbox: true` is not
+    // negotiable. The preload is therefore written with no `import` and no
+    // `export`, which makes it a script and valid under either system. The first
+    // real statement in it has to be CommonJS, and the emitted file has to say
+    // so by its extension or by a `"type"` field beside it. See
+    // electron/preload/index.ts, which carries the same note at the other end.
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // The third deliberate difference, and the one that was nearly a defect
+    // rather than a decision. The root config sets `moduleDetection: "force"`.
+    // Under `NodeNext` the default, `"auto"`, treats a file as an ES module when
+    // the nearest `package.json` says `"type": "module"` even if the file has no
+    // `import` and no `export` — and it then emits `export {};` to preserve that
+    // module-ness. That one line at the top of the compiled preload is a syntax
+    // error in the CommonJS realm a sandboxed preload is loaded into, produced
+    // by a compiler flag, in a file whose entire point is that it contains
+    // nothing. Verified by compiling the preload both ways and reading the
+    // output; `"legacy"` restores the rule that a file with no module syntax is
+    // a script, and a script emits as written. `main/index.ts` has real imports,
+    // so it is a module under either setting and its emit is unchanged.
+    "moduleDetection": "legacy",
+
+    // No `vite/client`. Nothing here is served by Vite.
+    "types": ["node"],
+
+    "rootDir": ".",
+    "outDir": "../dist-electron",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+
+    // The first of the two deliberate differences from the root config.
+    // `isolatedModules` requires every file to be a module, and a module needs
+    // `import` or `export` syntax. Applying it here would force `export {}` into
+    // the preload, which would emit ESM syntax into a file Electron loads as
+    // CommonJS — a syntax error at window creation, produced by a flag whose
+    // purpose is single-file transpilation for a bundler that is not involved
+    // here. `tsc` compiles this program as a whole; nothing transpiles these
+    // files one at a time.
+    "isolatedModules": false,
+
+    "useDefineForClassFields": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+
+    // The second difference. The root config sets `noEmit`, because the renderer
+    // is emitted by Vite and `tsc` there is only a checker. This program has no
+    // other compiler, so it emits — and it emits source maps, because the only
+    // thing standing between a main-process stack trace and a line of
+    // TypeScript is this setting.
+    "sourceMap": true
+  },
+  "include": ["main", "preload"]
+}
