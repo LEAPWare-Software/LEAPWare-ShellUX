@@ -104,15 +104,29 @@ evidence there.
   from the very next statement, and unregistering then re-registering the same id
   in one commit does not hand the previous vendor a live handle into the new
   one's scope.
-- **The host constants cannot be replaced.** `EXTENSION_ID_PATTERN`,
-  `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS` and
-  `HOTKEY_MODIFIER_REQUIRED_KEYS` — the rules every untrusted payload is measured
-  against — together with `PANE_IDS` are exported from modules a plug-in can
-  import, and every one of them used to be runtime-mutable: `REGISTRY_LIMITS` was
-  `as const`, which binds nobody who is not being compiled, and assigning
-  `EXTENSION_ID_PATTERN.test` shadowed the method every id check calls. All of
-  them are frozen, so no own property can be added, replaced or deleted on any of
-  them. **The obvious wider reading is false, and the repository asserts against
+- **The host constants cannot be replaced.** The rules every untrusted payload is
+  measured against are exported from modules a plug-in can import, and every one
+  of them used to be runtime-mutable: `REGISTRY_LIMITS` was `as const`, which
+  binds nobody who is not being compiled, and assigning `EXTENSION_ID_PATTERN.test`
+  shadowed the method every id check calls. All of them are frozen, so no own
+  property can be added, replaced or deleted on any of them.
+  **This paragraph used to enumerate six constants by name, and that list was
+  itself the defect.** Issue #10 closed this for `REGISTRY_LIMITS`, and it
+  returned twice in constants nobody had added to the list — `SHELL_UX_ERROR_CODES`
+  was a bare `new Set(...)` and `HYDRATION_LIMITS` was `as const`. The first was
+  the one that mattered: `toShellUXError` calls `.has` on that set to decide
+  whether an error crossing back from plug-in code carries a code the host trusts,
+  so a plug-in that shadowed `.has` could choose the code `register()` returned,
+  including masquerading as `REVOKED` — which falsified this very section. The
+  guard no longer works from a list. It **walks the modules' own exports** and
+  requires anything shaped like a host constant to be frozen, whether or not
+  anybody remembered it, so a third regression of this shape fails on the commit
+  that introduces it.
+  *Tests:* `src/core/__tests__/hostConstants.test.ts` — "discovers every constant
+  the hand-maintained list used to name, and more", "refuses to let a plug-in
+  shadow SHELL_UX_ERROR_CODES.has and choose its own error code" and "refuses to
+  let a caller raise a hydration bound, which `as const` never stopped".
+  **The obvious wider reading is false, and the repository asserts against
   it rather than leaving it to be discovered.** `Object.freeze` on a `Set` does
   not stop `.add()` — a `Set` keeps its state in internal slots rather than in
   properties, so `HOTKEY_KEYS.add('tab')` still widens the allowlist. What
@@ -120,6 +134,7 @@ evidence there.
   interesting attack. The claim is that these cannot be **replaced**, never that
   they cannot be **changed**, and a test demonstrates the mutability that remains
   — on a throwaway `Set`, so no live allowlist is left widened behind it.
+  *Test:* same file — "does not claim more than a frozen Set delivers".
 
 ### Entry-point validation — real at the door, bypassable elsewhere
 

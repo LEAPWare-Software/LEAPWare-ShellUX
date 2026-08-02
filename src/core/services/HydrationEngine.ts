@@ -208,7 +208,7 @@ export const DEFAULT_DEBOUNCE_MS = 120;
  * cannot make the host walk forever, and this engine cannot become the reason
  * the origin's storage quota is exhausted.
  */
-export const HYDRATION_LIMITS = {
+export const HYDRATION_LIMITS = Object.freeze({
   /** Max characters of the stored record. A longer entry is discarded unparsed. */
   MAX_RAW_LENGTH: 65536,
   /** Max length of any single persisted string. */
@@ -246,7 +246,7 @@ export const HYDRATION_LIMITS = {
    * something caps it.
    */
   MAX_NOTIFY_DEPTH: 16,
-} as const;
+} as const);
 
 /**
  * The layout a shell that has never been used starts from.

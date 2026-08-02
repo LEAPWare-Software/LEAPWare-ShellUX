@@ -767,8 +767,8 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
  * may carry any `code` at all; only a value in this set is trusted, and
  * anything else is downgraded to a host-chosen default.
  */
-export const SHELL_UX_ERROR_CODES: ReadonlySet<string> = new Set(
-  Object.keys(SHELL_UX_ERROR_CODE_MEMBERS),
+export const SHELL_UX_ERROR_CODES: ReadonlySet<string> = Object.freeze(
+  new Set(Object.keys(SHELL_UX_ERROR_CODE_MEMBERS)),
 );
 
 /**

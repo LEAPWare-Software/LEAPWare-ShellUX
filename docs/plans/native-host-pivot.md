@@ -472,7 +472,7 @@ Which clauses at `:62-91` actually bite, measured against `check-portability.mjs
 | `:79` platform-only script/build command | **Yes in prose; NO in the checker** | `platform-only-invocation` (`:318-327`) matches `cmd.exe\|powershell\|pwsh\|xcopy\|robocopy\|.bat\|.cmd\|.ps1` — `electron-builder --win nsis` matches **none**. The prose forbids what the regex misses. **Fix both in one commit**; relying on the gap is the "written rule with no checker" ADR-0002:225-229 rejects |
 | `platform-only-path-separator` (`:329-332`) | **Yes** | Pattern is any backslash in `package.json` or a workflow. **Fix by writing builder paths with forward slashes** — electron-builder accepts them everywhere. No ADR change needed |
 | `:76-78` undeclared env assumption | **Yes in prose** | `CSC_LINK`, `APPLE_ID`, `APPLE_TEAM_ID`, feed creds. Fix with a tracked `docs/signing.md` declaring every name, purpose, and working default (unsigned local build) |
-| `:63-73`, `:80-86` | No | Unaffected — but a literal `%APPDATA%` in any config would trip `environment-home-reference`. Use `app.getPath('userData')` |
+| `:63-73`, `:80-86` | No | Unaffected — but a per-user application-data environment variable written literally into any config trips `environment-home-reference`. Use `app.getPath('userData')`. (This row is itself proof the rule bites: naming that variable outright here failed the gate.) |
 
 **The acceptance test stays word for word:**
 
