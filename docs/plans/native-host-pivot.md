@@ -619,9 +619,16 @@ include a deliberately-failing theme fixture so it cannot pass vacuously.
 
 **`check-citations` blast radius, measured:** its test corpus is a raw filesystem walk
 (`scripts/check-citations.mjs:854`), so `e2e-desktop/*.spec.ts` and `electron/__tests__/*`
-enter automatically, and `electron/**/*.ts` becomes *prose* scanned for citations. **Pin
-`directories.output` to `dist/`** — any other builder output dir (`release/`, `out/`) is not
-in `SKIPPED_DIRECTORIES` and would be walked over an unpacked ~200MB app tree on every run.
+enter automatically, and `electron/**/*.ts` becomes *prose* scanned for citations.
+
+**Correction — this section previously said to pin `directories.output` to `dist/`, and that
+is wrong.** `dist/` is Vite's output directory and `vite build` **empties** it, so
+main-process and packaged output placed there is destroyed by every renderer build. Phase 1
+therefore compiles the main process to **`dist-electron/`**, and Phase 9's builder output
+needs its own directory again. The real obligation is the one this section was reaching for:
+**every build output directory must be added to `.gitignore` and to `SKIPPED_DIRECTORIES` in
+the same commit that creates it**, or `check:citations` walks an unpacked ~200MB app tree on
+every run.
 
 **Manual acceptance, because no test covers it:** run the app on a real Windows 11 machine and
 confirm Mica renders behind the chrome with opaque panes; run NVDA and VoiceOver across the

@@ -263,6 +263,16 @@ integrity. Each finding is tagged **[reproduced]** where confirmed by execution 
   audit workflows run only that script. Two critical CVEs in `vitest` (CVSS 9.8,
   arbitrary file read/execute) are therefore **structurally invisible** to CI.
   **[reproduced — workflow files inspected]**
+  **Re-reproduced 2026-08-02 on a fresh `npm ci`: 6 vulnerabilities, 3 moderate / 1 high /
+  2 critical.** The 2026-08-02 dependency triage found the second half of the problem, which
+  is worse than the first: **Dependabot could not offer the fix either.**
+  `.github/dependabot.yml` sets `open-pull-requests-limit: 5` and deliberately ungroups
+  majors; all five slots were occupied; and the fixes — `vitest@4`, `@vitest/coverage-v8@4`,
+  `vite@8` — are three ungrouped majors needing three free slots. So the vulnerability was
+  invisible to the gate *and* unofferable by the bot at the same time. Closing #35 and #38
+  freed two slots. **This must land before Phase 6**, which puts the entire cross-process
+  transport under jsdom unit test — i.e. increases this project's dependence on the exact
+  package carrying the criticals. See [`docs/dependabot-triage.md`](docs/dependabot-triage.md).
 - **There is no working way to report a vulnerability. Blocker.** **[reproduced]**
   `SECURITY.md:267-269` instructs reporters to use the Security tab's "Report a
   vulnerability". Private vulnerability reporting is a **public-repository feature**:
@@ -456,7 +466,7 @@ prerequisites the plan folds in rather than replaces.
 | 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | Still open. Do it with the exports-walking test, or it regresses a third time. |
 | 7 | **Root error boundary** | Still open, and the pivot raises its value — an Electron main process with no top-level boundary turns a renderer throw into a blank native window. |
 | 8 | Fix the two vacuous tests and the `patternFor` hole | **Phase 0c, in flight** for the `patternFor` half. It is a hard prerequisite for Phase 4: deleting the ribbon renames many cited titles at once, which is exactly when a prefix-match hole stops being theoretical. The two vacuous tests are still open. |
-| 9 | Triage the three red Dependabot PRs | #34, #35, #38 are red. #35 and #38 cross a major. Unchanged. |
+| 9 | Triage the red Dependabot PRs | **DONE 2026-08-02** — full findings in [`docs/dependabot-triage.md`](docs/dependabot-triage.md). **#35 and #38 closed.** The lead finding is not about any single PR: `.github/dependabot.yml` caps the queue at 5 with majors deliberately ungrouped, all five slots were full, and the fixes for the two CVSS 9.8 criticals in `vitest` are three ungrouped majors needing three free slots. So CI could not *see* the criticals (§6.2 — `audit:prod` omits dev) **and** Dependabot could not *offer* the fix. Two slots are now free. **#37 is green and CI is structurally blind to its breaking change** — jest-dom 7 raises `engines` to `node: >=22` while this repo declares a 20.19 floor and `.npmrc` sets `engine-strict=true`, so a developer on the declared-supported Node gets a hard `EBADENGINE`; every workflow reads `.nvmrc`, which is `24`, so **no CI leg has ever exercised the declared floor**. #34 is a doctrine decision rather than a chore: all 11 new warnings sit on `Object.freeze(...)` exports and 0.4.26 lints the same files clean. |
 | 10 | Everything else, by milestone priority | Re-triage against the pivot — the ribbon's deletion closes or moots several documentation issues. |
 
 ---
