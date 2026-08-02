@@ -181,6 +181,62 @@ expose further breakage behind it. **[reasoned]**
 or when a human decides the `allowExportNames` list may grow. Nothing here is urgent —
 0.4.26 has no advisory against it.
 
+#### CORRECTION (2026-08-02, later the same day) — the false-positive diagnosis above is wrong, and #34 was closed
+
+The section above reads the 11 warnings as an upstream regression and recommends waiting
+for a fix. Both halves are now disproven against the plugin's own published source. The
+diff between the 0.4.26 and 0.5.3 `index.js` was read in full. **[reproduced — both
+versions fetched with `npm pack` into a scratch directory and diffed; nothing installed]**
+
+**0.4.26 was not silent because it judged these exports correct. It was silent because of
+two detection bugs, and 0.5.x fixed both.**
+
+1. **The call-expression bug.** 0.4.26 classified an export by a *denylist* — a set named
+   `notReactComponentExpression` holding `ObjectExpression`, `ArrayExpression`, `Literal`
+   and nine more. **`CallExpression` is not in that set.** So `Object.freeze(…)` fell
+   through to the name test, and the name test is `/^[A-Z][a-zA-Z0-9_]*$/u` — which
+   `EXTENSION_ID_PATTERN`, `REGISTRY_LIMITS`, `DatabasePlugin` and every other name here
+   **match**, because `_` is a permitted character. 0.4.26 therefore recorded these frozen
+   constants as *React component exports*. 0.5.x replaced the denylist with an allowlist
+   (`isExpressionReactComponent` → `isCallExpressionReactComponent` → `getHocName`), which
+   correctly answers "`Object.freeze` is not a HOC" and reports them.
+2. **The class bug.** 0.4.26's `handleExportDeclaration` had branches for
+   `VariableDeclaration`, `FunctionDeclaration`, `CallExpression` and `TSEnumDeclaration`
+   — and **none for `ClassDeclaration`**. An exported React class component was invisible
+   to it, so `hasReactExport` stayed false in `FaultBoundary.tsx` and the
+   `describeFault` finding was never emitted. 0.5.x added the branch.
+
+So every one of the warnings names a real Fast Refresh boundary break. There is no upstream
+defect to wait for, and the "hold until upstream fixes it" premise is void.
+
+**And the proposed fix does not work.** The section above sizes the remedy as "eight more
+names in `allowExportNames`". Measured: `allowExportNames` clears the `RegistryContext.tsx`
+and `FaultBoundary.tsx` findings, and clears **none** of the five in `src/mocks/`.
+**[reproduced — 0.5.3 run against those files with the option supplied on the command line;
+5 of 5 survived]** The reason is structural. Those five are `localComponents` reports, which
+fire only when `hasReactExport` is false — and `allowExportNames` returns *before* setting
+that flag, so naming `DatabasePlugin` and `MailPlugin` cannot reach them. Closing them needs
+either the local components moved into their own files or the rule relaxed for
+`src/mocks/**`, and both are source changes well outside what a dependency bump carries.
+
+**The count is 13 now, not 11**, on the current branch: `RootBoundary.tsx` (`requestReload`)
+and `RegistryContext.tsx` (`clampMetricValue`) added two more non-component exports after
+this triage was written. The number is a function of tree state, so "11" is dated rather
+than wrong — and it will keep growing. **[reproduced]**
+
+**Action taken: #34 closed**, with the mechanism recorded on the PR. It should come back
+once the work has been scoped, and the expectation is that Dependabot re-raises on 0.5.4 or
+newer. **[reasoned — documented Dependabot close behaviour; not verified against this
+repository]** Hold that expectation more loosely than for #35 and #38: those are
+single-package PRs, whereas #34 is a **`minor-and-patch` group** PR, and a version-scoped
+suppression is a weaker guarantee when the group's membership changes between runs — the
+next group PR could re-include 0.5.3 alongside some other package.
+
+**`eslint.config.js` was left untouched.** The 25-line narrowness rationale quoted above is
+**vindicated** by this finding, not threatened by it: the names were never legitimately
+absent from the allowlist, they were hidden by a plugin bug, and the doctrine is the only
+reason anyone will be asked to argue for them on purpose when they are added.
+
 ---
 
 ### #35 — `typescript` 5.9.3 → 7.0.2 — **Close**
@@ -297,6 +353,64 @@ support-policy decision — it drops a Node line this repo currently promises �
 be made deliberately rather than absorbed silently by a dev-dependency bump. If dropping
 Node 20 is unacceptable, hold #37 instead. **Do not merge it as-is on the strength of the
 green tick.**
+
+#### UPDATE (2026-08-02, later the same day) — merged, and Node 20 was already gone
+
+`engines` for `@testing-library/jest-dom@7.0.0` was re-read from the registry rather than
+from the PR diff, and confirms the section above: `{ npm: '>=6', node: '>=22', yarn: '>=1' }`,
+against `>=14` on 6.9.1. **[reproduced]**
+
+**But jest-dom 7 is not what dropped Node 20 — `electron` already had.** The README's
+prerequisites table justified the old floor as the intersection of what the tree carries.
+That reasoning went stale on this branch **before this PR and independently of it**:
+`electron@43.2.0` entered the lockfile with the Phase 1 native-host commit and declares
+`engines.node: ">= 22.12.0"`, which alone makes the `^20.19.0` arm uninstallable. On `main`
+the old table was still accurate — nothing there requires `>=22`. **[reproduced — the
+committed lockfile at branch HEAD and at `origin/main` were both parsed; `node_modules/electron`
+is present in the first with that constraint and absent from the second]**
+
+So the support-policy decision the section above asks for had effectively already been taken
+by adding Electron; raising `engines` records it rather than makes it. The new floor is
+`^22.13.0 || >=24`. The two-arm shape is kept deliberately: `>=24` is what excludes the 23.x
+line, inherited from `eslint-visitor-keys` under `@typescript-eslint`, so collapsing it to
+`>=22` would silently widen support. The in-flight `vitest` 4 / `vite` 8 upgrade does not
+move it either — `vite@8.2.0` is `^20.19.0 || >=22.12.0` and `vitest@4.1.10` is
+`^20.0.0 || ^22.0.0 || >=24.0.0`, both satisfied throughout. **[reproduced — registry read]**
+
+**Action taken: #37 merged with `--squash`** after re-reading the status column on all five
+checks (all `pass`; `mergeStateStatus: CLEAN`). `package.json` `engines` raised to
+`^22.13.0 || >=24`, and the README prerequisites table rewritten to name `electron` as the
+binding constraint.
+
+**No matcher call site can break.** The 7.0.0 and 6.9.1 tarballs were fetched and their
+`types/matchers.d.ts` compared: 7.0.0 **removes and renames nothing** and adds 16 matchers
+(the `toContainAnyBy…` / `toContainOneBy…` family). Every jest-dom matcher this suite uses
+survives unchanged. **[reproduced — package contents diffed, not a test run; the tree was
+mid-migration and could not be installed on]**
+
+**The structural finding, and it is only half closed.** All four workflows were swept —
+`ci.yml`, `browser.yml`, `audit-dependencies.yml` and `audit-schedule.yml` — and every one
+reads `node-version-file: '.nvmrc'`. **No CI leg has ever executed the declared floor**, so
+`engine-strict` has never had anything to catch and the lower bound was the one claim in
+this repository that nothing ran. **[reproduced — all four workflows grepped]** A `floor`
+job pinned to Node `22.13.0` exactly was added to `ci.yml` to close it — one
+`ubuntu-latest` job at the 1x billing tier, running `npm ci` and `npm test`.
+
+**Open exposure.** That job and the `engines` raise both sit on `native-host-phase-0`, while
+#37 merged to `main`. Until this branch lands, `main` ships jest-dom 7 while still declaring
+`^20.19.0`. The blind spot is **staged, not yet closed.**
+
+**One follow-up for whoever owns this branch.** `package-lock.json` mirrors the root
+`engines` string in its `packages[""]` block, and it still holds the old three-arm value —
+`package.json` was raised, the lockfile was not, because rewriting it was out of scope here.
+This is **cosmetic, not fatal**: `npm ci` does not treat a root-`engines` divergence as an
+out-of-sync lockfile. Verified on an isolated reproduction carrying exactly this divergence
+— `npm ci` exited **0** — while the same reproduction with an unsatisfiable `engines` in
+`package.json` failed with `EBADENGINE` and exit **1**, confirming that `engine-strict`
+reads `package.json` and that the new `floor` job's mechanism works. **[reproduced — a
+throwaway two-package project outside this tree, using this repository's `.npmrc`]** The
+next `npm install` regenerates the block and resyncs it; the in-flight `vitest`/`vite`
+migration will almost certainly do so on its own.
 
 ---
 

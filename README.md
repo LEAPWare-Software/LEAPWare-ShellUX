@@ -279,7 +279,7 @@ measured on a codebase this young.
 
 | Tool | Requirement | Why this floor |
 |---|---|---|
-| **Node.js** | `^20.19.0 \|\| ^22.13.0 \|\| >=24` | Declared as `engines` in `package.json`. This is not a preference — it is the intersection of the `engines` constraints the dependency tree already carries. `package-lock.json` contains `^20.19.0 \|\| ^22.13.0 \|\| >=24` (via `@typescript-eslint`), `20 \|\| >=22` (via `test-exclude`, which rules out 21.x), and `^18.18.0 \|\| ^20.9.0 \|\| >=21.1.0` (ESLint). Nothing in the tree needs more. |
+| **Node.js** | `^22.13.0 \|\| >=24` | Declared as `engines` in `package.json`. This is not a preference — it is the intersection of the `engines` constraints the dependency tree already carries. Two of those constraints are what removed the `^20.19.0` arm this project used to accept: **`electron`, which declares `>= 22.12.0`**, and `@testing-library/jest-dom` 7, which declares `>=22`. The arms that remain come from `eslint-visitor-keys` (via `@typescript-eslint`), whose `^20.19.0 \|\| ^22.13.0 \|\| >=24` is also the reason `>=24` is written as a separate arm rather than folding into `>=22` — it is what excludes the 23.x line. `test-exclude` contributes `20 \|\| >=22`, which rules out 21.x on the same principle. Nothing in the tree needs more. |
 | **npm** | 10 or newer; 11.16.0 is what the lockfile was written with | Pinned as `packageManager` so a laptop reaching for yarn or pnpm errors instead of silently resolving a different tree from the version ranges in `package.json`. |
 | **git** | any recent version | The portability check below enumerates tracked files with `git ls-files`. |
 
@@ -287,10 +287,28 @@ measured on a codebase this young.
 right one without being told. CI reads the same file rather than duplicating the
 number.
 
+**Node 20 is no longer supported, and that is a policy change, not a side effect.**
+The floor above used to start at `^20.19.0`. It cannot any more: `electron` is a
+devDependency of this project and refuses to install below 22.12.0. Dev-only does
+not soften that — this package is `private`, so there is no consumer who installs
+it without dev dependencies, and the 20.x line stopped being installable here for
+everyone regardless of what `engines` claimed. Declaring a
+version the tree cannot install is worse than declaring one fewer version, so the
+arm was removed rather than left standing as a promise nothing keeps.
+
 **The floor is enforced, not suggested.** The tracked `.npmrc` sets
 `engine-strict=true`, so a Node below the floor fails `npm ci` immediately with a
 readable message. Without it npm's default is to print `EBADENGINE`, carry on, and
 hand you a tree that breaks later somewhere unrelated.
+
+**And the floor is now executed, not only enforced.** Until recently every job in
+every workflow took its Node version from `.nvmrc`, and `.nvmrc` has always named
+a version comfortably above the floor — so `engine-strict` had nothing to catch
+and the lower bound was the one claim in this file that nothing tested. A
+dependency could raise its own `engines` past the floor and every check would stay
+green while a developer on a supported version got a hard `EBADENGINE` on `npm ci`.
+The `Declared Node floor` job in `ci.yml` installs and tests on the exact lowest
+supported version, so that gap now fails in CI instead of on a laptop.
 
 No other setup exists. There is nothing to configure, no environment variable to
 set, and no `.env` file — nothing in this repository reads one.

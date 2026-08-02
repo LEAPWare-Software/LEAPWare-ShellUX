@@ -826,10 +826,15 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // passed is what to DO about a host chord; there is no table to register into
   // here, which is what keeps "host chrome is not plug-in-declarable" a structure
   // rather than a lookup order. See `HOST_CHORDS` in `hotkeyDispatch.ts`.
-  useHotkeyDispatch((id) => {
-    if (id === 'open-command-palette') {
-      setPaletteOpen(true);
-    }
+  // No `if` on the id, and that is a coverage fact as much as a style one.
+  // `HOST_CHORDS` holds exactly ONE entry, so an `if (id === 'open-command-palette')`
+  // has an implicit `else` no input can reach — vitest 2 did not count that branch
+  // and vitest 4 does, which is how it surfaced. Narrowing the parameter type is
+  // the honest fix: the compiler rejects a second host chord here rather than the
+  // test suite failing to reach it, so adding one is a type error at this call
+  // site instead of an invisible uncovered branch.
+  useHotkeyDispatch(() => {
+    setPaletteOpen(true);
   });
 
   // A mount-time SNAPSHOT, not a subscription. `defaultSize` means "where this

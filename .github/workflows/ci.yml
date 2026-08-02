@@ -104,3 +104,58 @@ jobs:
           path: coverage/
           if-no-files-found: warn
           retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # The declared floor, actually executed.
+  #
+  # The job above reads `.nvmrc`, and so does every job in every other workflow
+  # here. That is the right rule for the *development* Node: one tracked number,
+  # so a laptop and CI agree by construction. But it left the `engines` lower
+  # bound in package.json as the only claim in this repository that nothing ran.
+  # `.nvmrc` has always named a version comfortably above the floor, so the
+  # `engine-strict` setting in `.npmrc` never had anything to catch, and a
+  # dependency was free to raise its own `engines` past the floor with every leg
+  # staying green - while a developer on a version this project still promised to
+  # support hit a hard EBADENGINE on `npm ci`. That is how the Node 20 arm came to
+  # be advertised for longer than it was installable.
+  #
+  # This job is therefore a deliberate exception to the node-version-file rule,
+  # not an oversight against it. The floor is by definition the *other* boundary
+  # from the development version; it cannot be read from `.nvmrc` without `.nvmrc`
+  # ceasing to mean what it means. Two files, because there are genuinely two
+  # numbers.
+  #
+  # The literal is pinned exactly - '22.13.0', not '22'. setup-node resolves a
+  # bare major to the newest release in that line, which is precisely the version
+  # this job is not for.
+  #
+  # `npm ci` is the load-bearing step: with engine-strict it is what fails when
+  # the tree's transitive `engines` data has outgrown the declared floor. `npm
+  # test` follows because installing on the floor and never running on it proves
+  # only half the claim.
+  #
+  # Cost, stated honestly: one extra job. It is ubuntu-latest and nothing else -
+  # that is the 1x billing tier, where macOS bills at 10x and Windows at 2x.
+  # Engine resolution is not platform-specific, and the three-OS matrix above
+  # already covers what is, so a matrix here would multiply the bill to buy
+  # nothing.
+  # ---------------------------------------------------------------------------
+  floor:
+    name: Declared Node floor (22.13.0)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.13.0'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test

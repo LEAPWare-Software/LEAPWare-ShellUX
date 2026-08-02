@@ -155,12 +155,18 @@ export function CommandPalette({
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
-        if (!next) {
-          // The query is state of one visit, not of the shell. Leaving it behind
-          // would reopen the palette already filtered by whatever was typed
-          // before, which reads as "the palette is broken, it shows nothing".
-          setQuery('');
-        }
+        // The query is state of one visit, not of the shell. Leaving it behind
+        // would reopen the palette already filtered by whatever was typed
+        // before, which reads as "the palette is broken, it shows nothing".
+        //
+        // Cleared unconditionally, and there used to be an `if (!next)` around
+        // it. **There is no `Dialog.Trigger` in this component** — `open` is
+        // controlled entirely by the host chord — so Radix only ever reports a
+        // CLOSE here, and that guard was a branch no input could take the false
+        // side of. Vitest 2 did not count it and vitest 4 does, which is how it
+        // surfaced. Clearing on an open we never receive would be correct
+        // anyway: a palette that opens should open empty.
+        setQuery('');
         onOpenChange(next);
       }}
     >

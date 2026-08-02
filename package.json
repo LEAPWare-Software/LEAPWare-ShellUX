@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist-electron/main/index.js",
   "engines": {
-    "node": "^20.19.0 || ^22.13.0 || >=24"
+    "node": "^22.13.0 || >=24"
   },
   "packageManager": "npm@11.16.0",
   "scripts": {
@@ -50,8 +50,8 @@
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/coverage-v8": "^2.1.8",
+    "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.20",
     "electron": "^43.0.0",
     "eslint": "^9.17.0",
@@ -63,7 +63,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.18.2",
-    "vite": "^5.4.11",
-    "vitest": "^2.1.8"
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
   }
 }

@@ -60,7 +60,19 @@ export default defineConfig({
         'src/components/**/__tests__/**',
         'src/hooks/**/__tests__/**',
       ],
-      all: true,
+      // `all: true` was removed here when vitest 4 removed the option itself.
+      //
+      // **This is not a relaxation, and the difference is worth stating because
+      // it looks like one.** Under vitest 2 the flag was what made an untested
+      // module count against the gate at 0% rather than being silently absent
+      // from the report — deleting it there would have let a whole uncovered
+      // file disappear. Vitest 4 made that the default: every file matching
+      // `include` above is instrumented whether or not a test imports it, so the
+      // flag became a no-op and then an error.
+      //
+      // The property the gate depends on is therefore unchanged, and it is
+      // checked rather than assumed — see the coverage figures in `verify`,
+      // which still report every module under the three included roots.
       thresholds: {
         statements: 100,
         branches: 100,
