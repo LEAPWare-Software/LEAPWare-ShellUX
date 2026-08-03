@@ -79,10 +79,14 @@ carrying a SHA-512 over it. The packaged app was probed over CDP: it read its ba
   rationalised afterwards. **Arm B needs NVDA on Windows and VoiceOver on macOS — no
   agent can run a screen reader.** Building Phase 7 before the spike risks building
   the wrong topology. Evidence so far leans **two-process**.
-- **The update feed host does not exist.** `https://updates.leapware.dev/shellux/` is
-  a placeholder, proven dead at runtime. It appears in exactly three places, two of
-  which are gates that fail loudly until it changes. Blocks the first release, not
-  development. See `docs/RELEASE.md` §1.
+- **The update feed host does not exist — but the domain does.** Measured
+  2026-08-03: `leapware.dev` resolves (`145.131.10.226` plus IPv6), and only the
+  `updates` label is missing — `nslookup updates.leapware.dev` returns
+  `Non-existent domain`, which is precisely the `net::ERR_NAME_NOT_RESOLVED` the
+  packaged application reported. **So this is one DNS record and a static bucket,
+  not a domain purchase.** The URL appears in exactly three places, two of which
+  are gates that fail loudly until it changes; a fourth occurrence would itself be
+  the defect. Blocks the first release, not development. See `docs/RELEASE.md` §1.
 - **Nothing is signed and no certificate was sought.** macOS packaging is configured
   and never executed — unbuildable from Windows.
 - **An engines split-brain, until #100 merges.** PR #37 (jest-dom 7, which requires

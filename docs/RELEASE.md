@@ -32,6 +32,17 @@ things down.
       serving the directory `electron-builder.yml`'s `publish.url` names. It needs
       no compute, no authentication for readers, and no API — electron-updater
       fetches `latest.yml`, then the installer named in it.
+
+      **Measured 2026-08-03, and it narrows this task considerably.** `leapware.dev`
+      **resolves** — `145.131.10.226` and an IPv6 address — so the apex domain is
+      real and controlled. Only the `updates` label is missing: `nslookup
+      updates.leapware.dev` returns `Non-existent domain`, which is exactly the
+      `net::ERR_NAME_NOT_RESOLVED` the packaged application reported.
+
+      So this is **one DNS record plus a bucket**, not a domain purchase and not a
+      naming decision. The placeholder was chosen to sit under a domain that already
+      exists, which is why the three call sites below can keep their spelling if the
+      subdomain is created as written.
 - [ ] **Replace the placeholder host in exactly three places, and no more.**
       1. `electron-builder.yml`'s `publish.url` — the only place the *build* reads
          it, and the only place a running application's feed comes from.
