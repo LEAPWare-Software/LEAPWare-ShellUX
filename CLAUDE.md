@@ -45,21 +45,33 @@ ADR-0003. `.github/PULL_REQUEST_TEMPLATE.md` is the same list as checkboxes.
 npm run verify
 ```
 
-Runs, in order: `check:portability`, `check:citations`, `lint`, `typecheck`,
-`test:coverage`, `test:integration`, `test:scripts`, `build`, `audit:prod`. It must
-exit 0 end to end before a pull request opens, and its **real output** goes in the
-pull request body.
+Runs, in order: `check:portability`, `check:citations`, **`tokens:check`**, `lint`,
+`typecheck`, `test:coverage`, `test:integration`, `test:scripts`, `build`,
+`audit:prod`. **Ten stages.** It must exit 0 end to end before a pull request opens,
+and its **real output** goes in the pull request body.
 
 It needs the network, for the audit's advisory-database query.
 
-**`verify` is NOT the same set CI runs, whatever `README.md` says.** The `verify`
-job in `.github/workflows/ci.yml` runs five of the nine — `check:portability`,
-`lint`, `typecheck`, `test:coverage`, `build`. `check:citations`,
-`test:integration` and `test:scripts` execute on no leg of that workflow, and
-`audit:prod` runs only in `audit-dependencies.yml`, gated on a dependency-graph
-change plus a weekly timer. So `verify` is the stronger gate and it only runs where
-somebody runs it. Do not skip it on the theory that CI will catch it. GitHub issue
-#58 tracks the incorrect sentence in `README.md`.
+> **CORRECTED 2026-08-03, on the day this file merged.** The paragraph here said
+> "**`verify` is NOT the same set CI runs, whatever `README.md` says**", and listed
+> `check:citations`, `test:integration` and `test:scripts` as executing on no leg.
+> That was true when written and had got worse — `tokens:check` was added to `verify`
+> by the native-host pivot, also with no leg, so it was five of **ten**.
+>
+> **It is fixed. CI now runs every stage of `verify`.** The matrix job in
+> `.github/workflows/ci.yml` runs the first nine on three operating systems and
+> `audit:prod` runs in `audit-dependencies.yml`. GitHub issue #58 tracked it, was
+> closed as `COMPLETED` while nothing had closed it, and is genuinely closed now.
+>
+> **Run `verify` locally anyway, and the reason has changed rather than gone away.**
+> It is no longer "CI cannot catch this". It is that a 12–13 minute local failure is
+> cheaper than a failed matrix leg, and that rule 2 asks for real output in the pull
+> request body, which only a real run produces.
+>
+> **One narrower gap survives and is NOT #58's:** `audit:prod` is
+> `npm audit --omit=dev`, so **the dev tree is audited by nothing on any leg**. That
+> is the mechanism that made two CVSS 9.8 criticals in `vitest` structurally
+> invisible to CI. `HANDOFF.md` §6.2 carries it.
 
 **The browser lane is a fourth CI leg and is deliberately NOT in `verify`.**
 
@@ -104,8 +116,12 @@ The suite runs in jsdom. jsdom does not paint. It therefore cannot observe:
 through both.**
 
 - The ribbon overflow menu shipped clipped to zero visible pixels and unclickable,
-  under six tests that asserted it worked. All six passed vacuously. The postmortem
-  is the file banner in `src/components/ui/RibbonToolbar.tsx`.
+  under six tests that asserted it worked. All six passed vacuously. **The file that
+  carried the postmortem — `src/components/ui/RibbonToolbar.tsx` — no longer exists:
+  the native-host pivot's Phase 4 deleted the ribbon and replaced it with one command
+  registry and four surfaces.** The lesson survives the file and is the reason this
+  section exists; the reproduction survives too, in `e2e/`, against a real layout
+  pass. Do not go looking for the banner.
 - A case called "survives a collapse toggled while a divider drag is in flight" in
   `src/components/__tests__/ShellLayout.test.tsx` never starts a drag. That is
   measured by name. *Tests:* `src/__tests__/IntegrationSuite.test.tsx` — "cannot be
@@ -270,15 +286,29 @@ Citation markers the checker recognises: `*Tests:*`, `*Test:*`, and `pinned by`.
 
 ## Two things that will surprise you
 
-- **`npm run dev` renders an empty shell.** `src/App.tsx` registers nothing — its
-  own docblock says "Nothing is registered here". That is the production entry
-  point and it is deliberate. The browser fixture is **`dev.html`** with
-  `src/dev/`, which mounts the same shell with the two verification remotes in
-  `src/mocks/` registered. If you are trying to look at the shell, that is the one
-  you want.
-- **No human has signed off on the running application.** GitHub issue #39 is still
-  open, and the browser lane below narrows it without answering it: an automated
-  Chromium run is not a person looking at the thing.
+> **Both of these were true when written and BOTH ARE NOW FALSE. Corrected
+> 2026-08-03, the day this file merged, rather than left for a sweep — rule 3.**
 
-Neither is fixed by ADR-0003. Both are stated so that no one reads rule 5 as
-describing more than it does.
+- ~~**`npm run dev` renders an empty shell.**~~ **Fixed 2026-08-02.**
+  `vite.config.ts` installs a `configureServer` middleware rewriting `/` to
+  `dev.html`, so `npm run dev` opens the shell with both verification remotes in
+  `src/mocks/` registered. `/index.html` still serves the empty-registry production
+  shell **by name**, and `src/App.tsx` still registers nothing — that part was never
+  the defect. `dist/` is SHA-256 identical before and after the change, measured on
+  all three artifacts.
+- ~~**No human has signed off on the running application.**~~ **#39 is CLOSED.** A
+  native Electron window was launched and screenshotted in Phase 1 (`673d75d`), and
+  the packaged application was probed over CDP: it read its baked `app-update.yml`,
+  contacted the feed and reported the failure in its own command palette. **Read that
+  narrowly** — a person has now seen the application run, which is what #39 asked. It
+  is not a usability review, and no assistive technology has ever been pointed at it
+  (#60, still open).
+
+**Where to start instead, if you are here to write an extension:**
+`src/examples/HelloExtension.tsx` — the whole contract in about a hundred lines,
+registered and driven by its own test. The two modules under `src/mocks/` are
+verification remotes, ~1,000 lines each, and are the wrong thing to read first.
+
+Neither correction is delivered by ADR-0003. They are stated so that no one reads
+rule 5 as describing more than it does — and so that this file does not do the thing
+#90 was filed about, which is describe shipped code as unbuilt.
