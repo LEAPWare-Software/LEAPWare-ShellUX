@@ -79,14 +79,33 @@ carrying a SHA-512 over it. The packaged app was probed over CDP: it read its ba
   rationalised afterwards. **Arm B needs NVDA on Windows and VoiceOver on macOS — no
   agent can run a screen reader.** Building Phase 7 before the spike risks building
   the wrong topology. Evidence so far leans **two-process**.
-- **The update feed host does not exist — but the domain does.** Measured
-  2026-08-03: `leapware.dev` resolves (`145.131.10.226` plus IPv6), and only the
-  `updates` label is missing — `nslookup updates.leapware.dev` returns
-  `Non-existent domain`, which is precisely the `net::ERR_NAME_NOT_RESOLVED` the
-  packaged application reported. **So this is one DNS record and a static bucket,
-  not a domain purchase.** The URL appears in exactly three places, two of which
-  are gates that fail loudly until it changes; a fourth occurrence would itself be
-  the defect. Blocks the first release, not development. See `docs/RELEASE.md` §1.
+- **The update feed host was INVENTED, and it has been removed. Read this one.**
+  Phase 9 shipped `electron-builder.yml` pointing at `updates.leapware.dev`. That
+  host was written to look plausible under the project's brand; **this organisation
+  does not own `leapware.dev`.** The apex resolves to a netblock belonging to
+  somebody else, and an earlier revision of this very section cited that resolution
+  as proof the domain was "real and controlled" — it proved only that *someone*
+  owns it.
+
+  **Why this was a security defect rather than a naming mistake.** With
+  `provider: generic`, that one URL is the sole authority for both the `latest.yml`
+  manifest **and** the installer the manifest names. A shipped application would
+  have asked a stranger's server what to download and then run it, and nothing this
+  project builds is signed, so signature verification would not have refused the
+  answer. Remote code execution by configuration. Caught before any release, any
+  tag, or any user holding a build — but it was on `main`.
+
+  `publish` is now unset, `DOCUMENTED_ENDPOINTS` is empty, and the hostname rule is
+  fully on again, so an accidental re-introduction fails the build.
+
+  **The decision this leaves open is smaller than it looks.** `electron-updater`'s
+  GitHub provider was rejected because the repository is *private* — release assets
+  would need a token inside the shipped client. **On a public repository those
+  assets are plain public URLs and the provider needs no host, no DNS and no
+  bucket.** So going public collapses this blocker entirely, and it is the same
+  decision that resolves §5's branch protection and §6.2's vulnerability reporting.
+  Three blockers, one choice. The alternative is owning a static HTTPS host and
+  declaring it in the three places `docs/RELEASE.md` §1 enumerates.
 - **Nothing is signed and no certificate was sought.** macOS packaging is configured
   and never executed — unbuildable from Windows.
 - **An engines split-brain, until #100 merges.** PR #37 (jest-dom 7, which requires

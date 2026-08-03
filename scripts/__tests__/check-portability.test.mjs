@@ -349,16 +349,36 @@ describe('content rules', () => {
 // not an exemption, so the fixture below asserts BOTH halves: the declared host
 // passes and a host that merely starts with it does not.
 //
-// The lookalike is the sharp one. `updates.leapware.dev.something-else.tld` is a
-// host an attacker can register, it is not the declared endpoint, and a suffix
-// test — which is the right test for the RFC-reserved names and the wrong one
-// here — would have accepted it.
+// The lookalike is the sharp one. `<declared>.something-else.tld` is a host an
+// attacker can register, it is not the declared endpoint, and a suffix test —
+// which is the right test for the RFC-reserved names and the wrong one here —
+// would have accepted it.
+//
+// ---------------------------------------------------------------------------
+// REWRITTEN 2026-08-03, because `DOCUMENTED_ENDPOINTS` IS NOW EMPTY.
+//
+// This fixture used to name the real declared feed host and assert it passed.
+// That host turned out to be INVENTED — plausible-looking under the project's
+// brand, never owned by this organisation, and a DNS lookup returning an address
+// was mistaken for proof of ownership. It is deleted from the map, and with
+// `provider: generic` an unowned feed is remote code execution by configuration:
+// one URL is the sole authority for both the manifest and the installer it names,
+// and nothing here is signed.
+//
+// So this fixture no longer asserts anything about a *particular* host. It
+// asserts the MECHANISM, which is what has to keep working when the first real
+// feed is declared: with the map empty, every hostname is reported — including
+// one that would previously have been declared — and the lookalike is reported
+// too. When a row returns, the first assertion below is the one that must be
+// inverted, and the second must not.
 // ---------------------------------------------------------------------------
 
 describe('packaging build commands and the declared update feed', () => {
   const root = newRepo('packaging');
 
-  const feed = assemble('https', ':', '/', '/', 'updates', '.', 'leapware', '.', 'dev', '/shellux/');
+  // Assembled rather than written, so this file does not itself contain a
+  // hostname the checker would report when it scans its own repository.
+  const feed = assemble('https', ':', '/', '/', 'updates', '.', 'not-a-real-host', '.', 'test-host', '.', 'net/shellux/');
   const lookalike = assemble(feed.replace(/\/shellux\/$/, ''), '.', 'not-the-feed', '.', 'test-host', '.', 'net/shellux/');
 
   const paths = [
@@ -387,11 +407,18 @@ describe('packaging build commands and the declared update feed', () => {
     assert.deepEqual(rulesFor(report, 'package.json'), []);
   });
 
-  it('reports nothing for the update feed host, because it is declared', () => {
-    assert.deepEqual(rulesFor(report, 'electron-builder.yml'), []);
+  it('reports a feed host while no endpoint is declared, which is the empty map working', () => {
+    // With `DOCUMENTED_ENDPOINTS` empty, the hostname rule is fully on and an
+    // undeclared feed URL is a violation like any other. This is the assertion to
+    // INVERT — and the only one — in the change that declares the first real feed.
+    const rules = rulesFor(report, 'electron-builder.yml');
+    assert.ok(rules.includes('hardcoded-hostname'), JSON.stringify(rules));
   });
 
-  it('reports hardcoded-hostname for a host that only begins with the declared one', () => {
+  it('reports a lookalike host too, so a declaration could never be a suffix test', () => {
+    // This one must keep passing after a real endpoint is declared. A suffix test
+    // would accept `<declared>.somewhere-else.tld`, which is a host an attacker
+    // registers; exact equality is what refuses it.
     const rules = rulesFor(report, 'lookalike.yml');
     assert.ok(rules.includes('hardcoded-hostname'), JSON.stringify(rules));
   });
