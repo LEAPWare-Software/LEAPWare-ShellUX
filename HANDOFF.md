@@ -505,8 +505,33 @@ write-only, because `detailDefaultPercent` is always the remainder and never rea
 - `ShellStateStore.subscribe` does not validate its argument, while the banner above it
   claims every member does. One `undefined` callback wedges every subsequent write.
   **[reproduced]**
-- `DEVELOPER.md:1849` tells extension authors that a containment guarantee does not exist
-  when it does — and contradicts itself about 500 lines earlier. **[reproduced]**
+- ~~`DEVELOPER.md:1849` tells extension authors that a containment guarantee does not
+  exist when it does — and contradicts itself about 500 lines earlier.~~ **CLOSED
+  2026-08-03 with the other two passages of #90.** All three described shipped, tested
+  code as unbuilt: the ADR's **header banner** said "nothing in `src/` evaluates a
+  predicate or catches a render error yet" (`ribbonAction.ts` and `FaultBoundary.tsx`
+  both existed); the persistence paragraph said neither `ShellLayout` nor `App.tsx`
+  reads or writes persisted state (`ShellLayout` does both, in four places — and two
+  data-destroying defects have since been fixed *in* that path); and `DEVELOPER.md` told
+  authors a throwing predicate "will not be contained by anything" while saying the
+  opposite, correctly, 570 lines earlier. The ADR corrections are dated superseding notes
+  per its own convention rather than in-place edits.
+  **Two things worth keeping from it.** The persistence sentence had *already* been
+  superseded once — the 2026-07-31 note corrected the claim that the **engine** did not
+  exist and never touched the clause about the shell using it. The machinery worked and
+  was applied one clause too narrowly, which is the failure mode to watch for.
+  And the fourth passage an audit reported — "no `icon` field on the blueprint" — **is
+  true and was deliberately left alone**; the ADR is correctly scoped there and records
+  its own earlier error.
+  **The sweep #90 asks for was run rather than promised.** A grep over all 20 tracked
+  Markdown files for `not yet …` / `does not yet` / `still decision only` / `nothing in
+  src/` returned four live hits beyond the three fixed, and **all four triaged clean**:
+  `README.md:160` and `:1314`, `design/README.md:272` (which explicitly says "do not
+  write it in the present tense anywhere") and `docs/adr/0001-…:3584` on unforwarded
+  chords. They are honest current limits, not stale claims. **A permanent checker was
+  NOT built** — #90 suggests one and it is a real idea, but a gate needs its own tests
+  and its own portability surface, and that is a separate change rather than a rider on
+  this one.
 
 ### 6.5 Test integrity
 

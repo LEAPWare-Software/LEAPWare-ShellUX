@@ -2036,10 +2036,38 @@ put you in:
 **5. Test your visibility predicates directly.** They are pure functions taking
 a `RibbonContext`. Call them with the contexts you expect, plus the ones you do
 not — every field null, a stale `selectedItemId`, an `activeNavNodeId` that is
-not yours — and assert they return `false` rather than throwing. This matters
-more than usual right now: **nothing in the host calls `isVisible` yet** (see the
-predicates section), so your own tests are the only thing exercising them, and a
-predicate that throws will not be contained by anything.
+not yours — and assert they return `false` rather than throwing.
+
+> **CORRECTED 2026-08-03 — this paragraph used to tell you the opposite of the
+> truth, and it is worth knowing which way.** It said "**nothing in the host
+> calls `isVisible` yet** … a predicate that throws will not be contained by
+> anything." Both halves were false when written and are false now. The host
+> evaluates every predicate on every command-surface render, and it contains a
+> throw: `isVisible` in `src/core/ribbonAction.ts` wraps the call and treats a
+> throwing predicate as "not visible" rather than propagating. *Tests:*
+> `src/core/commands/__tests__/CommandRegistry.test.ts` — "hides a command whose
+> predicate throws, reports it once, and offers the rest" — and, at each of the
+> four surfaces, `src/components/command/__tests__/commandSurfaces.test.tsx`:
+> "the context bar hides a command whose isVisible predicate throws and still
+> renders the rest", and the same case for the command palette, the floating
+> toolbar and the omnibox composer. A throwing predicate also cannot fire a
+> chord: `src/core/__tests__/hotkeyDispatch.test.tsx` — "does not fire a chord
+> whose isVisible predicate throws, and reports it once".
+>
+> **The citation this note first carried named `RibbonToolbar.test.tsx`, which
+> Phase 4 deleted with the ribbon**, and `check:citations` refused the commit.
+> Worth recording as the gate doing exactly its job: the containment is real, the
+> evidence for it moved, and a stale citation reads as evidence when it is not.
+>
+> This document said so correctly about 570 lines earlier, under a heading
+> declaring the behaviour shipped, so it gave two answers and no way to tell
+> which was current. **The cost was not cosmetic**: an author reading the old
+> sentence would wrap every predicate in their own `try`/`catch` that the host
+> already provides, or conclude predicates are unsafe and avoid them. See #90.
+
+So test your predicates because a predicate that silently returns `false` hides
+your command and nothing will tell you — not because a throw will escape. It
+will not.
 
 **5a. Test your `onExecute` handlers with a real shell.** They now take
 `(ctx, shell)`, so they are testable end to end without the host: build a store,
