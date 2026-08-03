@@ -35,6 +35,42 @@ The rules:
 re-derivation are folded in below and throughout §3, §6, §7, §8 and §12.** Re-derive
 every SHA and every count again before trusting it — see §0.
 
+### IN FLIGHT: `pre-65-prep`, six commits, unmerged
+
+**The one decision this branch is FOR.** The project's real open question is not
+technical: the shell is built, nobody has shipped it, and the only two extensions in
+existence are mocks this project wrote to test itself. **#65 — build one real
+first-party module against the contract, by someone who did not design it — is the
+cheapest test of whether this project should continue.** The owner has chosen to run
+that test and this branch is the preparation for it: it fixes the things that would
+make #65 measure the wrong thing, and **deliberately leaves the contract gaps open,
+because which of them actually bite is the experiment's output.**
+
+| Commit | What | Issue |
+|---|---|---|
+| `715f14f` | every count in this file re-derived after the pivot merged | — |
+| `33ce56e` | CI runs all ten `verify` stages; four had no leg anywhere | **#58** |
+| `67ac6c7` | `subscribe` validates its argument; one `undefined` wedged every later write | **#83** |
+| `e8c8137` | `DatabasePlugin` supplies the icons it declares — the C A C rail was still live | **#81** |
+| `0afd218` | three passages describing shipped code as unbuilt | **#90** |
+| `9cb2226` | a copyable example extension, registered and driven by a test | **#52**, partial |
+
+**Left open ON PURPOSE, and re-opening them early destroys the signal:** #17
+(lifecycle hooks), #16 (immutable nav tree), #80 (no way to clear a badge), #91
+(`VirtualizedList` selection), #57 (conformance kit), #28/#32/#68 (contract
+versioning). Each is a plausible thing #65's author will hit. **Fixing them first is
+deciding the gaps from inside, which is the one thing #65 exists not to do.** The
+deliverable of #65 is the author's friction log, not the module.
+
+**Not spent, deliberately:** no signing certificate, no paid GitHub plan, no feed
+host. All three would buy a release for a product with no proven consumer. The Tier 1
+release path in `docs/RELEASE.md` stays valid whenever it is wanted.
+
+**Two things found while doing the above, both worth more than the fixes:** #58 was
+**closed as `COMPLETED` while every stage it named still ran nowhere**, and
+`check:citations` **refused a commit** whose evidence cited `RibbonToolbar.test.tsx` —
+a file Phase 4 deleted. Both are the gates and the re-derivation rule working.
+
 ### THE PIVOT IS BUILT AND MERGED. All nine phases are on `main`.
 
 `origin/main` is at **`1d2f8a5`**, a HANDOFF-only commit on top of **`21cf3e0`**, the
