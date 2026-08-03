@@ -10,6 +10,69 @@ the rules.
 
 ---
 
+## The working agreement: quality first, without exception
+
+**Quality is the first priority. Where quality and speed conflict, speed loses,
+and that trade is not re-argued per change.**
+
+This is not a values statement. It is ten rules, each written so that a reviewer
+can decide it by looking at the change — you either did this or you did not. The
+argument for them, the incident behind each one, and the honest table of which are
+machine-checked and which are convention are all in
+[`docs/adr/0003-quality-over-velocity.md`](docs/adr/0003-quality-over-velocity.md).
+Read it once; it is not repeated here.
+
+1. **Adversarial review precedes merge, never follows it.** Your change is reviewed
+   against the change, before it lands — not after a wave, not by a later audit
+   round opening issues against merged code.
+2. **Evidence, not assertion.** "Passing", "covered", "verified", "secure" and
+   "fast" are worth nothing alone. Each arrives with pasted output, the **full**
+   title of a named test, or a stated measurement with its method. ADR-0001
+   Amendment G established this for security claims; it now applies to every claim
+   of a property.
+3. **Documentation lands in the commit that makes it true.** Not a follow-up, not a
+   sweep. A sweep is a symptom.
+4. **A green suite is not evidence of a working feature where the suite cannot
+   observe the behaviour.** jsdom has no layout engine, no hit testing, no
+   `PointerEvent`, no `ResizeObserver`, no `scrollIntoView`, and
+   `getBoundingClientRect` returns 0×0 unless you stub it. Anything geometric,
+   visual, focus-ordered or pointer-driven is either verified in a real browser or
+   labelled "not verified in a browser". There is no third option.
+4b. **Coverage is not verification.** 100% means the lines executed. It says
+   nothing about whether the assertion was right, whether the test name describes
+   what the test does, or whether a user can reach the behaviour.
+5. **Run it.** A user-visible change is not done until a human has seen it work in
+   a browser. If you did not, say so and label the change unverified. "The browser
+   test lane" below is how this is answered mechanically, and `dev.html` is the
+   fixture to look at by hand — `npm run dev` renders an empty shell by design.
+6. **Parallel work needs disjoint file ownership.** Name the files each workstream
+   may write before it starts. Where two would touch one file, they serialise.
+   Concurrent work on one tree has already made `npm run verify` unrunnable here
+   once, and overtaken an open issue's premise once.
+7. **No "fix it later".** A defect you know about is fixed in the change or filed —
+   with a reproduction, a file and a line — before the change merges. Those are the
+   only two options.
+8. **Say what you did NOT do.** Every change states its limits: what a reader might
+   reasonably assume it delivers and it does not, which branch is executed but not
+   asserted, what is left unproven.
+9. **A tooling claim is measured on this tree, not recalled.** Name the invocation
+   that demonstrated it. A remembered flag is as unreliable as a remembered
+   guarantee.
+10. **Name the failure mode when you fix it.** Record why the defect was possible,
+    not only what the fix was. A fix without a recorded failure mode gets re-made.
+
+[`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) turns these
+into boxes you have to answer, and [`CLAUDE.md`](CLAUDE.md) is the operational
+version — the same rules plus the specific traps this repository has already paid
+for, in the file every AI session reads automatically.
+
+**These rules will make you slower.** ADR-0003 says so plainly, says by how much
+and in which places, and argues why that is the correct trade. The short form: the
+velocity was never real, and every defect it produced was paid for later by an
+audit round that cost more than the review would have.
+
+---
+
 ## The one acceptance test
 
 > **A fresh clone on a different operating system runs `npm ci && npm run verify`
@@ -130,7 +193,9 @@ and that one is a real typo or a real missing file.
 ## Standing rules for anything written here, including documentation
 
 These predate this document and are unchanged. See the Contributing section of
-[README.md](README.md) and ADR-0001 Amendment G.
+[README.md](README.md) and ADR-0001 Amendment G. Rule 2 of the working agreement
+above generalises rule 3 below from security claims to every claim of a property;
+neither replaces the other.
 
 1. **Do not assert unmeasured results.** If it has not been benchmarked, audited
    or measured, label it a target and say so.
@@ -172,10 +237,23 @@ narrow the include list to route around an untested branch.
 npm run verify
 ```
 
-That runs, in order: the portability check, lint at zero warnings, typecheck, the
-test suite with the coverage gate, the production build, and a production-dependency
-audit. It is the same gate CI applies, which is the point — CI should confirm what
-you already know, not tell you something new.
+That runs, in order: the portability check, the citation check, lint at zero
+warnings, typecheck, the suite with the coverage gate, the randomised integration
+run, the script tests, the production build, and a production-dependency audit.
+
+**It is not the same set CI applies, and this paragraph used to say that it was.**
+The `verify` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs five
+of those nine — the portability check, lint, typecheck, the coverage run and the
+build. The citation check, the randomised integration run and the script tests
+execute on no leg of that workflow, and the audit runs in
+[`.github/workflows/audit-dependencies.yml`](.github/workflows/audit-dependencies.yml)
+only when the dependency graph changed, plus weekly on a timer. So `verify` is the
+stronger gate, and it only runs where somebody runs it. Do not skip it on the
+theory that CI will catch it.
+
+[`README.md`](README.md) still carries the same incorrect sentence in its script
+table. It is filed rather than fixed here, as GitHub issue #58, under rule 7 of the
+working agreement above — correcting it belongs with a change that owns that file.
 
 `verify` needs network access, for `npm ci` and for the audit's advisory-database
 query. It is not an offline operation.

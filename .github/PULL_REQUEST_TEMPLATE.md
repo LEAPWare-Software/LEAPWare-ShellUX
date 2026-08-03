@@ -1,10 +1,22 @@
 <!--
 This checklist is not generic. Every item below is here because this repository
-has been bitten by its absence at least once; CONTRIBUTING.md and ADR-0001
-Amendment G are the long form of why.
+has been bitten by its absence at least once. docs/adr/0003-quality-over-velocity.md
+names the incident behind each rule; CONTRIBUTING.md and ADR-0001 Amendment G are
+the long form of the rest.
 
 Do not delete a section. If one does not apply, write why it does not apply —
 "not applicable" with a reason is an answer, a deleted heading is not.
+
+Do NOT put a closing keyword (close/closes/fix/fixes/resolve/resolves/closed)
+next to an issue reference unless you mean it. That has already happened here: a
+sentence beginning "Explicitly **not** closed:" and continuing straight into an
+issue number auto-shut that issue on merge, because the parser reads the keyword
+and the number and does not read the "not". Write "still open: <number>" or
+"deliberately untouched: <number>" instead. CLAUDE.md records the incident.
+
+This warning deliberately does not reproduce the offending fragment, because
+this template is pasted verbatim into every pull request body and would then be
+the bug rather than the warning.
 -->
 
 ## What changed, and why
@@ -12,46 +24,90 @@ Do not delete a section. If one does not apply, write why it does not apply —
 <!--
 The why, not the diff. A reviewer can read the diff. What they cannot read is
 the alternative you rejected, the constraint that forced the shape, or the
-defect this closes. If this fixes something, say what the defect actually was
-and how it was reproduced.
+defect this closes. If this fixes something, say what the defect actually was,
+how it was reproduced, and — rule 10 — what made it possible in the first place.
 -->
+
+## Review happened before this merged
+
+Rule 1. Adversarial review precedes merge; it never follows it. Review after the
+wave is what produced every defect listed in ADR-0003's Context.
+
+- [ ] This branch is up for review **before** merge, and no part of it has already
+      landed on `main` pending a later look.
+- [ ] The change is scoped so a reviewer can actually read it. If it is large, the
+      reason it could not be split is stated above.
 
 ## `npm run verify`, run locally
 
 Paste the real output. Not a summary of it, not "all green", not a screenshot of
 part of it. `verify` runs, in order: the portability check, the citation check,
-lint at zero warnings, typecheck, the suite with the coverage gate, the
-integration suite, the script tests, the build, and a production-dependency
-audit. CI should confirm what you already know rather than tell you something
-new.
+lint at zero warnings, typecheck, the suite with the coverage gate, the randomised
+integration run, the script tests, the build, and a production-dependency audit.
+
+**CI runs fewer steps than `verify` does** — the `verify` job in
+`.github/workflows/ci.yml` runs the portability check, lint, typecheck, coverage
+and build, and nothing else. The citation check, the integration run and the script
+tests execute on no CI leg, and the audit runs only when the dependency graph
+changed. So this paste is the only place several of these gates are observed.
+
+The browser lane is a separate workflow and is deliberately outside `verify`; if
+your change is geometric or visual, the section below is where it gets answered.
 
 ```text
 paste the output here
 ```
 
-- [ ] `npm run verify` passed locally, and its output is pasted above.
-- [ ] If any check was skipped or could not run here, that is stated with the reason.
+- [ ] `npm run verify` exited 0 end to end, and its complete output is pasted above.
+- [ ] If any check was skipped or could not run here, that is stated with the reason
+      and with what is therefore unverified.
 
-## Security claims name their tests
+## Evidence for every claim this change makes
 
-ADR-0001 Amendment G: **no security claim may stand in a `.md` file or a docblock
-unless it names the test that exercises it.** Three ways to satisfy it, all three
-acceptable — name the test, narrow the claim until an existing test asserts it,
-or delete the claim. Deleting it is the rule working, not a failure.
+Rule 2. "Passing", "covered", "verified", "secure" and "fast" are worth nothing on
+their own.
 
-`npm run check:citations` is now a gate on the second half of that rule: a
-citation that names a test which has been renamed, split or deleted fails the
-build. It cannot tell that a claim carries no citation at all — that half is
-still review's job, and it is this checkbox.
-
-- [ ] Every security sentence this change adds or edits names the test asserting it.
+- [ ] Every sentence this change adds that claims a property points at pasted
+      output, a **full** test title after a citation marker, or a stated
+      measurement with its method.
+- [ ] Every security sentence added or edited names the test asserting it
+      (ADR-0001 Amendment G). Naming the test, narrowing the claim, or deleting it
+      are all acceptable — deleting it is the rule working.
 - [ ] No citation was made to resolve by widening the checker, and none was
-      loosened to make prose pass. If a cited title moved, the citation moved with it.
-- [ ] Every new claim is placeable in one of the three words: **integrity control**
-      (unconditional), **entry-point validation** (real at the door), **guardrail**
-      (honest mistakes only).
+      loosened to make prose pass. If a cited title moved, the citation moved with
+      it. Citations quote **full** titles: `check:citations` compiles `it.each`
+      templates to regexes, so a short citation can resolve vacuously.
+- [ ] Every new security claim is placeable in one of the three words: **integrity
+      control** (unconditional), **entry-point validation** (real at the door),
+      **guardrail** (honest mistakes only).
+- [ ] Rule 9 — every claim this change makes about what a command, flag, library
+      or browser does names the invocation that demonstrated it, run against this
+      tree.
 
-## Coverage
+## Was it observed, and by what?
+
+Rules 4, 4b and 5. jsdom has no layout engine, no hit testing, no `PointerEvent`,
+no `ResizeObserver`, no `scrollIntoView`, and `getBoundingClientRect` returns 0×0
+unless a test stubs it. A ribbon menu once shipped clipped to zero pixels under six
+passing tests, and a test named for a divider drag never started one.
+
+Answer both. "No user-visible change" is a complete answer to the first.
+
+- [ ] This change touches nothing geometric, visual, focus-ordered or
+      pointer-driven — **or** the behaviour was seen working in a real browser, and
+      what was seen, how it was reached, and at what viewport is described above.
+- [ ] If it is geometric or visual, `e2e/` covers it and `npm run test:browser`
+      passed, **or** the reason a case could not be written there is stated. A
+      Playwright case that only reads the DOM belongs in the Vitest suite instead.
+- [ ] Nothing here is labelled done on the strength of a jsdom test that cannot
+      observe the behaviour it is named for. Anything unverified in a browser is
+      labelled as unverified rather than as covered.
+- [ ] No test in this change stubs the environment in order to pass. Where a test
+      supplies its own geometry, its name says so.
+- [ ] Rule 4b — no coverage figure is offered anywhere as evidence that a behaviour
+      works.
+
+## Coverage and suppressions
 
 - [ ] Coverage is still 100% on statements, branches, functions and lines over the
       gated tree. The threshold was not lowered and the include list was not
@@ -60,15 +116,29 @@ still review's job, and it is this checkbox.
       `c8 ignore`, no `istanbul ignore`, no `@ts-expect-error`. This repository is
       at zero and a change that raises it is a change to a decision.
 
+## Documentation landed with the change
+
+Rule 3. Not a follow-up, not a sweep. A sweep is how roughly sixty overclaiming
+sentences accumulated here.
+
+- [ ] Every document this change falsifies is corrected **in this change** —
+      `README.md`, `DEVELOPER.md`, `CLAUDE.md`, `.github/ISSUES_MANIFEST.md`,
+      `CHANGELOG.md` and the relevant ADR — or the reason a given one was left is
+      stated above.
+- [ ] If the extension contract moved, an ADR amendment records the decision, not
+      just the code.
+- [ ] Nothing here asserts an unmeasured result, and anything aspirational is
+      labelled as aspiration.
+
 ## What this deliberately does NOT build, and what is NOT covered
 
 <!--
-Required, and the most valuable section in this template. State plainly what a
-reader might reasonably assume this change delivers and it does not: the
-adjacent feature left unbuilt, the branch that is exercised but not asserted,
-the guarantee that holds in production and is untested in jsdom, the path that
-is defence-in-depth with no reachable failure. A reader who finds an unstated
-gap later reads every other sentence here differently.
+Rule 8, and required. State plainly what a reader might reasonably assume this
+change delivers and it does not: the adjacent feature left unbuilt, the branch
+that is exercised but not asserted, the guarantee that holds in production and is
+untested in jsdom, the path that is defence-in-depth with no reachable failure.
+A reader who finds an unstated gap later reads every other sentence here
+differently.
 -->
 
 ## Limits this change introduces or reveals
@@ -82,11 +152,29 @@ test, a contract that is now harder to change because someone may ship against
 it.
 -->
 
-## Documentation
+## Known defects: fixed here, or filed with evidence
 
-- [ ] `README.md`, `DEVELOPER.md`, the issue manifest and the relevant ADR are
-      consistent with this change, or the inconsistency is named above.
-- [ ] If the extension contract moved, an ADR amendment records the decision —
-      not just the code.
-- [ ] Nothing here asserts an unmeasured result, and anything aspirational is
-      labelled as aspiration.
+Rule 7. Those are the only two options — including for defects this change merely
+revealed nearby.
+
+- [ ] Every defect discovered while writing this is either closed by this diff or
+      carries an issue reference with a reproduction, a file and a line.
+- [ ] Nothing is deferred to "a later sweep".
+
+<!--
+List them here. Two shapes, and mind the warning at the top of this file:
+
+  handled in this diff — <what it was, and what made it possible>
+  still open: #N — <what it is, and where the evidence is>
+
+Only write a closing keyword next to a number when you actually intend that
+issue to shut on merge.
+-->
+
+## Parallel work
+
+Rule 6. Concurrent work on one tree has already made `verify` unrunnable here once
+and overtaken an open issue's premise once — see ADR-0003 rule 6 for both.
+
+- [ ] No other branch in flight writes any file this branch writes — **or** the
+      serialisation order was agreed and is stated above.
