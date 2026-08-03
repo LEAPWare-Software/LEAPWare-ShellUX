@@ -179,17 +179,30 @@ describe('ShellLayout — navigation icons in the collapsed track', () => {
  * read **C A C** — while #19 was closed, `CHANGELOG.md` recorded the fix, and
  * this file's own docblock described it in the past tense. See #81.
  *
- * The case below registers the real blueprint. It is the assertion that has been
- * missing since #19, and the property that stops it recurring: delete
+ * The case below asserts against `DatabasePlugin.navigationTree` — the real
+ * registered data, not a copy of it. It is the assertion that has been missing
+ * since #19, and the property that stops it recurring: delete
  * `icon: category.icon` from `DatabasePlugin`'s tree builder and this goes red
  * while every fixture-based case above stays green.
+ *
+ * **It takes the real TREE and not the whole blueprint, and that is a measured
+ * decision rather than a shortcut.** Registering `DatabasePlugin` entire mounts
+ * its pane-2 and pane-3 views, which seed 280 inventory records and start a
+ * 200ms interval; the case passed in isolation and **timed out at 5s inside the
+ * full suite**, where it competes with 1,738 other tests on an 8GB machine.
+ * Raising the timeout would have bought a slow test that still proves nothing
+ * extra: every fact this case asserts lives in the navigation tree, which is
+ * exactly the object #81 says was built wrong. The views are covered by
+ * `IntegrationSuite.test.tsx`, which is where a 280-row mount belongs.
  * ============================================================================
  */
 describe('the collapsed rail of the extension issue #19 was named after', () => {
   it('draws three distinguishable glyphs for Components, Assemblies and Consumables', async () => {
     const user = userEvent.setup();
-    render(<Harness blueprints={[DatabasePlugin]} />);
-    await user.click(await screen.findByRole('button', { name: 'Inventory Database' }));
+    render(
+      <Harness blueprints={[makeBlueprint({ navigationTree: DatabasePlugin.navigationTree })]} />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Sample Extension' }));
     await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
 
     // Matched by prefix, not by equality: these three roots carry a badge, so
