@@ -75,6 +75,39 @@ jobs:
       - name: Check portability
         run: npm run check:portability
 
+      # ---------------------------------------------------------------------
+      # THE FOUR STAGES THAT USED TO RUN NOWHERE. Added deliberately, and the
+      # reason is worth stating beside them rather than in a commit message.
+      #
+      # README.md has always claimed `npm run verify` is exactly what CI
+      # applies. It was not: CI ran five of the nine stages, and the four it
+      # skipped - check:citations, test:integration, test:scripts, and later
+      # tokens:check - were backed only by an author ticking a box on a pull
+      # request that nobody is required to review. HANDOFF.md section 5 records
+      # why nobody is required to: branch protection returns 403 on this plan,
+      # so the self-attestation was the entire gate.
+      #
+      # The gap was tracked as #58 and #58 was closed as completed while every
+      # stage it named still had no leg. So this is the close, and the ordering
+      # below is `verify`'s own ordering rather than a convenient one - a run
+      # should fail on the same step a laptop fails on, in the same order.
+      #
+      # The cost, stated rather than discovered. Three of the four are node
+      # scripts that finish in seconds. test:integration is not: it is roughly
+      # 199 seconds, and it overlaps test:coverage because IntegrationSuite
+      # runs in both. What it buys that coverage does not is `--sequence.shuffle`
+      # - the only order-independence signal this project has, and #64 records
+      # that it currently reaches one test file. Three legs times that duration,
+      # at macOS's 10x and Windows's 2x billing, is the price of the claim in
+      # README being true. Running it on one leg would buy a cheaper version of
+      # the same lie.
+      # ---------------------------------------------------------------------
+      - name: Check citations
+        run: npm run check:citations
+
+      - name: Check tokens
+        run: npm run tokens:check
+
       - name: Lint
         run: npm run lint
 
@@ -86,6 +119,12 @@ jobs:
       # is unmet, which fails this step and therefore the job.
       - name: Test with coverage
         run: npm run test:coverage
+
+      - name: Integration suite (shuffled)
+        run: npm run test:integration
+
+      - name: Test the gate scripts
+        run: npm run test:scripts
 
       - name: Build
         run: npm run build

@@ -782,37 +782,51 @@ Phase 4 deleted.) The jsdom suite alongside it is **1,733 tests in 72 files**,
 re-measured the same day with `npx vitest list`. **The 1,263-in-35 figure this paragraph
 used to carry was pre-pivot.**
 
-**CI does not run all of `verify`.** Re-inspected 2026-08-03 at `1d2f8a5` — the workflow
-set is now five files: `ci.yml`, `browser.yml`, `desktop.yml`, `audit-dependencies.yml`,
-`audit-schedule.yml`.
+**CI NOW RUNS ALL OF `verify`. This section said the opposite for its whole life and
+the change is the reason to read it.** Re-inspected 2026-08-03 at `1d2f8a5` — the
+workflow set is five files: `ci.yml`, `browser.yml`, `desktop.yml`,
+`audit-dependencies.yml`, `audit-schedule.yml`.
 
 | Stage | On CI? |
 |---|---|
 | `check:portability` | yes (`ci.yml`) |
-| `check:citations` | **no leg** |
-| **`tokens:check`** | **no leg** — the new tenth stage is unguarded like the other four |
+| `check:citations` | **yes — added 2026-08-03**, was no leg |
+| `tokens:check` | **yes — added 2026-08-03**, was no leg |
 | `lint` | yes |
 | `typecheck` | yes |
 | `test:coverage` | yes |
-| `test:integration` | **no leg** |
-| `test:scripts` | **no leg** |
+| `test:integration` | **yes — added 2026-08-03**, was no leg |
+| `test:scripts` | **yes — added 2026-08-03**, was no leg |
 | `build` | yes |
-| `audit:prod` | yes, but only in `audit-dependencies.yml` / `audit-schedule.yml`, and only with `--omit=dev` |
+| `audit:prod` | yes, in `audit-dependencies.yml` / `audit-schedule.yml`, and only with `--omit=dev` |
 
-`README.md` claims `verify` is exactly what CI applies. It is not — **five of ten**, and
-the gap widened rather than closed: `tokens:check` was added to `verify` with no CI leg,
-so it is now **five unguarded stages**, not four — `check:citations`, `tokens:check`,
-`test:integration`, `test:scripts`, and `audit:prod` in the dev tree.
+`README.md` claimed `verify` is exactly what CI applies, and for its whole life that was
+false — **five of ten**, and the gap had widened rather than closed, because
+`tokens:check` was added to `verify` with no leg either.
 
-> **#58 tracked this and is CLOSED as `COMPLETED` — re-derived 2026-08-03 with
-> `gh issue view 58 --json state,stateReason`. Nothing closed it.** `ci.yml` was
-> re-inspected at `1d2f8a5` in the same pass: it runs `check:portability`, `lint`,
-> `typecheck`, `test:coverage` and `build`, and no leg anywhere runs the three stages
-> #58 names in its own title. **Reopen it, or file its successor** — the gap it
-> describes is larger now than when it was filed, not smaller.
+> **#58 tracked it and was CLOSED as `COMPLETED` while nothing had closed it** —
+> re-derived 2026-08-03 with `gh issue view 58 --json state,stateReason`, and `ci.yml`
+> at `1d2f8a5` ran `check:portability`, `lint`, `typecheck`, `test:coverage` and `build`
+> and nothing else.
+>
+> **It is closed now for real: the four missing steps were added to `ci.yml`'s matrix
+> job on 2026-08-03**, in `verify`'s own order, so a CI failure lands on the same step a
+> laptop fails on. `README.md`'s `verify` row was corrected in the same change and now
+> records what it used to claim. **Re-open #58 only to confirm and close it again, or
+> leave it closed and cite this** — but do not cite the *old* #58 as an open gap.
 
-Read this next to §5: those five stages are backed only by an author's self-attestation
-on a PR nobody is required to review.
+**The cost was taken deliberately and should not be quietly trimmed later.**
+`test:integration` is ~199s and overlaps `test:coverage` (`IntegrationSuite.test.tsx`
+runs in both); what it adds is `--sequence.shuffle`, the only order-independence signal
+here, and #64 records that it reaches one file. Three legs at macOS 10x and Windows 2x
+billing is the price of `README`'s claim being true. **Running it on one leg would buy a
+cheaper version of the same lie** — that argument is in the workflow comment so the next
+person to look at the bill meets it.
+
+**One narrower gap survives and is NOT #58:** `audit:prod` is `npm audit --omit=dev`, so
+**the dev tree is audited by nothing on any leg.** That is §6.2's finding, it is the
+mechanism that made two CVSS 9.8 criticals in `vitest` structurally invisible, and
+closing #58 does not touch it.
 
 **Two workflows exist that this section never listed.** `desktop.yml` runs
 `npm run verify:desktop` — the packaging leg that produced the NSIS installer in §1 —

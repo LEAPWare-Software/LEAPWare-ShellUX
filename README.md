@@ -359,7 +359,7 @@ registry is empty".
 | `npm run lint` | ESLint at `--max-warnings 0`. There is no warning tier; a warning fails. |
 | `npm run check:portability` | Enforces ADR-0002 — see below. |
 | `npm run audit:prod` | `npm audit` over production dependencies at `--audit-level=high`. Needs network access. |
-| `npm run verify` | **The gate.** Runs all of the above in order: portability, citations, lint, typecheck, coverage, the randomised integration run, the script tests, build, audit. **CI applies five of those nine.** `.github/workflows/ci.yml` runs portability, lint, typecheck, coverage and build; `audit:prod` runs only in the two audit workflows and only with `--omit=dev`; and `check:citations`, `test:integration` and `test:scripts` have **no CI leg at all**. Running `verify` locally before a change is therefore not redundant with CI — it is the only place four of the nine stages ever run. |
+| `npm run verify` | **The gate.** Runs all of the above in order: portability, citations, tokens, lint, typecheck, coverage, the randomised integration run, the script tests, build, audit. **Ten stages, and CI now runs every one of them.** `.github/workflows/ci.yml` runs the first nine on each of three operating systems; `audit:prod` runs in `audit-dependencies.yml` and `audit-schedule.yml`. **This row used to say "CI applies five of those nine", and that was true for as long as it stood** — `check:citations`, `tokens:check`, `test:integration` and `test:scripts` had no leg anywhere, so four stages were backed only by an author ticking a box on a pull request that, per HANDOFF.md §5, nobody is required to review. Tracked as #58, which was closed while every stage it named still ran nowhere. Running `verify` locally is now genuinely redundant with CI, which is the point: it means a green run and a green laptop are the same claim. **One narrower gap survives and is not this one:** `audit:prod` is `npm audit --omit=dev`, so the dev tree is audited by nothing on any leg — that is a separate finding, not this row's. |
 | `npm run test:browser:install` | Downloads Chromium for the browser lane. Once per machine, and **not** part of `npm ci` — see "The browser test lane" below. |
 | `npm run test:browser` | Runs the Playwright suite in `e2e/` against a real Chromium. Deliberately **not** part of `verify`. |
 | `npm run build:desktop` | Compiles the main and preload processes to `dist-electron/` with `electron/tsconfig.json`. A second TypeScript program, not a second opinion — the root config describes a browser document and these files run under Node. |
@@ -395,6 +395,20 @@ a surprise.
 because this project is developed on more than one laptop, and because macOS
 support used to be *inferred* from the platform-specific optional dependencies in
 `package-lock.json` rather than observed. It is now observed.
+
+"The same steps" is meant literally and was not always true — see the `verify` row
+above for what CI used to skip and why that mattered. `ci.yml` carries a second job
+beside the matrix: **the declared Node floor**, which installs and tests on the exact
+lower bound in `package.json`'s `engines` rather than on `.nvmrc`. It exists because
+`.nvmrc` has always named a version above the floor, so `engine-strict` never had
+anything to catch and a dependency could raise its own floor past this project's with
+every leg staying green. That is not hypothetical: it happened, and it is why the job
+is there.
+
+A fifth workflow, [`.github/workflows/desktop.yml`](.github/workflows/desktop.yml),
+packages the Electron application on Windows and macOS. It is not part of `verify`
+for the same reason the browser lane is not — see the `verify:desktop` row above —
+and it publishes nothing.
 
 The production-dependency audit is a separate workflow on purpose. An advisory
 database that updates daily and a lockfile that does not means the audit result can
