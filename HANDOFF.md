@@ -71,14 +71,43 @@ carrying a SHA-512 over it. The packaged app was probed over CDP: it read its ba
 `app-update.yml`, contacted the feed, returned `net::ERR_NAME_NOT_RESOLVED`, and
 `Ctrl+K` listed "Check for updates — last check failed" beside the host commands.
 
+### Phase 7 IS built, as two processes, on branch `topology-spike`
+
+`f378329`. Host chrome renders the context bar, pane 1 and the palette; one
+extension renderer holds panes 2 and 3, the ledger and the composer. Activating an
+extension in pane 1 fills panes 2 and 3 **in the other document**, and Ctrl+K from
+the extension view opens the palette in host chrome — context crosses both ways.
+1,733 tests in 72 files, `verify` exit 0.
+
+**Two-process was chosen because it is safe under either spike outcome**, not
+because the spike returned. If arm B comes back clean, three-process becomes an
+additive change; if it comes back bad, two-process already shipped. Building
+three-process first would have been the bet that cannot be unwound. **ADR-0005 is
+still `Proposed` and this commit does not decide it.**
+
+**An earlier build of the same phase put a complete `ShellLayout` in BOTH views** —
+two whole shells side by side, with Phase 8's ledger in neither, and a green suite
+over it. That version was not committed. The defects that fixed it were all found
+by looking at the window: a restored pane-2 share that made the two panels sum to
+75, two documents racing over one `localStorage` key until **both** showed nothing,
+and an `activate()` that moved a ref without re-rendering.
+
+**Named limits, not fixed:** the context bar and palette are shell-wide chrome
+living in a 282px view, so the bar scrolls and the palette renders as a
+left-aligned strip; there is no draggable divider between the two views, because a
+pointer drag does not cross a native view edge; and `HydrationEngine` and
+`AuthoritativeStore` did **not** move to main — `electron/tsconfig.json` is
+`NodeNext` and every relative import in `src/` is extensionless, so that graph
+gives `TS2835` on every import. `AuthoritativeStore` runs in host chrome's document
+and main is a relay. Amendment O records two routes and takes neither.
+
 ### What is NOT done, and why each one is blocked
 
-- **Phase 7, the pane process split.** Deliberately not built.
-  `docs/adr/0005-pane-topology.md` is **`Proposed`** with a four-arm spike named and
-  the outcome-to-decision mapping written *in advance*, so the result cannot be
-  rationalised afterwards. **Arm B needs NVDA on Windows and VoiceOver on macOS — no
-  agent can run a screen reader.** Building Phase 7 before the spike risks building
-  the wrong topology. Evidence so far leans **two-process**.
+- **The topology spike's human arms.** `docs/adr/0005-pane-topology.md` stays
+  **`Proposed`**. `spike/topology/` holds a throwaway two-view app and every
+  machine-observable measurement (`baf3399`); **arm B needs NVDA on Windows 11 and
+  is what decides the ADR** — the B1–B5 script is in `spike/topology/README.md` and
+  takes about five minutes. Arm A needs `inspect.exe`; arm C needs a Mac.
 - **The update feed host was INVENTED, and it has been removed. Read this one.**
   Phase 9 shipped `electron-builder.yml` pointing at `updates.leapware.dev`. That
   host was written to look plausible under the project's brand; **this organisation
