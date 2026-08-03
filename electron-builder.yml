@@ -113,10 +113,28 @@ files:
 # application reads - which is why `electron/main/updater.ts` contains no URL at
 # all and why the renderer has no way to name a feed.
 # ---------------------------------------------------------------------------
-publish:
-  provider: generic
-  url: https://updates.leapware.dev/shellux/
-  channel: latest
+# THE FEED HOST IS DELIBERATELY UNSET, AND MUST STAY UNSET UNTIL SOMEBODY OWNS ONE.
+#
+# This block used to name `updates.leapware.dev`. That host was INVENTED - it was
+# written to look plausible under the project's brand, it was never owned by this
+# organisation, and a DNS lookup was mistaken for proof of ownership. The apex
+# resolves to a Dutch netblock belonging to somebody else.
+#
+# Why that is a security defect and not a naming mistake. `provider: generic`
+# means the URL below is the sole authority for both `latest.yml` AND the
+# installer that manifest names. A shipped application would have asked a
+# stranger's server what to download and then run it. Nothing this project builds
+# is signed, so signature verification would not have refused the answer. That is
+# remote code execution by configuration.
+#
+# It was caught before any release, any tag, or any user having a build.
+#
+# To enable updates: own a host, serve a directory over HTTPS, and change the URL
+# in the THREE places `docs/RELEASE.md` section 1 enumerates. Two of the three are
+# gates that fail until they agree, which is the property that makes the feed
+# impossible to change quietly. With no `publish` block at all, electron-builder
+# writes no `app-update.yml`, `electron/main/updater.ts` finds no feed, and the
+# palette reports the updater as unconfigured - which is the honest state.
 
 # ---------------------------------------------------------------------------
 # WINDOWS.

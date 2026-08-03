@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Topology spike, one document, sibling divs</title>
+<link rel="stylesheet" href="pane.css">
+</head>
+<body>
+<main>
+  <div id="pane-a" class="pane"></div>
+  <div id="pane-b" class="pane"></div>
+</main>
+<script src="pane.js"></script>
+<script>
+  window.renderPane(document.getElementById('pane-a'), 'a');
+  window.renderPane(document.getElementById('pane-b'), 'b');
+</script>
+</body>
+</html>

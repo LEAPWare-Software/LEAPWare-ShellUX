@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, ipcMain, webContents } from 'electron';
 import electronUpdater from 'electron-updater';
 
 /**
@@ -126,18 +126,27 @@ function describe(error: unknown): string {
 }
 
 /**
- * Record the new state and tell every live window.
+ * Record the new state and tell every live renderer.
  *
- * Every window, not the one that asked: the state belongs to the application,
- * not to whoever invoked the command, and a second window showing a stale
- * "Check for updates" while the first shows "Restart to update" would be two
- * answers to one question.
+ * Every renderer, not the one that asked: the state belongs to the application,
+ * not to whoever invoked the command, and one surface showing a stale "Check for
+ * updates" while another shows "Restart to update" would be two answers to one
+ * question.
+ *
+ * **`webContents.getAllWebContents()` and not `BrowserWindow.getAllWindows()`,
+ * and this is a correction Phase 7 forced rather than a refactor.** The shell is
+ * now a `BaseWindow` with two `WebContentsView`s. A `BaseWindow` has no
+ * `webContents` of its own and is not a `BrowserWindow`, so the old walk found
+ * ZERO windows and this function silently sent nothing — an update state that
+ * never reached the palette, on a code path with no error in it. Enumerating web
+ * contents asks the question this function actually has: which renderers are
+ * there to tell?
  */
 function publish(next: UpdateState): void {
   state = next;
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue;
-    window.webContents.send(CHANNEL_CHANGED, state);
+  for (const contents of webContents.getAllWebContents()) {
+    if (contents.isDestroyed()) continue;
+    contents.send(CHANNEL_CHANGED, state);
   }
 }
 
@@ -150,13 +159,20 @@ function publish(next: UpdateState): void {
  * nothing at all, silently.
  */
 export function initializeUpdater(): void {
-  // Every new window is told the current state once it can receive it. Without
-  // this, a window opened after a check completed would sit on the preload's
+  // Every new renderer is told the current state once it can receive it. Without
+  // this, a surface created after a check completed would sit on the preload's
   // initial `idle` until the next state change.
-  app.on('browser-window-created', (_event, window) => {
-    window.webContents.on('did-finish-load', () => {
-      if (window.isDestroyed()) return;
-      window.webContents.send(CHANNEL_CHANGED, state);
+  //
+  // `web-contents-created` and not `browser-window-created`, for the reason
+  // `publish` above enumerates web contents: the shell's two surfaces are
+  // `WebContentsView`s and no `BrowserWindow` is ever created, so the old event
+  // fired exactly never. It also covers the extension view being RELOADED after
+  // a crash — a case the window-scoped event could not have seen even when there
+  // were windows, because no window is created by a reload.
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('did-finish-load', () => {
+      if (contents.isDestroyed()) return;
+      contents.send(CHANNEL_CHANGED, state);
     });
   });
 

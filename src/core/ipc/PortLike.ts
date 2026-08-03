@@ -23,9 +23,7 @@
  * `MessagePortMain` hands its handler a `MessageEvent`, not the message: the
  * payload is at `event.data`, and the port must be `start()`ed before anything is
  * delivered. Neither fact belongs in `src/`, because neither is checkable under
- * jsdom. The adapter is therefore ~10 lines living in `electron/`, and it is the
- * only code in the pivot's state design that no unit test covers — which is a
- * statement about ten lines rather than about the design.
+ * jsdom. The adapter is therefore ~10 lines living in `electron/`.
  *
  * ```ts
  * // electron/main/portAdapter.ts — Phase 7, NOT part of this module
@@ -36,6 +34,41 @@
  *   return seam;
  * }
  * ```
+ *
+ * ---------------------------------------------------------------------------
+ * PHASE 7 BUILT IT. TWO CLAIMS ABOVE HELD AND TWO DID NOT.
+ * ---------------------------------------------------------------------------
+ * `electron/main/portAdapter.ts` exists and its body is the one written above,
+ * line for line. **The shape of this seam was right.** Two claims made around it
+ * need correcting, and they are corrected here rather than quietly dropped:
+ *
+ * 1. ~~"the only code in the pivot's state design that no unit test covers"~~.
+ *    False, and the adapter itself is why: `MessagePortMain` is structurally
+ *    three members, so a fake satisfies it in a few lines and both facts the
+ *    adapter absorbs — the `MessageEvent` wrapper and the mandatory `start()` —
+ *    are directly observable with no Electron imported. *Tests:*
+ *    `electron/__tests__/portAdapter.test.ts` — "starts the port, because a port
+ *    nobody started delivers nothing" and "DROPS a message that arrives before a
+ *    handler is installed, which is PortLike s documented semantics". It is
+ *    **tested but not gated**: the 100% coverage threshold covers `src/core/**`,
+ *    `src/components/**` and `src/hooks/**`, and `electron/**` is outside it.
+ *
+ * 2. **The placement assumption underneath the whole seam was never checked, and
+ *    it does not hold yet.** This module is written as though main will `import`
+ *    it. Main cannot. `electron/tsconfig.json` compiles with
+ *    `module: "NodeNext"`, because Node resolves those files and the sandboxed
+ *    preload's `.cjs` emit depends on it — and **every relative import under
+ *    `src/` is extensionless**, because a bundler resolves the renderer.
+ *    Compiling `src/core/ipc/AuthoritativeStore.ts` into that program was tried
+ *    and answers `TS2835: Relative import paths need explicit file extensions …
+ *    Did you mean '../types.js'?` on every relative import in the graph, before
+ *    any question of `lib` or of React arises. So `electron/main/portAdapter.ts`
+ *    restates `PortLike`'s two members structurally rather than importing them,
+ *    and the restatement is pinned to this file's exact spelling by the test
+ *    above. The two ways out — bundling the main process with the Vite already
+ *    in `devDependencies`, or giving `src/`'s relative imports the `.js` suffix
+ *    that TypeScript and Vite both resolve back to `.ts` — are recorded in
+ *    ADR-0001's Phase 7 amendment, and neither was taken in that phase.
  *
  * **What a `PortLike` implementation is REQUIRED to do, because the design rests
  * on it and an in-process fake could accidentally not do it: it must behave as

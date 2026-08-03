@@ -122,22 +122,37 @@ const DOCUMENTED_PORTS = new Map([[5173, "Vite's default dev-server port, docume
  * would accept `updates.leapware.dev.somewhere-else.tld`, which is a different
  * host entirely and one an attacker can register.
  */
-const DOCUMENTED_ENDPOINTS = new Map([
-  [
-    'updates.leapware.dev',
-    'The desktop update feed. `electron-builder.yml` names it once, in its `publish` ' +
-      'block, and electron-builder writes it into `app-update.yml` inside the packaged ' +
-      'application; nothing in `src/` or `electron/` contains a URL, and the renderer has ' +
-      'no way to name a feed at all. It is declared rather than allowlisted because a ' +
-      'SECOND host appearing in that file — or this one — must still fail. ' +
-      'electron-updater\'s GitHub provider was rejected on a fact rather than a taste: ' +
-      'this repository is private on a free plan, and that provider would require a token ' +
-      'inside the shipped client. **The host is not provisioned yet.** Replacing it is a ' +
-      'one-line edit to `electron-builder.yml` and a one-line edit here, and ' +
-      '`docs/RELEASE.md` makes doing so a blocking step of the first release rather than ' +
-      'something a reader has to infer.',
-  ],
-]);
+const DOCUMENTED_ENDPOINTS = new Map();
+
+/*
+ * EMPTY ON PURPOSE, AND THE REASON IS A SECURITY FINDING RATHER THAN A STYLE ONE.
+ *
+ * This map held one row: `updates.leapware.dev`, declared as the desktop update
+ * feed. **That host was invented.** It was written to look plausible under the
+ * project's brand, this organisation has never owned it, and a DNS lookup
+ * returning an address was mistaken for proof of ownership — the apex resolves to
+ * a netblock belonging to somebody else entirely.
+ *
+ * Why an invented feed host is worse than an invented anything else. The updater
+ * uses `provider: generic`, so that one URL is the sole authority for BOTH the
+ * `latest.yml` manifest and the installer the manifest names. A shipped
+ * application would have asked a stranger's server what to download, and then run
+ * it. Nothing this project produces is signed, so signature verification would not
+ * have refused the answer. That is remote code execution by configuration, and it
+ * was caught before any release, any tag, or any user holding a build.
+ *
+ * The rule this map softens is therefore switched fully back on: EVERY hostname in
+ * every tracked non-Markdown file is now reported. Restoring a row here is how the
+ * first real feed is declared, and it should happen in the same change that points
+ * `electron-builder.yml` at a host somebody can prove they control — see
+ * `docs/RELEASE.md` section 1. Until then the empty map is the honest state, and it
+ * is what makes an accidental re-introduction fail the build.
+ *
+ * The `endsWith`-versus-equality argument below is kept because it survives the
+ * deletion and is the trap the next person will meet: a suffix test would accept
+ * `<declared-host>.somewhere-else.tld`, which is a different host and one an
+ * attacker can register.
+ */
 
 /** Address literals that name no machine: loopback and the wildcard bind. */
 const DOCUMENTED_ADDRESSES = new Set(['127.0.0.1', '0.0.0.0', '255.255.255.255']);

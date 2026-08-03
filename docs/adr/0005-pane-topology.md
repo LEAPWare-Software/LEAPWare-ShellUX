@@ -256,24 +256,52 @@ harmless.
 
 ## What could not be verified from here, stated plainly
 
-Per ADR-0001 Amendment G, the limits are named rather than glossed:
+Per ADR-0001 Amendment G, the limits are named rather than glossed. Items 2, 3
+and 5 were written before the spike existed and are corrected in place on
+2026-08-03 rather than left standing, because a limit that has since been lifted
+reads as a live caveat and is not one.
 
-1. **No screen reader was run.** Not NVDA, not VoiceOver, not Narrator. jsdom has
-   no layout engine and no platform accessibility layer; the browser lane is
-   Chromium in Playwright, which is not an AT client. Every claim above about
-   *what a screen-reader user experiences* is inference from architecture, not
-   observation.
-2. **No Electron application with two `WebContentsView`s was built or launched.**
-   All source reads are of Chromium `main` and Electron `main` as of this date,
-   not of the v37–v43 release branches this project targets.
-3. **`kAccessibilityTreeForViews` was confirmed disabled on `main` only.** No
-   source was found for its state on any specific Chromium 130–150 branch.
-   Disabled-on-`main`-in-2026 makes enabled-in-130–150 unlikely; that is a
-   likelihood, not a fact.
+1. **No screen reader has been run.** Not NVDA, not VoiceOver, not Narrator.
+   jsdom has no layout engine and no platform accessibility layer; the browser
+   lane is Chromium in Playwright, which is not an AT client; and the spike drives
+   the Chrome DevTools Protocol, which is not one either. Every claim in this
+   document about *what a screen-reader user experiences* remains inference from
+   architecture. **This is the standing limit and it is why arm B decides.**
+2. ~~No Electron application with two `WebContentsView`s was built or launched.~~
+   **Superseded, 2026-08-03.** One was built — `spike/topology/` — and launched
+   on **Electron 43.2.0 / Chromium 150.0.7871.129**, which is a release branch
+   this project ships rather than Chromium `main`. See *Spike status* above. The
+   source reads recorded in *Evidence* are still of `main` and are still labelled
+   as such; what has changed is that the architectural inferences drawn from them
+   now have measurements from a shipped branch beside them.
+3. ~~`kAccessibilityTreeForViews` was confirmed disabled on `main` only.~~
+   **Narrowed, 2026-08-03.** Its state on the Chromium 150 branch is still not
+   known from source, and no claim about that is made here. What is now known is
+   the observable consequence: launching the spike with
+   `--enable-features=AccessibilityTreeForViews` changed **no** machine-observable
+   value — not the tree count, not the roots, not `Tab`, not IDREF resolution.
+   Whether it changes what an AT sees is part of arm B and is unanswered.
 4. **No source was found** stating formally that NVDA's browse-mode virtual
    buffer is scoped per document. The Chromium-with-plain-iframe reproduction
-   (finding 5) is the better evidence and is what is relied on.
-5. **The decisive Electron issue is six years old and about a different API.**
+   (finding 5) is the better evidence and is what is relied on. **The spike's own
+   iframe control now corroborates the mechanism at the DOM and CDP level** — one
+   web contents, three `RootWebArea`s, IDREFs failing across the frame edge — but
+   it says nothing about NVDA's buffer, which is still arm B4.
+5. ~~The decisive Electron issue is six years old and about a different API.~~
+   **Partly superseded, 2026-08-03.** electron/electron#26305 is indeed old and
+   about `BrowserView`, and no more weight is put on it. electron/electron#42339
+   is about `WebContentsView` and `addChildView` specifically, was confirmed open
+   on 2026-08-03, and **reproduces on Electron 43.2.0**. Finding 7's cost is
+   therefore observed rather than reported.
+6. **The spike's key and pointer events are synthesised into a chosen web
+   contents.** They measure where Chromium's sequential focus navigation goes from
+   a document, which is the question asked — but they are not operating-system
+   input and cannot prove OS-level input routing. That is the gap arm B3 closes.
+7. **Arm A was not run and could not be automated.** The Chrome DevTools Protocol
+   does not expose `ui::AXTreeID`, so the platform-tree count in finding 3 is
+   still an inference. No proxy was substituted for it in the spike's results.
+8. **Arm C was not run.** No macOS machine was available, so every statement
+   about `RenderWidgetHostViewCocoa` and the VoiceOver rotor remains unobserved.
 
 ---
 
@@ -296,6 +324,74 @@ Build a throwaway `BaseWindow` with two `WebContentsView`s side by side via
 is research and **not** a shippable strategy, because the feature is
 disabled-by-default in Chromium with no Electron support commitment — a positive
 result there is a note for a future ADR, not a reason to choose option A.
+
+### Spike status, 2026-08-03
+
+**The spike has been built and the machine-observable half of it has been run.**
+It is at `spike/topology/` — a throwaway `BaseWindow` with two
+`WebContentsView`s, outside `src/` and outside `electron/`, imported by nothing
+and inside no stage of `npm run verify`. `spike/topology/README.md` is the
+five-minute script a human runs for arm B; `spike/topology/RESULTS.md` holds the
+measurements, with the date and build they were taken on; `results.json` is the
+raw output of `node spike/topology/probe.mjs`.
+
+| Arm | Status |
+|---|---|
+| **A — connectedness** | **NOT RUN.** Needs `inspect.exe`. `ui::AXTreeID` is not exposed by the Chrome DevTools Protocol, so the platform-tree count could not be automated and no proxy was substituted for it. |
+| **B — enumeration and focus** | **NOT RUN — needs NVDA.** Unchanged: this is still the arm that decides this ADR. |
+| **C — macOS** | **NOT RUN — needs macOS.** Not runnable from the machine the rest of the spike was run on. |
+| **D — future option** | **RUN, machine-observable half only.** The switch changed no observable value; the assistive-technology half is blocked behind arm B. |
+
+What was measured, on **Electron 43.2.0 / Chromium 150.0.7871.129, Windows 11**,
+on 2026-08-03. Each of these is a value, not an inference; the reasoning and the
+limits are in `spike/topology/RESULTS.md`:
+
+1. **Two views, two of everything the protocol can count.** Two `webContents`,
+   two operating-system process ids, two `RootWebArea` roots, and neither tree
+   containing the other pane's heading. `--enable-features=AccessibilityTreeForViews`
+   changed none of it.
+2. **`Tab` from the last control of view 1 does not reach view 2 — it wraps to
+   the top of view 1.** Getting focus into view 2 required the main process to
+   call `webContents.focus()`, and after that call view 1's document still
+   reported its own active element and `document.hasFocus(): true`.
+3. **`document.hasFocus()` was `true` in BOTH pane documents simultaneously**, in
+   every reading of the two-view build. A renderer cannot tell whether it holds
+   focus; only the main process can.
+4. **A cross-view `aria-labelledby` did not resolve.** Chromium marked the name
+   source `invalid` and fell back to the control's own text; `labelledby` and
+   `controls` both carried zero related nodes.
+5. **The one-document control was run and it confirmed clause 4 above rather than
+   refuting it — in the sharper of the two available forms.** The same markup was
+   assembled three ways. As two sibling `<div>`s in one document the IDREF
+   resolves and `Tab` crosses. As two sibling `<iframe>`s — still **one**
+   `WebContentsView`, one renderer process, one page — the IDREF fails with
+   readings byte-identical to the two-view build, and that page reports **three**
+   `RootWebArea`s. **So the boundary that costs the reference is the document
+   edge, and finding 5 above is confirmed by observation rather than inferred
+   from a bug report.** `Tab`, however, *does* cross between two iframes in one
+   web contents and does *not* cross between two views — so traversal and
+   reference resolution do not have the same boundary, and only reference
+   resolution is purely a document question.
+6. **electron/electron#42339 is still open** (checked 2026-08-03; opened
+   2024-06-02, last updated 2026-07-28, labelled `component/accessibility`) **and
+   it reproduces here.** Adding a second `WebContentsView` to a window whose
+   first view holds keyboard focus moves focus to the new view — not synchronously
+   with `addChildView`, but by the time the new view's document has loaded, which
+   means a host that re-asserts focus on the next line re-asserts it too early.
+   The losing renderer is never told. Five identical launches of the two-view
+   build put startup focus on the last-added view four times and on the first view
+   once, so **which pane the user is typing into after startup is currently
+   undefined.** This lands on option A and option B alike, and Phase 7 must budget
+   focus arbitration in the main process whichever is chosen.
+
+**This is evidence, not a decision, and the status line above is unchanged.**
+Stating it plainly and once: clauses 2 and 4 are the two halves of the second
+bullet in *How the outcome maps to a decision* below, and both came out the way
+that bullet calls "the expected result". Nothing above is an observation of an
+assistive technology — clause 2 was measured with a synthesised key event
+delivered to a chosen web contents, which is not the same thing as a real `Tab`
+press reaching a real screen reader. **Arm B is named as the deciding arm and it
+has not been run.** Do not accept this ADR on the strength of this section.
 
 ### How the outcome maps to a decision
 

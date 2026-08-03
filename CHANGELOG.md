@@ -16,6 +16,49 @@ from so a reader can check it.
 
 ### Added
 
+- **The process split: one `BaseWindow`, two `WebContentsView`s, and a host-owned
+  focus ring (plan §3.2, §5, Phase 7).** The shell is no longer one renderer.
+  `electron/main/paneViews.ts` creates host chrome and an extension surface,
+  owns both rectangles through the only `setBounds` calls in the application, and
+  puts Mica on the window with **opaque** views — discharging the obligation
+  Phase 1 wrote down in the commit where it would be got wrong.
+  `paneview.html` and `src/paneview/` are the extension surface's document, which
+  holds panes 2 and 3 **in one document** so their ARIA relationships and focus
+  order work.
+  - **Two views, not three, and the reasoning is asymmetry rather than
+    confidence.** `docs/adr/0005-pane-topology.md` is still `Proposed` and its
+    deciding arm still needs a human with NVDA. Two-process is the option that is
+    safe under either outcome: a clean arm B makes three *available* as an
+    additive change, and a bad one means two is already what shipped. Building
+    three first would have been the bet that cannot be unwound. Recorded in
+    ADR-0001 Amendment O.
+  - **Focus arbitration, because the spike measured that startup was
+    non-deterministic.** Five identical launches of the unarbitrated two-view
+    build put focus on the last-added view four times and on the first once — so
+    *which pane the user was typing into after startup was undefined*.
+    electron/electron#42339 reproduces on Electron 43.2.0, and two things the
+    issue does not say decide the design: the steal is **not** synchronous with
+    `addChildView` (so a host that re-asserts on the next line re-asserts too
+    early), and **the losing renderer is never told** (so only main can see it).
+    `electron/main/focusRing.ts` asserts on load completion, against an injected
+    seam — because a single launch of a *broken* ring passes 80% of the time, and
+    "launch it and look" is therefore not a test.
+  - **Crash containment, observed rather than claimed.** Killing the extension
+    renderer produced *"the extension view stopped (reason: crashed, exit code:
+    -1); reloading it"*; the rail, pane 1, the context bar and the palette stayed
+    up, the view came back, and the focus ring caught the reload-time steal.
+  - **`before-input-event` is used for exactly one thing**, and
+    `electron/__tests__/noElectronListener.test.ts` says so with a count. It
+    carries no DOM target and no `defaultPrevented`, so the suppression rules in
+    `src/core/hotkeyDispatch.ts` cannot run there; the renderer keeps them
+    unchanged and main's handler is an escape hatch for a wedged renderer.
+  - **`electron/**` was never covered by the listener scan, and now is.**
+    `src/__tests__/noEventListener.test.ts` resolves its root from its own
+    location, so the native host was outside it *by construction*. The new scan is
+    deliberately not a copy — `addEventListener` appears zero times in a main
+    process and always would, so a copied scan would pass vacuously. It counts
+    every `on`/`once`/`off` registration per module, exact in both directions.
+
 - **A desktop packaging lane that produces a real installer, and auto-update from
   a static feed (plan §6, Phase 9).** `electron-builder.yml` — a file rather than
   a `build` key in `package.json`, because JSON cannot carry the argument for each

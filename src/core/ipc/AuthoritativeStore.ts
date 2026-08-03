@@ -57,7 +57,13 @@ import { KNOWN_OPERATION_KINDS, MAIN_ORIGIN, PROTOCOL_VERSION, applyOperation } 
  * a new port with a new origin.
  *
  * **Per ORIGIN, not global**, which is the property the storm test is actually
- * about: a wedged pane 3 must not stop pane 2 writing. *Tests:*
+ * about: a wedged renderer must not stop another one writing. The pair that is
+ * two origins under the topology Phase 7 built is **host chrome and the
+ * extension surface** — panes 2 and 3 share one document, one renderer and
+ * therefore one origin, so a storm in either of them severs both. That is the
+ * same trade docs/adr/0005-pane-topology.md records for crash containment, in a
+ * second place: one boundary was bought, and it was put between host chrome and
+ * the extension rather than between the list and its detail. *Tests:*
  * `src/core/ipc/__tests__/writeStorm.test.ts` — "a two-replica write loop is cut
  * off by main, and not by either notify-depth counter", "severs only the origin
  * that stormed, and leaves the other replica writing" and "counts a malformed

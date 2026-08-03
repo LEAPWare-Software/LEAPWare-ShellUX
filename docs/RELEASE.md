@@ -28,10 +28,38 @@ things down.
 
 ## 1. Once, before the first release
 
-- [ ] **Provision the feed host.** A static object store or any static HTTPS host
-      serving the directory `electron-builder.yml`'s `publish.url` names. It needs
-      no compute, no authentication for readers, and no API — electron-updater
-      fetches `latest.yml`, then the installer named in it.
+- [ ] **Decide where updates come from. There is no feed configured, deliberately.**
+
+      > **The previous placeholder was an invented host and it has been deleted.**
+      > `electron-builder.yml` pointed at `updates.leapware.dev`, which looks like
+      > this project's domain and is not owned by it. With `provider: generic` that
+      > single URL is the sole authority for both the manifest and the installer it
+      > names, and nothing here is signed — so a shipped build would have asked a
+      > stranger's server what to download and then run it. It never shipped. The
+      > `publish` block is now absent, `DOCUMENTED_ENDPOINTS` is empty, and the
+      > hostname rule is fully on, so it cannot come back quietly.
+
+      Two routes, and the first is much cheaper than it looks:
+
+      **(a) Make the repository public and use `provider: github`.** The GitHub
+      provider was rejected on one fact: this repository is private, so release
+      assets need authentication, which would mean a token inside the shipped
+      client. **On a public repository those assets are plain public URLs** — no
+      host to own, no DNS record, no bucket, no static site to keep alive. The feed
+      becomes GitHub Releases, which the release workflow is already producing
+      artifacts for. This is also the same decision that unblocks branch protection
+      (HANDOFF §5) and private vulnerability reporting (HANDOFF §6.2). One choice,
+      three blockers.
+
+      **(b) Own a static HTTPS host and use `provider: generic`.** Any object store
+      or static host serving one directory. No compute, no reader authentication, no
+      API — electron-updater fetches `latest.yml`, then the installer named in it.
+      Keeps the source closed. Costs a host somebody has to prove they control, and
+      a DNS record.
+
+      Whichever is chosen, **the host must be one this organisation demonstrably
+      owns.** A name that merely resolves proves somebody owns it, not that you do —
+      which is exactly the inference that produced the defect above.
 - [ ] **Replace the placeholder host in exactly three places, and no more.**
       1. `electron-builder.yml`'s `publish.url` — the only place the *build* reads
          it, and the only place a running application's feed comes from.

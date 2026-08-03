@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'node:url';
 
 /**
  * Serve the fixture shell at `/` on the DEV SERVER ONLY.
@@ -14,11 +15,19 @@ import react from '@vitejs/plugin-react';
  * **What this does and does not change.** It rewrites the request for `/` to
  * `dev.html` before Vite's own HTML middleware sees it. It is installed under
  * `configureServer`, which Vite calls for `vite` and `vite preview` and never
- * during `vite build`, so no build output is affected. `index.html` remains the
- * only build input — `build.rollupOptions.input` is still at its default — so
- * `dist/` contains exactly what it contained before this plugin existed, and
- * `dev.html`, `src/dev/main.dev.tsx` and `src/mocks/` are still unreachable from
- * anything a user installs.
+ * during `vite build`, so no build output is affected. `dev.html`,
+ * `src/dev/main.dev.tsx` and `src/mocks/` remain unreachable from anything a
+ * user installs, because neither build input references them.
+ *
+ * **This banner used to say "`index.html` remains the only build input", and
+ * that sentence is now false and has been rewritten rather than left standing.**
+ * Phase 7's process split gives the shell a second document — `paneview.html`,
+ * the extension surface holding panes 2 and 3 — and a second document has to be
+ * BUILT, or the packaged application has a second `WebContentsView` with nothing
+ * to load into it. `build.rollupOptions.input` is therefore declared below with
+ * two entries. The property the old sentence was really defending is unchanged
+ * and is now defended by the list rather than by the default: `dev.html` is not
+ * in it.
  *
  * **`/index.html` still serves the production shell**, unrewritten, so the empty
  * registry is still reachable on the dev server by name. This is a rewrite of one
@@ -56,5 +65,28 @@ export default defineConfig({
   plugins: [react(), serveFixtureAtRoot()],
   server: {
     port: 5173,
+  },
+  build: {
+    rollupOptions: {
+      // ---------------------------------------------------------------------
+      // TWO DOCUMENTS, LISTED RATHER THAN DEFAULTED.
+      //
+      // `index.html` is host chrome and `paneview.html` is the extension
+      // surface — the two `WebContentsView`s of the two-process topology, one
+      // build input each. Declaring the list rather than relying on the default
+      // is what makes `dev.html`'s exclusion a statement instead of a
+      // side-effect: a third root document added tomorrow is not shipped unless
+      // somebody adds it here, which is a line in a diff.
+      //
+      // Written with `fileURLToPath(new URL(...))` rather than `__dirname`
+      // because this config is an ES module, and with a URL rather than a
+      // string join because `platform-only-path-separator` in
+      // `scripts/check-portability.mjs` is right about backslashes.
+      // ---------------------------------------------------------------------
+      input: {
+        index: fileURLToPath(new URL('index.html', import.meta.url)),
+        paneview: fileURLToPath(new URL('paneview.html', import.meta.url)),
+      },
+    },
   },
 });

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LEAPWare ShellUX — extension surface</title>
+  </head>
+  <!--
+    THE EXTENSION SURFACE. PANES 2 AND 3, IN ONE DOCUMENT.
+
+    This is the renderer half of the two-process topology: one `WebContentsView`
+    holding both extension panes, so that their ARIA relationships and their
+    focus order work for free. The topology spike measured why they must share a
+    document rather than a process — an `aria-labelledby` fails across a document
+    edge even inside ONE web contents, and `Tab` does not cross a view boundary
+    at all. See `spike/topology/RESULTS.md` and `electron/main/surfaces.ts`.
+
+    Unlike `dev.html` this document IS a production build input: `vite.config.ts`
+    lists it in `build.rollupOptions.input`, so it is emitted into `dist/` and
+    served by the private scheme in `electron/main/index.ts`. A shell whose
+    second surface only existed on the dev server would be a shell nobody could
+    package.
+  -->
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/paneview/main.paneview.tsx"></script>
+  </body>
+</html>

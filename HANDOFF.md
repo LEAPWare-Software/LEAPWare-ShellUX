@@ -71,18 +71,70 @@ carrying a SHA-512 over it. The packaged app was probed over CDP: it read its ba
 `app-update.yml`, contacted the feed, returned `net::ERR_NAME_NOT_RESOLVED`, and
 `Ctrl+K` listed "Check for updates — last check failed" beside the host commands.
 
+### Phase 7 IS built, as two processes, on branch `topology-spike`
+
+`f378329`. Host chrome renders the context bar, pane 1 and the palette; one
+extension renderer holds panes 2 and 3, the ledger and the composer. Activating an
+extension in pane 1 fills panes 2 and 3 **in the other document**, and Ctrl+K from
+the extension view opens the palette in host chrome — context crosses both ways.
+1,733 tests in 72 files, `verify` exit 0.
+
+**Two-process was chosen because it is safe under either spike outcome**, not
+because the spike returned. If arm B comes back clean, three-process becomes an
+additive change; if it comes back bad, two-process already shipped. Building
+three-process first would have been the bet that cannot be unwound. **ADR-0005 is
+still `Proposed` and this commit does not decide it.**
+
+**An earlier build of the same phase put a complete `ShellLayout` in BOTH views** —
+two whole shells side by side, with Phase 8's ledger in neither, and a green suite
+over it. That version was not committed. The defects that fixed it were all found
+by looking at the window: a restored pane-2 share that made the two panels sum to
+75, two documents racing over one `localStorage` key until **both** showed nothing,
+and an `activate()` that moved a ref without re-rendering.
+
+**Named limits, not fixed:** the context bar and palette are shell-wide chrome
+living in a 282px view, so the bar scrolls and the palette renders as a
+left-aligned strip; there is no draggable divider between the two views, because a
+pointer drag does not cross a native view edge; and `HydrationEngine` and
+`AuthoritativeStore` did **not** move to main — `electron/tsconfig.json` is
+`NodeNext` and every relative import in `src/` is extensionless, so that graph
+gives `TS2835` on every import. `AuthoritativeStore` runs in host chrome's document
+and main is a relay. Amendment O records two routes and takes neither.
+
 ### What is NOT done, and why each one is blocked
 
-- **Phase 7, the pane process split.** Deliberately not built.
-  `docs/adr/0005-pane-topology.md` is **`Proposed`** with a four-arm spike named and
-  the outcome-to-decision mapping written *in advance*, so the result cannot be
-  rationalised afterwards. **Arm B needs NVDA on Windows and VoiceOver on macOS — no
-  agent can run a screen reader.** Building Phase 7 before the spike risks building
-  the wrong topology. Evidence so far leans **two-process**.
-- **The update feed host does not exist.** `https://updates.leapware.dev/shellux/` is
-  a placeholder, proven dead at runtime. It appears in exactly three places, two of
-  which are gates that fail loudly until it changes. Blocks the first release, not
-  development. See `docs/RELEASE.md` §1.
+- **The topology spike's human arms.** `docs/adr/0005-pane-topology.md` stays
+  **`Proposed`**. `spike/topology/` holds a throwaway two-view app and every
+  machine-observable measurement (`baf3399`); **arm B needs NVDA on Windows 11 and
+  is what decides the ADR** — the B1–B5 script is in `spike/topology/README.md` and
+  takes about five minutes. Arm A needs `inspect.exe`; arm C needs a Mac.
+- **The update feed host was INVENTED, and it has been removed. Read this one.**
+  Phase 9 shipped `electron-builder.yml` pointing at `updates.leapware.dev`. That
+  host was written to look plausible under the project's brand; **this organisation
+  does not own `leapware.dev`.** The apex resolves to a netblock belonging to
+  somebody else, and an earlier revision of this very section cited that resolution
+  as proof the domain was "real and controlled" — it proved only that *someone*
+  owns it.
+
+  **Why this was a security defect rather than a naming mistake.** With
+  `provider: generic`, that one URL is the sole authority for both the `latest.yml`
+  manifest **and** the installer the manifest names. A shipped application would
+  have asked a stranger's server what to download and then run it, and nothing this
+  project builds is signed, so signature verification would not have refused the
+  answer. Remote code execution by configuration. Caught before any release, any
+  tag, or any user holding a build — but it was on `main`.
+
+  `publish` is now unset, `DOCUMENTED_ENDPOINTS` is empty, and the hostname rule is
+  fully on again, so an accidental re-introduction fails the build.
+
+  **The decision this leaves open is smaller than it looks.** `electron-updater`'s
+  GitHub provider was rejected because the repository is *private* — release assets
+  would need a token inside the shipped client. **On a public repository those
+  assets are plain public URLs and the provider needs no host, no DNS and no
+  bucket.** So going public collapses this blocker entirely, and it is the same
+  decision that resolves §5's branch protection and §6.2's vulnerability reporting.
+  Three blockers, one choice. The alternative is owning a static HTTPS host and
+  declaring it in the three places `docs/RELEASE.md` §1 enumerates.
 - **Nothing is signed and no certificate was sought.** macOS packaging is configured
   and never executed — unbuildable from Windows.
 - **An engines split-brain, until #100 merges.** PR #37 (jest-dom 7, which requires
