@@ -70,9 +70,12 @@ The forces acting on the decision:
   directory.
 - A machine-specific temporary or scratch directory.
 - A hardcoded hostname or IP address, or a port assumption that is not a
-  documented default. Today the documented set is exactly one entry: the Vite dev
-  server's own default, recorded in README.md and in
-  `scripts/check-portability.mjs`.
+  documented default. There are two documented sets, both in
+  `scripts/check-portability.mjs`: `DOCUMENTED_PORTS`, which holds the Vite dev
+  server's own default and is also recorded in README.md, and
+  `DOCUMENTED_ENDPOINTS`, which holds the desktop update feed's host. See
+  **Amendment A**, which added the second one and states why a declaration is not
+  an allowlist entry.
 - An environment assumption that is not declared and defaulted. Nothing in `src/`
   reads an environment variable today, and a first reader would need a declared
   name and a working default in the same change.
@@ -135,6 +138,10 @@ repository match the naive form of these rules. Neither is allowlisted:
   since the rule had not yet been told the difference. The POSIX-standard portable
   shebang resolves an interpreter through PATH, so it is accepted on the first line
   and a shebang hardcoding an interpreter's install location is still reported.
+- **A path segment inside a URL is not a directory**, so `temp-or-scratch-path`
+  does not report one. Added by Amendment A.5, and argued there rather than here
+  because it is the one case in this list found by a dependency rather than by
+  reading the tree.
 
 A sharper pattern is worth more than an exemption, because an exemption stops
 checking a file and a sharper pattern does not.
@@ -262,3 +269,137 @@ commit, so a per-push blocking audit turns `main` red for a defect nobody
 introduced. The audit is instead blocking when the dependency graph changes — the
 only kind of commit that can introduce a vulnerable dependency — and blocking
 weekly on a timer, which is what notices drift without blaming a commit.
+
+---
+
+## Amendment A — desktop packaging, signing, and the update feed
+
+- **Status:** Accepted
+- **Date:** 2026-08-02
+- **Scope:** Adds to the Decision above. It supersedes nothing, and in particular
+  it does not touch the acceptance test in section 2.
+
+Phase 9 of `docs/plans/native-host-pivot.md` produces an installer, signs it when
+a certificate is supplied, and updates it from a feed. ADR-0004 clause 8 named
+four collisions with this decision **in advance**, and the point of naming them in
+advance was that they would be fixed in the change that caused them rather than
+discovered by it. All four are settled here.
+
+### A.1 `DOCUMENTED_ENDPOINTS` — a declaration, not an exemption
+
+The update feed's URL is a literal host in `electron-builder.yml`, which the
+`hardcoded-hostname` rule fails on sight. Two fixes were available and only one of
+them is compatible with section 3's "precision is preferred to suppression".
+
+An **ALLOWLIST entry** would switch the rule off for that path, so a second host
+arriving in the same file later would never be seen. A **declaration** names one
+host and leaves every other host in every file still reported. The second is what
+was built: `DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs`, one row,
+carrying the reason the host exists and the fact that it is not yet provisioned.
+It is deliberately the same shape as `DOCUMENTED_PORTS`, which had held exactly one
+row since this ADR was written.
+
+**It matches on exact host equality**, and that is the one implementation detail
+worth recording. The RFC-reserved list beside it matches with `endsWith`, correctly,
+because every name under `example.com` is reserved. An endpoint is not a suffix:
+`endsWith` would have accepted a host that merely *begins* with the declared one
+and continues into a domain somebody else can register. Both directions are pinned
+in `scripts/__tests__/check-portability.test.mjs`.
+
+**Why the feed URL exists at all**, since a reader will otherwise ask why the rule
+was not simply obeyed: this repository is private on a free plan, and
+`electron-updater`'s GitHub provider against a private repository requires a token
+inside the shipped client. The full argument, including the two alternatives, is
+ADR-0004 clause 7.
+
+### A.2 `platform-only-invocation` — the prose and the pattern, in one change
+
+ADR-0004 clause 8 recorded that the rule's regex matched shells and batch
+extensions and would therefore not catch `electron-builder --win nsis`, while the
+mandate's "platform-only script, build command, or path separator" clause plainly
+forbade it. Relying on that gap would have been the "written rule with no checker"
+this ADR's own Alternatives section rejects, so the pattern now also matches a
+build command that pins its output platform with a flag.
+
+**The portable form is to name no platform.** `electron-builder` with no platform
+flag builds for the host it is running on, so `npm run verify:desktop` is one
+command on every operating system and `.github/workflows/desktop.yml` gets its two
+platforms from a `runs-on` matrix — which is the line that genuinely knows which
+machine is present. No script or workflow in this repository names a platform in a
+command, and the checker now enforces that rather than describing it.
+
+`platform-only-path-separator` needed no change at all. `electron-builder` accepts
+forward slashes on every platform, so the rule is obeyed by writing them.
+
+### A.3 Clause 6 — every environment name the desktop build reads
+
+`docs/signing.md` is the declaration, it is tracked, and it now covers every name
+`electron-builder` reads rather than only the five a release supplies. **Setting
+none of them produces an installable, working, unsigned artifact** — that is the
+working default the clause requires, and it is the mode `npm run verify:desktop`
+ran in when this amendment was written.
+
+One correction was found in the process and is recorded there rather than here:
+`CSC_IDENTITY_AUTO_DISCOVERY` cannot be set from the packaging configuration, only
+from the environment, so the workflow sets it and the configuration cannot.
+
+### A.4 The acceptance test does not change, and a second one is added
+
+> **A fresh clone on a different operating system runs `npm ci && npm run verify`
+> with no local setup and no edits.**
+
+Word for word, and `verify` gains no packaging stage. The justification is the one
+already written at `playwright.config.ts` for the browser lane: the Playwright
+browser download is outside `npm ci` and outside `package-lock.json`, so the lane
+that needs it sits outside `verify`. Electron's binary and a code-signing
+certificate are the identical argument one step larger.
+
+A second sentence is added, and it is deliberately subordinate:
+
+> **A packaging acceptance test:** on Windows or macOS, `npm ci && npm run
+> verify:desktop` produces an installable artifact. This is **not** a
+> precondition for contributing; `verify` alone is.
+
+### A.5 `temp-or-scratch-path` was sharpened, and the choice is the same one
+
+Adding `electron-builder` to the tree put two new packages in `package-lock.json`
+that are *named* `tmp` and `temp`, so npm wrote registry tarball URLs into the
+lockfile carrying each of those names as a path segment — the exact shape the rule
+looks for — and it fired on both.
+
+**This ADR's own prose was the second thing it caught.** The paragraph above
+originally quoted the two offending segments literally, and the rule reported the
+file explaining it. Unlike `hardcoded-hostname` and `hardcoded-ip-address`, this
+rule is not skipped in Markdown, and widening it to accommodate a document about
+itself would be loosening a gate to make a sentence easier to write. The sentence
+was rewritten instead.
+
+The lockfile already carries an ALLOWLIST entry, for `hardcoded-hostname`, so
+adding `temp-or-scratch-path` to it was one edit away. **It was refused for a
+specific reason and not on principle:** an exemption switches the rule off for the
+whole file, and a lockfile *can* carry a genuine local path — a `file:` reference
+to a directory on the author's disk is precisely the dependency this checker exists
+to catch, and it is the one thing that exemption would have hidden.
+
+So the rule was sharpened instead. A match inside a URL is not reported, because a
+URL path segment is not a directory on anybody's disk. Nothing is given away by
+that: a URL reaching somewhere it should not is `hardcoded-hostname`'s finding, on
+the same line, under a rule with its own declared table. The match is not dropped,
+it is handed to the rule that can judge it. Both directions are pinned in
+`scripts/__tests__/check-portability.test.mjs` — a bare temporary path still fails,
+and so does one being *assembled* beside a URL, which is the case the sharpening
+must not swallow.
+
+Section 3's list of precision-over-suppression cases now has four entries, and the
+allowlist still has two.
+
+### A.6 A new obligation, stated as a rule because it has already been broken once
+
+**A build output directory is added to `.gitignore` and to `SKIPPED_DIRECTORIES`
+in `scripts/check-citations.mjs` in the same change that creates it.** There are
+now three of them — `dist/` (Vite), `dist-electron/` (`tsc`) and `release/`
+(electron-builder) — and the third exists because the plan's original instruction
+to point the packager at `dist/` was wrong: `vite build` empties that directory.
+The citation checker walks the working tree rather than the git index, and
+`release/win-unpacked` measured **419 MB** on the first real build, so a directory
+that reaches only the first list costs every later run of the gate.

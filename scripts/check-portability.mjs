@@ -19,7 +19,9 @@
  *                                 per shell.
  *   appdata-path                  A Windows per-user application-data directory
  *                                 does not exist off Windows.
- *   temp-or-scratch-path          A scratch directory is not a build input.
+ *   temp-or-scratch-path          A scratch directory is not a build input. A
+ *                                 path segment inside a URL is not a directory,
+ *                                 and is left to hardcoded-hostname to judge.
  *   absolute-posix-path           An absolute system path anchored outside the
  *                                 repository is a layout assumption.
  *   unc-path                      A UNC path names one specific host.
@@ -27,10 +29,14 @@
  *   hardcoded-ip-address          An address literal is an environment
  *                                 assumption that is neither declared nor
  *                                 defaulted.
- *   hardcoded-hostname            Same, for a DNS name.
+ *   hardcoded-hostname            Same, for a DNS name. A host is allowed only
+ *                                 when it is a declared endpoint (see
+ *                                 DOCUMENTED_ENDPOINTS).
  *   undocumented-port             A port assumption is allowed only when it is
  *                                 a documented default (see DOCUMENTED_PORTS).
- *   platform-only-invocation      A build command that only one OS can run.
+ *   platform-only-invocation      A build command that only one OS can run —
+ *                                 by the shell it names, or by the platform it
+ *                                 pins its output to.
  *   platform-only-path-separator  A backslash in a build command is a Windows
  *                                 assumption.
  *   line-endings                  .gitattributes mandates LF; a committed CRLF
@@ -98,6 +104,40 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Ports a tracked file may assume, each because it is a documented default. */
 const DOCUMENTED_PORTS = new Map([[5173, "Vite's default dev-server port, documented in README.md"]]);
+
+/**
+ * Network hosts a tracked file may name, each with the reason it is declared.
+ *
+ * **This table is a declaration, not an exemption, and the difference is the
+ * whole point.** An ALLOWLIST entry switches the hostname rule OFF for a path, so
+ * a second host arriving in the same file later is never seen. A row here names
+ * ONE host: every other host in every file, including this one's own file, is
+ * still reported. That is the shape ADR-0002 asks for when it says a sharper rule
+ * is worth more than an exemption, and it is the same shape `DOCUMENTED_PORTS`
+ * already has one row of.
+ *
+ * Matched on EXACT host equality. The reserved-suffix list below is matched with
+ * `endsWith` because those genuinely are suffixes — every name under
+ * `example.com` is reserved. An endpoint is not a suffix, and a suffix test here
+ * would accept `updates.leapware.dev.somewhere-else.tld`, which is a different
+ * host entirely and one an attacker can register.
+ */
+const DOCUMENTED_ENDPOINTS = new Map([
+  [
+    'updates.leapware.dev',
+    'The desktop update feed. `electron-builder.yml` names it once, in its `publish` ' +
+      'block, and electron-builder writes it into `app-update.yml` inside the packaged ' +
+      'application; nothing in `src/` or `electron/` contains a URL, and the renderer has ' +
+      'no way to name a feed at all. It is declared rather than allowlisted because a ' +
+      'SECOND host appearing in that file — or this one — must still fail. ' +
+      'electron-updater\'s GitHub provider was rejected on a fact rather than a taste: ' +
+      'this repository is private on a free plan, and that provider would require a token ' +
+      'inside the shipped client. **The host is not provisioned yet.** Replacing it is a ' +
+      'one-line edit to `electron-builder.yml` and a one-line edit here, and ' +
+      '`docs/RELEASE.md` makes doing so a blocking step of the first release rather than ' +
+      'something a reader has to infer.',
+  ],
+]);
 
 /** Address literals that name no machine: loopback and the wildcard bind. */
 const DOCUMENTED_ADDRESSES = new Set(['127.0.0.1', '0.0.0.0', '255.255.255.255']);
@@ -218,6 +258,27 @@ const ALLOWLIST = [
 // Rules
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether the character at `index` sits inside a URL that begins earlier on the
+ * same line.
+ *
+ * The test is deliberately cheap and deliberately strict. It looks backwards for
+ * the nearest `://` and then requires that everything between it and the match is
+ * URL-shaped — no quote, no whitespace, no bracket and no comma, any of which ends
+ * an authority or a path in every format this repository tracks. So
+ * `"https://host/tmp/x"` answers yes and `"https://host" + tmpDir + "/tmp/x"`
+ * answers no, which is the distinction that matters: the second one is a path
+ * being assembled, and a path being assembled is a path.
+ *
+ * Line-scoped, because every rule that uses it matches within one line.
+ */
+function withinUrl(line, index) {
+  const before = line.slice(0, index);
+  const scheme = before.lastIndexOf('://');
+  if (scheme === -1) return false;
+  return !/["'`\s,;()<>[\]{}]/.test(before.slice(scheme + 3));
+}
+
 const CONTENT_RULES = [
   {
     id: 'windows-drive-path',
@@ -250,6 +311,29 @@ const CONTENT_RULES = [
     id: 'temp-or-scratch-path',
     what: 'a machine-specific temporary or scratch directory',
     patterns: [/[\\/](?:tmp|temp)[\\/]/gi, /\bscratchpad\b/gi, /[\\/]var[\\/]folders[\\/]/g],
+    // A path segment inside a URL is not a directory on anybody's disk, and this
+    // rule is about directories. The case that found it: npm writes registry
+    // tarball URLs into package-lock.json, and two dependencies of the desktop
+    // packaging lane are *named* `tmp` and `temp`, so their download URLs contain
+    // `/tmp/` and `/temp/` as package-name segments.
+    //
+    // Sharpened rather than allowlisted, which is the choice ADR-0002 section 3
+    // requires: an ALLOWLIST entry would have switched this rule off for the whole
+    // lockfile, and a lockfile CAN carry a genuine local path — a `file:` reference
+    // to a directory on the author's disk is exactly the dependency this checker
+    // exists to catch, and it is the one thing an exemption here would have hidden.
+    //
+    // The argument that this gives nothing away: a URL is not a local-environment
+    // dependency of the shape this rule describes, and a URL to somewhere it should
+    // not be reaching is `hardcoded-hostname`'s finding, which is enforced on the
+    // same line by a rule that has its own declared table. So the match is not
+    // dropped, it is reassigned to the rule that can actually judge it.
+    //
+    // Deliberately NOT applied to the other path-shaped rules. Each one states its
+    // own URL reasoning where it needs one — `windows-drive-path` carries a
+    // lookbehind for exactly this purpose — and a shared accept applied everywhere
+    // would be a single decision quietly loosening five rules at once.
+    accept: (match, context) => withinUrl(context.line, match.index),
   },
   {
     id: 'absolute-posix-path',
@@ -305,6 +389,8 @@ const CONTENT_RULES = [
       // A single-label authority resolves nowhere public, so it is a sample
       // value rather than an endpoint.
       if (!host.includes('.')) return true;
+      // Exact equality, never a suffix test. See DOCUMENTED_ENDPOINTS.
+      if (DOCUMENTED_ENDPOINTS.has(host)) return true;
       return RESERVED_DNS_SUFFIXES.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
     },
   },
@@ -323,6 +409,37 @@ const CONTENT_RULES = [
     patterns: [
       /\b(?:cmd\.exe|cmd\s+\/c|powershell(?:\.exe)?|pwsh|xcopy|robocopy|del\s+\/|rmdir\s+\/|copy\s+\/)/gi,
       /\.(?:bat|cmd|ps1)\b/gi,
+      // ---------------------------------------------------------------------
+      // THE SECOND WAY A COMMAND CAN BE PLATFORM-ONLY, AND THE ONE THIS RULE
+      // MISSED UNTIL PACKAGING ARRIVED.
+      //
+      // The patterns above ask which SHELL a command names. This one asks which
+      // PLATFORM it pins its output to. `electron-builder --win nsis` contains
+      // no shell, no batch extension and no Windows path — it matches nothing
+      // above — and it is a build step that produces an artifact on one
+      // operating system and fails or lies on the other two.
+      //
+      // ADR-0002's prose already forbade it (clause "a platform-only script,
+      // build command, or path separator"). The regex did not, and
+      // ADR-0004 clause 8 recorded the gap in advance rather than relying on
+      // it: a written rule with no checker is the weaker instrument ADR-0002's
+      // own "Alternatives considered" section rejects. Prose and pattern are
+      // therefore fixed in one change, which is the whole point of recording
+      // the gap.
+      //
+      // THE PORTABLE FORM IS TO NAME NO PLATFORM. `electron-builder` with no
+      // platform flag builds for the host it is running on, so
+      // `npm run verify:desktop` is one command that means "package for this
+      // machine" on all of them, and `.github/workflows/desktop.yml` gets its
+      // two platforms from a `runs-on` matrix — which is where a platform
+      // belongs, because that is the line that says which machine is present.
+      //
+      // Written as a flag rather than as a word so that ordinary prose is
+      // untouched: `runs-on: windows-latest` is not a match and must not be.
+      // `--linux` is included even though nothing here targets Linux, because a
+      // rule that only forbids the platforms someone happened to think of is a
+      // rule that teaches people to reach for the third one.
+      /(?:^|\s)--(?:win|windows|mac|macos|linux)(?=[\s=]|$)/gi,
     ],
   },
   {

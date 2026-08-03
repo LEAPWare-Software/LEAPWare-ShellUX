@@ -154,12 +154,30 @@ const TEST_MODIFIERS = new Set([
   'todo',
 ]);
 
-/** Directories a walk never descends into. */
+/**
+ * Directories a walk never descends into.
+ *
+ * Every one of these is build output, and the reason each is listed is the same:
+ * this corpus is a raw filesystem walk rather than a read of the git index, so a
+ * generated tree is visible to it and would be scanned as if somebody had written
+ * it. `release/` is the packaging lane's output — an unpacked Electron
+ * application is roughly 200 MB of files, including a copy of `dist/` inside an
+ * asar archive — and it is listed here in the same change that created it and
+ * added it to `.gitignore`, because a build directory that reaches only one of
+ * those two lists is a directory that silently costs every later run.
+ *
+ * `build/` predates all of this and is NOT this project's output directory. It is
+ * electron-builder's default `buildResources` name — icons and entitlements,
+ * which are tracked input rather than generated output. No such directory exists
+ * in this tree today, so the entry currently skips nothing; it is left in place
+ * because if one is ever added it will hold binary assets and no prose.
+ */
 const SKIPPED_DIRECTORIES = new Set([
   'node_modules',
   '.git',
   'dist',
   'dist-electron',
+  'release',
   'coverage',
   'build',
   '.vite',

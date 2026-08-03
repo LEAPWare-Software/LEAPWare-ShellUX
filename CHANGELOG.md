@@ -16,6 +16,51 @@ from so a reader can check it.
 
 ### Added
 
+- **A desktop packaging lane that produces a real installer, and auto-update from
+  a static feed (plan §6, Phase 9).** `electron-builder.yml` — a file rather than
+  a `build` key in `package.json`, because JSON cannot carry the argument for each
+  decision and this repository argues every one of them beside the line that takes
+  it. NSIS on Windows, dmg **and** zip on macOS (the zip because electron-updater
+  updates a macOS application from it and a dmg-only release cannot update
+  itself), hardened runtime on, and `notarize` deliberately absent so that
+  notarization runs when the Apple credentials are present and skips with a
+  warning when they are not — which is exactly the "working default when unset"
+  column `docs/signing.md` promises.
+  - **Observed, not merely configured.** `npm run verify:desktop` on Windows
+    produced `leapware-shellux-0.1.0-win-x64.exe` (110 MB), `latest.yml` and a
+    blockmap. The packaged application was launched, and its palette offers
+    *"Check for updates — last check failed"* — the update state having travelled
+    from `electron-updater` through the main process, an IPC channel, the preload
+    bridge, a hook and the Phase 4 command registry. The failure is correct: the
+    feed host is not provisioned, and the running application reports
+    `net::ERR_NAME_NOT_RESOLVED`.
+  - **`electron-updater` against the `generic` provider, never `github`.** This
+    repository is private on a free plan, and the GitHub provider would require a
+    token inside the shipped client, which anyone can extract from an asar in
+    seconds. The feed URL is written in exactly one tracked file; electron-builder
+    bakes it into `app-update.yml` inside the package, so `electron/main/updater.ts`
+    contains no URL and the renderer has no way to name a feed at all.
+  - **The surface is a palette command and never a modal.** `checkForUpdates`
+    rather than `checkForUpdatesAndNotify`; both commands declare
+    `surfaces: ['palette']`. "Check for updates" is offered for every status
+    except a development run — **including `error`**, which is when a user most
+    wants to press it again, and which is also the only positive evidence that the
+    preload bridge loaded at all.
+  - `.github/workflows/desktop.yml` on **tags and `workflow_dispatch` only**, on
+    `windows-latest` and `macos-latest`, always `--publish never`. Not on every
+    pull request: Windows bills at 2x and macOS at 10x, and there is no Linux leg
+    to average them down.
+  - `docs/RELEASE.md` — the checklist, including the clean-VM SmartScreen
+    observation, an actual old-build-updates-itself test, and a section stating
+    what is observed versus what is only configured.
+- **The preload stopped being empty, and changed extension to do it.**
+  `electron/preload/index.cts` compiles to `index.cjs`, because a sandboxed
+  preload is loaded into a CommonJS realm and this package declares
+  `"type": "module"`. It is the one file in the repository whose **extension is a
+  constraint rather than a convention**; `verbatimModuleSyntax` enforces it by
+  rejecting ESM syntax in a CommonJS file, and `eslint.config.js` learned `cts` in
+  the same change so the file could not escape the lint stage.
+
 - **Graphical visualization in all three panes — three tiers, three different
   problems (plan §3.3).** Panes 2 and 3 are opposite performance problems and no
   single library wins both, so they do not share one.
@@ -59,6 +104,65 @@ from so a reader can check it.
 
 ### Changed
 
+- **ADR-0002 gained Amendment A, and the checker gained three rules' worth of
+  teeth.** ADR-0004 clause 8 named four collisions between the desktop lane and
+  the no-local-environment-dependencies mandate *in advance*; all four are settled
+  in the change that caused them.
+  - **`DOCUMENTED_ENDPOINTS`**, a one-row declaration table beside the existing
+    `DOCUMENTED_PORTS`, holding the update feed's host with a written reason. **Not
+    an ALLOWLIST entry**: an allowlist switches the rule off for a path, so a
+    second host arriving in the same file later is never seen; a declaration names
+    one host and leaves every other host still reported. It matches on **exact
+    host equality**, because the reserved-suffix list beside it uses `endsWith`
+    correctly — every name under `example.com` is reserved — while an endpoint is
+    not a suffix and `endsWith` would have accepted a host that merely begins with
+    the declared one and continues into a domain somebody else can register.
+  - **`platform-only-invocation` now catches what its prose always forbade.** The
+    rule matched shells and batch extensions, so `electron-builder --win nsis`
+    matched nothing — a build command that pins its output to one platform, which
+    the mandate plainly forbids. Pattern and prose are fixed together, because
+    relying on the gap is the "written rule with no checker" ADR-0002's own
+    Alternatives section rejects. **The portable form is to name no platform:**
+    `electron-builder` with no flag builds for the machine it is on, so
+    `npm run verify:desktop` is one command everywhere and `desktop.yml` gets its
+    platforms from a `runs-on` matrix.
+  - **`temp-or-scratch-path` no longer reports a path segment inside a URL.**
+    `electron-builder` brought in two packages *named* `tmp` and `temp`, so npm
+    wrote registry tarball URLs into the lockfile carrying each of those names as
+    a path segment — which is the exact shape the rule looks for.
+    Sharpened rather than allowlisted, and the reason is specific: the lockfile
+    already has an ALLOWLIST entry for hostnames, and adding this rule to it would
+    have switched the rule off for a file that **can** carry a genuine local path
+    — a `file:` reference to a directory on the author's disk is exactly what this
+    checker exists to catch. A URL reaching somewhere it should not is
+    `hardcoded-hostname`'s finding on the same line, so the match is reassigned
+    rather than dropped.
+  - Both directions of all three rules are pinned in
+    `scripts/__tests__/check-portability.test.mjs`: a lookalike host that begins
+    with the declared one must still fail, a build command that names no platform
+    must not, and a temporary path being *assembled* beside a URL must still fail.
+  - **`release/` is the third build output directory**, and it landed in
+    `.gitignore` and in `SKIPPED_DIRECTORIES` in `scripts/check-citations.mjs` in
+    the same change. The plan's original instruction to point the packager at
+    `dist/` was wrong — `vite build` empties it. The citation checker walks the
+    working tree rather than the git index, and `release/win-unpacked` measured
+    **419 MB**.
+  - **The acceptance test is unchanged, word for word.** `verify` gains no
+    packaging stage, on the justification already written at `playwright.config.ts`
+    for the browser lane: a download outside `npm ci` and outside the lockfile
+    belongs outside `verify`, and an Electron binary plus a signing certificate is
+    the same argument one step larger. `verify:desktop` is separate and
+    subordinate.
+- **`docs/signing.md` corrected itself in two places while being implemented.**
+  `CSC_IDENTITY_AUTO_DISCOVERY` **cannot** be set from the packaging
+  configuration — it is read from `process.env` and has no config key — so
+  `desktop.yml` sets it and the config cannot; and the checker that file promised
+  "when the packaging configuration exists" is now recorded as **rejected with a
+  reason**, because `electron-builder.yml` names no environment variable at all
+  and such a check would pass vacuously forever. Seven further names the tool
+  reads (`APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`,
+  `APPLE_KEYCHAIN`, `APPLE_KEYCHAIN_PROFILE`, `WIN_CSC_LINK`,
+  `WIN_CSC_KEY_PASSWORD`) are now declared.
 - **Measured bundle delta, because README's performance section forbids quoting
   unverified numbers as characteristics.** ECharts is the first runtime dependency
   beyond Radix and React. `npm run build`, before and after, on the same machine:

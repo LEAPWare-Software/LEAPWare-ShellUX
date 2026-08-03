@@ -605,7 +605,7 @@ Three lanes, deliberately separate:
 |---|---|---|
 | **`npm run verify`** (unchanged, 9 stages, ~12–13 min) | Every commit, 3 OS legs | Everything pure: `src/core/ipc/**` against a fake `PortLike` (echo suppression, out-of-order commits, write storms, null-prototype re-creation), `when.ts` (a pure parser — the cheapest 100% in the repo), `normalizeTheme`, `normalizeChartSpec`, the payload validator, `focusScope`. **All inside the 100% gate** — HANDOFF §6.5 already criticizes that the gate covers ~72% of tracked source; widening the ungated share is a finding waiting to be filed against this very PR |
 | **`npm run test:browser`** (`e2e/`, Chromium) | Every PR | Real pixels. `ribbon-overflow.spec.ts` dies with the ribbon → rewritten as `command-palette.spec.ts` / `context-bar.spec.ts`. New `e2e/theme.spec.ts` proves the **compiled stylesheet** actually applies tokens in each forced theme — the gap `ShellLayout.test.tsx:906-930` already names and cannot itself close. `focus-visibility.spec.ts` upgrades from a *difference* assertion to a *ratio* assertion, closing the gap it names at `:22-26` |
-| **`npm run verify:desktop`** (new, `e2e-desktop/` via `_electron.launch()`) | Tags + dispatch, Win + macOS | Six things nothing else can see: three `WebContentsView`s exist; Tab from pane 2's last control lands in pane 3's first; a chord in pane 3 reaches the right `onExecute`; a `setSelectedItems` in pane 3 reaches the host context bar within N frames; a divider drag moves pane 3's `setBounds`; **`process.crash()` in pane 3 leaves nav and pane 2 alive** — the one test that proves the topology bought what it cost |
+| **`npm run test:desktop`** (new, `e2e-desktop/` via `_electron.launch()`) | Tags + dispatch, Win + macOS | Six things nothing else can see: three `WebContentsView`s exist; Tab from pane 2's last control lands in pane 3's first; a chord in pane 3 reaches the right `onExecute`; a `setSelectedItems` in pane 3 reaches the host context bar within N frames; a divider drag moves pane 3's `setBounds`; **`process.crash()` in pane 3 leaves nav and pane 2 alive** — the one test that proves the topology bought what it cost |
 
 **New gate: `scripts/check-tokens.mjs`** — plain Node, zero dependencies, in
 `check-portability.mjs`'s register. Reads the **generated CSS** (not the DTCG source, so the
@@ -621,6 +621,15 @@ include a deliberately-failing theme fixture so it cannot pass vacuously.
 (`scripts/check-citations.mjs:854`), so `e2e-desktop/*.spec.ts` and `electron/__tests__/*`
 enter automatically, and `electron/**/*.ts` becomes *prose* scanned for citations.
 
+**A name collision, resolved rather than noted.** This section originally called the
+Playwright-Electron lane `verify:desktop`, and §7 and ADR-0004 clause 8 both bind that name to
+*packaging* — the sentence "`npm ci && npm run verify:desktop` produces an installable
+artifact" is the packaging acceptance test and is the older of the two claims. Phase 9 took
+the name for packaging, and the lane above is `test:desktop`. Two names, because they are two
+different questions: one asks whether an installer comes out, the other asks whether three
+views exist and a chord crosses a pane boundary. Phase 9 implements the first; the second
+arrives with Phase 7 and does not have to argue about what it is called.
+
 **Correction — this section previously said to pin `directories.output` to `dist/`, and that
 is wrong.** `dist/` is Vite's output directory and `vite build` **empties** it, so
 main-process and packaged output placed there is destroyed by every renderer build. Phase 1
@@ -629,6 +638,10 @@ needs its own directory again. The real obligation is the one this section was r
 **every build output directory must be added to `.gitignore` and to `SKIPPED_DIRECTORIES` in
 the same commit that creates it**, or `check:citations` walks an unpacked ~200MB app tree on
 every run.
+
+**Settled in Phase 9: the third directory is `release/`**, set as `directories.output` in
+`electron-builder.yml`, and it is in both lists. The ~200MB figure was an underestimate —
+`release/win-unpacked` measured **419 MB** on the first real build.
 
 **Manual acceptance, because no test covers it:** run the app on a real Windows 11 machine and
 confirm Mica renders behind the chrome with opaque panes; run NVDA and VoiceOver across the

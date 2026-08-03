@@ -1,0 +1,194 @@
+# =============================================================================
+# PACKAGING. THE CONFIGURATION THAT TURNS A COMPILED TREE INTO AN INSTALLER.
+# =============================================================================
+#
+# WHY THIS IS A FILE AND NOT THE `build` KEY IN package.json. Three reasons, and
+# the first is the one that decided it.
+#
+#   1. JSON has no comments. Every non-obvious decision in this repository is
+#      argued beside the line that takes it - that is the house style and it is
+#      the reason a reader can audit `electron/main/index.ts` without a second
+#      document. A build configuration is *entirely* non-obvious decisions, and
+#      putting it somewhere it cannot be explained would have meant either a
+#      silent config or a parallel document that goes stale.
+#   2. `package.json` is the one file `platform-only-invocation` and
+#      `platform-only-path-separator` are scoped to in `scripts/check-portability.mjs`.
+#      Those two rules exist to guard the file that runs commands; a build
+#      configuration that grows platform-specific keys inside it would either
+#      trip them or force them to be loosened. Kept separate, both rules keep
+#      their narrow scope and this file is still covered by every repository-wide
+#      rule - including `hardcoded-hostname`, which is the one that matters here.
+#   3. `package.json` is rewritten by npm and by Dependabot. A hundred lines of
+#      hand-argued configuration in a file that tools edit is a merge conflict
+#      waiting for a dependency bump.
+#
+# NOTHING HERE SIGNS ANYTHING BY ITSELF. Signing happens when `CSC_LINK` is set,
+# notarization when the Apple names are set, and every one of those names, its
+# purpose and its behaviour when unset is declared in `docs/signing.md`. With none
+# of them set this configuration produces a working, installable, unsigned
+# artifact - which is the mode a contributor builds in and the mode this file is
+# defaulted against.
+# =============================================================================
+
+appId: software.leapware.shellux
+productName: LEAPWare ShellUX
+copyright: Copyright © LEAPWare Software
+
+# ---------------------------------------------------------------------------
+# A DETERMINISTIC ARTEFACT NAME.
+#
+# The default template is `${productName}-${version}.${ext}`, which puts a space
+# in every filename this project ships and makes the name of the thing a release
+# checklist refers to depend on a display string. `${name}` is the package name,
+# which is lowercase, hyphenated and already the identifier everything else uses.
+# The architecture is in the name because a release publishes more than one and
+# "which build is this" should be answerable from the filename alone.
+# ---------------------------------------------------------------------------
+artifactName: ${name}-${version}-${os}-${arch}.${ext}
+
+directories:
+  # ---------------------------------------------------------------------------
+  # THE THIRD BUILD DIRECTORY, AND THE ONE CORRECTION THIS PLAN HAD TO MAKE.
+  #
+  # electron-builder's default output is `dist`. That default is wrong here and
+  # would have been wrong silently: `dist/` is Vite's output directory and
+  # `vite build` EMPTIES it, so a packaged installer written there is destroyed
+  # by the next renderer build - and `npm run verify:desktop` runs `vite build`
+  # immediately before packaging, which is the ordering that would have made the
+  # damage invisible rather than obvious.
+  #
+  # `dist-electron/` is not available either: that is where
+  # `tsc -p electron/tsconfig.json` emits the main and preload programs, and
+  # packaging READS it. So the packaged output gets a third name of its own, and
+  # that name is in `.gitignore` and in `SKIPPED_DIRECTORIES` in
+  # `scripts/check-citations.mjs` - both, in the change that created it, because
+  # the citation checker walks the working tree rather than the git index and an
+  # unpacked Electron application is roughly 200 MB of files it would otherwise
+  # read on every run.
+  # ---------------------------------------------------------------------------
+  output: release
+
+# ---------------------------------------------------------------------------
+# WHAT GOES INTO THE ARCHIVE, STATED RATHER THAN INHERITED.
+#
+# The default is "everything except a standard ignore list", which for this
+# repository means `src/`, `e2e/`, `docs/`, `design/`, `coverage/` and every
+# test in the tree get packed into the asar. On a private repository that is a
+# disclosure, not merely weight: an asar is a container and not a safe, and
+# anyone with the installer can read what is inside it.
+#
+# So the list is explicit and it is short. `dist/` is the built renderer,
+# `dist-electron/` is the compiled main and preload, and `package.json` is read
+# at runtime by Electron for `main` and by electron-updater for `version`.
+# Production dependencies are NOT listed and do not need to be: electron-builder
+# resolves them from `package.json` and copies them itself, which is also what
+# keeps devDependencies out.
+# ---------------------------------------------------------------------------
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+
+# ---------------------------------------------------------------------------
+# THE UPDATE FEED. ONE URL, IN ONE FILE, AND NOT A GITHUB TOKEN.
+#
+# `generic` and not `github`, on a verified fact rather than a preference: this
+# repository is private on a free plan - HANDOFF.md section 5 records the 403
+# and its "upgrade or make this repository public" message - and
+# electron-updater's GitHub provider against a private repository requires a
+# token inside the shipped client, where anyone who downloads the installer can
+# extract it. docs/adr/0004-native-host-runtime.md clause 7 records the two
+# alternatives that were weighed and why each was set aside.
+#
+# **THE HOST BELOW IS NOT PROVISIONED.** It names the static endpoint the release
+# lane will publish to, it is deliberately the ONLY place in the repository where
+# a feed host appears, and replacing it is a one-line edit to this file followed
+# by a rebuild. `DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs` declares
+# it under ADR-0002 - declared, not exempted - and `docs/RELEASE.md` makes
+# provisioning it a blocking step of the first release rather than something a
+# reader is expected to infer from a comment.
+#
+# electron-builder writes this block into `app-update.yml` inside the packaged
+# application's resources. That file, and not this one, is what the running
+# application reads - which is why `electron/main/updater.ts` contains no URL at
+# all and why the renderer has no way to name a feed.
+# ---------------------------------------------------------------------------
+publish:
+  provider: generic
+  url: https://updates.leapware.dev/shellux/
+  channel: latest
+
+# ---------------------------------------------------------------------------
+# WINDOWS.
+#
+# NSIS, because it is the target electron-updater can actually update on Windows
+# - a Squirrel or MSI artifact is not - and because it is the format a Windows
+# user recognises.
+#
+# There is no signing configuration here, and that is deliberate rather than
+# missing. electron-builder signs when `CSC_LINK` names a certificate and
+# produces an unsigned artifact when it does not, which is exactly the swappable
+# provider `docs/signing.md` section 3 requires: moving between a cloud signing
+# service and a traditional OV/EV certificate is a change of what `CSC_LINK`
+# points at, not a change to this file. That matters because of the live,
+# unverified report that Azure Artifact Signing's new intermediate authorities
+# are being SmartScreen-flagged - if that turns out to be true, the response is
+# a different certificate and not a different build.
+# ---------------------------------------------------------------------------
+win:
+  target:
+    - nsis
+
+nsis:
+  # Not a one-click installer. A one-click NSIS build installs silently on
+  # double-click with no directory choice and no visible consent, which is the
+  # behaviour users have learned to associate with software they did not mean to
+  # install. An installer that asks is an installer that can be refused.
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # Per-user, so installing needs no administrator prompt - and so that
+  # auto-update can replace the application without one either. A per-machine
+  # install would make every update an elevation prompt, which is the surest way
+  # to teach a user to decline them.
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# ---------------------------------------------------------------------------
+# MACOS. CONFIGURED HERE, BUILDABLE ONLY THERE.
+#
+# `zip` alongside `dmg` is not a convenience: electron-updater updates a macOS
+# application from the zip artifact, and a dmg-only release is a release that
+# cannot update itself. Both are produced and both are published.
+#
+# `hardenedRuntime` is the runtime restriction notarization requires. It is
+# electron-builder's default and it is written out anyway, because a security
+# posture that depends on a tool's default is a posture that changes when the
+# tool does.
+#
+# `notarize` is deliberately ABSENT rather than set. Unset means: notarize when
+# the Apple credentials are present in the environment, and skip with a warning
+# when they are not. That is precisely the "working default when unset" column
+# `docs/signing.md` promises for `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and
+# `APPLE_TEAM_ID` - verified by reading `notarizeIfProvided` in
+# app-builder-lib rather than by reading its documentation. Setting it `true`
+# would make an unsigned local build fail; setting it `false` would make a
+# release quietly ship un-notarized.
+# ---------------------------------------------------------------------------
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+    - target: zip
+  hardenedRuntime: true
+  # The assessment is the Gatekeeper check, and it is skipped at BUILD time on
+  # purpose: it can only pass once the artifact is notarized, which happens
+  # after this point. The real assessment is a human downloading the artifact on
+  # a clean machine, which is a step in docs/RELEASE.md and not something a
+  # build can claim to have done.
+  gatekeeperAssess: false
+
+# Linux is not configured. Nothing in this project has been run on a Linux
+# desktop, `verify`'s Linux leg is a headless test lane, and shipping a target
+# nobody has launched is how a broken artifact acquires users. The `verify` leg
+# stays; the packaging lane is Windows and macOS.

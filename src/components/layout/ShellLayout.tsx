@@ -17,6 +17,8 @@ import type { HydrationEngine, PaneSizes } from '../../core/services/HydrationEn
 import type { NavigationMetric, NavigationNode, PaneId, RibbonContext } from '../../core/types';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { useElementWidth } from '../../hooks/useElementWidth';
+import { useHostUpdates } from '../../hooks/useHostUpdates';
+import { hostUpdateCommands } from '../../core/updates/hostUpdates';
 import { MetricGlyph } from '../ui/MetricGlyph';
 import { createCommandRegistry, withRecent } from '../../core/commands/CommandRegistry';
 import type { ExtensionCommands, HostCommand } from '../../core/commands/CommandRegistry';
@@ -975,6 +977,11 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // `attachGroup` on every render, which would detach and reattach the ref and so
   // disconnect and rebuild the observer. `ref` alone is stable for the lifetime.
   const { width: observedWidth, ref: observeGroupRef } = useElementWidth();
+
+  // The native host's updater, or `null` in a browser document. Read here, with
+  // the other hooks, and used exactly once — in `hostCommands` below.
+  const hostUpdates = useHostUpdates();
+
   const attachGroup = useCallback(
     (node: HTMLDivElement | null): void => {
       measureGroup(node);
@@ -1204,6 +1211,12 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
         setNavCollapsed(false);
       },
     },
+    // AUTO-UPDATE, AND NOTHING ELSE IN THIS FILE KNOWS ABOUT IT. The list is
+    // empty in the browser lane and in a development run of the native host, so
+    // this spread is the whole of the integration; the decisions about which
+    // commands exist for which status live in `src/core/updates/hostUpdates.ts`,
+    // where they can be unit-tested without a shell around them.
+    ...hostUpdateCommands(hostUpdates),
   ];
 
   const commandExtension: ExtensionCommands | null =

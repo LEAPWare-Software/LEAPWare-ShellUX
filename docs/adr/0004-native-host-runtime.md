@@ -3,8 +3,11 @@
 - **Status:** Accepted
 - **Date:** 2026-08-02
 - **Deciders:** LEAPWare-ShellUX project owner and maintainers
-- **Implemented by (Phase 1 only):** `electron/main/index.ts`,
-  `electron/preload/index.ts`, `electron/tsconfig.json`
+- **Implemented by (Phase 1):** `electron/main/index.ts`,
+  `electron/preload/index.cts`, `electron/tsconfig.json`
+- **Implemented by (Phase 9):** `electron/main/updater.ts`,
+  `electron-builder.yml`, `.github/workflows/desktop.yml`, `docs/RELEASE.md` —
+  see Amendment A
 - **Related:** `docs/plans/native-host-pivot.md` (the full plan and its nine
   phases), ADR-0001 Amendment E (what a boundary in this project can and cannot
   be), ADR-0002 (no local-environment dependencies — this decision owes it an
@@ -72,8 +75,10 @@ and macOS is supported; Linux is not a requirement and is not claimed.
 `nodeIntegration: false`, loads the SPA this repository already builds, denies
 window-opening and off-origin navigation by default, applies the Windows 11
 backdrop material conditionally, and turns four classes of load failure into a
-named error dialog. `electron/preload/index.ts` exposes nothing and contains no
-executable statement. `npm run verify` is untouched, every existing test still
+named error dialog. The preload exposes nothing and contains no executable
+statement — it was `electron/preload/index.ts` at Phase 1 and is
+`electron/preload/index.cts` from Phase 9, for the module-format reason in
+Amendment A.2. `npm run verify` is untouched, every existing test still
 runs in jsdom against the same modules, and no file under `src/` changes.
 
 **What does not exist and is not claimed:** `BaseWindow`, `WebContentsView`, any
@@ -297,9 +302,10 @@ repository public** would fix all three at once, which is why it deserves a real
 decision on its own merits rather than being ruled out by default; it is not this
 ADR's to take.
 
-Nothing in clause 7 is implemented. The updater is Phase 9, and the paragraph
-exists so that Phase 9 does not start by reaching for the provider that looks
-easiest.
+**Clause 7 was written before Phase 9 and has now been built as written**; see
+Amendment A below for what shipped, what it cost, and the one thing it proved
+rather than assumed. The paragraph above was drafted so that Phase 9 would not
+start by reaching for the provider that looks easiest, and it did its job.
 
 **The signing risk is live and unverified**, and `docs/signing.md` carries it:
 since 26 March 2026 Azure Trusted Signing — renamed Azure Artifact Signing — has
@@ -502,3 +508,71 @@ exists *because* `isVisible` cannot cross a process boundary, and the transport
 seam in Phase 6 is shaped like `MessagePortMain` on purpose. Deferring the
 decision would not have avoided it; it would have made four phases of work depend
 on an assumption nobody had written down.
+
+---
+
+## Amendment A — Phase 9: packaging, and the preload stops being empty
+
+- **Status:** Accepted
+- **Date:** 2026-08-02
+- **Scope:** Records what clause 7 became when it was built, and one runtime
+  constraint that only appeared when the first line of preload code was written.
+  It changes no earlier clause.
+
+### A.1 The feed works exactly as clause 7 said, and it has been observed doing so
+
+`electron-builder.yml` carries a `generic` publish block. electron-builder writes
+it into `app-update.yml` inside the packaged application's resources, and that
+file — not the tracked one — is what `autoUpdater` reads. Three consequences,
+each of which is the point rather than a side effect:
+
+- **`electron/main/updater.ts` contains no URL, and neither does anything in
+  `src/`.** Changing the feed is one line in one tracked file.
+- **The renderer cannot name a feed.** The preload bridge moves state outward and
+  two argument-free intents inward. A renderer that could name its own update
+  source is a renderer that can be persuaded to install something.
+- **No token ships**, which was the whole reason the GitHub provider was refused.
+
+The first packaged build on Windows produced an installer, and the running
+application reported `net::ERR_NAME_NOT_RESOLVED` from the feed host — which is
+the correct answer, because the host is not provisioned yet. That is the honest
+end state of Phase 9: the mechanism is real and observed, the endpoint is not.
+
+### A.2 The preload had to change module format, and the reason is not a preference
+
+`sandbox: true` is not negotiable (clause 4), and a sandboxed preload is loaded
+into a CommonJS realm. The root `package.json` declares `"type": "module"`, so
+every emitted `.js` in this tree is an ES module. While the preload was empty it
+sidestepped the collision by containing no module syntax at all; the first
+`contextBridge` call ended the sidestep, exactly as the file's own comment
+predicted it would.
+
+The source is therefore `electron/preload/index.cts`, which compiles to
+`index.cjs`. It is the one file in the repository whose **extension is a
+constraint rather than a convention**, and `verbatimModuleSyntax` is what keeps
+that honest: it rejects ESM `import ... from` syntax in a CommonJS file, so the
+file cannot be written in one shape and emitted in another. `eslint.config.js`
+had to learn `cts` in the same change, because a glob that stopped at `ts` would
+have left precisely that file unlinted.
+
+### A.3 What is configured and cannot be verified here
+
+**macOS is configured and unbuilt.** `dmg` plus `zip` — the zip because
+electron-updater updates a macOS application from it and a dmg-only release
+cannot update itself — with `hardenedRuntime` on and `notarize` deliberately
+unset, so notarization runs when the Apple credentials are present and is skipped
+with a warning when they are not. None of that has been executed: it cannot be
+built from Windows, and it will first be exercised by the `macos-latest` leg of
+`.github/workflows/desktop.yml`.
+
+**Signing is configured and unexecuted.** No certificate exists for this project,
+none was sought, and the artifact produced was verified to be unsigned rather than
+assumed to be. The swappable-provider requirement in `docs/signing.md` is
+satisfied structurally: `electron-builder.yml` contains no signing configuration
+at all, so the provider is whatever `CSC_LINK` points at.
+
+**The SmartScreen report remains unverified and is now a checklist item** rather
+than a paragraph. `docs/RELEASE.md` requires downloading the signed installer in a
+browser on a clean Windows 11 virtual machine at default settings and recording
+whether the unrecognized-application dialog appears — either way, because a clean
+run is only evidence if it was written down when it happened.

@@ -231,6 +231,18 @@ const ACCEPTED = [
     why: "Vite's default dev-server port is documented in README.md",
   },
   {
+    // The shape npm writes into package-lock.json for a package named `tmp`.
+    // The host is RFC-reserved so that only the rule under test is in play.
+    file: 'src/registry-url.ts',
+    text: assemble('https', ':', '/', '/', 'registry', '.', 'example', '.', 'com', '/tmp', '/-/tmp-0.2.7.tgz'),
+    why: 'a path segment inside a URL is a package name, not a directory on anyone disk',
+  },
+  {
+    file: 'src/registry-url-temp.ts',
+    text: assemble('https', ':', '/', '/', 'registry', '.', 'example', '.', 'com', '/temp', '/-/temp-0.9.4.tgz'),
+    why: 'the same, for the other spelling',
+  },
+  {
     file: 'docs/citation.md',
     text: `${assemble('203', '.', '0', '.', '113', '.', '7')} and ${assemble('https', ':', '/', '/', 'acme-corp', '.', 'net')}`,
     why: 'a URL or address in prose is a citation, not a network dependency of the build',
@@ -254,6 +266,18 @@ describe('content rules', () => {
   const shebang = assemble('#!', '/', 'usr', '/', 'bin', '/', 'env node');
   paths.push(write(root, 'src/tool.mjs', `${shebang}\nexport const value = 1;\n`));
   paths.push(write(root, 'src/late-shebang.ts', `// the same text, on line two\n${shebang}\n`));
+
+  // A temporary path being ASSEMBLED next to a URL is still a path, and the quote
+  // between the two is exactly what tells them apart. Written out here rather than
+  // in the FIRING table because the sample contains quotes of its own.
+  paths.push(
+    write(
+      root,
+      'src/assembled-temp.ts',
+      `const base = '${assemble('https', ':', '/', '/', 'host', '.', 'example', '.', 'com')}';\n` +
+        `export const value = base + scratch + '${assemble('/', 'tmp', '/', 'x')}';\n`,
+    ),
+  );
 
   // The two rules scoped to files that run commands.
   paths.push(
@@ -295,6 +319,10 @@ describe('content rules', () => {
     assert.deepEqual(rulesFor(report, 'src/late-shebang.ts'), ['absolute-posix-path']);
   });
 
+  it('reports a temporary path assembled beside a URL, because it is not inside one', () => {
+    assert.deepEqual(rulesFor(report, 'src/assembled-temp.ts'), ['temp-or-scratch-path']);
+  });
+
   it('reports platform-only-invocation and platform-only-path-separator in package.json', () => {
     const rules = rulesFor(report, 'package.json');
     assert.ok(rules.includes('platform-only-invocation'), JSON.stringify(rules));
@@ -307,6 +335,65 @@ describe('content rules', () => {
     assert.equal(drive.line, 1);
     assert.ok(drive.column > 1, 'the column should point at the match, not at the start of the line');
     assert.match(drive.what, /Windows drive letter/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Packaging, and the two rules it changed.
+//
+// Both changes landed with the desktop packaging lane, and both are the kind of
+// change that is easy to make one-sided. `platform-only-invocation` gained a
+// pattern for a build command that pins its output to one platform without
+// naming a shell — the prose forbade it from the start and the regex did not.
+// `hardcoded-hostname` gained `DOCUMENTED_ENDPOINTS`, which is a declaration and
+// not an exemption, so the fixture below asserts BOTH halves: the declared host
+// passes and a host that merely starts with it does not.
+//
+// The lookalike is the sharp one. `updates.leapware.dev.something-else.tld` is a
+// host an attacker can register, it is not the declared endpoint, and a suffix
+// test — which is the right test for the RFC-reserved names and the wrong one
+// here — would have accepted it.
+// ---------------------------------------------------------------------------
+
+describe('packaging build commands and the declared update feed', () => {
+  const root = newRepo('packaging');
+
+  const feed = assemble('https', ':', '/', '/', 'updates', '.', 'leapware', '.', 'dev', '/shellux/');
+  const lookalike = assemble(feed.replace(/\/shellux\/$/, ''), '.', 'not-the-feed', '.', 'test-host', '.', 'net/shellux/');
+
+  const paths = [
+    // The portable form: no platform flag at all, so the same command means
+    // "package for this machine" on every operating system.
+    write(root, 'package.json', '{\n  "scripts": {\n    "package": "electron-builder --publish never"\n  }\n}\n'),
+    // The form the rule now catches. No shell, no batch file, no backslash.
+    write(
+      root,
+      '.github/workflows/desktop.yml',
+      'jobs:\n  package:\n    steps:\n      - run: electron-builder --win nsis --publish never\n',
+    ),
+    write(root, 'electron-builder.yml', `publish:\n  provider: generic\n  url: ${feed}\n`),
+    write(root, 'lookalike.yml', `publish:\n  provider: generic\n  url: ${lookalike}\n`),
+  ];
+
+  track(root, ...paths);
+  const report = run(root);
+
+  it('reports platform-only-invocation for a build command that pins its platform', () => {
+    const rules = rulesFor(report, '.github/workflows/desktop.yml');
+    assert.ok(rules.includes('platform-only-invocation'), JSON.stringify(rules));
+  });
+
+  it('reports nothing for a build command that names no platform', () => {
+    assert.deepEqual(rulesFor(report, 'package.json'), []);
+  });
+
+  it('reports nothing for the update feed host, because it is declared', () => {
+    assert.deepEqual(rulesFor(report, 'electron-builder.yml'), []);
+  });
+
+  it('reports hardcoded-hostname for a host that only begins with the declared one', () => {
+    const rules = rulesFor(report, 'lookalike.yml');
+    assert.ok(rules.includes('hardcoded-hostname'), JSON.stringify(rules));
   });
 });
 

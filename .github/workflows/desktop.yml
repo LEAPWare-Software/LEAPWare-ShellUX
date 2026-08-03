@@ -1,0 +1,121 @@
+name: Desktop
+
+# ---------------------------------------------------------------------------
+# TAGS AND MANUAL DISPATCH ONLY. NOT EVERY PULL REQUEST, AND THE REASON IS THE
+# BILL.
+#
+# ADR-0002 already records the arithmetic for `ci.yml`: on a private repository
+# GitHub bills Linux at 1x, Windows at 2x and macOS at 10x. This workflow is the
+# expensive pair with no Linux leg to average them down, and packaging is slower
+# than `verify` — an Electron download, an asar pack, an NSIS build and a dmg.
+# Running it on every pull request would cost roughly as much as the whole of CI
+# to answer a question that changes only when the packaging configuration or the
+# main process changes.
+#
+# What is given up by that choice, stated rather than glossed: a pull request
+# that breaks packaging is not caught until a tag. The mitigations are that
+# `verify` still typechecks `electron/` on all three legs, and that
+# `workflow_dispatch` makes running this lane against a branch a two-click
+# operation for whoever is changing packaging. Moving it to `pull_request` with a
+# path filter is the obvious next step if that trade stops holding.
+#
+# This lane NEVER publishes. `package:desktop` passes `--publish never`, so the
+# artifacts land on the workflow run and go to the update feed only when somebody
+# uploads them deliberately, following docs/RELEASE.md.
+# ---------------------------------------------------------------------------
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+# Least privilege, exactly as ci.yml. This lane reads the repository and writes
+# an artifact to its own run; it needs no other scope, and in particular it needs
+# no release or package write, because it does not publish.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    # The platform is chosen HERE and nowhere else. There is no `--win` or `--mac`
+    # anywhere in this repository: `electron-builder` with no platform flag builds
+    # for the machine it is running on, so `npm run verify:desktop` is one portable
+    # command and the matrix is what decides which machine that is. That is the
+    # rule `platform-only-invocation` in scripts/check-portability.mjs now
+    # enforces, and this file is what it looks like when it is followed.
+    #
+    # No Linux leg: electron-builder.yml configures no Linux target, because
+    # nothing in this project has ever been launched on a Linux desktop.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # -------------------------------------------------------------------
+      # THE SIGNING ENVIRONMENT, DECLARED IN FULL AND WORKING WHEN EMPTY.
+      #
+      # Every name here is declared in docs/signing.md with its purpose and its
+      # behaviour when unset, which is what ADR-0002 clause 6 requires. An
+      # unconfigured repository has none of these secrets, every value expands to
+      # the empty string, and this step produces an installable UNSIGNED artifact
+      # rather than failing — the same result a contributor gets on a laptop.
+      #
+      # `CSC_IDENTITY_AUTO_DISCOVERY: 'false'` is the one value that is set
+      # rather than passed through, and it is the fix for the failure mode
+      # docs/signing.md section 2 names: without it, electron-builder searches the
+      # login keychain on macOS, so the same command produces a signed build on a
+      # machine that happens to hold a Developer ID and an unsigned one on a
+      # machine that does not. That is a build whose output is decided by the
+      # machine, which is the exact dependency ADR-0002 exists to forbid.
+      # `CSC_LINK` becomes the only route in.
+      # -------------------------------------------------------------------
+      - name: Build and package
+        run: npm run verify:desktop
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # The installers and the feed manifests, together. `latest.yml` and
+      # `latest-mac.yml` are what electron-updater reads to decide whether an
+      # update exists, so an upload that carried only the installers would be an
+      # upload nobody could update from.
+      #
+      # `if-no-files-found: error`, because the failure this guards against is a
+      # green run that produced nothing — an artifact name that stopped matching
+      # after an `artifactName` change would otherwise pass silently.
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14

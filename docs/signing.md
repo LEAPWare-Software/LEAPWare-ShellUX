@@ -1,10 +1,18 @@
 # Desktop build, code signing, and every environment variable involved
 
-**Status:** declaration only. Nothing described here is implemented. The desktop
-packaging lane is Phase 9 of `docs/plans/native-host-pivot.md`, and **the Phase 1
-runtime reads none of these names** — `electron/main/index.ts` reads no
-environment variable at all, by the same argument `vite.config.ts` uses for its
-dev-server middleware.
+**Status:** the packaging lane exists. `electron-builder.yml`,
+`npm run verify:desktop` and `.github/workflows/desktop.yml` are Phase 9 of
+`docs/plans/native-host-pivot.md`, and they are what reads the names below.
+**Nothing has been signed and no certificate has been sought.** The one build this
+document has been checked against produced an unsigned Windows installer with none
+of these variables set, which is the working default section 1 promises, and
+`Get-AuthenticodeSignature` was used to confirm the artifact was unsigned rather
+than the absence of a warning in the build log being taken for it.
+
+**The runtime still reads none of these names.** `electron/main/index.ts` and
+`electron/main/updater.ts` read no environment variable at all; `app.isPackaged`
+is a property of the application's own layout and is not one. Every name here is
+read by the *build*.
 
 This file exists because ADR-0002 clause 6 forbids "an environment assumption
 that is not declared and defaulted", and because `.gitignore` records the
@@ -57,10 +65,34 @@ Two things follow, and both are load-bearing:
 Developer ID certificate installed can produce a signed build without anyone
 having set `CSC_LINK`, and a machine without one produces an unsigned build from
 the same command — the same command, two results, decided by the machine. That is
-the exact shape of dependency ADR-0002 exists to forbid, so the packaging
-configuration should set the discovery off explicitly and let `CSC_LINK` be the
-only route in. Recorded here rather than in the table because it is a setting the
-build makes, not a value an operator supplies.
+the exact shape of dependency ADR-0002 exists to forbid, so the discovery is
+switched off explicitly and `CSC_LINK` is the only route in.
+
+> **CORRECTION, found while implementing Phase 9.** This paragraph used to say
+> that *the packaging configuration* should set the discovery off. It cannot:
+> `CSC_IDENTITY_AUTO_DISCOVERY` is read from `process.env` by
+> `app-builder-lib/out/util/flags.js` and has no `electron-builder.yml` key at
+> all. So `.github/workflows/desktop.yml` sets it in the `env` block of the
+> packaging step, and `electron-builder.yml` cannot. The obligation is unchanged
+> and the place it is discharged has moved; a **local** signed build on a Mac has
+> to set it in the shell that invokes the build, which is now the honest
+> instruction rather than a promise the config was going to keep.
+
+**Seven more names `electron-builder` reads, none of which this project sets.**
+They are recorded because clause 6 of ADR-0002 is about *undeclared* environment
+assumptions, and a name the build tool will act on if it finds it is an
+assumption whether or not this project chose it.
+`APPLE_API_KEY`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` are the App Store
+Connect API alternative to `APPLE_ID`; `APPLE_KEYCHAIN` and
+`APPLE_KEYCHAIN_PROFILE` are the stored-credential alternative. `notarizeIfProvided`
+in `app-builder-lib` tries them in that order and skips notarization with a
+warning when it finds none, which is exactly the working default the three
+`APPLE_*` rows above describe. **Setting a partial set of any group is the one way
+to make the build fail rather than skip** — the tool throws when it finds one
+member of a group and not the others, deliberately, because a half-configured
+notarization is a release that silently ships un-notarized.
+`WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` are Windows-specific overrides for
+`CSC_LINK` and `CSC_KEY_PASSWORD`, consulted first on Windows and unset here.
 
 **None of these belong in a tracked file.** `.gitignore` already ignores `.env`
 and `.env.*`, and it says in as many words that those patterns are a guard
@@ -139,9 +171,20 @@ is the argument made good. This one cannot be, and it is worth saying why rather
 than leaving the asymmetry to be noticed.
 
 A checker can verify that a name appearing in a build configuration also appears
-in a table here, and that is a real check worth adding when the packaging
-configuration exists. What it cannot verify is the column that makes the
-declaration compliant: whether the default is *working*. Determining that means
+in a table here, and this file used to say that was worth adding once the
+packaging configuration existed. It now exists, and the check turns out to have
+nothing to read: **`electron-builder.yml` names no environment variable at all.**
+Every one of these is read by `electron-builder` itself, from its own source, so
+a scan of tracked configuration would find zero names and report a clean result
+forever — which is worse than no check, because a vacuous pass looks like
+evidence. The names that *are* written down in this repository are in the `env`
+block of `.github/workflows/desktop.yml`, and a checker over that file would
+verify one workflow against this table and would not see a local build at all.
+Recorded as a rejected check with its reason rather than left as an unkept
+promise.
+
+What no checker can verify is the column that makes the declaration compliant:
+whether the default is *working*. Determining that means
 running the build with the variable unset and seeing whether an artifact comes
 out, on a machine with the platform SDK present, which is the packaging lane and
 not a lint. And the SmartScreen observation in section 4 is a human looking at a

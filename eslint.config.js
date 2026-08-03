@@ -13,7 +13,13 @@ export default tseslint.config(
   { ignores: ['dist', 'dist-electron', 'coverage', 'node_modules'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
-    files: ['**/*.{ts,tsx}'],
+    // `cts` is in this glob for one file and one reason. A sandboxed Electron
+    // preload is loaded into a CommonJS realm, and this repository's root
+    // `package.json` declares `"type": "module"`, so the preload's source carries
+    // the `.cts` extension to force a `.cjs` emit — see electron/preload/index.cts.
+    // A glob that stopped at `ts` would have let the one file with a hand-written
+    // module-format constraint be the one file the linter never read.
+    files: ['**/*.{ts,tsx,cts}'],
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
@@ -64,9 +70,35 @@ export default tseslint.config(
   // rules from the block above are inherited and are not restated here.
   // -------------------------------------------------------------------------
   {
-    files: ['electron/**/*.ts'],
+    files: ['electron/**/*.{ts,cts}'],
     languageOptions: {
       globals: globals.node,
+    },
+  },
+  // -------------------------------------------------------------------------
+  // The sandboxed preload, and the second exception this config makes.
+  //
+  // `@typescript-eslint/no-require-imports` exists to keep CommonJS imports out
+  // of ES modules, and it is right about every other file in this repository.
+  // This one file is a CommonJS module BY REQUIREMENT and not by accident: a
+  // sandboxed Electron preload is loaded into a CommonJS realm, `sandbox: true`
+  // is not negotiable, and `verbatimModuleSyntax` forbids ESM `import ... from`
+  // syntax in a CommonJS file precisely so that a file cannot be written in one
+  // shape and emitted in another. `import electron = require('electron')` is the
+  // only spelling that satisfies all three, so the rule and the constraint are in
+  // direct conflict and the constraint wins.
+  //
+  // Scoped to `*.cts` under `electron/preload/`, which is the one place the
+  // constraint applies. A `require` anywhere else - including elsewhere under
+  // `electron/` - still fails the build. Stated in config rather than as an
+  // inline `eslint-disable`, for the reason the block below gives at length:
+  // this repository has zero inline suppressions and that is a defended
+  // invariant.
+  // -------------------------------------------------------------------------
+  {
+    files: ['electron/preload/**/*.cts'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
   // -------------------------------------------------------------------------

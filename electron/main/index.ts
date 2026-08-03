@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, nativeTheme, net, protocol, shell } from 'electron';
+import { initializeUpdater } from './updater.js';
 import { release } from 'node:os';
 import { join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -251,8 +252,18 @@ const MAIN_DIRECTORY = fileURLToPath(new URL('.', import.meta.url));
 /** Root of the built renderer. Every served path must normalise inside this. */
 const RENDERER_ROOT = join(MAIN_DIRECTORY, '..', '..', 'dist');
 
-/** The preload of decision 1. Deliberately inert; see electron/preload/index.ts. */
-const PRELOAD_SCRIPT = join(MAIN_DIRECTORY, '..', 'preload', 'index.js');
+/**
+ * The preload of decision 1.
+ *
+ * `.cjs`, not `.js`, and the extension is the whole point. A sandboxed preload is
+ * loaded into a CommonJS realm, the root `package.json` declares
+ * `"type": "module"`, and a `.js` emitted anywhere in this tree is therefore an ES
+ * module. The source is `electron/preload/index.cts`, which compiles to
+ * `index.cjs` — the one file in the repository whose extension is a constraint
+ * rather than a convention. It stopped being inert in Phase 9; see that file for
+ * the one name it now exposes.
+ */
+const PRELOAD_SCRIPT = join(MAIN_DIRECTORY, '..', 'preload', 'index.cjs');
 
 /**
  * Registered before the application is ready, which is the only time this call
@@ -513,6 +524,9 @@ app
   .whenReady()
   .then(() => {
     registerRendererProtocol();
+    // Before the first window, so that the `browser-window-created` listener it
+    // installs sees that window rather than only the ones opened afterwards.
+    initializeUpdater();
     openShellWindow();
 
     // Decision 8. macOS keeps the process alive with no windows, and the dock
