@@ -279,16 +279,37 @@ repository *claims* otherwise is genuinely valuable — see below.
 
 ## Reporting a vulnerability
 
-**Report privately, through GitHub Security Advisories.** On this repository:
-Security tab, then "Report a vulnerability". That opens a private advisory
-visible only to you and the maintainers.
+**Report privately, by email, to `leapware@outlook.com`.** That is the route, it is
+monitored, and it is the only one this project asks you to use.
+
+Encrypted mail is welcome and no key is published, so if you need one, say so in a
+first message containing no detail and one will be arranged. **A report is never
+refused for arriving in plain text** — a finding that reaches us unencrypted is
+better than a finding that does not reach us.
+
+> **This section used to be circular, and it is worth saying so rather than quietly
+> replacing it.** It sent reporters to the Security tab's "Report a vulnerability"
+> button. **That button does not exist here.** Private vulnerability reporting is a
+> **public-repository** feature; this repository is private, `security_and_analysis`
+> is `null` and the advisories endpoint returns `404`. The fallback sentence then
+> said to use "the private channel you *do* have" — and never named one, anywhere in
+> this file or any other.
+>
+> So the honest description of the previous state is that **there was no way to
+> report a vulnerability at all**, and the instructions read as though there were.
+> Tracked as issue #75 and closed by naming the address above. Fixed 2026-08-03,
+> before any release rather than after one.
 
 **Do not open a public issue for a suspected vulnerability.** Not a bug report,
 not a discussion, not a pull request that fixes it with an explanatory title. A
 public issue publishes the finding before there is anything to update to, and on
-a project with no release there is nothing to update to. If private reporting is
-unavailable to you for any reason, say so through the private channel you *do*
-have rather than working around it in public.
+a project with no release there is nothing to update to.
+
+**What you can expect back.** An acknowledgement that a human has read it. This
+project makes **no** response-time commitment, and stating one it has never measured
+would be exactly the kind of unevidenced claim `CLAUDE.md` rule 2 and ADR-0001
+Amendment G exist to prevent. It is a pre-release project maintained by a small
+team; the address is real and monitored, and that is the whole of the promise.
 
 Please include, in as much of this form as you can manage:
 
