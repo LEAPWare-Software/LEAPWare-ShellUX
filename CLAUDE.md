@@ -281,6 +281,9 @@ Citation markers the checker recognises: `*Tests:*`, `*Test:*`, and `pinned by`.
 | Writing an extension | `DEVELOPER.md` |
 | The five-item work breakdown | `.github/ISSUES_MANIFEST.md` |
 | What has actually been fixed, and what made each defect possible | `CHANGELOG.md` |
+| Who this shell is for, what it must not look like, and what accessibility is committed to | `PRODUCT.md` |
+| What the redesign is, in words, before any pixel exists | `docs/design/SHAPE-BRIEF.md` |
+| The audit of the current UI that the redesign started from — an input, unreviewed | `docs/design/REDESIGN-SPEC.md` |
 
 ---
 

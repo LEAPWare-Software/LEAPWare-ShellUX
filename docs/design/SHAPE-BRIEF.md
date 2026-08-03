@@ -264,7 +264,7 @@ The committed spec says it has five entries and that three are in the change lis
 | Marker | State | Under this brief |
 |---|---|---|
 | `leading-5` | no extension active (`EmptyPane`) | **Breaks.** Empty states are rewritten. Needs a replacement marker chosen in the same commit. |
-| `pl-2` | extension active (tree child indent) | **Kept.** Tree depth gets a guide rule at the existing indent rather than a deeper one. Chosen partly for this. |
+| `pl-2` | extension active (tree child indent) | **Undecided, and deliberately not decided here.** The indent value is a gate-4 judgement made looking at a drawn tree, not a value a test fixture gets to pick. If it moves, `border-l` on the tree's guide rule is the replacement marker — it is unique to the tree and appears in no other state. |
 | `w-40` | utility drawer open | Untouched |
 | `h-8` | navigation collapsed | Untouched. The 32px square stays 32px. |
 | `w-44` | overflow menu open | Untouched |

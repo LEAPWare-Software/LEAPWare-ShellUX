@@ -1572,8 +1572,14 @@ These apply to every issue above and are not restated per ticket.
   unmet, failing the job. The threshold applies per module as each module lands.
   There is no project-wide coverage figure to report yet, and none should be
   claimed.
-- **Accessibility.** WCAG 2.2 **AA** is the target. See `README.md` for the
-  known conflicts that keep AAA out of scope.
+- **Accessibility.** **No stated conformance target**, decided 2026-08-03 and
+  recorded in `PRODUCT.md`. This line said "WCAG 2.2 **AA** is the target" and
+  the target is withdrawn, not met — a target nothing commits to is a claim
+  without a test. Three floors survive because each is gated rather than
+  asserted: contrast pairs (`design/check-contrast.mjs`), visible focus measured
+  on painted pixels (`e2e/focus-visibility.spec.ts`), and colour never being the
+  only channel. See `README.md` § Accessibility for what is explicitly not
+  committed to.
 - **Untrusted plugin content.** Any surface that renders extension-supplied
   strings **must** render them as text nodes, and `dangerouslySetInnerHTML` is
   prohibited in extension-content paths. The gate for each render site is that the
