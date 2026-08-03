@@ -189,6 +189,22 @@ export interface ShellStateStore {
    * another renderer does not run before the writing statement returns, and
    * cannot throw into it".
    * ==========================================================================
+   *
+   * **`listener` itself is validated, and it did not used to be.** Everything
+   * above is about what a listener may DO once registered — all of it still
+   * true, none of it closable. This is the narrower point underneath it: the
+   * ARGUMENT must be a function. It is checked, because a `Set` accepts
+   * `undefined` happily and `notify` then calls it, which raised a raw
+   * `TypeError` into an unrelated writer's frame and left the bad entry in the
+   * set so that every subsequent write in the shell threw. That was one
+   * mistyped argument away and it is now `INVALID_FIELD` in the frame that made
+   * the mistake. *Tests:* `src/core/__tests__/subscribe.test.tsx` — "refuses a
+   * listener that is not a function, in the frame that made the mistake" and
+   * "leaves the store writable after refusing a non-function listener".
+   *
+   * @param listener Called after every change that really changed something.
+   * @throws {ShellUXError} `INVALID_FIELD` when `listener` is not a function.
+   *   Nothing is registered and the store is left exactly as it was.
    */
   subscribe(listener: () => void): () => void;
   /**
@@ -1045,6 +1061,19 @@ const MAX_NOTIFY_DEPTH = 16;
  * methods, cannot replace one, and cannot put an illegal value through one") and by
  * `capability.test.tsx` ("the store handed out by useShellStore is frozen").
  *
+ * **"Every one of the twelve" was false by one member until #83, and the member it
+ * was false about was `subscribe`.** It took a listener, added it to a `Set`
+ * unchecked, and a stored `undefined` then threw a raw `TypeError` out of the next
+ * unrelated write and every write after it. The premise is repaired rather than
+ * narrowed — `subscribe` validates now, so this sentence and `SECURITY.md`'s
+ * "Integrity controls — unconditional" are both true as written and neither needed
+ * softening. Per ADR-0001 Amendment G the repair is named here rather than only in
+ * the member's own docblock: `subscribe.test.tsx` ("refuses a listener that is not
+ * a function, in the frame that made the mistake" and "leaves the store writable
+ * after refusing a non-function listener"). **The second title is the load-bearing
+ * one** — the first only proves a bad call is refused, the second proves the shell
+ * is still writable afterwards, which is the wedge the guard exists to prevent.
+ *
  * **That is the whole of it, and a wider clause used to be appended here.** The
  * sentence went on: "and no caller can intercept, suppress or forge the writes and
  * reads another holder makes through it." **False, and the freeze is irrelevant to
@@ -1126,6 +1155,33 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   }
 
   function subscribe(listener: () => void): () => void {
+    // Validated for the same reason every other member is, and thrown HERE
+    // rather than filtered at notify time on purpose. `listeners` is a `Set`,
+    // so an unchecked `subscribe(undefined)` succeeds and stores `undefined`;
+    // `notify` then calls it, `undefined()` raises a raw `TypeError` — not a
+    // `ShellUXError` — into whichever unrelated holder happened to write next,
+    // every listener ordered after it is starved, and the bad entry stays in
+    // the `Set` because the only thing that removes it is the unsubscribe
+    // closure returned to the caller who is, by hypothesis, not going to call
+    // it. From that point every write in the shell throws. One mistyped
+    // argument wedges the shell, and the realistic trigger is not an attacker
+    // but `subscribe(cb())` where `cb()` returns nothing.
+    //
+    // Throwing at the call site puts the error in the frame of the code that
+    // made the mistake, which is the entire benefit: filtering at notify time
+    // would leave the author's typo surfacing in someone else's stack.
+    //
+    // It also makes the banner above true. That paragraph says every member
+    // taking an argument validates it, `SECURITY.md` repeats it under
+    // "Integrity controls — unconditional", and `subscribe` was the one member
+    // that did not. See #83.
+    if (typeof listener !== 'function') {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `subscribe: "listener" must be a function; received ${describeUntrusted(listener)}.`,
+        'listener',
+      );
+    }
     listeners.add(listener);
     return (): void => {
       listeners.delete(listener);

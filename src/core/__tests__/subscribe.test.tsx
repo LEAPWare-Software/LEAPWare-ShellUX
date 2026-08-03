@@ -350,3 +350,87 @@ describe('a listener re-publishes the foreground and the host disagrees with the
     unsubscribe();
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* 6. The ARGUMENT, which is the one thing here that WAS a defect               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * ============================================================================
+ * EVERYTHING ABOVE IS A LIMIT. THIS IS THE BUG THAT WAS HIDING UNDER IT.
+ * ============================================================================
+ * The five sections above pin what a listener may DO once registered, and none
+ * of it is closable. This section is the narrower point underneath: whether the
+ * ARGUMENT is a function at all.
+ *
+ * It was not checked. `listeners` is a `Set`, so `subscribe(undefined)`
+ * succeeded and stored `undefined`, and the wedge that followed is worse than
+ * the throw itself:
+ *
+ *   - `notify` calls it, and `undefined()` raises a raw `TypeError` — into
+ *     whichever unrelated holder happened to write next, not into the caller
+ *     that made the mistake;
+ *   - every listener ordered after it is starved, which by section 3 above
+ *     includes a victim pane's `useSyncExternalStore` subscription;
+ *   - **and it does not clear.** The only thing that removes the entry is the
+ *     unsubscribe closure returned to the caller who, by hypothesis, dropped it.
+ *     So EVERY subsequent write in the shell throws — every `patchContext`,
+ *     every `setBadgeCount`, every host foreground publication.
+ *
+ * The realistic trigger is not an attacker. It is
+ * `useEffect(() => store.subscribe(cb()), …)` where `cb()` returns nothing.
+ *
+ * The second test below is the one that matters. The first only asserts that a
+ * bad call is refused; the second asserts the shell is still writable
+ * afterwards, which is the wedge this guard exists to prevent. Deleting the
+ * guard turns the second one red, and that is the property to check before
+ * trusting either of them.
+ *
+ * See #83. Fixing this is also what makes the store banner in `ShellAPI.ts` and
+ * `SECURITY.md`'s "Integrity controls — unconditional" true; both said every
+ * member validates its argument while `subscribe` did not.
+ * ============================================================================
+ */
+describe('subscribe validates its argument, which is the half of this file that is not a limit', () => {
+  it('refuses a listener that is not a function, in the frame that made the mistake', () => {
+    const store = createShellStateStore();
+
+    for (const bad of [undefined, null, {}, 'listener', 42, []]) {
+      let caught: unknown;
+      try {
+        // The cast is the point of the test: a plain-JavaScript caller has no
+        // compiler, and this store is reachable from plug-in code through the
+        // public `useShellStore()`.
+        store.subscribe(bad as unknown as () => void);
+      } catch (error: unknown) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(ShellUXError);
+      expect((caught as ShellUXError).code).toBe('INVALID_FIELD');
+      expect((caught as ShellUXError).field).toBe('listener');
+    }
+  });
+
+  it('leaves the store writable after refusing a non-function listener', () => {
+    const store = createShellStateStore();
+
+    // A real listener registered FIRST, so the assertion below proves the good
+    // one still runs rather than merely that nothing threw.
+    const seen: (string | null)[] = [];
+    store.subscribe(() => {
+      seen.push(store.getContext().selectedItemId);
+    });
+
+    expect(() => store.subscribe(undefined as unknown as () => void)).toThrow(ShellUXError);
+
+    // The wedge, had the bad entry been stored: this write would raise a raw
+    // TypeError out of patchContext and every write after it would too.
+    expect(() => store.patchContext({ selectedItemId: 'msg-1' })).not.toThrow();
+    expect(store.getContext().selectedItemId).toBe('msg-1');
+    expect(seen).toEqual(['msg-1']);
+
+    // And the store is not one-shot-poisoned: a second write still lands.
+    store.patchContext({ selectedItemId: 'msg-2' });
+    expect(seen).toEqual(['msg-1', 'msg-2']);
+  });
+});
