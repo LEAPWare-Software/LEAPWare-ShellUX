@@ -34,11 +34,21 @@ The rules:
 **Rewritten 2026-08-03.** Re-derive every SHA and every count below before trusting
 it — see §0.
 
-### The pivot is BUILT. Eight of nine phases are on `native-host-phase-0`, now pushed, as PR #100.
+### THE PIVOT IS BUILT AND MERGED. All nine phases are on `main`.
 
-18 commits, 166 files, **+36,227 / −2,783**. `origin/main` is at `0ed78e3`; the
-branch is 18 ahead and 0 behind. **PR #100 is open.** Nothing mechanical requires
-review of it — see §5, branch protection is 403 on this plan.
+`origin/main` is at **`21cf3e0`**, the merge of PR #101, which followed PR #100.
+Nothing is outstanding on a branch. **Everything below is on `main` and green
+there**: `npm run verify` exit 0 across ten stages, 1,733 tests in 72 files, 100%
+statements/branches/functions/lines, 0 vulnerabilities in **both** trees, 230
+tracked files at 0 portability violations, 51 Playwright.
+
+Both PRs passed all five CI checks — three OS `Verify` legs, the browser lane and
+the new declared-Node-floor job. Neither was reviewed by a person; nothing
+mechanical requires it, and that is §5 rather than an oversight.
+
+**Two issues are open and both are decisions rather than work: #102 (the topology
+spike's NVDA arm) and #103 (the update feed).** Read those two before starting
+anything else.
 
 | Commit | What landed | Plan item |
 |---|---|---|
@@ -103,12 +113,14 @@ and main is a relay. Amendment O records two routes and takes neither.
 
 ### What is NOT done, and why each one is blocked
 
-- **The topology spike's human arms.** `docs/adr/0005-pane-topology.md` stays
-  **`Proposed`**. `spike/topology/` holds a throwaway two-view app and every
-  machine-observable measurement (`baf3399`); **arm B needs NVDA on Windows 11 and
-  is what decides the ADR** — the B1–B5 script is in `spike/topology/README.md` and
-  takes about five minutes. Arm A needs `inspect.exe`; arm C needs a Mac.
-- **The update feed host was INVENTED, and it has been removed. Read this one.**
+- **Tracked as GitHub issue #102.** **The topology spike's human arms.**
+  `docs/adr/0005-pane-topology.md` stays **`Proposed`**. `spike/topology/` holds a
+  throwaway two-view app and every machine-observable measurement (`baf3399`);
+  **arm B needs NVDA on Windows 11 and is what decides the ADR** — the B1–B5 script
+  is in `spike/topology/README.md` and takes about five minutes. Arm A needs
+  `inspect.exe`; arm C needs a Mac.
+- **Tracked as GitHub issue #103.** **The update feed host was INVENTED, and it has
+  been removed. Read this one.**
   Phase 9 shipped `electron-builder.yml` pointing at `updates.leapware.dev`. That
   host was written to look plausible under the project's brand; **this organisation
   does not own `leapware.dev`.** The apex resolves to a netblock belonging to
