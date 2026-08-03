@@ -1196,9 +1196,32 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
  * These badge values are what the REGISTRY stores. Everything after registration
  * goes through `shell.setBadgeCount` from the interval in pane 2.
  */
+/**
+ * The registered tree, built from the two tables above.
+ *
+ * **`icon` is copied through, and for eight months it was not.** #19 fixed the
+ * collapsed 48px track host-side — `NavigationNode.icon` exists, `ShellLayout`
+ * resolves it through `SHELL_ICONS` and falls back to the monogram only when a
+ * node declares nothing — and this builder then dropped the field on the floor.
+ * So `TOP_LEVEL_CATEGORIES` declared `box`, `layers` and `droplet`, the docblock
+ * above them explained why, and all three were dead data: the registered nodes
+ * carried `icon: undefined`, every root took the monogram, and the collapsed rail
+ * read **C A C** — the exact string #19 is named after and that three documents
+ * record as fixed. See #81.
+ *
+ * **Leaves declare no icon deliberately, and that is a decision rather than the
+ * same omission twice.** A leaf is only ever drawn in the expanded tree, beside
+ * its own label and indented under a root that already carries a glyph; the
+ * collapsed track shows roots only, which is where an icon is doing the work of
+ * a label rather than decorating one. Fourteen leaves would need fourteen keys
+ * from a host table of fifteen glyphs, and the result would be decoration that
+ * makes the tree noisier without disambiguating anything. If the collapsed track
+ * ever renders leaves, this decision is the one to revisit.
+ */
 const NAVIGATION_TREE: readonly NavigationNode[] = TOP_LEVEL_CATEGORIES.map((category) => ({
   id: category.id,
   label: category.label,
+  icon: category.icon,
   badgeCount: lowStockCount(INITIAL_STATE, category.id),
   children: LEAF_CATEGORIES.filter((leaf) => leaf.parentId === category.id).map((leaf) => ({
     id: leaf.id,
