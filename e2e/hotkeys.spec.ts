@@ -43,8 +43,26 @@ test.describe('hotkey dispatch in a real browser', () => {
     // Two independent observables, both rendered by the host rather than by the
     // plug-in: the detail pane shows the new draft, and the navigation badge the
     // extension wrote through IShellAPI went up by one.
+    //
+    // THE HEADING, BY ROLE, AND NOT A TEXT MATCH ON THE PANE. A text locator here
+    // was a race the test never declared, and CI lost it: `MailPlugin` resolves a
+    // message body `BODY_FETCH_LATENCY_MS` (120ms) after the heading renders, and
+    // the generated body QUOTES THE SUBJECT — `You wrote about "Untitled draft 1"
+    // at Now.` So before the fetch resolves the pane holds one match and the
+    // assertion passes; after it resolves the pane holds two and Playwright's
+    // strict mode fails the locator outright. The test was green only while it
+    // won a 120ms footrace against a latency this repository chose deliberately,
+    // and it lost that race on a loaded runner.
+    //
+    // Asserting the heading by role is unambiguous whether or not the body has
+    // arrived, which is the right assertion anyway: this case is about the CHORD
+    // firing and the host rendering the result, not about body-fetch timing.
+    // That timing has its own coverage — see the rapid-switch cases that exist
+    // precisely because 120ms is longer than a test needs to switch extensions.
     await expect(
-      page.getByRole('region', { name: 'Detail' }).getByText('Untitled draft 1'),
+      page
+        .getByRole('region', { name: 'Detail' })
+        .getByRole('heading', { name: 'Untitled draft 1', exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Drafts badge 3' })).toBeVisible();
   });
