@@ -31,53 +31,65 @@ The rules:
 
 ## 1. Currently in flight
 
-**Rewritten 2026-08-02**, against the working tree, the branch list and the commit
-log — not against the previous contents of this section. It used to describe PR #71
-and the demo routing as the live work; neither is. **Re-derive every SHA and every
-count below before trusting it — see §0.**
+**Rewritten 2026-08-03.** Re-derive every SHA and every count below before trusting
+it — see §0.
 
-### The native-host pivot IS the live work. Phases 0–3 have landed on `native-host-phase-0`.
+### The pivot is BUILT. Eight of nine phases are on `native-host-phase-0`, now pushed, as PR #100.
 
-That branch is the checked-out one, it is **10 commits ahead of `origin/main` and 0
-behind**, and **none of it is merged or even opened as a PR.** `origin/main` is at
-`0ed78e3` — the merge of PR #72 — and local `main` is at the same commit. On the
-branch, newest first:
+18 commits, 166 files, **+36,227 / −2,783**. `origin/main` is at `0ed78e3`; the
+branch is 18 ahead and 0 behind. **PR #100 is open.** Nothing mechanical requires
+review of it — see §5, branch protection is 403 on this plan.
 
 | Commit | What landed | Plan item |
 |---|---|---|
+| `a9a7a69` | packaging, signing configuration, auto-update from a feed | **Phase 9** |
+| `5da912f` | visualization in all three panes; pane 3 takes input | **Phase 8** |
+| `3745548` | the cross-process state design, proven in-process; topology ADR | **Phase 6** |
+| `8127029` | pane-1 metrics, structured payload channel, live dimensions, theming | **Phase 5** |
+| `abf25bf` | vitest 4 / vite 8 — both CVSS 9.8 criticals gone; the Node floor | §6.2 |
+| `673d75d` | the desktop host wired up and launched | **Phase 1**, closes **#39** |
+| `c082e9a` | the ribbon deleted for one command registry and four surfaces | **Phase 4** |
+| `cc756b0` | claims that outran their evidence, corrected | — |
 | `7d87867` | every colour in the shell is a token | **Phase 3** |
-| `c02456b` | the two confirmed-vacuous tests now assert what they are named for | §8 item 8 |
+| `c02456b` | the two confirmed-vacuous tests now assert what they name | §8 item 8 |
 | `72ff274` | the collapse round trip and the false sentinel no longer destroy layouts | **Phase 0b** |
-| `719c818` | a root error boundary, and the `when`-expression evaluator | §8 item 7, plus Phase 4 groundwork |
+| `719c818` | a root error boundary, and the `when`-expression evaluator | §8 item 7 |
 | `e6266f9` | the generative token pipeline | **Phase 2** |
-| `971348d` | the Phase 1 native-host source — **unwired** | **Phase 1, partial** |
+| `971348d` | the Phase 1 native-host source — unwired at the time | **Phase 1, partial** |
 | `57a7554` | the Dependabot triage | §8 item 9 |
 | `b4da5f2` | the `patternFor` trailing-placeholder hole is closed | **Phase 0c** |
 | `deaf83c` | the two host constants are frozen | §6.2 |
 | `863685e` | the working demo is served at `/` | **Phase 0a** |
 
-**Phase 1 is the entry to read carefully, because its name overstates it.**
-`electron/main/index.ts`, `electron/preload/index.ts` and `electron/tsconfig.json`
-exist and **nothing runs them**: `package.json` declares no `electron` dependency,
-no packaging script and no native build. So **issue #39 — "nobody has ever run the
-app", the sole tracked Blocker — has NOT closed.** The plan says it closes when a
-native window exists on day one. There is no window yet.
+**Gate state at `a9a7a69`:** `npm run verify` exit 0 across ten stages — 1,667 tests
+in 66 files, 100% statements/branches/functions/lines, 0 vulnerabilities in **both**
+trees, 204 tracked files at 0 portability violations — plus 51 Playwright.
 
-### Phase 4 is in flight RIGHT NOW, in this shared working tree, owned by another agent.
+**Three things were observed, not asserted.** A native window was launched and
+screenshotted. `verify:desktop` produced a 105.6 MB NSIS installer and a `latest.yml`
+carrying a SHA-512 over it. The packaged app was probed over CDP: it read its baked
+`app-update.yml`, contacted the feed, returned `net::ERR_NAME_NOT_RESOLVED`, and
+`Ctrl+K` listed "Check for updates — last check failed" beside the host commands.
 
-**Do not edit `src/components/ui/RibbonToolbar.tsx` or `src/core/types.ts`.** They are
-being rewritten as you read this — `types.ts` alone is over 200 uncommitted lines
-ahead of `HEAD` — together with much of `src/core/` and `DEVELOPER.md`. Phase 4
-replaces the ribbon with **one command registry and four surfaces**, and **deletes
-`RibbonToolbar.tsx` at the end**. `src/core/commands/when.ts` is the piece of it that
-has already landed.
+### What is NOT done, and why each one is blocked
 
-The plan budgets Phase 4 as **a prose migration, not a file deletion**, and names it
-the largest unplanned-effort risk in the whole pivot: `types.ts`, `hotkeyDispatch.ts`,
-ADR-0001 Amendments H and J, `DEVELOPER.md` and `README.md` all cite the ribbon by
-name, and `check:citations` fails hard on every stale reference. Phase 0c landing
-first was the prerequisite for precisely this, and it now bites properly — the
-trailing-placeholder prefix match that used to let a near-miss through is closed.
+- **Phase 7, the pane process split.** Deliberately not built.
+  `docs/adr/0005-pane-topology.md` is **`Proposed`** with a four-arm spike named and
+  the outcome-to-decision mapping written *in advance*, so the result cannot be
+  rationalised afterwards. **Arm B needs NVDA on Windows and VoiceOver on macOS — no
+  agent can run a screen reader.** Building Phase 7 before the spike risks building
+  the wrong topology. Evidence so far leans **two-process**.
+- **The update feed host does not exist.** `https://updates.leapware.dev/shellux/` is
+  a placeholder, proven dead at runtime. It appears in exactly three places, two of
+  which are gates that fail loudly until it changes. Blocks the first release, not
+  development. See `docs/RELEASE.md` §1.
+- **Nothing is signed and no certificate was sought.** macOS packaging is configured
+  and never executed — unbuildable from Windows.
+- **An engines split-brain, until #100 merges.** PR #37 (jest-dom 7, which requires
+  Node ≥22) merged to `main`, while the `engines` raise to `^22.13.0 || >=24` landed
+  on this branch. So `main` right now advertises Node 20.19 while carrying a
+  dependency that refuses it, and **no CI leg catches it** because every workflow
+  reads `.nvmrc`, which is `24`. Merging #100 resolves it.
 
 **One working tree, one git writer — §1b, and it has already cost a commit on the
 wrong branch.** If you are resuming and the tree is dirty, the dirt is not yours.
