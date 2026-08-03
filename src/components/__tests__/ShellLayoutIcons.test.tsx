@@ -10,6 +10,7 @@ import { ShellHostProvider } from '../../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
 import { createHydrationEngine } from '../../core/services/HydrationEngine';
 import { makeBlueprint } from '../../core/__tests__/fixtures';
+import { DatabasePlugin } from '../../mocks/DatabasePlugin';
 import { ShellLayout } from '../layout/ShellLayout';
 import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
 
@@ -158,6 +159,87 @@ describe('ShellLayout — navigation icons in the collapsed track', () => {
     // Expanded, every row shows its full label and there is no 32px square to
     // fill, so the icon is a collapsed-track affordance and nothing wider.
     expect(screen.getByRole('button', { name: 'Known Icon' }).querySelector('svg')).toBeNull();
+  });
+});
+
+/**
+ * ============================================================================
+ * THE SAME REGRESSION, ASSERTED AGAINST THE EXTENSION IT IS NAMED AFTER
+ * ============================================================================
+ * Everything above renders `ICON_TREE`, a fixture defined in this file. That is
+ * the right way to assert the four host outcomes, and it is why this file's
+ * docblock could narrate the `DatabasePlugin` collision as the motivation while
+ * never importing `DatabasePlugin` — so the host proved it draws an icon when
+ * one is supplied, and nothing anywhere proved the extension supplied one.
+ *
+ * It did not. `TOP_LEVEL_CATEGORIES` declared `box`, `layers` and `droplet`; the
+ * builder that turns that table into `NavigationNode[]` copied `id`, `label`,
+ * `badgeCount` and `children` and dropped `icon`. So the registered roots
+ * carried `icon: undefined`, every one took the monogram, and the collapsed rail
+ * read **C A C** — while #19 was closed, `CHANGELOG.md` recorded the fix, and
+ * this file's own docblock described it in the past tense. See #81.
+ *
+ * The case below asserts against `DatabasePlugin.navigationTree` — the real
+ * registered data, not a copy of it. It is the assertion that has been missing
+ * since #19, and the property that stops it recurring: delete
+ * `icon: category.icon` from `DatabasePlugin`'s tree builder and this goes red
+ * while every fixture-based case above stays green.
+ *
+ * **It takes the real TREE and not the whole blueprint, and that is a measured
+ * decision rather than a shortcut.** Registering `DatabasePlugin` entire mounts
+ * its pane-2 and pane-3 views, which seed 280 inventory records and start a
+ * 200ms interval; the case passed in isolation and **timed out at 5s inside the
+ * full suite**, where it competes with 1,738 other tests on an 8GB machine.
+ * Raising the timeout would have bought a slow test that still proves nothing
+ * extra: every fact this case asserts lives in the navigation tree, which is
+ * exactly the object #81 says was built wrong. The views are covered by
+ * `IntegrationSuite.test.tsx`, which is where a 280-row mount belongs.
+ * ============================================================================
+ */
+describe('the collapsed rail of the extension issue #19 was named after', () => {
+  it('draws three distinguishable glyphs for Components, Assemblies and Consumables', async () => {
+    const user = userEvent.setup();
+    render(
+      <Harness blueprints={[makeBlueprint({ navigationTree: DatabasePlugin.navigationTree })]} />,
+    );
+    await user.click(await screen.findByRole('button', { name: 'Sample Extension' }));
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+
+    // Matched by prefix, not by equality: these three roots carry a badge, so
+    // the accessible name is "Components badge 35" and will move with the
+    // seeded stock. The fixture rows above have no badge, which is why they can
+    // be named exactly and these cannot.
+    const rootRow = (label: string): HTMLElement =>
+      screen.getByRole('button', { name: new RegExp(`^${label}\\b`) });
+
+    // Each root resolves to the host glyph its own table declares - not to the
+    // fallback, which is what a mistyped key would give, and not to nothing.
+    const pathsOfRow = (label: string): string[] =>
+      Array.from(rootRow(label).querySelectorAll('svg path')).map(
+        (path) => path.getAttribute('d') ?? '',
+      );
+
+    expect(pathsOfRow('Components')).toEqual(pathsOfGlyph(SHELL_ICONS.get('box')));
+    expect(pathsOfRow('Assemblies')).toEqual(pathsOfGlyph(SHELL_ICONS.get('layers')));
+    expect(pathsOfRow('Consumables')).toEqual(pathsOfGlyph(SHELL_ICONS.get('droplet')));
+
+    // The three are distinct from each other, which is the user-visible claim
+    // #19 makes and the one "C A C" violated. Asserting the keys alone would
+    // pass if the host published identical paths under all three.
+    const drawn = ['Components', 'Assemblies', 'Consumables'].map((label) =>
+      JSON.stringify(pathsOfRow(label)),
+    );
+    expect(new Set(drawn).size).toBe(3);
+
+    // And no row fell back to a letter. Two of these would have been "C".
+    // Every aria-hidden span in the row is checked rather than the first,
+    // because the badge is one of them and the monogram is not always first.
+    for (const label of ['Components', 'Assemblies', 'Consumables']) {
+      const hidden = Array.from(rootRow(label).querySelectorAll('[aria-hidden="true"]')).map(
+        (node) => node.textContent ?? '',
+      );
+      expect(hidden.some((text) => text.length === 1)).toBe(false);
+    }
   });
 });
 

@@ -1,8 +1,8 @@
 # HANDOFF — LEAPWare ShellUX
 
-Last updated 2026-08-01, after the second wave of audits. Read this before touching
-anything. Correct anything you find stale, but do not delete a finding without checking
-it.
+Last updated **2026-08-03**, by a session whose whole job was re-deriving §0's numbers
+after the pivot merged. Read this before touching anything. Correct anything you find
+stale, but do not delete a finding without checking it.
 
 ---
 
@@ -31,24 +31,70 @@ The rules:
 
 ## 1. Currently in flight
 
-**Rewritten 2026-08-03.** Re-derive every SHA and every count below before trusting
-it — see §0.
+**Rewritten 2026-08-03. Re-derived 2026-08-03 (later session) — the deltas from that
+re-derivation are folded in below and throughout §3, §6, §7, §8 and §12.** Re-derive
+every SHA and every count again before trusting it — see §0.
+
+### IN FLIGHT: `pre-65-prep`, six commits, unmerged
+
+**The one decision this branch is FOR.** The project's real open question is not
+technical: the shell is built, nobody has shipped it, and the only two extensions in
+existence are mocks this project wrote to test itself. **#65 — build one real
+first-party module against the contract, by someone who did not design it — is the
+cheapest test of whether this project should continue.** The owner has chosen to run
+that test and this branch is the preparation for it: it fixes the things that would
+make #65 measure the wrong thing, and **deliberately leaves the contract gaps open,
+because which of them actually bite is the experiment's output.**
+
+| Commit | What | Issue |
+|---|---|---|
+| `715f14f` | every count in this file re-derived after the pivot merged | — |
+| `33ce56e` | CI runs all ten `verify` stages; four had no leg anywhere | **#58** |
+| `67ac6c7` | `subscribe` validates its argument; one `undefined` wedged every later write | **#83** |
+| `e8c8137` | `DatabasePlugin` supplies the icons it declares — the C A C rail was still live | **#81** |
+| `0afd218` | three passages describing shipped code as unbuilt | **#90** |
+| `9cb2226` | a copyable example extension, registered and driven by a test | **#52**, partial |
+
+**Left open ON PURPOSE, and re-opening them early destroys the signal:** #17
+(lifecycle hooks), #16 (immutable nav tree), #80 (no way to clear a badge), #91
+(`VirtualizedList` selection), #57 (conformance kit), #28/#32/#68 (contract
+versioning). Each is a plausible thing #65's author will hit. **Fixing them first is
+deciding the gaps from inside, which is the one thing #65 exists not to do.** The
+deliverable of #65 is the author's friction log, not the module.
+
+**Not spent, deliberately:** no signing certificate, no paid GitHub plan, no feed
+host. All three would buy a release for a product with no proven consumer. The Tier 1
+release path in `docs/RELEASE.md` stays valid whenever it is wanted.
+
+**Two things found while doing the above, both worth more than the fixes:** #58 was
+**closed as `COMPLETED` while every stage it named still ran nowhere**, and
+`check:citations` **refused a commit** whose evidence cited `RibbonToolbar.test.tsx` —
+a file Phase 4 deleted. Both are the gates and the re-derivation rule working.
 
 ### THE PIVOT IS BUILT AND MERGED. All nine phases are on `main`.
 
-`origin/main` is at **`21cf3e0`**, the merge of PR #101, which followed PR #100.
-Nothing is outstanding on a branch. **Everything below is on `main` and green
-there**: `npm run verify` exit 0 across ten stages, 1,733 tests in 72 files, 100%
-statements/branches/functions/lines, 0 vulnerabilities in **both** trees, 230
-tracked files at 0 portability violations, 51 Playwright.
+`origin/main` is at **`1d2f8a5`**, a HANDOFF-only commit on top of **`21cf3e0`**, the
+merge of PR #101, which followed PR #100. Nothing is outstanding on a branch.
+**Everything below is on `main`**: `npm run verify` exit 0 across ten stages, 1,733
+tests in 72 files, 100% statements/branches/functions/lines, 0 vulnerabilities in
+**both** trees, 230 tracked files at 0 portability violations, 51 Playwright.
+
+**The counts were re-measured 2026-08-03** with `npx vitest list` and
+`npx playwright test --list`: **1,733 in 72 files** and **51 in 9 files**, both exact.
+`verify` chains **ten** stages, confirmed by reading `package.json` — `tokens:check`
+was added and §12's list of nine was written before it. `verify` itself was **not**
+re-run: `main` is docs-only on top of `21cf3e0`, and §11 records this machine
+OOM-killing coverage runs.
 
 Both PRs passed all five CI checks — three OS `Verify` legs, the browser lane and
 the new declared-Node-floor job. Neither was reviewed by a person; nothing
 mechanical requires it, and that is §5 rather than an oversight.
 
-**Two issues are open and both are decisions rather than work: #102 (the topology
-spike's NVDA arm) and #103 (the update feed).** Read those two before starting
-anything else.
+**#102 (the topology spike's NVDA arm) and #103 (the update feed) are the two open
+items that block the pivot, and both are decisions rather than work.** Read those two
+first. **Do not read that as "two issues are open" — an earlier revision of this line
+said exactly that and it was false.** Re-derived 2026-08-03: **58 issues open**, 47 of
+them on milestone 1. See §7.
 
 | Commit | What landed | Plan item |
 |---|---|---|
@@ -81,7 +127,14 @@ carrying a SHA-512 over it. The packaged app was probed over CDP: it read its ba
 `app-update.yml`, contacted the feed, returned `net::ERR_NAME_NOT_RESOLVED`, and
 `Ctrl+K` listed "Check for updates — last check failed" beside the host commands.
 
-### Phase 7 IS built, as two processes, on branch `topology-spike`
+### Phase 7 IS built, as two processes — and it is MERGED
+
+**Corrected 2026-08-03.** This section used to head "on branch `topology-spike`". PR
+**#101 squash-merged that branch** as `21cf3e0`, so `f378329` is **not** an ancestor of
+`main` while its content is. Verified: `git diff origin/main origin/topology-spike`
+touches **`HANDOFF.md` only**. The branch still exists locally and on the remote and is
+2 behind / 5 ahead by commit count — that is squash-merge bookkeeping, not outstanding
+work. Nothing needs to be merged from it.
 
 `f378329`. Host chrome renders the context bar, pane 1 and the palette; one
 extension renderer holds panes 2 and 3, the ledger and the composer. Activating an
@@ -149,11 +202,12 @@ and main is a relay. Amendment O records two routes and takes neither.
   declaring it in the three places `docs/RELEASE.md` §1 enumerates.
 - **Nothing is signed and no certificate was sought.** macOS packaging is configured
   and never executed — unbuildable from Windows.
-- **An engines split-brain, until #100 merges.** PR #37 (jest-dom 7, which requires
-  Node ≥22) merged to `main`, while the `engines` raise to `^22.13.0 || >=24` landed
-  on this branch. So `main` right now advertises Node 20.19 while carrying a
-  dependency that refuses it, and **no CI leg catches it** because every workflow
-  reads `.nvmrc`, which is `24`. Merging #100 resolves it.
+- ~~**An engines split-brain, until #100 merges.**~~ **RESOLVED — #100 merged as
+  `e3078db`.** Re-derived 2026-08-03: `package.json` on `main` declares
+  `"node": "^22.13.0 || >=24"`, which is the raise, so the window where `main`
+  advertised Node 20.19 while carrying jest-dom 7 is closed. The finding is kept only
+  for its mechanism: **no CI leg exercised the declared floor**, because every workflow
+  reads `.nvmrc` (`24`). #100 also added the declared-Node-floor job that closes that.
 
 **One working tree, one git writer — §1b, and it has already cost a commit on the
 wrong branch.** If you are resuming and the tree is dirty, the dirt is not yours.
@@ -268,44 +322,50 @@ this update was written in a throwaway worktree for exactly that reason.
 
 ## 2. Where we are
 
+**This section describes 2026-08-01 and is kept for that. It predates the pivot — read
+§1 first, and do not take "the next phase is remediation" as current.**
+
 LEAPWare ShellUX is a pluggable desktop UI shell host. All five originally planned work
 items (ISSUE-001 through ISSUE-005) are built and merged. A full audit on 2026-08-01
 found the result **is not production-ready**; the next phase is remediation, tracked in
 the milestone **Phase 2 — Production Readiness**.
 
+**What changed after that:** the owner redirected the project on 2026-08-02 (§1), and
+the nine-phase native-host pivot is now built and merged — Electron host, ribbon
+deleted, tokens, three-pane visualization, packaging. The milestone still holds 47 open
+issues, so remediation did not go away; it stopped being the only thing in flight.
+
 ---
 
 ## 3. Repository state
 
-**The SHAs in this table were verified 2026-08-01 and are now well behind.** Two rows
-were re-measured on 2026-08-02 and are marked as such; **the rest have not been
-re-derived and no replacement SHA has been invented for them.** Per §0, the numbers in
-this document are a starting point, not a source of truth — run `git fetch --all
---prune` and re-derive the whole table before acting on any row.
+**This table was re-derived 2026-08-03** — `git fetch --all --prune`, `git branch -vv`,
+`gh pr view`. It will go stale again; per §0 the numbers here are a starting point, not
+a source of truth.
 
 | Ref | SHA | Note |
 |---|---|---|
-| `native-host-phase-0` | `7d87867` | **Re-measured 2026-08-02.** The checked-out branch and the live work — 10 ahead of `origin/main`, 0 behind, unmerged, no PR. See §1. |
-| `origin/main` | `0ed78e3` | **Re-measured 2026-08-02.** Merge of PR #72. The `3ebf86d` this row used to name (PR #70) is two merges back. |
-| local `main` | `0ed78e3` | **Re-measured 2026-08-02.** Level with `origin/main`. It is no longer the `e504fd3` this row used to warn about. |
+| `origin/main` | `1d2f8a5` | **Re-derived 2026-08-03.** A HANDOFF-only commit on `21cf3e0` (PR #101). **Everything is here** — all nine phases, both PRs. |
+| local `main` | `1d2f8a5` | **Re-derived 2026-08-03.** Level with `origin/main`, checked out, working tree clean. |
+| `native-host-phase-0` | `abe86c0` | **MERGED via PR #100 (`e3078db`).** No longer the live work. Branch preserved local and remote. |
+| `topology-spike` | `e033397` | **MERGED via PR #101 (`21cf3e0`), squashed** — so `f378329` is not an ancestor of `main` though its content is. Only `HANDOFF.md` differs between the two. See §1. |
 | `origin/browser-test-lane` | `da7d89e` | **Merged** via PR #70. Branch preserved. |
-| `origin/quality-first-agreement` | `c82bfe1` | **PR #71 open, CI green — see §1.** |
+| `origin/quality-first-agreement` | `c82bfe1` | **PR #71 still OPEN — re-derived 2026-08-03. The one piece of unblocked work in this file.** See §1 and §8 item 4. |
 | `origin/phase-1-hotkeys` | `a1df19d` | Merged content; branch not deleted. |
 | `origin/phase-2-shell` | `b80cad0` | Merged via PR #33. |
 | `origin/docs-security-sweep` | `4509c38` | Merged via PR #56. **Was fast-forwarded to `868fe88` in a local tree by an agent outside its remit — see §11.** |
-| 5 `dependabot/*` remotes | — | Five branches still exist. **"All open" is stale**: §8 item 9 records **#35 and #38 as CLOSED on 2026-08-02**. PR states were not re-derived here — that needs `gh`, and per §0 it should be re-run rather than read off this row. |
-| `origin/handoff`, `origin/handoff-audit-2` | — | Present in the remote list and not previously recorded here. `handoff-audit-2` is what PR #72 merged. |
+| `dependabot/*` remotes | — | **Re-derived 2026-08-03: the five this row used to name are PRUNED.** #34, #35 and #38 are **CLOSED**; #37 is **MERGED** (`3a110a3`). Three new ones are open — **#96, #97, #36**. See §7. |
+| `origin/handoff`, `origin/handoff-audit-2` | — | `handoff-audit-2` is what PR #72 merged. |
 
 > **FIRST ACTION for a new session:** re-derive this table — `git fetch --all --prune`,
 > then `git log --oneline -1 origin/main` and `git status`.
-> **The old warning on this line is now obsolete and its replacement is the opposite
-> one.** It used to say local `main` sat at `e504fd3`, predating the shell merge, so a
-> tree checked out there had no `src/components/` — that is fixed, local `main` is level
-> with `origin/main`. The live hazard is now the other direction: **the work is not on
-> `main` at all.** Ten commits of the pivot sit unmerged on `native-host-phase-0`, so a
-> session that checks out `main` will find no tokens, no root boundary, no `when.ts` and
-> none of the layout fixes, and will reasonably conclude they were never written. Read
-> §1 before checking anything out.
+> **Both of this line's previous warnings are now obsolete, and there is no replacement
+> hazard.** It once warned that local `main` predated the shell merge; then that the
+> pivot sat unmerged on `native-host-phase-0` and a session on `main` would find no
+> tokens, no root boundary and no `when.ts`. **Neither is true.** `main` carries
+> everything, the tree is clean, and no branch holds work that `main` lacks. Checking
+> out `main` is now the correct thing to do. Read §1 anyway — for what is *decided* and
+> what is *open*, not for where the code is.
 
 ---
 
@@ -382,7 +442,7 @@ integrity. Each finding is tagged **[reproduced]** where confirmed by execution 
 
 | Finding | Location | |
 |---|---|---|
-**BOTH CLOSED 2026-08-02 by `72ff274` on `native-host-phase-0` — unmerged, see §1.**
+**BOTH CLOSED 2026-08-02 by `72ff274`, MERGED to `main` via PR #100 (`e3078db`).**
 The rows below are the finding as filed. **Two of their numbers were wrong**, and the
 fix measured rather than repeated them:
 
@@ -404,7 +464,7 @@ write-only, because `detailDefaultPercent` is always the remainder and never rea
   `REVOKED`. This falsifies a claim `SECURITY.md` labels an *unconditional* integrity
   control.~~ ~~`HYDRATION_LIMITS` (`HydrationEngine.ts:211`) is `as const`, not frozen —
   the exact defect issue #10 closed for `REGISTRY_LIMITS`, reintroduced.~~
-  **BOTH CLOSED 2026-08-02 by `deaf83c` on `native-host-phase-0` — unmerged, see §1.**
+  **BOTH CLOSED 2026-08-02 by `deaf83c`, MERGED to `main` via PR #100 (`e3078db`).**
   Both are now `Object.freeze`d, `SECURITY.md` was corrected in the same commit, and
   **the structural half of the recommendation landed too**: `hostConstants.test.ts` no
   longer carries a hand-maintained freeze list but a discovery scan over the modules'
@@ -457,7 +517,7 @@ write-only, because `detailDefaultPercent` is always the remainder and never rea
   no dynamic import. The model is compile-time only — deploying today means deploying an
   empty frame. **[reproduced]**
 - ~~**No top-level error boundary.** Any throw above `ShellLayout` is a white screen.~~
-  **CLOSED 2026-08-02** by `719c818` on `native-host-phase-0` (unmerged — see §1).
+  **CLOSED 2026-08-02** by `719c818`, MERGED to `main` via PR #100 (`e3078db`).
   `src/components/error/RootBoundary.tsx` exists and is exercised by 20 cases in
   `src/components/__tests__/RootBoundary.test.tsx`. **Do not read it wider than it is:**
   it is a React error boundary, so it contains a throw during render, and it is neither
@@ -481,13 +541,47 @@ write-only, because `detailDefaultPercent` is always the remainder and never rea
 - `ShellStateStore.subscribe` does not validate its argument, while the banner above it
   claims every member does. One `undefined` callback wedges every subsequent write.
   **[reproduced]**
-- `DEVELOPER.md:1849` tells extension authors that a containment guarantee does not exist
-  when it does — and contradicts itself about 500 lines earlier. **[reproduced]**
+- ~~`DEVELOPER.md:1849` tells extension authors that a containment guarantee does not
+  exist when it does — and contradicts itself about 500 lines earlier.~~ **CLOSED
+  2026-08-03 with the other two passages of #90.** All three described shipped, tested
+  code as unbuilt: the ADR's **header banner** said "nothing in `src/` evaluates a
+  predicate or catches a render error yet" (`ribbonAction.ts` and `FaultBoundary.tsx`
+  both existed); the persistence paragraph said neither `ShellLayout` nor `App.tsx`
+  reads or writes persisted state (`ShellLayout` does both, in four places — and two
+  data-destroying defects have since been fixed *in* that path); and `DEVELOPER.md` told
+  authors a throwing predicate "will not be contained by anything" while saying the
+  opposite, correctly, 570 lines earlier. The ADR corrections are dated superseding notes
+  per its own convention rather than in-place edits.
+  **Two things worth keeping from it.** The persistence sentence had *already* been
+  superseded once — the 2026-07-31 note corrected the claim that the **engine** did not
+  exist and never touched the clause about the shell using it. The machinery worked and
+  was applied one clause too narrowly, which is the failure mode to watch for.
+  And the fourth passage an audit reported — "no `icon` field on the blueprint" — **is
+  true and was deliberately left alone**; the ADR is correctly scoped there and records
+  its own earlier error.
+  **The sweep #90 asks for was run rather than promised.** A grep over all 20 tracked
+  Markdown files for `not yet …` / `does not yet` / `still decision only` / `nothing in
+  src/` returned four live hits beyond the three fixed, and **all four triaged clean**:
+  `README.md:160` and `:1314`, `design/README.md:272` (which explicitly says "do not
+  write it in the present tense anywhere") and `docs/adr/0001-…:3584` on unforwarded
+  chords. They are honest current limits, not stale claims. **A permanent checker was
+  NOT built** — #90 suggests one and it is a real idea, but a gate needs its own tests
+  and its own portability surface, and that is a separate change rather than a rider on
+  this one.
 
 ### 6.5 Test integrity
 
 **The coverage number is real but narrower than it reads, and the mutation result is
 genuinely good. Both halves matter.**
+
+> **NOT RE-DERIVED 2026-08-03, and every input to it moved.** The ratio below is
+> **pre-pivot**. Tracked files went 204 → 230, tests 1,667 → 1,733, and the pivot added
+> `electron/`, `src/core/ipc/` and the token pipeline — none of which existed when
+> 9,733/13,484 was measured. **Open issue #89 already cites a different denominator,
+> 13,608**, so this file and its own tracker disagree. It was deliberately not
+> re-measured: the ratio needs `test:coverage`, which §11 records being OOM-killed twice
+> on this machine. **Re-measure before quoting either number.** The *mechanism* below is
+> unaffected and still holds.
 
 - The 100% gate is measured over roughly **72% of tracked source** — the audit measured
   9,733 of 13,484 lines. The mechanism is **[reproduced]**: `vitest.config.ts` scopes
@@ -503,7 +597,7 @@ genuinely good. Both halves matter.**
 - **What is uncovered is the presentation layer — which is exactly where both
   data-destroying defects in §6.1 lived.** That is the finding, not the percentage.
 
-**Two confirmed vacuous tests — BOTH FIXED 2026-08-02 by `c02456b`, unmerged (§1).**
+**Two confirmed vacuous tests — BOTH FIXED 2026-08-02 by `c02456b`, MERGED via #100.**
 Both were re-verified by mutation before the fix, and the table below is that record.
 **Read the first row's resolution, because it settles the contradiction underneath it:**
 the collapse case no longer pretends a drag occurred. It now pins the *limit* — it
@@ -530,7 +624,7 @@ is §11's first trap stated as a mechanism rather than as folklore.
 
 ### 6.6 `check-citations` had a hole that made it partly ornamental — CLOSED 2026-08-02
 
-**Closed by `b4da5f2` on `native-host-phase-0` (unmerged — see §1), which is Phase 0c.**
+**Closed by `b4da5f2`, MERGED to `main` via PR #100 (`e3078db`), which is Phase 0c.**
 The measurements below are kept because they are the record of what the hole was and how
 it was quantified, and because §11's trap row and Phase 4's risk both rest on them. Read
 them in the past tense: a trailing placeholder no longer degenerates to a prefix match,
@@ -606,16 +700,28 @@ risk **cannot exhibit it**, because its fixture has a long literal tail.
 
 ## 7. Issue tracker state
 
-Counts verified 2026-08-01. **See §0 — re-derive these, do not trust them.**
+**Re-derived 2026-08-03** with `gh issue list` and the milestones endpoint. **See §0 —
+re-derive again, do not trust these.**
 
-- Milestone 1 — **Phase 2 — Production Readiness**: **35 open**, 0 closed.
-- **46 issues open in total.** So **11 open issues — #58 through #68 — are NOT attached
-  to the milestone.** They were filed after it was created. **Sweep them on.**
-- 14 issues closed. 5 PRs open, all Dependabot dev-dependency bumps (#34–#38).
+- Milestone 1 — **Phase 2 — Production Readiness**: **47 open, 11 closed.** Was 35/0 on
+  2026-08-01.
+- **58 issues open in total, 27 closed.** So **11 open issues are NOT attached to the
+  milestone: #59, #60, #61, #62, #63, #64, #65, #66, #68, #102, #103.** The old "#58
+  through #68" reading is stale — #58 and #67 are gone from the open list and the two
+  pivot decisions are new. **Sweep the eleven on**, or decide the milestone is not the
+  instrument for the two decisions.
+- **4 PRs open: #71 (the quality agreement, not a bump) and three Dependabot — #96, #97,
+  #36.** The old "#34–#38, all Dependabot" row is dead: **#34, #35, #38 CLOSED**, **#37
+  MERGED** (`3a110a3`), and their remote branches are pruned.
+- **The table below is the 2026-08-01 grouping and has NOT been re-grouped.** Issues
+  filed since — #74, #75, #80, #81, #83, #85, #86, #89, #90, #91, #92, #93, #94, #95,
+  #102, #103 — appear in the open list above and in no row here. Several are the audit
+  findings in §6 filed at last, and **#93 is §4 and #74 is §5**, so the two "no issue at
+  all" entries below are now filed. Re-group before using this taxonomy for planning.
 
 | Group | Issues |
 |---|---|
-| **BLOCKER** | **#39 — nobody has ever run the app.** Plus **three items with no issue at all**: routing the demo to `/` (§6.3), the §5 enforcement gap, and §6.2 vulnerability reporting. **File all three.** |
+| **BLOCKER** | ~~**#39 — nobody has ever run the app.**~~ **CLOSED by `673d75d`** (Phase 1) — a native window was launched and screenshotted, see §1. The **three items with no issue** are now filed: routing the demo to `/` was done (§6.3), the §5 enforcement gap is **#74**, and §6.2 vulnerability reporting is **#75**. |
 | RESEARCH / DECISION | #68 (versioning mechanisms conflict), #67 (theming), #65 (build a real first-party module) |
 | CORRECTNESS | #10, #16, #17, #20, #21, #22, #23, #24, #25, #26, #64 |
 | CONTRACT | #28, #29, #30, #31, #32, #57, #66 |
@@ -643,11 +749,11 @@ prerequisites the plan folds in rather than replaces.
 | 2 | **Answer §5: pay for the tier that allows branch protection, or go public?** | **STILL OPEN, and now larger.** Auto-update needs a release feed, and the GitHub provider on a private repo would mean shipping an extractable token. Public would resolve §5, §6.2 and the update feed together. |
 | 3 | ~~Route the working demo to `/`~~ | **DONE 2026-08-02.** See §6.3. |
 | 4 | **Merge PR #71** (`quality-first-agreement`) | Still open, still green. Larger stakes now: the pivot is the biggest change in this repo's history and §5 means nothing enforces review. |
-| 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | **Phase 0b — LANDED 2026-08-02 as `72ff274`, unmerged (§1).** Kept ahead of the pivot deliberately: item 3 makes this an artifact a human is now asked to run, and two data-destroying defects in a demo is not acceptable. The pivot later deletes the code they live in — the value is one correct release plus a browser-lane regression test that survives as a behavioural spec. |
-| 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | **LANDED 2026-08-02 as `deaf83c`, unmerged (§1)** — and landed the right way: the hand-maintained freeze list in `hostConstants.test.ts` was replaced by a scan over the modules' own exports, so the third regression has somewhere to fail. See §6.2. |
-| 7 | **Root error boundary** | **LANDED 2026-08-02 as `719c818`, unmerged (§1)** — `src/components/error/RootBoundary.tsx`, 20 cases. The pivot argument stands and now has something to point at: an Electron renderer throw above the boundary would otherwise be a blank native window. Scope limit in §6.3. |
-| 8 | Fix the two vacuous tests and the `patternFor` hole | **Both halves LANDED 2026-08-02, unmerged (§1)** — `b4da5f2` closes the `patternFor` hole (Phase 0c) and `c02456b` makes the two confirmed-vacuous tests assert what they are named for. The Phase 4 argument is why the order mattered: deleting the ribbon renames many cited titles at once, which is exactly when a prefix-match hole stops being theoretical, and Phase 4 is in flight now. |
-| 9 | Triage the red Dependabot PRs | **DONE 2026-08-02** — full findings in [`docs/dependabot-triage.md`](docs/dependabot-triage.md). **#35 and #38 closed.** The lead finding is not about any single PR: `.github/dependabot.yml` caps the queue at 5 with majors deliberately ungrouped, all five slots were full, and the fixes for the two CVSS 9.8 criticals in `vitest` are three ungrouped majors needing three free slots. So CI could not *see* the criticals (§6.2 — `audit:prod` omits dev) **and** Dependabot could not *offer* the fix. Two slots are now free. **#37 is green and CI is structurally blind to its breaking change** — jest-dom 7 raises `engines` to `node: >=22` while this repo declares a 20.19 floor and `.npmrc` sets `engine-strict=true`, so a developer on the declared-supported Node gets a hard `EBADENGINE`; every workflow reads `.nvmrc`, which is `24`, so **no CI leg has ever exercised the declared floor**. #34 is a doctrine decision rather than a chore: all 11 new warnings sit on `Object.freeze(...)` exports and 0.4.26 lints the same files clean. |
+| 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | **Phase 0b — LANDED 2026-08-02 as `72ff274`, MERGED via #100.** Kept ahead of the pivot deliberately: item 3 makes this an artifact a human is now asked to run, and two data-destroying defects in a demo is not acceptable. The pivot later deletes the code they live in — the value is one correct release plus a browser-lane regression test that survives as a behavioural spec. |
+| 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | **LANDED 2026-08-02 as `deaf83c`, MERGED via #100** — and landed the right way: the hand-maintained freeze list in `hostConstants.test.ts` was replaced by a scan over the modules' own exports, so the third regression has somewhere to fail. See §6.2. |
+| 7 | **Root error boundary** | **LANDED 2026-08-02 as `719c818`, MERGED via #100** — `src/components/error/RootBoundary.tsx`, 20 cases. The pivot argument stands and now has something to point at: an Electron renderer throw above the boundary would otherwise be a blank native window. Scope limit in §6.3. |
+| 8 | Fix the two vacuous tests and the `patternFor` hole | **Both halves LANDED 2026-08-02, MERGED via #100** — `b4da5f2` closes the `patternFor` hole (Phase 0c) and `c02456b` makes the two confirmed-vacuous tests assert what they are named for. The Phase 4 argument is why the order mattered: deleting the ribbon renames many cited titles at once, which is exactly when a prefix-match hole stops being theoretical, and Phase 4 is in flight now. |
+| 9 | Triage the red Dependabot PRs | **DONE 2026-08-02** — full findings in [`docs/dependabot-triage.md`](docs/dependabot-triage.md). **#35 and #38 closed.** The lead finding is not about any single PR: `.github/dependabot.yml` caps the queue at 5 with majors deliberately ungrouped, all five slots were full, and the fixes for the two CVSS 9.8 criticals in `vitest` are three ungrouped majors needing three free slots. So CI could not *see* the criticals (§6.2 — `audit:prod` omits dev) **and** Dependabot could not *offer* the fix. Two slots are now free. ~~**#37 is green and CI is structurally blind to its breaking change**~~ — **RESOLVED, re-derived 2026-08-03: #37 MERGED (`3a110a3`), `engines` on `main` is now `^22.13.0 || >=24`, and #100 added the declared-Node-floor job that no workflow used to provide.** #34 has since been **CLOSED**, along with #35 and #38; the doctrine question it raised — 11 new warnings all sitting on `Object.freeze(...)` exports, which 0.4.26 lints clean — was **not** answered by closing it, and **#96 re-proposes the identical bump**. Answer it there. |
 | 10 | Everything else, by milestone priority | Re-triage against the pivot — the ribbon's deletion closes or moots several documentation issues. |
 
 ---
@@ -713,10 +819,14 @@ One session owns delivery. Concretely, that role:
 
 ## 12. How to verify anything
 
-`npm run verify` chains **nine** stages, in order:
+**Corrected 2026-08-03 by reading `package.json`. This section said nine stages; it is
+TEN** — the pivot added `tokens:check` as the third. §1 said ten and this section said
+nine, in the one file whose purpose is being trusted; §1 was right.
 
-`check:portability` → `check:citations` → `lint` → `typecheck` → `test:coverage` →
-`test:integration` → `test:scripts` → `build` → `audit:prod`
+`npm run verify` chains **ten** stages, in order:
+
+`check:portability` → `check:citations` → **`tokens:check`** → `lint` → `typecheck` →
+`test:coverage` → `test:integration` → `test:scripts` → `build` → `audit:prod`
 
 **It takes roughly 12–13 minutes**, dominated by `test:coverage` (~351s) and
 `test:integration` (~199s) — **and those two overlap**, because `IntegrationSuite.test.tsx`
@@ -725,30 +835,65 @@ the doctrine and its cost should be stated rather than discovered.
 
 There is now a **second, separate lane**: `npm run test:browser` runs the Playwright
 suite against a real Chromium, on its own `browser.yml` workflow. **Re-measured
-2026-08-02 with `npx playwright test --list`: 42 tests in 7 files** — it was 24 in 5
-when PR #70 merged, and `dev-routing.spec.ts` and `theme.spec.ts` are the two new
-files. It is **deliberately not part of `verify`** — see §1a. Run it when touching
-layout, the ribbon, dividers, hotkeys, theming or focus, because it is the only thing
-here that can see what jsdom cannot. The jsdom suite alongside it is **1,263 tests in
-35 files**, re-measured the same day with `npx vitest list`.
+2026-08-03 with `npx playwright test --list`: 51 tests in 9 files** — 24 in 5 when PR
+#70 merged, 42 in 7 on 2026-08-02. It is **deliberately not part of `verify`** — see
+§1a. Run it when touching layout, dividers, hotkeys, theming or focus, because it is the
+only thing here that can see what jsdom cannot. (It no longer covers *the ribbon*, which
+Phase 4 deleted.) The jsdom suite alongside it is **1,733 tests in 72 files**,
+re-measured the same day with `npx vitest list`. **The 1,263-in-35 figure this paragraph
+used to carry was pre-pivot.**
 
-**CI does not run all of `verify`.** Inspected at `3ebf86d`:
+**CI NOW RUNS ALL OF `verify`. This section said the opposite for its whole life and
+the change is the reason to read it.** Re-inspected 2026-08-03 at `1d2f8a5` — the
+workflow set is five files: `ci.yml`, `browser.yml`, `desktop.yml`,
+`audit-dependencies.yml`, `audit-schedule.yml`.
 
 | Stage | On CI? |
 |---|---|
 | `check:portability` | yes (`ci.yml`) |
-| `check:citations` | **no leg** |
+| `check:citations` | **yes — added 2026-08-03**, was no leg |
+| `tokens:check` | **yes — added 2026-08-03**, was no leg |
 | `lint` | yes |
 | `typecheck` | yes |
 | `test:coverage` | yes |
-| `test:integration` | **no leg** |
-| `test:scripts` | **no leg** |
+| `test:integration` | **yes — added 2026-08-03**, was no leg |
+| `test:scripts` | **yes — added 2026-08-03**, was no leg |
 | `build` | yes |
-| `audit:prod` | yes, but only in `audit-dependencies.yml` / `audit-schedule.yml`, and only with `--omit=dev` |
+| `audit:prod` | yes, in `audit-dependencies.yml` / `audit-schedule.yml`, and only with `--omit=dev` |
 
-`README.md` claims `verify` is exactly what CI applies. It is not — five of nine.
-Tracked as #58. Read this next to §5: the four unguarded stages are backed only by an
-author's self-attestation on a PR nobody is required to review.
+`README.md` claimed `verify` is exactly what CI applies, and for its whole life that was
+false — **five of ten**, and the gap had widened rather than closed, because
+`tokens:check` was added to `verify` with no leg either.
+
+> **#58 tracked it and was CLOSED as `COMPLETED` while nothing had closed it** —
+> re-derived 2026-08-03 with `gh issue view 58 --json state,stateReason`, and `ci.yml`
+> at `1d2f8a5` ran `check:portability`, `lint`, `typecheck`, `test:coverage` and `build`
+> and nothing else.
+>
+> **It is closed now for real: the four missing steps were added to `ci.yml`'s matrix
+> job on 2026-08-03**, in `verify`'s own order, so a CI failure lands on the same step a
+> laptop fails on. `README.md`'s `verify` row was corrected in the same change and now
+> records what it used to claim. **Re-open #58 only to confirm and close it again, or
+> leave it closed and cite this** — but do not cite the *old* #58 as an open gap.
+
+**The cost was taken deliberately and should not be quietly trimmed later.**
+`test:integration` is ~199s and overlaps `test:coverage` (`IntegrationSuite.test.tsx`
+runs in both); what it adds is `--sequence.shuffle`, the only order-independence signal
+here, and #64 records that it reaches one file. Three legs at macOS 10x and Windows 2x
+billing is the price of `README`'s claim being true. **Running it on one leg would buy a
+cheaper version of the same lie** — that argument is in the workflow comment so the next
+person to look at the bill meets it.
+
+**One narrower gap survives and is NOT #58:** `audit:prod` is `npm audit --omit=dev`, so
+**the dev tree is audited by nothing on any leg.** That is §6.2's finding, it is the
+mechanism that made two CVSS 9.8 criticals in `vitest` structurally invisible, and
+closing #58 does not touch it.
+
+**Two workflows exist that this section never listed.** `desktop.yml` runs
+`npm run verify:desktop` — the packaging leg that produced the NSIS installer in §1 —
+and `ci.yml` carries the declared-Node-floor job, which is what would now catch the
+engines split-brain that §1 records. **Its provenance was checked rather than inherited
+from prose: `git log -S -- .github/workflows/ci.yml` puts it in `e3078db`, PR #100.**
 
 Two checks gate every commit and are easy to trip:
 
@@ -758,7 +903,10 @@ Two checks gate every commit and are easy to trip:
 - **`check:citations`** — never quote a test title you have not confirmed exists. It only
   inspects quoted strings that follow a citation marker. Since PR #70 its corpus includes
   `e2e/`. **The checker prints its own corpus size on every run — read that rather than a
-  number written here.** On 2026-08-02 it reported 889 citations in 92 prose files
-  resolving against 1,213 titles in 44 test files, where 37 was the figure at PR #70.
+  number written here.** Run 2026-08-03 against this update: **1,062 citations in 175
+  prose files resolving against 1,770 titles in 83 test files, 7 quoted spans set aside
+  as prose** — against 889 / 92 / 1,213 / 44 on 2026-08-02, and 37 test files at PR #70.
+  Both gates were re-run after these edits and both pass; `check:portability` reports
+  **230 tracked files, 20 rules, 0 violations**.
   **§6.6's trailing-placeholder prefix-match hole is CLOSED** — `b4da5f2`, Phase 0c, see
   §1 — so a near-miss no longer resolves vacuously.

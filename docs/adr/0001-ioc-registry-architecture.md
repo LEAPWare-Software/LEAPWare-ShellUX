@@ -9,10 +9,27 @@
 > **Implementation status.** ISSUE-001 has landed: `src/core/types.ts`,
 > `src/core/RegistryContext.tsx` and `src/core/ShellAPI.ts` exist and are held
 > to a 100% coverage gate over `src/core/**`. Sections 1–3 of the decision
-> below are implemented. Sections 4 (predicate evaluation), 5 (lazy loading)
-> and 6 (pane fault boundaries) describe ISSUE-002 and ISSUE-004 behaviour and
-> are **still decision only** — nothing in `src/` evaluates a predicate or
-> catches a render error yet.
+> below are implemented.
+>
+> **SUPERSEDED 2026-08-03. The sentence this banner used to end with was false,
+> and it was the first thing every reader of this document saw.** It said
+> sections 4 (predicate evaluation), 5 (lazy loading) and 6 (pane fault
+> boundaries) were "**still decision only** — nothing in `src/` evaluates a
+> predicate or catches a render error yet". Two of those three shipped:
+>
+> - **Predicate evaluation is implemented.** `isVisible` in
+>   `src/core/ribbonAction.ts` evaluates every predicate and contains a throwing
+>   one rather than propagating it. Every command surface calls it.
+> - **Fault boundaries are implemented.** `src/components/error/FaultBoundary.tsx`
+>   is a React class component with `getDerivedStateFromError` and
+>   `componentDidCatch`, composed repeatedly in `ShellLayout`, and
+>   `src/components/error/RootBoundary.tsx` has since been added above it.
+> - **Section 5, lazy loading, is still decision only** and is the one third of
+>   that sentence that stayed true. It has no work item naming it — see §6.8 of
+>   `HANDOFF.md` and #29, which argues the contract cannot deliver it as written.
+>
+> The correction is dated rather than made in place, per this document's own
+> amendment convention: what was believed when is part of the record. See #90.
 >
 > Eight amendments have been made and are recorded at the end of this document —
 > the header previously named only the first two, and then only the first six,
@@ -184,18 +201,35 @@ caller name any scope, so the namespace confines nothing" and "reads and rewrite
 another extension's scope straight through the storage entry" for what it does
 not, each reproduced as behaviour rather than asserted in prose.
 
-Nothing in the shell is wired to any of it yet. Neither
-`src/components/layout/ShellLayout.tsx` nor `src/App.tsx` reads or writes persisted
-state, so no pane divider and no collapse toggle survives a reload today: the
-engine and the hook exist and are tested, and the shell does not use them.
-
 > **Superseded 2026-07-31, when ISSUE-003 landed the engine.** This paragraph
 > previously declared the whole subject absent — nothing written anywhere, no
 > module under `src/` owning a storage entry — and sent the reader to ISSUE-003 and
 > to the README's "Specified but not yet enforced" list. That was accurate when it
 > was written and is not now. What survives of it is the `IShellAPI` half, which is
-> unchanged, and its warning, which the paragraph above keeps: what has landed is a
+> unchanged, and its warning, which the paragraph keeps: what has landed is a
 > store, not a boundary.
+
+> **SUPERSEDED AGAIN, 2026-08-03 — and this is the half the note above did not
+> reach.** The paragraph went on: "Nothing in the shell is wired to any of it yet.
+> Neither `src/components/layout/ShellLayout.tsx` nor `src/App.tsx` reads or writes
+> persisted state, so no pane divider and no collapse toggle survives a reload
+> today." **`ShellLayout` reads and writes persisted state in four places** — a
+> `useLocalStorageState` binding for the collapse toggle, the restored pane sizes it
+> reads at mount, the whole-layout write on a divider drag, and an
+> `engine.setSlot('activeExtensionId', …)` on handover. Pane dividers and the
+> collapse toggle both survive a reload, and two of the data-destroying defects this
+> project has fixed were *in* that persistence path, which is the strongest possible
+> evidence it is wired.
+>
+> The 2026-07-31 note is left above rather than rewritten, because it is correct
+> about what it addressed: it superseded the claim that the **engine** did not
+> exist, and said nothing about the shell using it. That is how a sentence outlived
+> its own correction for two days — the amendment machinery worked and was applied
+> one clause too narrowly. See #90, and read it next to the standing rule that a
+> correction should name what it does *not* cover.
+>
+> What still stands from the original: **what has landed is a store, not a
+> boundary.** The `IShellAPI` half is unchanged.
 
 ### 4. Contextual behaviour through visibility predicates
 
