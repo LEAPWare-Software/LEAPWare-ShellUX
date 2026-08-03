@@ -25,6 +25,8 @@ import { ContextBar } from '../command/ContextBar';
 import { FloatingToolbar } from '../command/FloatingToolbar';
 import { OmniboxComposer } from '../command/OmniboxComposer';
 import type { OmniboxSubmission } from '../command/OmniboxComposer';
+import { echartsRenderer } from '../../core/chart/echartsRenderer';
+import { BlockLedger } from '../ledger/BlockLedger';
 import { FaultBoundary } from '../error/FaultBoundary';
 import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
 import { PaneWrapper } from './PaneWrapper';
@@ -908,6 +910,14 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // or an `ask` until the structured payload channel exists. See the composer's
   // `onSubmit` below.
   const [lastSubmission, setLastSubmission] = useState<OmniboxSubmission | null>(null);
+  /**
+   * The last `form` block a user submitted, echoed rather than consumed.
+   *
+   * The same answer the composer's submission gets, for the same reason: writing
+   * it back onto the publisher's channel would be host chrome publishing under
+   * an extension's scope, which is the host impersonating the extension.
+   */
+  const [lastBlockSubmission, setLastBlockSubmission] = useState<string | null>(null);
 
   // The shell's one keyboard listener. Called HERE — see decision 3 in the banner
   // and decision 1 in `hotkeyDispatch.ts` — because this component is host
@@ -1460,6 +1470,45 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                         )}
                       </FaultBoundary>
                     </div>
+                    {/*
+                      THE BLOCK LEDGER. HOST CHROME, AND THE FIRST SURFACE IN
+                      THIS SHELL THAT DRAWS A CHART LIBRARY.
+
+                      Outside the fault boundary above, for the reason the
+                      composer and the floating toolbar are: a plug-in render
+                      that throws must not take the shell's own surfaces with
+                      it. That is safe here rather than merely hoped for,
+                      because every reader under `src/core/ledger/` is TOTAL —
+                      a malformed payload draws a complaint, never a throw.
+
+                      `echartsRenderer` is injected at this one point. It is
+                      the only production import of a chart library in `src/`,
+                      which is what makes the renderer swappable and what makes
+                      the measured bundle delta attributable to one line.
+                    */}
+                    {active === null ? null : (
+                      <BlockLedger
+                        shell={active.shell}
+                        context={context}
+                        renderer={echartsRenderer}
+                        onSubmit={(blockId, values) => {
+                          setLastBlockSubmission(
+                            `${blockId}: ${Object.entries(values)
+                              .map(([name, value]) => `${name}=${value}`)
+                              .join(', ')}`,
+                          );
+                        }}
+                      />
+                    )}
+                    {lastBlockSubmission === null ? null : (
+                      <p
+                        data-shell-region="ledger-echo"
+                        className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
+                      >
+                        <span className="font-semibold">block</span>
+                        {`: ${lastBlockSubmission}`}
+                      </p>
+                    )}
                     {lastSubmission === null ? null : (
                       /*
                         The submission, echoed back in the host's own words. It is
@@ -1486,9 +1535,12 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                         // chrome operating a plug-in's UI, which nothing in this
                         // repository grants; publishing the text as a context key
                         // would write into a namespace that is the extension's.
-                        // The submission is recorded and the surface that will
-                        // consume it is the structured payload channel, which is
-                        // the next phase's work.
+                        // The submission is recorded, and the surface that
+                        // would consume it — the block ledger below — is fed by
+                        // the structured payload channel, which only the
+                        // EXTENSION may publish on. The host has no door to it
+                        // that would not be the host impersonating the
+                        // extension.
                         setLastSubmission(submission);
                       }}
                     />

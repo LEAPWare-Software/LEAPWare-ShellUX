@@ -1,16 +1,19 @@
 import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
+import { RowMetric } from '../components/ui/RowMetric';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
   IShellAPI,
   LEAPExtensionBlueprintInput,
+  NavigationMetric,
   NavigationNode,
   RibbonAction,
   RibbonContext,
   StructuredPayload,
 } from '../core/types';
 import { useChannelPayload } from '../core/payload/PayloadChannel';
+import { LEDGER_CONTEXT_KEY } from '../core/ledger/ledgerIndex';
 
 /**
  * ============================================================================
@@ -459,6 +462,129 @@ function findMessage(snapshot: MailState, messageId: string): MailMessage | unde
   return [...SEED_MESSAGES, ...snapshot.composed].find((message) => message.id === messageId);
 }
 
+/* -------------------------------------------------------------------------- */
+/* The pane-2 row metric — tier 0, and a remote's use of a host primitive        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How many readings a thread's activity sparkline holds.
+ *
+ * Eight, not thirty. `MAX_METRIC_POINTS` is 32 and the host would accept that
+ * many, but the glyph is 28 `viewBox` units wide, so a 32-point series draws
+ * points less than one unit apart and the shape stops being readable before the
+ * host's bound is anywhere near reached. §3.3 puts the tier-0 range at 7–30
+ * points and this sits at the bottom of it deliberately: a pane-2 row is a
+ * SHAPE, and pane 3 is where a series is a number you can read off an axis.
+ */
+const ACTIVITY_POINTS = 8;
+
+/**
+ * A deterministic pseudo-random stream from one string.
+ *
+ * A vendor's mock has no telemetry to draw, and this file is verification code
+ * that must produce the same picture on every run — a `Math.random()` series
+ * would make every screenshot and every browser-lane assertion a coin flip. So
+ * the shape is a function of the message id: the same thread always draws the
+ * same sparkline, and two threads draw different ones.
+ *
+ * The multiplier and increment are a small, well-known LCG. Nothing here is
+ * cryptographic and nothing pretends to be.
+ */
+function seededStream(seed: string): () => number {
+  let state = 0;
+  for (const character of seed) {
+    state = (state * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return (): number => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+/**
+ * The thread-activity metric for one message, and the delta beside it.
+ *
+ * The series is what `MetricGlyph` draws and the delta is the last step of that
+ * same series, so the two channels cannot disagree — a rising arrow beside a
+ * falling line would be a lie the row tells about itself, and deriving one from
+ * the other makes it unrepresentable rather than merely unlikely.
+ *
+ * `description` is REQUIRED by `NavigationMetric` and is the non-colour,
+ * non-shape channel WCAG 1.4.1 asks for. It says what the shape means in words.
+ */
+function activityMetric(message: MailMessage): {
+  metric: NavigationMetric;
+  value: string;
+  delta: number;
+} {
+  const next = seededStream(message.id);
+  const series = Array.from({ length: ACTIVITY_POINTS }, () => Math.round(next() * 100) / 100);
+  const last = series[ACTIVITY_POINTS - 1] as number;
+  const previous = series[ACTIVITY_POINTS - 2] as number;
+  return {
+    value: String(Math.round(last * 100)),
+    metric: {
+      kind: 'sparkline',
+      value: last,
+      series,
+      description: `thread activity over ${String(ACTIVITY_POINTS)} days`,
+    },
+    delta: Math.round((last - previous) * 100),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The pane-3 ledger blocks — tier 1, and the channel's second consumer         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The two channels this remote publishes blocks on.
+ *
+ * Registry-valid identifiers, because `publishPayload` holds a channel name to
+ * `EXTENSION_ID_PATTERN` — and because they are also the ADDRESSES pane 3's
+ * ledger index names, so `parseLedgerIndex` has to accept them too. One rule,
+ * two readers.
+ */
+const ACTIVITY_BLOCK = 'mail-activity';
+const NOTE_BLOCK = 'mail-note';
+
+/**
+ * The folder's activity, as a chart spec — and note what is NOT in it.
+ *
+ * **No colour anywhere.** `ChartSpecInput` has no `color` member to write, and
+ * `normalizeChartSpec` would reject one at runtime if this module found another
+ * way to put it there. What the host assigns instead is a `colorIndex`, a `dash`
+ * AND a `marker` per series, so these two lines are distinguishable to a reader
+ * who cannot see colour at all. A vendor cannot opt out of that, which is the
+ * point of it being the host's rotation.
+ */
+function activityChart(messages: readonly MailMessage[], readIds: ReadonlySet<string>): unknown {
+  const totals = new Array<number>(ACTIVITY_POINTS).fill(0);
+  const unread = new Array<number>(ACTIVITY_POINTS).fill(0);
+  for (const message of messages) {
+    const series = activityMetric(message).metric.series ?? [];
+    series.forEach((point, index) => {
+      totals[index] = Math.round(((totals[index] as number) + point) * 100) / 100;
+      if (!readIds.has(message.id)) {
+        unread[index] = Math.round(((unread[index] as number) + point) * 100) / 100;
+      }
+    });
+  }
+  return {
+    kind: 'line',
+    title: 'Thread activity',
+    xLabel: 'day',
+    yLabel: 'activity',
+    categories: Array.from({ length: ACTIVITY_POINTS }, (_unused, index) =>
+      `Day ${String(index + 1)}`,
+    ),
+    series: [
+      { name: 'all threads', values: totals },
+      { name: 'unread', values: unread },
+    ],
+  };
+}
+
 /** The badge this extension wants on `inbox` right now. */
 function unreadInboxCount(snapshot: MailState): number {
   return messagesIn(snapshot, 'inbox').filter((message) => !snapshot.readIds.has(message.id))
@@ -717,6 +843,28 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
     });
   }, [shell]);
 
+  // The pane-3 ledger: two blocks and the index that orders them.
+  //
+  // The CONTENT goes on the payload channel, because a chart spec is structured
+  // and a context key is a primitive. The INDEX goes on a context key, because
+  // a list of addresses is exactly the cheap primitive fact a context key is
+  // for — see `src/core/ledger/ledgerIndex.ts`. Both are published from pane 2,
+  // which is where this module knows what folder is on screen.
+  useEffect(() => {
+    guarded('publishing the ledger blocks', () => {
+      const snapshot = getSnapshot(shell);
+      const listed = messagesIn(snapshot, folderId);
+      shell.publishPayload(ACTIVITY_BLOCK, 'chart', activityChart(listed, snapshot.readIds));
+      shell.publishPayload(NOTE_BLOCK, 'text', {
+        text:
+          `${folderId} holds ${String(listed.length)} messages. The chart above is drawn by the ` +
+          'host from this extension’s published spec; this extension chose no colours and ' +
+          'could not have.',
+      });
+      shell.setContextKey(LEDGER_CONTEXT_KEY, `${ACTIVITY_BLOCK},${NOTE_BLOCK}`);
+    });
+  }, [shell, folderId, snapshot]);
+
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-1 p-1">
       <p className={`px-1 text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>
@@ -725,6 +873,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
       <ul className="flex min-w-0 flex-col gap-px" data-mail-list={folderId}>
         {messages.map((message) => {
           const isUnread = !snapshot.readIds.has(message.id);
+          const activity = activityMetric(message);
           return (
             <li key={message.id} className="min-w-0">
               <button
@@ -732,7 +881,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                 data-message-id={message.id}
                 aria-current={context.selectedItemId === message.id ? 'true' : undefined}
                 className={
-                  'flex w-full min-w-0 flex-col items-start gap-px rounded-sm border p-1 ' +
+                  'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm border p-1 ' +
                   'text-left text-[12px] leading-4 ' +
                   `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
                   `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
@@ -748,13 +897,31 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                   });
                 }}
               >
-                <span className={isUnread ? 'truncate font-semibold' : 'truncate'}>
-                  {message.subject}
+                <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
+                  <span className={isUnread ? 'truncate font-semibold' : 'truncate'}>
+                    {message.subject}
+                  </span>
+                  <span className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
+                    {message.from} — {message.receivedAt}
+                    {isUnread ? ' — unread' : ''}
+                  </span>
                 </span>
-                <span className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
-                  {message.from} — {message.receivedAt}
-                  {isUnread ? ' — unread' : ''}
-                </span>
+                {/*
+                  TIER 0, AND THE HOST'S OWN PRIMITIVE RATHER THAN A SECOND ONE.
+
+                  A vendor drawing its own sparkline here is exactly the
+                  duplication §3.3 exists to prevent, and it would also be the
+                  vendor deciding a colour — which `MetricGlyph` refuses by
+                  drawing in `currentColor` and taking no colour field at all.
+                  Reaching for a chart library instead would put a chart
+                  INSTANCE in every row of a list that virtualizes, which is
+                  the failure mode the whole tier is a response to.
+                */}
+                <RowMetric
+                  metric={activity.metric}
+                  value={activity.value}
+                  delta={activity.delta}
+                />
               </button>
             </li>
           );

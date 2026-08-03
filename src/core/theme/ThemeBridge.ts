@@ -1,5 +1,7 @@
+import { useCallback, useSyncExternalStore } from 'react';
 import { EMPTY_THEME, isThemeValue, normalizeTheme } from './normalizeTheme';
 import type { ResolvedTheme } from './normalizeTheme';
+import type { IShellAPI } from '../types';
 import { SEMANTIC_TOKEN_NAME_LIST } from './tokens.generated';
 import type { SemanticTokenName } from './tokens.generated';
 
@@ -156,6 +158,39 @@ export function createThemeBridge(root: Element): ThemeBridgeStore {
       broadcast(normalizeTheme(candidate, theme));
     },
   });
+}
+
+/**
+ * Subscribe a component to the resolved theme on its own `IShellAPI`.
+ *
+ * `useSyncExternalStore` rather than `useState` plus an effect, for exactly the
+ * reason `useChannelPayload` gives: a read taken during render can be stale by
+ * the time the tree commits, and two charts resolving at different points would
+ * paint two different palettes in one frame.
+ *
+ * **The snapshot is safe because `getTheme`'s identity is stable.** The bridge
+ * resolves once per theme change and hands the same frozen record to every
+ * reader until the next one, so two reads with nothing in between are
+ * `Object.is`-equal and React bails out. That identity is also what
+ * `src/components/chart/Chart.tsx` keys a chart instance's LIFETIME on — a
+ * `getTheme` that rebuilt its record per call would dispose and re-initialise
+ * every chart on every render. Pinned by "resolves the whole semantic set with
+ * exactly one getComputedStyle call" in
+ * `src/core/theme/__tests__/themeBridge.test.ts`.
+ *
+ * @throws {ShellUXError} `REVOKED` during render when the handle has been
+ *   revoked, which is the same loud failure `useChannelPayload` chooses.
+ */
+export function useShellTheme(shell: IShellAPI): ResolvedTheme {
+  const subscribe = useCallback(
+    (onStoreChange: () => void): (() => void) =>
+      shell.onThemeChange(() => {
+        onStoreChange();
+      }),
+    [shell],
+  );
+  const getSnapshot = useCallback((): ResolvedTheme => shell.getTheme(), [shell]);
+  return useSyncExternalStore(subscribe, getSnapshot);
 }
 
 export type { ResolvedTheme, SemanticTokenName };

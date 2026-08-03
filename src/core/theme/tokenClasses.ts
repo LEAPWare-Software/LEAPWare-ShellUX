@@ -171,6 +171,22 @@ export const TOKEN_CLASS = {
   badgeSurface: 'bg-surface-subtle',
 
   // ---------------------------------------------------------------------
+  // The pane-2 row delta. `--chart-positive` and `--chart-negative` rather
+  // than `--status-success` and `--status-danger`, and the two pairs are not
+  // interchangeable: a status colour answers "is this thing broken?", and a
+  // rise in stock is neither good nor bad — it is a DIRECTION on a chart, and
+  // the chart ramp is the tier `design/contrast-manifest.json` measures
+  // against a plot background. This is the first consumer of either name.
+  //
+  // Colour is the WEAKEST of the three channels `RowMetric` gives a delta;
+  // the arrow and the `sr-only` word carry it without help. See that file's
+  // banner for why all three exist.
+  // ---------------------------------------------------------------------
+  deltaPositive: 'text-chart-positive',
+  deltaNegative: 'text-chart-negative',
+  deltaFlat: 'text-text-muted',
+
+  // ---------------------------------------------------------------------
   // The pane divider, which is a filled 4px control and not a border. It has
   // its own token group for that reason — `design/README.md` "Honest limits"
   // item 9 records `controls` as an eighth group added precisely so that one

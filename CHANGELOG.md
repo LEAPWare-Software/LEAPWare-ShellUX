@@ -16,6 +16,86 @@ from so a reader can check it.
 
 ### Added
 
+- **Graphical visualization in all three panes — three tiers, three different
+  problems (plan §3.3).** Panes 2 and 3 are opposite performance problems and no
+  single library wins both, so they do not share one.
+  - **Tier 0, panes 1 and 2 — no library.** `src/components/ui/RowMetric.tsx`
+    composes the existing `MetricGlyph` — the same 32×12 `viewBox`, the same
+    memoised `d` string, the same `stroke="currentColor"` — and adds a value and
+    a delta. A chart *instance* per row is a construct and a destroy on every
+    scroll tick of a virtualized list; a memoised path string has none. Both
+    verification remotes now draw one per pane-2 row: `MailPlugin` a sparkline
+    of thread activity, `DatabasePlugin` a bar of stock against reorder level.
+  - **Tier 1, pane 3 — Apache ECharts 6.1.0 (Apache-2.0), canvas renderer,
+    tree-shaken.** `src/components/chart/Chart.tsx` is the ONE wrapper; the one
+    file in `src/` that names the library is `src/core/chart/echartsRenderer.ts`,
+    reached through the `ChartRenderer` seam in `src/core/chart/ChartRenderer.ts`
+    — the same shape as `HydrationEngine`'s `ShellStorage` and `src/core/ipc/`'s
+    `PortLike`. **Tier 2 (uPlot) is not in this change.**
+- **`normalizeChartSpec` (`src/core/chart/chartSpec.ts`), which makes "never
+  encode meaning by colour alone" a compiler property.** A series input has no
+  `color` member to write, and the normalised series carries `colorIndex`, `dash`
+  AND `marker` as required fields assigned in one statement, so a series with a
+  colour and no second channel is not representable. A `color` arriving through
+  `publishPayload` — where the compiler was never in the loop — is rejected on
+  sight with `INVALID_FIELD`. The series bound is **twelve**, because the colour,
+  dash and marker rotations have periods 12, 3 and 4, so a thirteenth series
+  would repeat the first in all three channels at once.
+- **The pane-3 block ledger.** `src/components/ledger/BlockLedger.tsx` renders a
+  vertically scrolling stack of addressable blocks — chart, table, form, text,
+  agent — each with a stable id that IS its payload channel, and each with a
+  Grafana-style inspector revealing the channel, the kind, the host-assigned
+  `revision` and the raw payload without navigating away. The `form` arm renders
+  real labelled inputs: pane 3 is a canvas and an input surface at once.
+  - **The index rides on a context key and the content on the payload channel.**
+    `src/core/ledger/ledgerIndex.ts` reads a comma-separated block list from the
+    reserved `ledger` context key. A list of addresses is exactly the cheap
+    primitive fact a context key is for; a chart's data is not.
+  - Both verification remotes publish blocks, so the ledger has real consumers.
+- **A text alternative for every chart.** `ChartDataTable` renders the same
+  `ChartSpec` the canvas was built from as a real table — the actual numbers, plus
+  the dash and marker of each series — `sr-only` beside the canvas and visibly in
+  the inspector. One implementation, two placements.
+
+### Changed
+
+- **Measured bundle delta, because README's performance section forbids quoting
+  unverified numbers as characteristics.** ECharts is the first runtime dependency
+  beyond Radix and React. `npm run build`, before and after, on the same machine:
+
+  | Artefact | Before | After | Delta |
+  |---|---|---|---|
+  | `dist/assets/index-*.js` | 331.39 kB | 893.05 kB | **+561.66 kB** |
+  | …gzipped | 105.76 kB | 295.09 kB | **+189.33 kB** |
+  | `dist/assets/index-*.css` | 20.95 kB | 21.41 kB | +0.46 kB |
+  | …gzipped | 5.08 kB | 5.20 kB | +0.12 kB |
+
+  That is a **169% increase in raw JavaScript** for a tree-shaken build pulling in
+  three chart types and five components. It is stated rather than softened: the
+  shell is a desktop host loading from disk, not a page over a network, and the
+  same figure would be a different decision for a web deployment. `npm audit
+  --omit=dev` still reports **0 vulnerabilities**; four packages were added.
+- **A theme change disposes and re-initialises every chart in the document
+  (risk R7).** ECharts registers a theme at `init` and has no setter for it, so a
+  chart instance's lifetime is exactly a palette's lifetime — expressed in the
+  code as a parameter of `ChartRenderer.create` rather than as a comment. The
+  option is preserved and re-applied inside the same effect, so there is no blank
+  frame; what is NOT preserved is anything the user did to the instance — a zoom,
+  a pan, a legend item toggled off. A DATA change costs one `setOption` and no
+  teardown, and the two are separate effects so the cheap path cannot silently
+  become the expensive one.
+
+### Fixed
+
+- **`sr-only` does not work on a `<table>`, and the shell was shipping one.** CSS
+  table sizing says a table's used width is never below its min-content width, so
+  the `width: 1px` in `sr-only` is ignored; being absolutely positioned with no
+  positioned ancestor, the "hidden" chart data table escaped every
+  `overflow: hidden` in the pane and made the whole page scroll sideways at 320px.
+  `ChartDataTable` now wraps its table in a `div` and the caller's classes go
+  there. Caught by `e2e/shell-layout.spec.ts`, in the browser lane, because jsdom
+  lays nothing out and could not have seen it.
+
 - **The command registry and its four surfaces — the ribbon is deleted.**
   `src/core/commands/CommandRegistry.ts` holds one collection and four projections
   — `listForSurface`, `listByCategory`, `recents` and `suggestedFor` — and every

@@ -1,16 +1,19 @@
 import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
+import { RowMetric } from '../components/ui/RowMetric';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
   IShellAPI,
   LEAPExtensionBlueprintInput,
+  NavigationMetric,
   NavigationNode,
   RibbonAction,
   RibbonContext,
   StructuredPayload,
 } from '../core/types';
 import { useChannelPayload } from '../core/payload/PayloadChannel';
+import { LEDGER_CONTEXT_KEY } from '../core/ledger/ledgerIndex';
 
 /**
  * ============================================================================
@@ -444,6 +447,91 @@ function isLowStock(snapshot: InventoryState, record: InventoryRecord): boolean 
   return stockOf(snapshot, record.id) <= record.reorderLevel;
 }
 
+/* -------------------------------------------------------------------------- */
+/* The pane-3 ledger blocks                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** The three channels this remote publishes blocks on. Registry-valid ids. */
+const STOCK_BLOCK = 'stock-levels';
+const FILTER_BLOCK = 'stock-filter';
+const TABLE_BLOCK = 'stock-table';
+
+/** How many records a pane-3 block shows. A bar per record stops reading long before this. */
+const BLOCK_RECORD_LIMIT = 12;
+
+/**
+ * The current stock levels as a chart spec, and the same numbers as a table.
+ *
+ * Two blocks over one dataset on purpose: the ledger's job is to be addressable,
+ * so a reader who wants the shape scrolls to the chart and a reader who wants
+ * the numbers scrolls to the table — and neither has to navigate away from the
+ * other. The chart's own accessible alternative is a third rendering of the same
+ * data, `sr-only` beside its canvas; the block inspector shows that one visibly.
+ */
+function stockBlocks(
+  snapshot: InventoryState,
+  records: readonly InventoryRecord[],
+): { chart: unknown; table: unknown } {
+  const shown = records.slice(0, BLOCK_RECORD_LIMIT);
+  const skus = shown.map((record) => record.sku);
+  const onHand = shown.map((record) => stockOf(snapshot, record.id));
+  const reorder = shown.map((record) => record.reorderLevel);
+  return {
+    chart: {
+      kind: 'bar',
+      title: 'Stock against reorder level',
+      xLabel: 'sku',
+      yLabel: 'units',
+      categories: skus,
+      series: [
+        { name: 'on hand', values: onHand },
+        { name: 'reorder level', values: reorder },
+      ],
+    },
+    table: {
+      columns: ['sku', 'name', 'on hand', 'reorder level'],
+      rows: shown.map((record, index) => [
+        record.sku,
+        record.name,
+        onHand[index] ?? 0,
+        record.reorderLevel,
+      ]),
+    },
+  };
+}
+
+/**
+ * Where one record's stock sits on its own track, as a tier-0 `bar`.
+ *
+ * ==========================================================================
+ * THE FULL-SCALE POINT IS THE ONLY DECISION HERE, AND IT IS A DECISION
+ * ==========================================================================
+ * `NavigationMetric.value` is a FRACTION, host-clamped to `[0, 1]`, so drawing
+ * a stock level means choosing what "full" means. Four times the reorder level
+ * is this catalogue's answer: it puts the reorder line a quarter of the way
+ * along the track, so a bar that is visibly short is a record that is visibly
+ * near reordering, and the same bar means the same thing on a record whose
+ * reorder level is 4 and on one whose level is 40.
+ *
+ * The clamp is written here as well as being applied by the host. It is not
+ * belt-and-braces for its own sake: a runtime-added record can hold stock far
+ * above four times its level, and an unclamped `1.4` would be REJECTED at the
+ * door with `INVALID_FIELD` rather than drawn — so clamping is this module
+ * deciding what an over-stocked record looks like instead of failing.
+ *
+ * `description` is required and carries the real numbers, which is the channel
+ * that survives a monochrome display, a 32px collapsed track and a screen
+ * reader. The bar is the fast read; the sentence is the accurate one.
+ */
+function stockMetric(record: InventoryRecord, stock: number): NavigationMetric {
+  const fullScale = record.reorderLevel * 4;
+  return {
+    kind: 'bar',
+    value: Math.min(1, Math.max(0, stock / fullScale)),
+    description: `${String(stock)} in stock against a reorder level of ${String(record.reorderLevel)}`,
+  };
+}
+
 /** The leaf categories a pane-1 selection covers: itself, or its children. */
 function leavesUnder(categoryId: string): readonly string[] {
   const children = LEAF_CATEGORIES.filter((leaf) => leaf.parentId === categoryId).map(
@@ -722,7 +810,7 @@ function InventoryRecordRow({
       aria-current={isSelected ? 'true' : undefined}
       onClick={onSelect}
       className={
-        'flex w-full min-w-0 flex-row items-center gap-1 rounded-sm border p-1 ' +
+        'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm border p-1 ' +
         'text-left text-[12px] leading-4 ' +
         `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
         `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
@@ -732,8 +820,24 @@ function InventoryRecordRow({
         {record.sku}
       </span>
       <span className="min-w-0 flex-1 truncate">{record.name}</span>
+      {/*
+        TIER 0, AND A `bar` RATHER THAN A `sparkline`, WHICH IS THE HONEST SHAPE.
+
+        This remote holds no stock HISTORY — the ticker moves one number and
+        keeps no series behind it — so a sparkline here would be a line drawn
+        through readings that were never taken. A bar says exactly what this
+        module knows: where the current level sits against the headroom this
+        record is allowed. Synthesising eight fake readings to get a prettier
+        glyph is the thing `MetricGlyph`'s `dot` docblock refuses in the other
+        direction, and it is refused here too.
+      */}
+      <RowMetric
+        metric={stockMetric(record, stock)}
+        value={String(stock)}
+        delta={stock - record.reorderLevel}
+      />
       <span className={isLow ? 'flex-none font-semibold' : `flex-none ${TOKEN_CLASS.mutedText}`}>
-        {String(stock)}
+        {isLow ? 'low' : 'ok'}
       </span>
     </button>
   );
@@ -782,6 +886,40 @@ function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactEleme
     return (): void => {
       clearInterval(ticker);
     };
+  }, [shell]);
+
+  // The pane-3 ledger: three blocks and the index that orders them.
+  //
+  // Keyed on the SNAPSHOT rather than driven from the ticker, and that is the
+  // difference between a live chart and a picture of the moment it mounted: the
+  // ticker moves stock, the stock lands on this module's own channel, the
+  // snapshot identity changes, and this effect republishes. One writer, one
+  // reason to republish. It is also why `toEChartsOption` sets
+  // `animation: false` — a chart that animated every tick would never be still.
+  useEffect(() => {
+    guarded('publishing the ledger blocks', () => {
+      const current = getSnapshot(shell);
+      const blocks = stockBlocks(current, visibleRecords(current, categoryId));
+      shell.publishPayload(STOCK_BLOCK, 'chart', blocks.chart);
+      shell.publishPayload(TABLE_BLOCK, 'table', blocks.table);
+      shell.publishPayload(FILTER_BLOCK, 'form', {
+        fields: [
+          { name: 'category', label: 'Category', value: categoryId ?? 'all' },
+          { name: 'minimum', label: 'Minimum stock', value: '0' },
+        ],
+      });
+    });
+  }, [shell, categoryId, snapshot]);
+
+  // The INDEX is written separately, and only when it could actually have
+  // changed. It is the same three ids on every tick, and writing it back into
+  // the context moves the host store — which re-renders the whole shell. A
+  // context write on a 200ms timer is a re-render of every surface on a 200ms
+  // timer, for a string that did not change.
+  useEffect(() => {
+    guarded('publishing the ledger index', () => {
+      shell.setContextKey(LEDGER_CONTEXT_KEY, `${STOCK_BLOCK},${TABLE_BLOCK},${FILTER_BLOCK}`);
+    });
   }, [shell]);
 
   return (
