@@ -3,6 +3,29 @@
 This is the onboarding guide for third parties building extensions against the
 LEAPWare-ShellUX host.
 
+> **START WITH THE EXAMPLE, NOT WITH THIS DOCUMENT.**
+> [`src/examples/HelloExtension.tsx`](../src/examples/HelloExtension.tsx) is a
+> complete, working extension in about a hundred lines, most of which is comment.
+> Copy it, rename it, and change the two view components; the five manifest keys
+> and the one command are the whole contract you must satisfy.
+>
+> It is **registered and driven by a test** —
+> [`src/examples/__tests__/HelloExtension.test.tsx`](../src/examples/__tests__/HelloExtension.test.tsx)
+> — so it cannot quietly stop being a working extension. *Tests:* "is accepted by
+> the registry the host actually uses", "renders both of its panes and moves the
+> selection between them", and "offers its command only when its predicate says
+> so, and the command clears the selection".
+>
+> **The two modules under `src/mocks/` are the wrong place to start** and this
+> guide used to leave that unsaid. They are *verification remotes*: their job is
+> to exercise the host's edges, so each is around a thousand lines carrying a
+> seeded catalogue, a running timer, a deliberately throwing renderer and the
+> structured payload channel. Read them **second**, when you want a feature the
+> example does not show. See #52.
+>
+> Then run the shell — `npm run dev` serves the demo with both remotes registered
+> at `/`.
+
 ---
 
 ## Read this before you read anything else
