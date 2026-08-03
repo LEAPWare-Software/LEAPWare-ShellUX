@@ -244,6 +244,31 @@ and main is a relay. Amendment O records two routes and takes neither.
 **One working tree, one git writer — §1b, and it has already cost a commit on the
 wrong branch.** If you are resuming and the tree is dirty, the dirt is not yours.
 
+### 2026-08-03, later: the queue is empty and #65 is the only thing in the way
+
+**Zero open pull requests. 53 open issues. `main` at `6caac51`, tree clean.**
+
+- **PR #71 MERGED** (`3bee328`). `CLAUDE.md` and `docs/adr/0003-quality-over-velocity.md`
+  are on `main`, so §9 of this file is no longer the only home of the doctrine —
+  **replace §9 with a pointer to those two files**, which is what §9 itself asks for.
+- **PR #108 MERGED** (`6caac51`). `SECURITY.md` names `leapware@outlook.com`, closing
+  **#75** — a Blocker, closed without going public and without spend.
+  **The same PR corrected `CLAUDE.md` on the day it merged**, because #71 branched
+  before the pivot and arrived saying `verify` is nine stages, that CI runs five of
+  them, that `npm run dev` renders an empty shell and that #39 is open. Four claims,
+  all false on arrival, in the one file auto-loaded into every session. Its own rule 3
+  is why that was fixed rather than filed.
+
+**The decisions board is at [`docs/DECISIONS.md`](docs/DECISIONS.md): six open, and
+not one of them is work.** D-01 third parties (#93) and D-06 macOS-in-v1 are
+judgements for the CPO; D-05 signing and D-07 branch protection are money; D-04 is
+five minutes with NVDA (#102); D-08 is a one-minute call (#105). **None of the six
+blocks #65.** They block a release.
+
+**So the honest state is: nothing stands between this repository and #65.** What
+stands between it and v1 is step 4 of the line-of-sight table — *fix what #65 finds* —
+which cannot be sized until #65 runs. That is the whole reason it goes next.
+
 ### Still open from before the pivot, and still unmerged
 
 - **PR #71, `quality-first-agreement`, `c82bfe1` — OPEN, CI green, not merged.** It is
@@ -792,11 +817,25 @@ prerequisites the plan folds in rather than replaces.
 
 ## 9. The quality doctrine
 
-**As of `3ebf86d`, `docs/adr/0003-quality-over-velocity.md` and the repo-root `CLAUDE.md`
-do not exist on `origin/main`.** They are the content of **PR #71**, which is open and
-green. **Once it merges, replace this section with a pointer to those two files.**
+**PR #71 MERGED 2026-08-03 as `3bee328`, and this section is now a pointer, exactly as
+its previous text instructed.**
 
-Until then, the doctrine to apply:
+- **[`CLAUDE.md`](CLAUDE.md)** — what to *do*. Auto-loaded into every session in this
+  repository, which is the whole point of merging it: the rules used to hold because
+  whoever was working had read §9 of this file.
+- **[`docs/adr/0003-quality-over-velocity.md`](docs/adr/0003-quality-over-velocity.md)**
+  — why, with the incident behind each rule.
+- `.github/PULL_REQUEST_TEMPLATE.md` — the same list as checkboxes.
+
+**One warning, and it is the reason this section keeps a body at all.** `CLAUDE.md`
+merged carrying **four claims the pivot had already falsified** — `verify` at nine
+stages, CI running five of them, `npm run dev` rendering an empty shell, and #39 open.
+All four were corrected the same day by PR #108. **A rulebook is not exempt from the
+rot it legislates against**, and this one arrived with it. Re-derive what it says about
+the gates before quoting it, the same way §0 asks you to re-derive this file.
+
+The five-step review loop below is preserved because it is quoted elsewhere and because
+`CLAUDE.md` states the rules rather than the loop:
 
 > **Review precedes merge. Never follows it.**
 
