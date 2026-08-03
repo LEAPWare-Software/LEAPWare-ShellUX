@@ -462,6 +462,68 @@ describe('ShellLayout — dividers', () => {
     const { container } = render(<Harness />);
     expect(panelSizes(container)).toEqual([18, 26, 56]);
   });
+
+  it('recomputes the percentage bands from an observed width, and leaves defaultSize on the mount-time measurement', () => {
+    // The half of §4.3 that `useElementWidth` exists for, asserted THROUGH the
+    // shell rather than only against the hook. `measureGroup` is untouched, so
+    // `defaultSize` is still the commit-time snapshot; only `minSize` and
+    // `maxSize` follow the observer.
+    //
+    // The fake is installed here rather than in `src/test/setup.ts`, on purpose:
+    // that file stubs nothing, and a global stub would make the no-observer
+    // branch — which is what jsdom and older embedded WebViews really take —
+    // unreachable rather than tested. See `src/hooks/useElementWidth.ts`.
+    const built: { fire: () => void }[] = [];
+    class FakeResizeObserver {
+      constructor(private readonly callback: () => void) {
+        built.push({ fire: (): void => { this.callback(); } });
+      }
+      observe(): void {
+        /* the element is not needed: the hook re-reads it */
+      }
+      disconnect(): void {
+        /* nothing to tear down in a fake */
+      }
+    }
+    (globalThis as { ResizeObserver?: unknown }).ResizeObserver = FakeResizeObserver;
+    try {
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, 0, 1000, 800),
+      );
+      const { container } = render(<Harness />);
+      // 240/1000 = 24, 360/1000 = 36, remainder 40 — the same numbers the
+      // mount-time measurement produces on its own.
+      expect(panelSizes(container)).toEqual([24, 36, 40]);
+      const separators = Array.from(
+        container.querySelectorAll<HTMLElement>('[role="separator"]'),
+      );
+      // 176px of 1000px is 17.6%. The library rounds what it reports to
+      // assistive technology, so the assertion is on the value and not on its
+      // spelling.
+      const minAt1000 = Number(separators[0]?.getAttribute('aria-valuemin'));
+      expect(minAt1000).toBeCloseTo(17.6, 0);
+
+      // The window narrows. `defaultSize` does NOT move — that would feed the
+      // number being dragged back in as the starting point — but the band does,
+      // because 176px is a different share of 500px than it is of 1000px.
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(
+        new DOMRect(0, 0, 500, 800),
+      );
+      act(() => {
+        for (const observer of built) {
+          observer.fire();
+        }
+      });
+      const after = Array.from(container.querySelectorAll<HTMLElement>('[role="separator"]'));
+      const minAt500 = Number(after[0]?.getAttribute('aria-valuemin'));
+      expect(minAt500).toBeCloseTo(35.2, 0);
+      // Twice the share for half the width, which is the whole point: the pixel
+      // intent in `PANE_PX` is what stayed constant.
+      expect(minAt500).toBeGreaterThan(minAt1000 * 1.9);
+    } finally {
+      delete (globalThis as { ResizeObserver?: unknown }).ResizeObserver;
+    }
+  });
 });
 
 describe('ShellLayout — pane 1 collapse', () => {

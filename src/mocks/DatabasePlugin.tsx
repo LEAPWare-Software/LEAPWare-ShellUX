@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
@@ -8,7 +8,9 @@ import type {
   NavigationNode,
   RibbonAction,
   RibbonContext,
+  StructuredPayload,
 } from '../core/types';
+import { useChannelPayload } from '../core/payload/PayloadChannel';
 
 /**
  * ============================================================================
@@ -41,15 +43,26 @@ import type {
  * `context` the host passes in. The two constraints worth restating because they
  * shape this file's code rather than its imports:
  *
- * **The two views share a module-scoped external store, not a React context.**
- * `views.pane2` and `views.pane3` mount in unrelated subtrees, each under its own
- * `ExtensionHostBoundary`, so no provider written here could sit above both.
- * `useSyncExternalStore` over module state is the shape that spans them.
+ * **The two views share a HOST CHANNEL, not a React context and — since ADR-0001
+ * Amendment L — not a module-scoped store either.** `views.pane2` and
+ * `views.pane3` mount in unrelated subtrees, each under its own
+ * `ExtensionHostBoundary`, so no provider written here could sit above both. A
+ * module-scoped `let` spanned them and is correct in exactly one process: under
+ * the process split `docs/plans/native-host-pivot.md` §3.2 describes this module
+ * loads twice, the static catalogue still resolves so pane 3 looks right on first
+ * paint, and every stock tick committed in pane 2 becomes invisible to pane 3
+ * with nothing to say why. The state therefore travels on
+ * `IShellAPI.publishPayload` / `readPayload` / `subscribePayload`, and
+ * `useChannelPayload` is the host's own `useSyncExternalStore` binding over it.
+ * See ADR-0001 Amendment L Decision 7.
  *
- * **No visibility predicate reads module state.** A command surface re-renders on host
- * context change, not on this module's changes, so a predicate closing over the
- * store would be evaluated against a stale snapshot and would produce a ribbon
- * that lies. Every predicate below is a pure function of `ctx`.
+ * **No visibility predicate reads this module's state.** A command surface
+ * re-renders on host context change, not on this module's changes, so a predicate
+ * closing over the state would be evaluated against a stale snapshot and would
+ * produce a surface that lies. Every predicate below is a pure function of `ctx`.
+ * The channel does not weaken that: `getContext()` does not return a payload and
+ * `isVisible(ctx)` has no argument through which to reach one — see ADR-0001
+ * Amendment L Decision 1.
  *
  * UNTRUSTED CONTENT: every string this module supplies reaches the DOM as a JSX
  * text node. No `dangerouslySetInnerHTML`, no `innerHTML`, nothing interpolated
@@ -248,7 +261,7 @@ function buildOpeningStock(): ReadonlyMap<string, number> {
 const FALLBACK_FAULT_RECORD_ID = `${RECORD_ID_PREFIX}fasteners-001`;
 
 /* -------------------------------------------------------------------------- */
-/* The module-scoped external store                                            */
+/* The state, and the host channel it travels on                               */
 /* -------------------------------------------------------------------------- */
 
 /** One observed stock movement. The cross-pane stream pane 3 reads. */
@@ -276,6 +289,20 @@ interface InventoryState {
    * arms it the way a user would.
    */
   readonly faultedRecordId: string | null;
+  /**
+   * The tick counters, and the count of records added so far.
+   *
+   * **They live on the state rather than beside it**, which they did not have to
+   * while the state was a module-scope `let` and four module-scope counters could
+   * sit next to it. Once the state crosses a channel, a counter left in module
+   * scope is the very defect the migration removes: it would reset in the second
+   * process, reissue sequence numbers the first one had already used, and restart
+   * the deterministic tick sequence that makes a timer-cleanup test falsifiable.
+   */
+  readonly tickSequence: number;
+  readonly tickCursor: number;
+  readonly tickSeed: number;
+  readonly addedCount: number;
 }
 
 /** How much stock history is kept. An unbounded log in a long-lived module is a leak. */
@@ -288,38 +315,120 @@ const INITIAL_STATE: InventoryState = {
   history: [],
   showLowStockOnly: false,
   faultedRecordId: null,
+  tickSequence: 0,
+  tickCursor: 0,
+  tickSeed: 7919,
+  addedCount: 0,
 };
 
-let state: InventoryState = INITIAL_STATE;
-let tickSequence = 0;
-let tickCursor = 0;
-let tickSeed = 7919;
-let addedCount = 0;
-const listeners = new Set<() => void>();
+/**
+ * The channel this module's whole cross-pane state travels on.
+ *
+ * A registry-valid identifier, because `publishPayload` holds a channel name to
+ * exactly the rule the registry holds a node id to.
+ */
+const STATE_CHANNEL = 'inventory-state';
 
-function getSnapshot(): InventoryState {
-  return state;
+/**
+ * The state as it crosses the channel: leaves only, no `Map`.
+ *
+ * `PayloadLeaf` is `ContextKeyValue` — ADR-0001 Amendment L Decision 2 preserves
+ * that at the leaves — so the stock levels travel as a record of numbers and
+ * `decode` rebuilds the `Map`.
+ */
+interface InventoryWire {
+  readonly selectedId: string | null;
+  readonly stockById: Readonly<Record<string, number>>;
+  readonly added: readonly InventoryRecord[];
+  readonly history: readonly StockTick[];
+  readonly showLowStockOnly: boolean;
+  readonly faultedRecordId: string | null;
+  readonly tickSequence: number;
+  readonly tickCursor: number;
+  readonly tickSeed: number;
+  readonly addedCount: number;
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return (): void => {
-    listeners.delete(listener);
+function encode(next: InventoryState): InventoryWire {
+  return {
+    selectedId: next.selectedId,
+    stockById: Object.fromEntries(next.stockById),
+    added: next.added,
+    history: next.history,
+    showLowStockOnly: next.showLowStockOnly,
+    faultedRecordId: next.faultedRecordId,
+    tickSequence: next.tickSequence,
+    tickCursor: next.tickCursor,
+    tickSeed: next.tickSeed,
+    addedCount: next.addedCount,
   };
 }
 
 /**
- * Commit and notify. The pass runs over a snapshot of the listener set and
- * re-checks membership, so a view that unsubscribes during the pass is not
- * called after its unsubscribe returned.
+ * Rebuild this module's working shape from the host's frozen copy.
+ *
+ * A channel nothing has published on reads `null`, which is the seed state — so
+ * the first render of either pane sees what the module used to start with, and no
+ * ordering between the two panes' mounts matters.
  */
-function commit(next: InventoryState): void {
-  state = next;
-  for (const listener of Array.from(listeners)) {
-    if (listeners.has(listener)) {
-      listener();
-    }
+function decode(payload: StructuredPayload | null): InventoryState {
+  if (payload === null) {
+    return INITIAL_STATE;
   }
+  const wire = payload.data as unknown as InventoryWire;
+  return {
+    selectedId: wire.selectedId,
+    stockById: new Map(Object.entries(wire.stockById)),
+    added: wire.added,
+    history: wire.history,
+    showLowStockOnly: wire.showLowStockOnly,
+    faultedRecordId: wire.faultedRecordId,
+    tickSequence: wire.tickSequence,
+    tickCursor: wire.tickCursor,
+    tickSeed: wire.tickSeed,
+    addedCount: wire.addedCount,
+  };
+}
+
+/**
+ * Read this module's state back out of the host.
+ *
+ * **This takes a `shell` and used to take nothing**, and that is the migration
+ * ADR-0001 Amendment L Decision 7 records. A module-scope `let` is correct in
+ * exactly one process; under the process split
+ * `docs/plans/native-host-pivot.md` §3.2 describes, this module would load twice,
+ * the static catalogue would still resolve — so pane 3 would look right on first
+ * paint — and every stock tick committed in pane 2 would be invisible to pane 3,
+ * with nothing to say why.
+ */
+function getSnapshot(shell: IShellAPI): InventoryState {
+  return decode(shell.readPayload(STATE_CHANNEL));
+}
+
+/**
+ * Commit and notify, through the host.
+ *
+ * The host deep-copies, assigns a revision and notifies every subscriber of this
+ * channel synchronously — including the added-during-pass and removed-during-pass
+ * discipline this function used to implement for itself.
+ */
+function commit(shell: IShellAPI, next: InventoryState): void {
+  guarded('publishing the inventory state', () => {
+    shell.publishPayload(STATE_CHANNEL, 'table', encode(next));
+  });
+}
+
+/**
+ * Subscribe a view to this module's channel.
+ *
+ * `useChannelPayload` is the host's own `useSyncExternalStore` binding, and the
+ * snapshot it hands React is the frozen `StructuredPayload` whose identity is
+ * stable until the channel is republished. The decode is memoised on that
+ * identity, so it runs once per publish rather than once per render.
+ */
+function useInventoryState(shell: IShellAPI): InventoryState {
+  const payload = useChannelPayload(shell, STATE_CHANNEL);
+  return useMemo(() => decode(payload), [payload]);
 }
 
 /** Seeded catalogue plus anything added at runtime. */
@@ -373,8 +482,13 @@ function withHistory(next: InventoryState, ticks: readonly StockTick[]): Invento
   return { ...next, history: history.slice(Math.max(0, history.length - MAX_HISTORY)) };
 }
 
-function selectRecord(recordId: string | null): void {
-  commit({ ...state, selectedId: recordId });
+// Every mutator below reads the CURRENT state through the shell and publishes
+// the next one back. There is no module variable between them, so pane 2 and
+// pane 3 read and write the same host-owned record however many times this
+// module has been loaded.
+
+function selectRecord(shell: IShellAPI, recordId: string | null): void {
+  commit(shell, { ...getSnapshot(shell), selectedId: recordId });
 }
 
 /** How many records move on each tick. Small enough to stay legible in the log. */
@@ -389,13 +503,15 @@ const RECORDS_PER_TICK = 4;
  * timer-cleanup test unfalsifiable, because "nothing changed after unmount" and
  * "nothing happened to change" look identical.
  */
-function tickStock(): void {
+function tickStock(shell: IShellAPI): void {
+  const state = getSnapshot(shell);
   const records = allRecords(state);
   if (records.length === 0) {
     return;
   }
   const levels = new Map(state.stockById);
   const moved: StockTick[] = [];
+  let { tickCursor, tickSeed, tickSequence } = state;
   for (let index = 0; index < RECORDS_PER_TICK; index += 1) {
     tickCursor = (tickCursor + 1) % records.length;
     const record = records[tickCursor];
@@ -409,21 +525,31 @@ function tickStock(): void {
     tickSequence += 1;
     moved.push({ seq: tickSequence, recordId: record.id, level });
   }
-  commit(withHistory({ ...state, stockById: levels }, moved));
+  commit(
+    shell,
+    withHistory({ ...state, stockById: levels, tickCursor, tickSeed, tickSequence }, moved),
+  );
 }
 
 /** Take one unit off a record, from pane 3. */
-function reserveStock(recordId: string): void {
+function reserveStock(shell: IShellAPI, recordId: string): void {
+  const state = getSnapshot(shell);
   const levels = new Map(state.stockById);
   const level = Math.max(0, (levels.get(recordId) ?? 0) - 1);
   levels.set(recordId, level);
-  tickSequence += 1;
-  commit(withHistory({ ...state, stockById: levels }, [{ seq: tickSequence, recordId, level }]));
+  const tickSequence = state.tickSequence + 1;
+  commit(
+    shell,
+    withHistory({ ...state, stockById: levels, tickSequence }, [
+      { seq: tickSequence, recordId, level },
+    ]),
+  );
 }
 
 /** Add a record to a leaf category and return it, so the caller can select it. */
-function addRecord(categoryId: string): InventoryRecord {
-  addedCount += 1;
+function addRecord(shell: IShellAPI, categoryId: string): InventoryRecord {
+  const state = getSnapshot(shell);
+  const addedCount = state.addedCount + 1;
   const record: InventoryRecord = {
     id: `${RECORD_ID_PREFIX}${categoryId}-new-${String(addedCount).padStart(3, '0')}`,
     categoryId,
@@ -433,8 +559,9 @@ function addRecord(categoryId: string): InventoryRecord {
   };
   const levels = new Map(state.stockById);
   levels.set(record.id, 0);
-  commit({
+  commit(shell, {
     ...state,
+    addedCount,
     added: [...state.added, record],
     stockById: levels,
     selectedId: record.id,
@@ -442,18 +569,20 @@ function addRecord(categoryId: string): InventoryRecord {
   return record;
 }
 
-function setLowStockFilter(enabled: boolean): void {
+function setLowStockFilter(shell: IShellAPI, enabled: boolean): void {
+  const state = getSnapshot(shell);
   if (state.showLowStockOnly === enabled) {
     return;
   }
-  commit({ ...state, showLowStockOnly: enabled });
+  commit(shell, { ...state, showLowStockOnly: enabled });
 }
 
-function setFaultedRecord(recordId: string | null): void {
+function setFaultedRecord(shell: IShellAPI, recordId: string | null): void {
+  const state = getSnapshot(shell);
   if (state.faultedRecordId === recordId) {
     return;
   }
-  commit({ ...state, faultedRecordId: recordId });
+  commit(shell, { ...state, faultedRecordId: recordId });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -500,7 +629,7 @@ const publishedBadges = new Map<string, number>();
 
 /** Push any top-level badge whose value has moved. Never called unguarded. */
 function publishBadges(shell: IShellAPI): void {
-  const snapshot = getSnapshot();
+  const snapshot = getSnapshot(shell);
   for (const category of TOP_LEVEL_CATEGORIES) {
     const count = lowStockCount(snapshot, category.id);
     if (publishedBadges.get(category.id) === count) {
@@ -619,7 +748,7 @@ function InventoryRecordRow({
  * virtualizer exists for.
  */
 function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactElement {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useInventoryState(shell);
   const categoryId = ownCategory(context);
   const records = visibleRecords(snapshot, categoryId);
 
@@ -637,7 +766,7 @@ function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactEleme
   // selection survive that round trip.
   useEffect(() => {
     publishedBadges.clear();
-    const remembered = getSnapshot().selectedId;
+    const remembered = getSnapshot(shell).selectedId;
     guarded('restoring the remembered selection', () => {
       shell.setSelectedItem(remembered);
     });
@@ -645,7 +774,7 @@ function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactEleme
       publishBadges(shell);
     });
     const ticker = setInterval(() => {
-      tickStock();
+      tickStock(shell);
       guarded('publishing a stock badge', () => {
         publishBadges(shell);
       });
@@ -673,7 +802,7 @@ function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactEleme
                 // Module state first, host second — both synchronous, so the
                 // order is observable and is what a cross-pane ordering test
                 // should expect.
-                selectRecord(record.id);
+                selectRecord(shell, record.id);
                 guarded(`selecting ${record.id}`, () => {
                   shell.setSelectedItem(record.id);
                 });
@@ -694,7 +823,7 @@ function InventoryRecordList({ shell, context }: ExtensionViewProps): ReactEleme
  * carries what the host does not: stock levels, the tick history, the filter.
  */
 function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactElement {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useInventoryState(shell);
   const recordId = ownSelection(context);
   const record = recordId === null ? undefined : findRecord(snapshot, recordId);
   const ticks =
@@ -730,7 +859,7 @@ function InventoryRecordDetail({ shell, context }: ExtensionViewProps): ReactEle
               'disabled:cursor-not-allowed disabled:opacity-40'
             }
             onClick={() => {
-              reserveStock(record.id);
+              reserveStock(shell, record.id);
               // Recomputed from the state AFTER the mutation, not from the
               // snapshot this render closed over.
               guarded('publishing a stock badge', () => {
@@ -843,7 +972,7 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     hotkey: { key: 'r', ctrl: true, alt: true },
     isVisible: (): boolean => true,
     onExecute: (_ctx, shell): void => {
-      tickStock();
+      tickStock(shell);
       publishBadges(shell);
     },
   },
@@ -853,8 +982,8 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     icon: 'search',
     hotkey: { key: 'l', ctrl: true, shift: true },
     isVisible: (): boolean => true,
-    onExecute: (): void => {
-      setLowStockFilter(!getSnapshot().showLowStockOnly);
+    onExecute: (_ctx, shell): void => {
+      setLowStockFilter(shell, !getSnapshot(shell).showLowStockOnly);
     },
   },
   {
@@ -873,7 +1002,7 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
       if (category === null || !isLeafCategory(category)) {
         return;
       }
-      const record = addRecord(category);
+      const record = addRecord(shell, category);
       shell.setSelectedItem(record.id);
       publishBadges(shell);
     },
@@ -900,8 +1029,8 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     label: 'Arm record fault',
     icon: 'edit',
     isVisible: (): boolean => true,
-    onExecute: (ctx): void => {
-      setFaultedRecord(ownSelection(ctx) ?? FALLBACK_FAULT_RECORD_ID);
+    onExecute: (ctx, shell): void => {
+      setFaultedRecord(shell, ownSelection(ctx) ?? FALLBACK_FAULT_RECORD_ID);
     },
   },
   {
@@ -909,8 +1038,8 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     label: 'Clear record fault',
     icon: 'close',
     isVisible: (): boolean => true,
-    onExecute: (): void => {
-      setFaultedRecord(null);
+    onExecute: (_ctx, shell): void => {
+      setFaultedRecord(shell, null);
     },
   },
 ];

@@ -189,6 +189,7 @@ stale by omission, and it cannot document a key that does not exist.
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
 | `icon?` | `string` | Optional. **Untrusted icon key.** Non-blank, at most 256 characters. An explicit `undefined` is treated as absent. Resolved through the same host-owned table `RibbonAction.icon` uses — a **lookup key only**, never interpolated into a URL or into markup. It is drawn in the collapsed 48px pane-1 track, which otherwise shows a monogram taken from the first letter of your `label`; a node that declares no icon keeps that monogram, and a key the host does not publish gets the host's fallback glyph rather than the monogram. The published key list is in "The icon vocabulary" below. *Tests:* `src/components/__tests__/ShellLayoutIcons.test.tsx` — "renders a declared node icon in the collapsed track instead of the monogram", "falls back to the host glyph for an icon key the host does not publish", "keeps the monogram for a node that declares no icon" and "does not resolve a prototype-shaped node icon key to anything inherited". |
 | `badgeCount?` | `number` | Optional. Non-negative safe integer. An explicit `undefined` is treated as absent. **This is the value the node is BORN with, and it is frozen at registration.** To change a badge at runtime call `IShellAPI.setBadgeCount(nodeId, count)`; pane 1 reads the store first and falls back to this field only when the store holds nothing for that node, so a runtime write of `0` really does clear a badge this field declared as `3`. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the blueprint badge for a node the store has never been written for" and "overrides a blueprint badge with the store value, including down to zero". |
+| `metric?` | `NavigationMetric` | Optional. A small quantitative glyph beside the row. `{ kind, value, series?, description }`. **`kind`** is `'bar' \| 'sparkline' \| 'dot'` and has **no fallback** — an unknown shape is `INVALID_FIELD`, unlike an unknown `icon` key, because a wrong shape has no honest rendering. **`value`** is a fraction: it is **clamped** to `[0, 1]` and a non-finite one is **refused**. **`series?`** is optional, each point clamped the same way, at most `REGISTRY_LIMITS.MAX_METRIC_POINTS` (32) of them. **`description` is REQUIRED** — it is the non-colour, non-shape channel WCAG 2.2 §1.4.1 asks for, and it renders as `sr-only` text beside the glyph. **There is no colour field and there will not be one**: a plug-in colour is invisible to the contrast manifest, so a metric draws in `currentColor`. Like `badgeCount`, `value` here is the value the node is BORN with; call `IShellAPI.setNavMetric(nodeId, value)` to move it at runtime. The override reaches `value` and **nothing else**, so a runtime write to a node that declared no `metric` draws nothing — the host will not invent a `kind` or a `description` for you. *Tests:* `src/core/__tests__/navMetric.test.tsx` — "clamps an out-of-range metric value at both doors and refuses a non-finite one", "refuses a metric kind the host does not publish" and "bounds the series at MAX_METRIC_POINTS"; `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "renders a declared navigation metric as a host-drawn glyph with its description" and "overrides a blueprint metric value with the store value, including down to zero". |
 | `children?` | `readonly NavigationNode[]` | Optional. An explicit `undefined` is treated as absent. Counts against the 512-node and 8-level limits. |
 
 ### `RibbonAction`
@@ -879,12 +880,15 @@ foreground revokes nothing" and "revokes when the extension is unregistered" in
 
 ### The member list
 
-As landed in `src/core/types.ts`, `IShellAPI` has exactly seven members. It is
+As landed in `src/core/types.ts`, `IShellAPI` has exactly fourteen members. It is
 deliberately small — every addition is a new capability handed to untrusted
-code — and it **grew from three to seven** in the contract-hardening wave
-recorded as ADR-0001 Amendment K. If you are reading an older copy of this guide
-that says "exactly three", the four new members are `setSelectedItems`,
-`setActiveNavNode`, `getBadgeCount` and `setContextKey`.
+code — and it has grown three times: **from three to seven** in the
+contract-hardening wave recorded as ADR-0001 Amendment K, whose four new members
+are `setSelectedItems`, `setActiveNavNode`, `getBadgeCount` and `setContextKey`;
+**from seven to nine** with the pane-1 metric pair `setNavMetric` and
+`getNavMetric`; and **from nine to fourteen** with the structured payload channel
+(`publishPayload`, `readPayload`, `subscribePayload` — ADR-0001 Amendment L) and
+the theme bridge (`getTheme`, `onThemeChange` — Amendment M).
 
 ```ts
 interface IShellAPI {
@@ -894,6 +898,13 @@ interface IShellAPI {
   setBadgeCount(nodeId: string, count: number): void;
   getBadgeCount(nodeId: string): number | undefined;
   setContextKey(key: string, value: string | number | boolean | null): void;
+  setNavMetric(nodeId: string, value: number): void;
+  getNavMetric(nodeId: string): number | undefined;
+  publishPayload(channel: string, kind: BlockKind, data: unknown): void;
+  readPayload(channel: string): StructuredPayload | null;
+  subscribePayload(channel: string, listener: (p: StructuredPayload) => void): () => void;
+  getTheme(): ResolvedTheme;
+  onThemeChange(listener: (theme: ResolvedTheme) => void): () => void;
   getContext(): Readonly<RibbonContext>;
 }
 ```
@@ -906,14 +917,21 @@ interface IShellAPI {
 | `setActiveNavNode(nodeId)` | Sets — or clears, with `null` — the selected pane-1 navigation node, which surfaces as `RibbonContext.activeNavNodeId`. **This one throws.** Before issue #15 your extension could not navigate at all: the field was writable only by the host's own pane-1 click handler. Unlike `setSelectedItem`'s `id`, `nodeId` **is** a host lookup key and is held to the same allowlist and reserved words the registry applied to your node ids — `INVALID_ID` otherwise. It is **not** checked against your own tree, deliberately: name a node you do not own and you get a field none of your own rendering will match, which is the same posture `setSelectedItem` takes. *Tests:* `src/core/__tests__/shellApi.test.ts` — "setActiveNavNode validates its argument". |
 | `getBadgeCount(nodeId)` | Reads back the badge count for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure `setBadgeCount` is scoped by, so it reads back exactly what this handle can write and offers no parameter through which to name another extension's scope. Before issue #12 you could write a badge and had no way to read one, so a module wanting to increment its own count had to keep a shadow copy. *Test:* `src/core/__tests__/dataflow.test.tsx` — "reads back only its own scope, and offers no parameter to name another". |
 | `setContextKey(key, value)` | Publishes one named primitive fact about your extension, which surfaces as `RibbonContext.contextKeys[key]` for your own predicates to branch on. **This one throws.** See "Context keys" below — it is a mechanism rather than a field, and it is worth reading before you reach for it. |
+| `setNavMetric(nodeId, value)` | Sets the live value of the metric glyph beside one of your navigation nodes, **in your own scope**, exactly as `setBadgeCount` is scoped. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid, `INVALID_FIELD` for a value that is not a finite number. `value` is **clamped** to `[0, 1]` and a non-finite one is **refused**: `1.4` is a scaling mistake with an obviously right answer, and `NaN` has none. It exists because a `NavigationMetric` declared in your blueprint is frozen at registration and could otherwise never move — the same defect issue #12 filed against badges. It overrides the declared `value` and **nothing else**, so a write to a node that declared no `metric` at all is stored, readable, and drawn by nobody: the host will not invent a `kind` or a `description` for you. *Tests:* `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "lets a setNavMetric write through a live IShellAPI change the glyph the sidebar draws" and "draws nothing for a runtime metric on a node that declared none". |
+| `getNavMetric(nodeId)` | Reads back the clamped metric value for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure the write half is, for the reason `getBadgeCount` gives: a scoped write with an unscoped read is not a scope. *Test:* `src/core/__tests__/navMetric.test.tsx` — "reads back only its own scope through getNavMetric". |
+| `publishPayload(channel, kind, data)` | Publishes one block of **structured** data on one of your channels, for your other pane to read. **This one throws.** This is the answer to "a context key can only hold a primitive" and it does not reverse that rule — see ADR-0001 Amendment L. The host takes a **deep copy** into null-prototype records and frozen arrays, so nothing of your object graph is retained and mutating what you passed afterwards changes nothing; your getters run exactly once, here. Leaves are `string | number | boolean | null`. Bounds: depth 6, 4096 nodes, 262144 host-accounted bytes, 32 channels per extension. **A cycle is rejected, never truncated.** `INVALID_ID` for a channel name that is not registry-valid, `INVALID_FIELD` for a bad `kind`, a non-primitive leaf, a cycle or a value that refuses to be read, `PAYLOAD_TOO_LARGE` for any bound. A rejected publish leaves the channel exactly as it was. |
+| `readPayload(channel)` | Reads the current payload on one of your channels, or `null`. **This one throws** — `INVALID_ID` for a bad channel. The returned object is the host's frozen copy and its **identity is stable** until the channel is republished, which is what makes it safe as a `useSyncExternalStore` snapshot. Compare `revision`, never the object: an identical republish DOES bump the revision and DOES notify, because the host does not deep-compare payloads. |
+| `subscribePayload(channel, listener)` | Subscribes to one of your channels; returns the unsubscribe function. **This one throws** — `INVALID_ID` for a bad channel, `INVALID_FIELD` for a listener that is not a function. **The disposer it returns is total and throws nothing, ever, including after your extension is revoked**, so it is safe in a React effect cleanup. Your listener runs synchronously inside the publisher's `publishPayload` frame; it can observe, re-enter and throw there. |
+| `getTheme()` | Returns the resolved semantic token set — every name the host publishes, with a value for each, deep-frozen. **This one throws** `REVOKED` and nothing else. One `getComputedStyle` per **theme change**, never per reader: a canvas cannot read a CSS custom property, so a chart has to be handed resolved values, and resolving per chart is one forced style recalculation per chart per frame. The record's identity is stable until the theme changes, so memoise on it. An empty string for a name means the document defines nothing for it. |
+| `onThemeChange(listener)` | Subscribes to theme changes; returns the unsubscribe function. **This one throws** — `INVALID_FIELD` for a listener that is not a function. It is **not** called on subscribe; call `getTheme()` for the current value. The disposer is total, for the same reason `subscribePayload`'s is. |
 | `getContext()` | Returns a frozen snapshot of the current `RibbonContext`. A snapshot, not a live view: hold the result only for the duration of the work you are doing, and call again rather than caching it across renders. |
 
 Every member but `getContext` rejects a bad argument; `getContext` takes no
-argument to reject. **None of the seven is total, and `getContext` is not an
-exception:** all seven throw `REVOKED` once your extension is released or unregistered
-(pinned in `dataflow.test.tsx`, which walks the whole member list rather than a
-representative one), and the five writers can additionally deliver whatever a
-store listener throws — see "Where that stops" near the end of this guide. Note the
+argument to reject. **None of the fourteen is total, and `getContext` is not an
+exception:** all fourteen throw `REVOKED` once your extension is released or
+unregistered (pinned in `dataflow.test.tsx`, which walks the whole member list
+rather than a representative one), and the writers can additionally deliver
+whatever a store listener throws — see "Where that stops" near the end of this guide. Note the
 asymmetry with `register`, which never throws: `IShellAPI` is called by *you*, so a bad
 argument is your bug and is reported as an exception, whereas `register` is called by the
 *host* on your data, where an exception would take the shell down.
@@ -1071,7 +1089,7 @@ write, the orphaned store, and `release` and `unregister` each still ending a ha
 ### There is no `revoke` on your `IShellAPI`, and the controller is not handed to you
 
 There is no `revoke` member on your `IShellAPI`. `Object.keys(shell)` is exactly
-the seven members above, `revoke` lives on a wrapper object the host keeps, and it
+the fourteen members above, `revoke` lives on a wrapper object the host keeps, and it
 closes over a variable no other scope can reach. That part is unconditional.
 
 **What this section used to claim beyond that was false, twice over.** It first

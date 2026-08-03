@@ -1,7 +1,23 @@
 import { createContext, useCallback, useContext, useSyncExternalStore } from 'react';
-import { EXTENSION_ID_PATTERN, REGISTRY_LIMITS, RESERVED_IDS } from './RegistryContext';
-import type { ContextKeyValue, IShellAPI, RibbonContext } from './types';
+import {
+  EXTENSION_ID_PATTERN,
+  REGISTRY_LIMITS,
+  RESERVED_IDS,
+  clampMetricValue,
+} from './RegistryContext';
+import type {
+  BlockKind,
+  ContextKeyValue,
+  IShellAPI,
+  RibbonContext,
+  StructuredPayload,
+} from './types';
 import { ShellUXError } from './types';
+import { createPayloadChannelStore } from './payload/PayloadChannel';
+import type { PayloadChannelStore } from './payload/PayloadChannel';
+import { createThemeBridge } from './theme/ThemeBridge';
+import type { ThemeBridgeStore } from './theme/ThemeBridge';
+import type { ResolvedTheme } from './theme/normalizeTheme';
 
 /**
  * Recursively freeze `value` and everything reachable from it.
@@ -283,6 +299,44 @@ export interface ShellStateStore {
    *   committed.
    */
   setBadgeCount(extensionId: string, nodeId: string, count: number): void;
+  /**
+   * Live metric value for one extension's node, or `undefined` when none was
+   * ever set.
+   *
+   * **The badge doors' exact shape, deliberately.** A metric has the same
+   * lifetime, the same scoping question and the same blueprint-override rule a
+   * badge has, and giving it a different shape would mean two answers to "why is
+   * my runtime write not showing?" where this codebase already has one settled
+   * answer. Both arguments are validated, for the reason `getBadgeCount` gives:
+   * this is a member of the store, `useShellStore()` is public, and the key is
+   * built by interpolating both components.
+   *
+   * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
+   *   registry-valid identifier nor the host scope, or `nodeId` is not a
+   *   registry-valid identifier.
+   */
+  getNavMetric(extensionId: string, nodeId: string): number | undefined;
+  /**
+   * Set the live metric value for one extension's node.
+   *
+   * `value` is CLAMPED to `[0, 1]` and REFUSED when non-finite, through
+   * `clampMetricValue` in `RegistryContext.tsx` — the same function the registry
+   * applies to a declared `NavigationMetric.value`, imported rather than
+   * restated so the two doors cannot drift apart.
+   *
+   * A successful write notifies, so a listener can throw a non-`ShellUXError`
+   * into this frame — see `subscribe`. `REENTRANT_NOTIFY` is asymmetric here in
+   * exactly the way it is for `setBadgeCount`: the value is committed BEFORE the
+   * notification pass, so a cascade reaching `MAX_NOTIFY_DEPTH` raises out of
+   * here with the metric already stored. Pinned by "raises REENTRANT_NOTIFY from
+   * setNavMetric, with the value already committed" in
+   * `src/core/__tests__/navMetric.test.tsx`.
+   *
+   * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
+   *   `INVALID_FIELD` when `value` is not a finite number; `REENTRANT_NOTIFY`
+   *   from the notification cascade, after the value is committed.
+   */
+  setNavMetric(extensionId: string, nodeId: string, value: number): void;
   /**
    * Set or clear the selected item — a selection of exactly one, or none.
    *
@@ -954,11 +1008,11 @@ const MAX_NOTIFY_DEPTH = 16;
  * one, nothing on a function object that exposes what it captured. A caller who
  * walks React's fiber tree — which is possible, and is pinned by
  * `src/core/__tests__/reflection.test.tsx` ("never reaches the badge map itself,
- * because it is a closure variable") — obtains the ten METHODS and never the state
+ * because it is a closure variable") — obtains the twelve METHODS and never the state
  * behind them.
  *
  * *Its methods are its own.* The returned object is **frozen**, so no holder can
- * replace, delete or add a member. Every one of the ten that takes an argument validates it.
+ * replace, delete or add a member. Every one of the twelve that takes an argument validates it.
  * Therefore no caller can put a value of the wrong shape into this store's
  * context: every value that enters the context through this store is well-typed,
  * for any caller however hostile. Pinned by `reflection.test.tsx` ("gets the store
@@ -968,7 +1022,7 @@ const MAX_NOTIFY_DEPTH = 16;
  * **That is the whole of it, and a wider clause used to be appended here.** The
  * sentence went on: "and no caller can intercept, suppress or forge the writes and
  * reads another holder makes through it." **False, and the freeze is irrelevant to
- * it.** `subscribe` is one of the ten frozen members, it is reachable through the
+ * it.** `subscribe` is one of the twelve frozen members, it is reachable through the
  * public `useShellStore()`, and it runs plug-in code SYNCHRONOUSLY INSIDE ANOTHER
  * HOLDER'S WRITE. Nothing is replaced, so nothing the freeze does applies. The real
  * limit, stated plainly: **a listener is a synchronous call into untrusted code
@@ -1026,6 +1080,10 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   // A Map, never an object literal: badge keys come from plugin-supplied node
   // ids, and a Map has no prototype chain to pollute.
   const badgeCounts = new Map<string, number>();
+  // The same shape and the same reason as `badgeCounts`: keyed by
+  // `${scope}:${node}`, both components proven strings before the key is built,
+  // and a `Map` because the node half originates in a plug-in manifest.
+  const navMetrics = new Map<string, number>();
   // Context keys, namespaced by extension. Nested rather than flat because the
   // published record needs a whole scope at once; a `Map` at both levels for the
   // same prototype reason as `badgeCounts`. See `setContextKey`.
@@ -1308,6 +1366,25 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     notify();
   }
 
+  function getNavMetric(extensionId: string, nodeId: string): number | undefined {
+    assertValidBadgeScope(extensionId, 'getNavMetric');
+    assertValidNodeId(nodeId, 'getNavMetric');
+    return navMetrics.get(badgeKey(extensionId, nodeId));
+  }
+
+  function setNavMetric(extensionId: string, nodeId: string, value: number): void {
+    assertValidBadgeScope(extensionId, 'setNavMetric');
+    assertValidNodeId(nodeId, 'setNavMetric');
+    // The registry's own rule, imported rather than restated: clamped for an
+    // out-of-range number, refused for a non-finite one.
+    navMetrics.set(badgeKey(extensionId, nodeId), clampMetricValue(value, 'setNavMetric', 'value'));
+    // UNCONDITIONAL, exactly as `setBadgeCount`'s notify is: a metric is not part
+    // of the context snapshot, so `useShellContext` bails out on its own
+    // unchanged snapshot, and it is `useNavMetric`'s `Object.is` bail-out that
+    // stops a rewritten value becoming a re-render.
+    notify();
+  }
+
   function setSelectedItem(id: string | null): void {
     // Checked here as well as inside `applyPatch`, and deliberately so: this is
     // the door an extension calls, so the rejection has to name the parameter the
@@ -1457,13 +1534,13 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   //
   // `Object.freeze`, not `deepFreeze`: the members are host-written functions with
   // nothing underneath them worth walking, and a shallow freeze is exactly the
-  // property being bought — the ten bindings cannot be replaced, deleted, or
+  // property being bought — the twelve bindings cannot be replaced, deleted, or
   // added to. Pinned by "the store handed out by useShellStore is frozen" in
   // `capability.test.tsx` and "the store object cannot be rewired" in
   // `shellApi.test.ts`.
   //
   // What the freeze does NOT buy is that calls through the object are private:
-  // `subscribe` is one of the ten, it is public, and it runs plug-in code inside
+  // `subscribe` is one of the twelve, it is public, and it runs plug-in code inside
   // another holder's write. See its docblock and `subscribe.test.tsx`.
   return Object.freeze({
     getContext,
@@ -1471,12 +1548,42 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     patchContext,
     getBadgeCount,
     setBadgeCount,
+    getNavMetric,
+    setNavMetric,
     setSelectedItem,
     setSelectedItems,
     setActiveNavNode,
     setContextKey,
     clearContextKeys,
   });
+}
+
+/**
+ * The theme bridge the UNSCOPED host facade falls back to, created at most once.
+ *
+ * **A module singleton, and it earns that rather than reaching for it.**
+ * `createThemeBridge` runs a `getComputedStyle` and a 60-name loop IN ITS BODY,
+ * so a plain default argument — `themes = createThemeBridge(...)` — would force
+ * one style recalculation per `createShellAPI()` call and mint a private bridge
+ * for each. That would make "one `getComputedStyle` per theme change, never one
+ * per reader" narrower than ADR-0001 Amendment M Decision 3 states it, in the
+ * module that states it.
+ *
+ * `ShellHostProvider` never reaches this: it owns one bridge per provider and
+ * passes it explicitly, which is what makes a provider's extensions share a
+ * record. What is left for this to answer is `createShellAPI` — the unscoped,
+ * unrevocable, host-side facade, and the one extension authors are told to build
+ * test doubles against — where there is no provider to take a bridge from.
+ *
+ * It is created lazily rather than at module scope, so importing this module
+ * touches no `document` and an environment without one pays nothing until
+ * somebody actually mints an unscoped facade.
+ */
+let hostThemeBridgeInstance: ThemeBridgeStore | null = null;
+
+function hostThemeBridge(): ThemeBridgeStore {
+  hostThemeBridgeInstance ??= createThemeBridge(document.documentElement);
+  return hostThemeBridgeInstance;
 }
 
 /**
@@ -1493,13 +1600,16 @@ export interface RevocableShellAPI {
    *
    * **Not on `api`, and not reachable from it.** It is a property of THIS wrapper,
    * and it closes over a variable no other scope can reach, so a plugin holding
-   * `api` has no route to it: `Object.keys(api)` is exactly the seven `IShellAPI`
-   * members and there is no eighth. That much is an integrity control and holds
+   * `api` has no route to it: `Object.keys(api)` is exactly the fourteen
+   * `IShellAPI` members and there is no fifteenth. That much is an integrity control and holds
    * against any caller, and it is pinned by "does not expose revoke to the plugin"
    * in `src/core/__tests__/dataflow.test.tsx`, whose assertion is the literal
    * member list rather than a count — so widening `IShellAPI` from three members
-   * to seven was a change that test had to be told about, which is the point of
-   * writing it that way.
+   * to seven in Amendment K, from seven to nine when `setNavMetric` and
+   * `getNavMetric` landed, and from nine to twelve when the payload channel did,
+   * and from twelve to fourteen when `getTheme` and `onThemeChange` did, were
+   * all changes that test had to be told about, which is the point of writing it
+   * that way.
    *
    * **It is not therefore host-only.** An earlier version of this comment
    * concluded that a plugin "cannot revoke itself, and cannot revoke another
@@ -1577,7 +1687,7 @@ export interface RevocableShellAPI {
  *
  * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
  *   registry-valid identifier nor `HOST_BADGE_SCOPE`. That is the only outcome
- *   THIS function decides on; what the returned `api`'s seven members can raise
+ *   THIS function decides on; what the returned `api`'s fourteen members can raise
  *   is documented on `IShellAPI` in `types.ts`. Pinned by "refuses to mint a
  *   scoped facade for an extensionId that was never validated" in
  *   `src/core/__tests__/shellApi.test.ts`.
@@ -1586,6 +1696,8 @@ export function createRevocableShellAPI(
   store: ShellStateStore,
   extensionId: string,
   isLive: () => boolean = (): boolean => true,
+  payloads: PayloadChannelStore = createPayloadChannelStore(),
+  themes: ThemeBridgeStore = hostThemeBridge(),
 ): RevocableShellAPI {
   // Before anything else, and before the closure captures it: the `REVOKED`
   // message interpolates this value, so it has to be provably a primitive string.
@@ -1644,6 +1756,61 @@ export function createRevocableShellAPI(
       // the write half has, so a handle can read back exactly what it can write
       // and nothing else. There is no parameter through which to aim elsewhere.
       return store.getBadgeCount(extensionId, nodeId);
+    },
+
+    setNavMetric(nodeId: string, value: number): void {
+      assertLive('setNavMetric');
+      // `extensionId` from the closure, never from the caller — the badge
+      // doors' scoping exactly, for the reason `NavigationNode.metric` gives.
+      store.setNavMetric(extensionId, nodeId, value);
+    },
+
+    getNavMetric(nodeId: string): number | undefined {
+      assertLive('getNavMetric');
+      // `extensionId` from the closure, never from the caller: a scoped write
+      // with an unscoped read is not a scope. ADR-0001 Amendment K Decision 4.
+      return store.getNavMetric(extensionId, nodeId);
+    },
+
+    publishPayload(channel: string, kind: BlockKind, data: unknown): void {
+      assertLive('publishPayload');
+      // `extensionId` from the closure, never from the caller — the scoping every
+      // other write on this facade has.
+      payloads.publish(extensionId, channel, kind, data);
+    },
+
+    readPayload(channel: string): StructuredPayload | null {
+      assertLive('readPayload');
+      return payloads.read(extensionId, channel);
+    },
+
+    subscribePayload(channel: string, listener: (payload: StructuredPayload) => void): () => void {
+      // Liveness is checked when the subscription is TAKEN and deliberately not
+      // again when it is dropped: the disposer `payloads.subscribe` returns is
+      // total, so a pane unmounting after its extension was unregistered runs a
+      // cleanup that throws nothing. See `IShellAPI.subscribePayload`.
+      assertLive('subscribePayload');
+      return payloads.subscribe(extensionId, channel, listener);
+    },
+
+    getTheme(): ResolvedTheme {
+      assertLive('getTheme');
+      return themes.getTheme();
+    },
+
+    onThemeChange(listener: (theme: ResolvedTheme) => void): () => void {
+      // Liveness is checked when the subscription is TAKEN and deliberately not
+      // again when it is dropped: the disposer is total, so a pane unmounting
+      // after its extension was unregistered runs a cleanup that throws nothing.
+      assertLive('onThemeChange');
+      if (typeof listener !== 'function') {
+        throw new ShellUXError(
+          'INVALID_FIELD',
+          `onThemeChange: "listener" must be a function; received ${describeUntrusted(listener)}.`,
+          'listener',
+        );
+      }
+      return themes.subscribe(listener);
     },
 
     getContext(): Readonly<RibbonContext> {
@@ -1832,6 +1999,60 @@ export function useBadgeCount(extensionId: string, nodeId: string): number | und
   const store = useShellStore();
   const getSnapshot = useCallback(
     (): number | undefined => store.getBadgeCount(extensionId, nodeId),
+    [store, extensionId, nodeId],
+  );
+  return useSyncExternalStore(store.subscribe, getSnapshot);
+}
+
+/**
+ * Subscribe to one node's live metric value. Re-renders the calling component
+ * when that metric changes, and not when anything else in the store does.
+ *
+ * **`useBadgeCount`'s exact shape, and that is the decision rather than a
+ * copy-paste.** A metric has the same lifetime a badge has, the same
+ * blueprint-versus-store override question, and the same "my runtime write is
+ * invisible" failure that issue #12 filed against badges. Rendering the
+ * blueprint's `NavigationMetric.value` alone would reproduce that defect
+ * exactly, so pane 1 reads through this hook and a store value overrides the
+ * declared one — with `??`, never a truthiness test, because a metric written
+ * down to `0` is a value and `||` would fall back to a stale blueprint number
+ * for the very reading that matters most. Pinned by "overrides a blueprint
+ * metric value with the store value, including down to zero" in
+ * `src/components/__tests__/ShellLayoutMetrics.test.tsx`.
+ *
+ * The snapshot is a primitive, so no memoisation is needed and none is used: two
+ * reads of an unchanged metric are `Object.is`-equal and `useSyncExternalStore`
+ * bails out by itself. That bail-out carries the same weight it does for badges —
+ * `setNavMetric` notifies UNCONDITIONALLY, so every metric write anywhere in the
+ * shell wakes every one of these subscribers and only the rows whose own number
+ * moved re-render. Pinned by "does not re-render when the metric is rewritten
+ * with the value it already holds" in `src/core/__tests__/navMetric.test.tsx`.
+ *
+ * `extensionId` is a PARAMETER here for the reason it is one on `useBadgeCount`:
+ * this is a host-side selector over the unscoped store, and a sidebar has to read
+ * every extension's metrics in order to draw them. It adds nothing a caller did
+ * not already have, because `useShellStore()` is public.
+ *
+ * **Both arguments are validated, and the rejection arrives DURING RENDER**, by
+ * `store.getNavMetric`'s own check rather than a restatement here, so the two
+ * cannot drift. A component that passes a malformed id fails to render rather
+ * than quietly reading `undefined` — the same trade `useBadgeCount` makes. Pinned
+ * by "raises INVALID_ID during render for a malformed metric scope" in
+ * `src/core/__tests__/navMetric.test.tsx`.
+ *
+ * @param extensionId The metric scope to read — a registry-valid extension id,
+ *   or the host scope `createShellAPI` writes through.
+ * @param nodeId The navigation node id within that scope.
+ * @returns The clamped metric value, or `undefined` when none was ever set.
+ * @throws {ShellUXError} `INVALID_ID` during render for a malformed scope or node
+ *   id. That is the only code reachable from here: this hook reads and writes
+ *   nothing else, so it never notifies.
+ * @throws when called outside `ShellHostProvider`.
+ */
+export function useNavMetric(extensionId: string, nodeId: string): number | undefined {
+  const store = useShellStore();
+  const getSnapshot = useCallback(
+    (): number | undefined => store.getNavMetric(extensionId, nodeId),
     [store, extensionId, nodeId],
   );
   return useSyncExternalStore(store.subscribe, getSnapshot);

@@ -109,6 +109,20 @@ export default tseslint.config(
             'useRegistry',
             'useRegistryRevision',
             'validateBlueprint',
+            // `clampMetricValue` is the sixth, and it is argued for rather than
+            // waved through. A `NavigationMetric.value` is reached by TWO doors —
+            // the registration door in this file and `IShellAPI.setNavMetric` at
+            // runtime — and the clamp/reject asymmetry between them is a rule, not
+            // an implementation detail: out of range is corrected, non-finite is
+            // refused. Two copies of that rule would drift exactly the way two
+            // copies of `isVisible` would, which is the argument ADR-0001
+            // Amendment J Decision 1 makes for extracting a guard BEFORE adding a
+            // second route to it. It lives here rather than in a module of its own
+            // because it reports through this file's `describeType`, and moving it
+            // out would mean exporting that too — a wider surface bought to close a
+            // narrower one. The accepted cost is unchanged: this file already
+            // triggers a full dev reload because of `validateBlueprint`.
+            'clampMetricValue',
           ],
         },
       ],

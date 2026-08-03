@@ -7,12 +7,15 @@ import type {
   ExtensionView,
   Hotkey,
   LEAPExtensionBlueprint,
+  NavigationMetric,
+  NavigationMetricKind,
   NavigationNode,
   ShellUXErrorCode,
 } from './types';
 import {
   COMMAND_CATEGORIES,
   COMMAND_SURFACES,
+  NAVIGATION_METRIC_KINDS,
   SHELL_UX_ERROR_CODES,
   ShellUXError,
 } from './types';
@@ -151,6 +154,22 @@ export const REGISTRY_LIMITS = Object.freeze({
    * likes, into a record every predicate reads on every render.
    */
   MAX_CONTEXT_VALUE_LENGTH: 256,
+  /**
+   * Max points in one `NavigationMetric.series`.
+   *
+   * **Small on purpose, and the number is an argument rather than a round
+   * figure.** A pane-1 metric is tier 0 of the native-host plan's three-tier
+   * visualization model: a memoised path string with no chart instance behind it,
+   * drawn once per navigation row, in a tree the shell re-renders on every
+   * foreground change and on every badge write. Thirty-two points is a SHAPE —
+   * enough to read a trend at 12px — and three thousand is a chart, which belongs
+   * in a pane that has a canvas to spend on it.
+   *
+   * It bounds what is STORED, like every bound above it: the count is captured
+   * once before the loop and the host-owned array is filled with exactly that
+   * many entries, so a `Proxy` cannot grow the work after the bound was checked.
+   */
+  MAX_METRIC_POINTS: 32,
 });
 
 /**
@@ -472,7 +491,16 @@ interface MutableNavigationNode {
   label: string;
   icon?: string;
   badgeCount?: number;
+  metric?: NavigationMetric;
   children?: readonly NavigationNode[];
+}
+
+/** Builder shape for a normalised metric; frozen into a `NavigationMetric`. */
+interface MutableNavigationMetric {
+  kind: NavigationMetricKind;
+  value: number;
+  series?: readonly number[];
+  description: string;
 }
 
 /** Builder shape for a normalised command; frozen into a `Command`. */
@@ -657,6 +685,136 @@ function normalizeHotkey(value: unknown, path: string, seenChords: Set<string>):
   return hotkey;
 }
 
+/**
+ * One metric scalar, held to the clamp/reject rule — the ONE implementation of
+ * it, for both doors that reach the field.
+ *
+ * **The asymmetry is the decision and it is not an inconsistency.** An
+ * out-of-range value is CLAMPED: `1.4` is a scaling mistake, there is an
+ * obviously right answer, and refusing a whole blueprint — every navigation node,
+ * every command, both views — over one badly scaled bar is out of proportion to
+ * the error. A non-finite value is REFUSED: no clamp turns `NaN` into a fraction,
+ * and every candidate answer invents a quantity the extension never published. It
+ * is the rule `assertValidContextKeyValue` applies to a context-key number,
+ * reached from a different door.
+ *
+ * It is EXPORTED so that `IShellAPI.setNavMetric` applies this function rather
+ * than a second copy of the sentence — the same one-rule-one-door argument
+ * `assertValidIdentifier` makes by importing `EXTENSION_ID_PATTERN` from here
+ * instead of restating it. The dependency runs one way only: `ShellAPI.ts`
+ * imports from this module and this module imports nothing back.
+ *
+ * `method` and `field` are parameters because both doors reach here — the
+ * registration door and the runtime door — and a rejection has to name the one
+ * the caller actually used.
+ *
+ * Pinned by "clamps an out-of-range metric value at both doors and refuses a
+ * non-finite one" in `src/core/__tests__/navMetric.test.tsx`.
+ *
+ * @throws {ShellUXError} `INVALID_FIELD` when `value` is not a finite number.
+ */
+export function clampMetricValue(value: unknown, method: string, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `${method}: "${field}" must be a finite number; received ${describeType(value)}. There is no clamp that makes a non-finite value a fraction, so it is refused rather than corrected.`,
+      field,
+    );
+  }
+  return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * Validate a `metric` payload and build the host-owned record for it.
+ *
+ * The same single-read discipline `normalizeNavigationNode` itself uses: every
+ * field is read once into a local, the local is what is both checked AND stored,
+ * and the series length is captured ONCE before the loop that fills a host-owned
+ * array with exactly that many entries. A `Proxy` reporting one length while it
+ * is measured and another afterwards therefore cannot grow what the host keeps.
+ * Pinned by "captures the series length once, so a shifting length cannot grow
+ * what is stored" and "stores a host-owned frozen metric that a plug-in cannot
+ * mutate afterwards" in `src/core/__tests__/navMetric.test.tsx`.
+ *
+ * **`kind` has NO FALLBACK**, unlike `icon` — see `NavigationMetricKind` in
+ * `types.ts` for the argument. An unknown glyph key is a wrong picture beside a
+ * correct label; an unknown SHAPE has no rendering that means "the host did not
+ * recognise this", so it is `INVALID_FIELD` at the door. Pinned by "refuses a
+ * metric kind the host does not publish" in the same file.
+ *
+ * **`description` is REQUIRED**, for the reason `label` is: it is the
+ * non-colour, non-shape channel WCAG 2.2 §1.4.1 asks for, and making it optional
+ * would put the accessible case behind an opt-in. Pinned by "refuses a metric
+ * with no description", same file.
+ *
+ * **There is no `colour` field to normalise, deliberately.** A plug-in-supplied
+ * colour is a colour outside `design/`, unreachable by
+ * `design/contrast-manifest.json` and by `npm run tokens:check`. A metric draws
+ * in `currentColor`.
+ */
+function normalizeNavigationMetric(value: unknown, path: string): NavigationMetric {
+  if (!isRecord(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be an object; received ${describeType(value)}.`,
+      path,
+    );
+  }
+
+  const kindPath = `${path}.kind`;
+  const rawKind = requireField(value, 'kind', kindPath);
+  if (typeof rawKind !== 'string' || !NAVIGATION_METRIC_KINDS.has(rawKind)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${kindPath}" must name one of ${[...NAVIGATION_METRIC_KINDS].join(', ')}; received ${describeType(rawKind)}. An unknown shape has no honest fallback, so it is refused rather than drawn as something else.`,
+      kindPath,
+    );
+  }
+
+  const valuePath = `${path}.value`;
+  const scalar = clampMetricValue(requireField(value, 'value', valuePath), 'register', valuePath);
+
+  const descriptionPath = `${path}.description`;
+  const description = validateText(
+    requireField(value, 'description', descriptionPath),
+    descriptionPath,
+    REGISTRY_LIMITS.MAX_TEXT_LENGTH,
+  );
+
+  const metric: MutableNavigationMetric = {
+    kind: rawKind as NavigationMetricKind,
+    value: scalar,
+    description,
+  };
+
+  const series = value['series'];
+  if (series !== undefined) {
+    if (!isArrayValue(series)) {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `Field "${path}.series" must be an array; received ${describeType(series)}.`,
+        `${path}.series`,
+      );
+    }
+    // Captured ONCE, before the loop, exactly as `children.length` is below.
+    const pointCount = series.length;
+    if (pointCount > REGISTRY_LIMITS.MAX_METRIC_POINTS) {
+      throw new ShellUXError(
+        'PAYLOAD_TOO_LARGE',
+        `Field "${path}.series" exceeds the maximum of ${REGISTRY_LIMITS.MAX_METRIC_POINTS} points.`,
+        `${path}.series`,
+      );
+    }
+    const points: number[] = [];
+    for (let index = 0; index < pointCount; index += 1) {
+      points.push(clampMetricValue(series[index], 'register', `${path}.series[${index}]`));
+    }
+    metric.series = Object.freeze(points);
+  }
+
+  return Object.freeze(metric);
+}
+
 function normalizeNavigationNode(
   value: unknown,
   path: string,
@@ -734,6 +892,14 @@ function normalizeNavigationNode(
       );
     }
     node.badgeCount = badgeCount;
+  }
+
+  // Read once into a local, exactly as `icon` and `badgeCount` are, and the
+  // record built from it is host-owned and frozen — so a plug-in mutating its
+  // own metric object after registration changes nothing the shell draws.
+  const metric = value['metric'];
+  if (metric !== undefined) {
+    node.metric = normalizeNavigationMetric(metric, `${path}.metric`);
   }
 
   const children = value['children'];

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ExtensionHostBoundary, useActivation } from '../../core/ActivationContext';
 import type { ActiveExtension } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
-import { useBadgeCount, useShellContext, useShellStore } from '../../core/ShellAPI';
+import { useBadgeCount, useNavMetric, useShellContext, useShellStore } from '../../core/ShellAPI';
 import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { useHotkeyDispatch } from '../../core/hotkeyDispatch';
 import {
@@ -14,8 +14,10 @@ import {
   selectActiveExtensionId,
 } from '../../core/services/HydrationEngine';
 import type { HydrationEngine, PaneSizes } from '../../core/services/HydrationEngine';
-import type { NavigationNode, PaneId, RibbonContext } from '../../core/types';
+import type { NavigationMetric, NavigationNode, PaneId, RibbonContext } from '../../core/types';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useElementWidth } from '../../hooks/useElementWidth';
+import { MetricGlyph } from '../ui/MetricGlyph';
 import { createCommandRegistry, withRecent } from '../../core/commands/CommandRegistry';
 import type { ExtensionCommands, HostCommand } from '../../core/commands/CommandRegistry';
 import { CommandPalette } from '../command/CommandPalette';
@@ -68,12 +70,36 @@ import { PaneWrapper } from './PaneWrapper';
  *    only while the pixel minimums fit, which is 800px and wider" in
  *    `src/components/__tests__/ShellLayout.test.tsx`.
  *
- *    **The measurement is not repeated.** There is no observer here. A later
- *    viewport change rescales the panes proportionally and leaves the
- *    percentage minimums where they were, which is predictable and — by the
- *    flex-ratio argument above — still cannot overflow. When the width is
+ *    **THE MEASUREMENT IS NOT REPEATED FOR `defaultSize`, AND IT IS REPEATED
+ *    FOR THE BANDS. THIS PARAGRAPH USED TO SAY "THERE IS NO OBSERVER HERE" AND
+ *    THAT IS NO LONGER TRUE.** `measureGroup` is unchanged and is still the only
+ *    thing `defaultSize` is derived from, for the timing reason above: it runs
+ *    during commit, so the first layout is the right one. What is added beside it
+ *    is `useElementWidth` (`src/hooks/useElementWidth.ts`), which observes the
+ *    same element and reports its live width.
+ *
+ *    The split is what makes both halves correct. `defaultSize` means "where this
+ *    panel STARTS", so re-deriving it from a live width would feed the number
+ *    being dragged back in as the starting point — the defect decision 6
+ *    describes for the restored layout. `minSize` and `maxSize` mean "what
+ *    `PANE_PX` is worth as a share of the group", which is a different number at
+ *    every window width and was previously frozen at the width the shell happened
+ *    to open on: a window dragged from 1400px to 700px kept a 176px minimum
+ *    expressed as 12.6%, which is 88px. Only the BANDS move.
+ *
+ *    A runtime with no `ResizeObserver` — jsdom, and some older embedded
+ *    WebViews — reports `null` and every band falls back to the mount-time
+ *    measurement, which is exactly what this shell did before. That branch is not
+ *    stubbed away in `src/test/setup.ts`; see the hook's banner. When the width is
  *    unmeasurable — 0, as it is in jsdom — `percentOf` falls back to
- *    `PANE_FALLBACK_PERCENT` rather than dividing by zero.
+ *    `PANE_FALLBACK_PERCENT` rather than dividing by zero. *Tests:*
+ *    `src/hooks/__tests__/useElementWidth.test.tsx` — "reports null and observes
+ *    nothing when ResizeObserver is absent", "reports the observed width when
+ *    ResizeObserver is present", "disconnects the observer when the element
+ *    detaches" and "floors a sub-pixel width at one whole pixel";
+ *    `src/components/__tests__/ShellLayout.test.tsx` — "recomputes the percentage
+ *    bands from an observed width, and leaves defaultSize on the mount-time
+ *    measurement".
  *
  *    A restored size is held to the SAME minimums, at the width measured on this
  *    load — see decision 6. That is the question this paragraph used to defer to
@@ -306,6 +332,38 @@ import { PaneWrapper } from './PaneWrapper';
  *    node id, and there is no scope under which the store could hold a badge for
  *    one.
  *
+ * 8. A NAVIGATION METRIC IS A DECLARATIVE FIELD, NOT A `views.pane1`.
+ *    Decision 5 above says nothing an extension can register makes pane 1 throw
+ *    during render. A `views.pane1` would make that FALSE — pane 1 renders every
+ *    registered extension's rows in one tree, so one vendor's renderer throwing
+ *    would take the whole navigation surface, and every route back to the other
+ *    vendors, down to a fault surface. So a metric arrives as
+ *    `NavigationNode.metric`: four registry-validated primitives and a bounded
+ *    array of numbers, drawn by `src/components/ui/MetricGlyph.tsx`, which is
+ *    host-authored geometry and no library. Nothing a plug-in supplies reaches an
+ *    attribute; `description` is a text node in an `sr-only` span.
+ *
+ *    **The liveness rule is decision 7's, applied again rather than reinvented.**
+ *    `NavNodeButton` subscribes through `useNavMetric(extensionId, node.id)` and
+ *    a store value overrides the blueprint's `value` with `??` — never a
+ *    truthiness test, because a metric written down to `0` is a value. The
+ *    override is a FRESH frozen object over the registry's record, so the
+ *    registry's own copy is never mutated and `MetricGlyph` may memoise on the
+ *    metric's identity.
+ *
+ *    **It overrides `value` and NOTHING ELSE, and a runtime write to a node that
+ *    declared no metric draws nothing.** That is deliberately not what a badge
+ *    does, and the asymmetry follows from the shapes: a badge is one number and
+ *    the store can supply the whole of it, while a metric also needs a `kind` and
+ *    a `description`, and the host will not invent either. *Tests:*
+ *    `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "renders a declared
+ *    navigation metric as a host-drawn glyph with its description", "lets a
+ *    setNavMetric write through a live IShellAPI change the glyph the sidebar
+ *    draws", "overrides a blueprint metric value with the store value, including
+ *    down to zero", "draws nothing for a runtime metric on a node that declared
+ *    none" and "keeps the metric description in the collapsed track and drops the
+ *    glyph".
+ *
  * NOT HERE, DELIBERATELY: `ShellLayout` does not itself window pane 2 —
  * `VirtualizedList` is a component an extension's own `views.pane2` renders, not
  * something the host wraps around it, because the host does not know what a row
@@ -438,6 +496,14 @@ interface ShellNavButtonProps {
   readonly icon: string | undefined;
   /** Registry-validated non-negative integer, or `undefined` for no badge. */
   readonly badgeCount: number | undefined;
+  /**
+   * The host-owned metric to draw beside the row, or `undefined` for none.
+   *
+   * Already resolved against the store by `NavNodeButton` — see decision 8 in
+   * the banner. Every field on it is registry-validated, and the only one this
+   * component's caller can have moved is `value`.
+   */
+  readonly metric: NavigationMetric | undefined;
   readonly isCollapsed: boolean;
   readonly isCurrent: boolean;
   readonly onSelect: () => void;
@@ -510,6 +576,7 @@ function ShellNavButton({
   label,
   icon,
   badgeCount,
+  metric,
   isCollapsed,
   isCurrent,
   onSelect,
@@ -545,6 +612,15 @@ function ShellNavButton({
         </span>
       ) : null}
       <span className={isCollapsed ? 'sr-only' : 'truncate'}>{label}</span>
+      {/*
+        Host-drawn geometry and an `sr-only` description; nothing a plug-in
+        supplied reaches an attribute. `MetricGlyph` decides what a collapsed
+        row keeps, which is the text channel — see its `isGlyphHidden`
+        docblock — so there is no second copy of that rule here.
+      */}
+      {metric === undefined ? null : (
+        <MetricGlyph metric={metric} isGlyphHidden={isCollapsed} />
+      )}
       {badgeCount === undefined ? null : (
         <span
           className={
@@ -596,6 +672,21 @@ function NavNodeButton({
   onSelect,
 }: NavNodeButtonProps): ReactElement {
   const liveBadge = useBadgeCount(extensionId, node.id);
+  const liveMetric = useNavMetric(extensionId, node.id);
+  // The override reaches `value` and nothing else, and it produces a FRESH
+  // frozen object rather than mutating the registry's record — which is what
+  // makes `MetricGlyph`'s `useMemo` on the metric identity correct. When the
+  // node declared no metric there is nothing to draw a store value ON: a metric
+  // needs a `kind` and a `description` and the host will not invent either, so
+  // the write is stored, readable through `getNavMetric`, and drawn by nobody.
+  // See decision 8 in the banner.
+  const metric = useMemo((): NavigationMetric | undefined => {
+    const declared = node.metric;
+    if (declared === undefined || liveMetric === undefined) {
+      return declared;
+    }
+    return Object.freeze({ ...declared, value: liveMetric });
+  }, [node.metric, liveMetric]);
   return (
     <ShellNavButton
       label={node.label}
@@ -603,6 +694,7 @@ function NavNodeButton({
       // `??`, not `||`: a badge written down to `0` is a value, and a truthiness
       // test would silently fall back to the blueprint's stale number for it.
       badgeCount={liveBadge ?? node.badgeCount}
+      metric={metric}
       isCollapsed={isCollapsed}
       isCurrent={isCurrent}
       onSelect={() => {
@@ -863,6 +955,24 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     setGroupWidth(node.getBoundingClientRect().width);
   }, []);
 
+  // The live half. `observeGroup.ref` has a stable identity for this component's
+  // whole lifetime, so composing the two here does not detach and reattach — and
+  // therefore does not disconnect and rebuild the observer — on every render.
+  // `measureGroup` runs FIRST, so the commit-time snapshot `defaultSize` depends
+  // on is taken before anything else touches the node.
+  // DESTRUCTURED, and that is load-bearing rather than tidy: the hook returns a
+  // fresh object every render, so depending on the object would rebuild
+  // `attachGroup` on every render, which would detach and reattach the ref and so
+  // disconnect and rebuild the observer. `ref` alone is stable for the lifetime.
+  const { width: observedWidth, ref: observeGroupRef } = useElementWidth();
+  const attachGroup = useCallback(
+    (node: HTMLDivElement | null): void => {
+      measureGroup(node);
+      observeGroupRef(node);
+    },
+    [measureGroup, observeGroupRef],
+  );
+
   const selectNavNode = useCallback(
     (nodeId: string): void => {
       // Registry-validated ids only — every node in a stored blueprint passed
@@ -995,11 +1105,18 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // `percentOf` answers with the fallback band for it, and for any width a
   // browser reports as zero.
   const width = groupWidth ?? 0;
-  const navMinPercent = percentOf(PANE_PX.navMin, width, PANE_FALLBACK_PERCENT.navMin);
-  const navMaxPercent = percentOf(PANE_PX.navMax, width, PANE_FALLBACK_PERCENT.navMax);
-  const listMinPercent = percentOf(PANE_PX.listMin, width, PANE_FALLBACK_PERCENT.listMin);
-  const listMaxPercent = percentOf(PANE_PX.listMax, width, PANE_FALLBACK_PERCENT.listMax);
-  const detailMinPercent = percentOf(PANE_PX.detailMin, width, PANE_FALLBACK_PERCENT.detailMin);
+  // The BANDS, and only the bands, follow the observed width. `?? width` is the
+  // no-observer answer — jsdom, an older WebView, or the render before the
+  // observer has delivered anything — and it is the mount-time measurement, which
+  // is what every band was derived from before this hook existed. `??` rather
+  // than a truthiness test because the floor in `useElementWidth` is 1, so a
+  // reported width is never falsy, but `null` genuinely means "nothing observed".
+  const bandWidth = observedWidth ?? width;
+  const navMinPercent = percentOf(PANE_PX.navMin, bandWidth, PANE_FALLBACK_PERCENT.navMin);
+  const navMaxPercent = percentOf(PANE_PX.navMax, bandWidth, PANE_FALLBACK_PERCENT.navMax);
+  const listMinPercent = percentOf(PANE_PX.listMin, bandWidth, PANE_FALLBACK_PERCENT.listMin);
+  const listMaxPercent = percentOf(PANE_PX.listMax, bandWidth, PANE_FALLBACK_PERCENT.listMax);
+  const detailMinPercent = percentOf(PANE_PX.detailMin, bandWidth, PANE_FALLBACK_PERCENT.detailMin);
 
   // A restored size wins over the pixel-derived default, and is held to the same
   // band that default would have been held to — see decision 6. With nothing
@@ -1129,6 +1246,10 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                 // `ShellNavButton` docblock for why the host does not invent one.
                 icon={undefined}
                 badgeCount={undefined}
+                // Nor a metric: a blueprint has no such field, and an extension
+                // row is not a navigation node, so there is no scope under which
+                // the store could hold one for it. Same reason as the badge.
+                metric={undefined}
                 isCollapsed={isNavCollapsed}
                 isCurrent={active !== null && active.id === extension.id}
                 onSelect={() => {
@@ -1211,7 +1332,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
             </PaneWrapper>
           </div>
         ) : null}
-        <div ref={measureGroup} className="flex min-h-0 min-w-0 flex-1">
+        <div ref={attachGroup} className="flex min-h-0 min-w-0 flex-1">
           {groupWidth === null ? null : (
             <PanelGroup id="shell-panes" direction="horizontal" className="flex min-w-0 flex-1">
               {isNavCollapsed ? null : (

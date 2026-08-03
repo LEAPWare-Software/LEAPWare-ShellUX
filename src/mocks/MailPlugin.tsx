@@ -1,13 +1,16 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
+  IShellAPI,
   LEAPExtensionBlueprintInput,
   NavigationNode,
   RibbonAction,
   RibbonContext,
+  StructuredPayload,
 } from '../core/types';
+import { useChannelPayload } from '../core/payload/PayloadChannel';
 
 /**
  * ============================================================================
@@ -36,7 +39,8 @@ import type {
  * receives. Everything else is this module's own state.
  *
  * ---------------------------------------------------------------------------
- * WHY PANE 2 AND PANE 3 SHARE A MODULE-SCOPED STORE AND NOT A REACT CONTEXT
+ * WHY PANE 2 AND PANE 3 SHARE A HOST CHANNEL, AND NOT A REACT CONTEXT — NOR,
+ * SINCE ADR-0001 AMENDMENT L, A MODULE-SCOPED STORE
  * ---------------------------------------------------------------------------
  * `ShellLayout` mounts `views.pane2` and `views.pane3` in two *unrelated*
  * subtrees, each inside its own `ExtensionHostBoundary`. Neither is an ancestor
@@ -44,20 +48,30 @@ import type {
  * context declared here would be read by whichever view happened to be inside
  * it and by nothing else.
  *
- * The shape that does work across two unrelated subtrees is an external store —
- * module-scoped state, a `subscribe`/`getSnapshot` pair, and
- * `useSyncExternalStore` in each view. That is what `mailStore` below is. Both
- * views read the same snapshot object, so neither can tear against the other,
- * and a mutation from either one re-renders both.
+ * **This module used to answer that with a module-scoped external store — a
+ * `let`, a listener `Set`, and `useSyncExternalStore` in each view — and that
+ * answer is correct in exactly one process.** `docs/plans/native-host-pivot.md`
+ * §3.2 puts each pane in its own renderer, and under that split this module
+ * loads TWICE. The seeds are static, so they resolve identically in both copies
+ * and pane 3 looks right on first paint; every `commit` made in pane 2 then
+ * lands in a `let` pane 3 cannot see, and nothing anywhere says so. A
+ * verification remote that would fail silently under the architecture it exists
+ * to verify is not verifying it.
  *
- * **The store is module state, so it outlives a mount.** That is the honest
- * behaviour of a real plug-in — a vendor's cache does not evaporate because the
- * host unmounted a pane — and it is what makes "switching extensions must not
+ * So the state travels on `IShellAPI.publishPayload` / `readPayload` /
+ * `subscribePayload` — the structured payload channel ADR-0001 Amendment L adds
+ * and whose Decision 7 records this migration. The host owns the copy, assigns
+ * the revision and notifies both panes, so a transport change is the only thing
+ * a process split costs this file. `useChannelPayload` is the host's own
+ * `useSyncExternalStore` binding over it.
+ *
+ * **The state still outlives a mount**, because it lives in the host's payload
+ * store for as long as this extension is registered — which is the honest
+ * behaviour of a real plug-in, and is what makes "switching extensions must not
  * bleed layout state" testable at all: this module remembers its own selection
- * across a switch and republishes it on remount (see `MailMessageList`). A test
- * that needs a *fresh* store must re-import this module (`vi.resetModules()`
- * followed by a dynamic `import`), because that is the only way to reset module
- * state that is not also a back door written into shipping code.
+ * across a switch and republishes it on remount (see `MailMessageList`). It is
+ * dropped when the extension is released or unregistered, which module state
+ * never was.
  *
  * ---------------------------------------------------------------------------
  * WHY NO RIBBON PREDICATE READS MODULE STATE
@@ -259,7 +273,7 @@ const FOLDER_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /* -------------------------------------------------------------------------- */
-/* The module-scoped external store                                            */
+/* The state, and the host channel it travels on                               */
 /* -------------------------------------------------------------------------- */
 
 /** One entry in the cross-pane activity stream. */
@@ -282,6 +296,17 @@ interface MailState {
   readonly pendingId: string | null;
   /** Newest last. Bounded by `MAX_EVENTS`. */
   readonly events: readonly MailEvent[];
+  /**
+   * The next event sequence number, and the number of drafts composed so far.
+   *
+   * **They live on the state rather than beside it**, which they did not have to
+   * while the state was a module-scope `let` and two module-scope counters could
+   * sit next to it. Once the state crosses a channel, a counter left in module
+   * scope is the very defect the migration removes — it would reset in the second
+   * process and start reissuing sequence numbers the first one had already used.
+   */
+  readonly eventSequence: number;
+  readonly composedCount: number;
 }
 
 /**
@@ -300,52 +325,127 @@ const INITIAL_STATE: MailState = {
   bodies: new Map<string, string>(),
   pendingId: null,
   events: [],
+  eventSequence: 0,
+  composedCount: 0,
 };
 
-let state: MailState = INITIAL_STATE;
-let eventSequence = 0;
-let composedCount = 0;
-const listeners = new Set<() => void>();
+/**
+ * The channel this module's whole cross-pane state travels on.
+ *
+ * A registry-valid identifier, because `publishPayload` holds a channel name to
+ * exactly the rule the registry holds a node id to.
+ */
+const STATE_CHANNEL = 'mail-state';
 
 /**
- * The `useSyncExternalStore` snapshot.
+ * The state as it crosses the channel: leaves only, no `Set` and no `Map`.
  *
- * Its IDENTITY is stable until something really changes, which is the whole
- * contract: a `getSnapshot` that allocated on every call would re-render both
- * panes forever.
+ * `PayloadLeaf` is `ContextKeyValue` — ADR-0001 Amendment L Decision 2 preserves
+ * that at the leaves — so the two membership sets travel as arrays and the body
+ * cache travels as a record. Rebuilding them on read is what `decode` is for.
  */
-function getSnapshot(): MailState {
-  return state;
+interface MailWire {
+  readonly selectedId: string | null;
+  readonly readIds: readonly string[];
+  readonly deletedIds: readonly string[];
+  readonly composed: readonly MailMessage[];
+  readonly bodies: Readonly<Record<string, string>>;
+  readonly pendingId: string | null;
+  readonly events: readonly MailEvent[];
+  readonly eventSequence: number;
+  readonly composedCount: number;
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return (): void => {
-    listeners.delete(listener);
+function encode(next: MailState): MailWire {
+  return {
+    selectedId: next.selectedId,
+    readIds: [...next.readIds],
+    deletedIds: [...next.deletedIds],
+    composed: next.composed,
+    bodies: Object.fromEntries(next.bodies),
+    pendingId: next.pendingId,
+    events: next.events,
+    eventSequence: next.eventSequence,
+    composedCount: next.composedCount,
   };
 }
 
 /**
- * Commit a new state object and tell both panes.
+ * Rebuild this module's working shape from the host's frozen copy.
  *
- * The pass runs over a snapshot of the listener set and re-checks membership, so
- * a view that unsubscribes during the pass — React does exactly that while
- * unmounting one pane in response to a change — is not called after its
- * unsubscribe returned.
+ * A channel that has never been published on reads `null`, which is the seed
+ * state — so the very first render of either pane has the same state the module
+ * used to start with, and no ordering between the two panes' mounts matters.
  */
-function commit(next: MailState): void {
-  state = next;
-  for (const listener of Array.from(listeners)) {
-    if (listeners.has(listener)) {
-      listener();
-    }
+function decode(payload: StructuredPayload | null): MailState {
+  if (payload === null) {
+    return INITIAL_STATE;
   }
+  const wire = payload.data as unknown as MailWire;
+  return {
+    selectedId: wire.selectedId,
+    readIds: new Set(wire.readIds),
+    deletedIds: new Set(wire.deletedIds),
+    composed: wire.composed,
+    bodies: new Map(Object.entries(wire.bodies)),
+    pendingId: wire.pendingId,
+    events: wire.events,
+    eventSequence: wire.eventSequence,
+    composedCount: wire.composedCount,
+  };
+}
+
+/**
+ * Read this module's state back out of the host.
+ *
+ * **This takes a `shell` and used to take nothing**, and that is the whole of
+ * the migration recorded in ADR-0001 Amendment L Decision 7. The state used to be
+ * a module-scope `let`, which is correct in exactly one process: under the
+ * process split `docs/plans/native-host-pivot.md` §3.2 describes, this module
+ * would load twice, the static seeds would still resolve — so pane 3 would look
+ * right on first paint — and every commit made in pane 2 would be invisible to
+ * pane 3, with nothing to say why.
+ */
+function getSnapshot(shell: IShellAPI): MailState {
+  return decode(shell.readPayload(STATE_CHANNEL));
+}
+
+/**
+ * Commit a new state and tell both panes, through the host.
+ *
+ * The host takes a deep copy, assigns a revision and notifies every subscriber
+ * of this channel synchronously — including the listener-set discipline this
+ * function used to implement for itself. What is stored is host-owned, so
+ * mutating anything handed in here afterwards changes nothing.
+ */
+function commit(shell: IShellAPI, next: MailState): void {
+  guarded('publishing the mail state', () => {
+    shell.publishPayload(STATE_CHANNEL, 'table', encode(next));
+  });
 }
 
 function withEvent(next: MailState, label: string): MailState {
-  eventSequence += 1;
+  const eventSequence = next.eventSequence + 1;
   const events = [...next.events, { seq: eventSequence, label }];
-  return { ...next, events: events.slice(Math.max(0, events.length - MAX_EVENTS)) };
+  return {
+    ...next,
+    eventSequence,
+    events: events.slice(Math.max(0, events.length - MAX_EVENTS)),
+  };
+}
+
+/**
+ * Subscribe a view to this module's channel.
+ *
+ * `useChannelPayload` is the host's own `useSyncExternalStore` binding, and the
+ * snapshot it hands React is the frozen `StructuredPayload` whose identity is
+ * stable until the channel is republished. The decode is memoised on that
+ * identity, so it runs once per publish rather than once per render — which is
+ * the property the old module-scope `getSnapshot` had by returning a `let`.
+ */
+function useMailState(shell: IShellAPI): MailState {
+  const payload = useChannelPayload(shell, STATE_CHANNEL);
+  return useMemo(() => decode(payload), [payload]);
 }
 
 /** Every message currently in `folderId`, seeded and composed alike. */
@@ -370,24 +470,33 @@ function draftCount(snapshot: MailState): number {
   return messagesIn(snapshot, 'drafts').length;
 }
 
-function selectMessage(messageId: string | null): void {
+// Every mutator below reads the CURRENT state through the shell and publishes
+// the next one back. There is no module variable between them, so pane 2 and
+// pane 3 are reading and writing the same host-owned record however many times
+// this module has been loaded.
+
+function selectMessage(shell: IShellAPI, messageId: string | null): void {
+  const state = getSnapshot(shell);
   const label = messageId === null ? 'selection cleared' : `selected ${messageId}`;
-  commit(withEvent({ ...state, selectedId: messageId }, label));
+  commit(shell, withEvent({ ...state, selectedId: messageId }, label));
 }
 
-function markRead(messageId: string): void {
+function markRead(shell: IShellAPI, messageId: string): void {
+  const state = getSnapshot(shell);
   if (state.readIds.has(messageId)) {
     return;
   }
   const readIds = new Set(state.readIds);
   readIds.add(messageId);
-  commit(withEvent({ ...state, readIds }, `marked ${messageId} read`));
+  commit(shell, withEvent({ ...state, readIds }, `marked ${messageId} read`));
 }
 
-function deleteMessage(messageId: string): void {
+function deleteMessage(shell: IShellAPI, messageId: string): void {
+  const state = getSnapshot(shell);
   const deletedIds = new Set(state.deletedIds);
   deletedIds.add(messageId);
   commit(
+    shell,
     withEvent(
       { ...state, deletedIds, selectedId: state.selectedId === messageId ? null : state.selectedId },
       `deleted ${messageId}`,
@@ -396,8 +505,9 @@ function deleteMessage(messageId: string): void {
 }
 
 /** Append a draft and return it, so the caller can select what it created. */
-function composeDraft(): MailMessage {
-  composedCount += 1;
+function composeDraft(shell: IShellAPI): MailMessage {
+  const state = getSnapshot(shell);
+  const composedCount = state.composedCount + 1;
   const draft: MailMessage = {
     id: `${MESSAGE_ID_PREFIX}9${String(100 + composedCount)}`,
     folderId: 'drafts',
@@ -406,33 +516,37 @@ function composeDraft(): MailMessage {
     receivedAt: 'Now',
   };
   commit(
+    shell,
     withEvent(
-      { ...state, composed: [...state.composed, draft], selectedId: draft.id },
+      { ...state, composedCount, composed: [...state.composed, draft], selectedId: draft.id },
       `composed ${draft.id}`,
     ),
   );
   return draft;
 }
 
-function noteActivity(label: string): void {
-  commit(withEvent(state, label));
+function noteActivity(shell: IShellAPI, label: string): void {
+  commit(shell, withEvent(getSnapshot(shell), label));
 }
 
-function beginBodyFetch(messageId: string): void {
-  commit({ ...state, pendingId: messageId });
+function beginBodyFetch(shell: IShellAPI, messageId: string): void {
+  commit(shell, { ...getSnapshot(shell), pendingId: messageId });
 }
 
-function endBodyFetch(messageId: string): void {
+function endBodyFetch(shell: IShellAPI, messageId: string): void {
+  const state = getSnapshot(shell);
   if (state.pendingId !== messageId) {
     return;
   }
-  commit({ ...state, pendingId: null });
+  commit(shell, { ...state, pendingId: null });
 }
 
-function recordBody(messageId: string, body: string): void {
+function recordBody(shell: IShellAPI, messageId: string, body: string): void {
+  const state = getSnapshot(shell);
   const bodies = new Map(state.bodies);
   bodies.set(messageId, body);
   commit(
+    shell,
     withEvent(
       { ...state, bodies, pendingId: state.pendingId === messageId ? null : state.pendingId },
       `body arrived for ${messageId}`,
@@ -580,7 +694,7 @@ function folderFor(activeNavNodeId: string | null): string {
  * re-evaluates the ribbon predicates.
  */
 function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useMailState(shell);
   const folderId = folderFor(context.activeNavNodeId);
   const messages = messagesIn(snapshot, folderId);
 
@@ -597,7 +711,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
   // comes from the store rather than from `snapshot`, so the effect depends on the
   // shell handle alone and does not re-run on every selection.
   useEffect(() => {
-    const remembered = getSnapshot().selectedId;
+    const remembered = getSnapshot(shell).selectedId;
     guarded('restoring the remembered selection', () => {
       shell.setSelectedItem(remembered);
     });
@@ -628,7 +742,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                   // the order is observable and is the order a cross-pane
                   // ordering test should expect: this module knows about the
                   // selection before the host tells pane 3 about it.
-                  selectMessage(message.id);
+                  selectMessage(shell, message.id);
                   guarded(`selecting ${message.id}`, () => {
                     shell.setSelectedItem(message.id);
                   });
@@ -660,7 +774,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
  * read state, the event log).
  */
 function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useMailState(shell);
   const messageId = ownSelection(context);
   const message = messageId === null ? undefined : findMessage(snapshot, messageId);
   const body = messageId === null ? undefined : snapshot.bodies.get(messageId);
@@ -674,7 +788,7 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
     if (messageId === null) {
       return;
     }
-    const current = getSnapshot();
+    const current = getSnapshot(shell);
     if (current.bodies.has(messageId)) {
       return;
     }
@@ -683,17 +797,17 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
       return;
     }
     const controller = new AbortController();
-    beginBodyFetch(messageId);
+    beginBodyFetch(shell, messageId);
     void fetchBody(target, controller.signal).then((outcome) => {
       if (outcome.status === 'ok') {
-        recordBody(messageId, outcome.body);
+        recordBody(shell, messageId, outcome.body);
       }
     });
     return (): void => {
       controller.abort();
-      endBodyFetch(messageId);
+      endBodyFetch(shell, messageId);
     };
-  }, [messageId]);
+  }, [messageId, shell]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2 p-1">
@@ -721,11 +835,11 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
               'disabled:cursor-not-allowed disabled:opacity-40'
             }
             onClick={() => {
-              markRead(message.id);
+              markRead(shell, message.id);
               // The badge is recomputed from the state AFTER the mutation, not
               // from the snapshot this render closed over.
               guarded('updating the inbox badge', () => {
-                shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot()));
+                shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot(shell)));
               });
             }}
           >
@@ -830,9 +944,9 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     hotkey: { key: 'n', ctrl: true, shift: true },
     isVisible: (): boolean => true,
     onExecute: (_ctx, shell): void => {
-      const draft = composeDraft();
+      const draft = composeDraft(shell);
       shell.setSelectedItem(draft.id);
-      shell.setBadgeCount('drafts', draftCount(getSnapshot()));
+      shell.setBadgeCount('drafts', draftCount(getSnapshot(shell)));
     },
   },
   {
@@ -840,10 +954,10 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     label: 'Reply',
     icon: 'edit',
     isVisible: (ctx): boolean => ownSelection(ctx) !== null,
-    onExecute: (ctx): void => {
+    onExecute: (ctx, shell): void => {
       const selected = ownSelection(ctx);
       if (selected !== null) {
-        noteActivity(`replied to ${selected}`);
+        noteActivity(shell, `replied to ${selected}`);
       }
     },
   },
@@ -852,10 +966,10 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     label: 'Forward',
     icon: 'open',
     isVisible: (ctx): boolean => ownSelection(ctx) !== null,
-    onExecute: (ctx): void => {
+    onExecute: (ctx, shell): void => {
       const selected = ownSelection(ctx);
       if (selected !== null) {
-        noteActivity(`forwarded ${selected}`);
+        noteActivity(shell, `forwarded ${selected}`);
       }
     },
   },
@@ -869,8 +983,8 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
       if (selected === null) {
         return;
       }
-      markRead(selected);
-      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot()));
+      markRead(shell, selected);
+      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot(shell)));
     },
   },
   {
@@ -884,13 +998,13 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
       if (selected === null) {
         return;
       }
-      deleteMessage(selected);
+      deleteMessage(shell, selected);
       // Clearing the selection is what hides Reply, Forward, Mark as read and
       // Delete again: the action set changes because a HOST field changed, not
       // because a predicate read this module's state.
       shell.setSelectedItem(null);
-      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot()));
-      shell.setBadgeCount('drafts', draftCount(getSnapshot()));
+      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot(shell)));
+      shell.setBadgeCount('drafts', draftCount(getSnapshot(shell)));
     },
   },
 ];
