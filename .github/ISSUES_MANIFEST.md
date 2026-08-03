@@ -20,12 +20,26 @@ currently exists.
 | Issue | Title | Status |
 |---|---|---|
 | ISSUE-001 | Type-Safe IoC Extension Registry & Primitives | `LANDED` |
-| ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
-| ISSUE-003 | UI State Hydration & Serialization Engine | `IN PROGRESS` — engine implemented, green and **now consumed by the shell**; **not merged**; see the note below |
-| ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `IN PROGRESS` — implemented and green, **not merged**; see the note below |
-| ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `IN PROGRESS` — remotes and suite implemented, **not merged**; one Definition-of-Done clause deliberately substituted; see "As landed" below |
+| ISSUE-002 | Compact Desktop 3-Pane Resizable Layout Matrix | `LANDED` — merged 2026-08-02. The ribbon half was later **deleted** by the native-host pivot's Phase 4; see below |
+| ISSUE-003 | UI State Hydration & Serialization Engine | `LANDED` — merged 2026-08-02, engine and shell consumption both |
+| ISSUE-004 | High-Throughput Row Virtualizer & Fault Boundaries | `LANDED` — merged 2026-08-02. **`VirtualizedList` still has zero consumers**; see #91 and HANDOFF §6.7 |
+| ISSUE-005 | Verification Remotes & Adversarial Integration Suite | `LANDED` — merged 2026-08-02; one Definition-of-Done clause deliberately substituted, see "As landed" below |
 
-**No marker in the legend fits ISSUE-002 exactly, and it is being recorded that way
+> **RESOLVED 2026-08-03. The four rows above said `IN PROGRESS` — "implemented and
+> green, not merged" — and all four merged on 2026-08-02.** The careful reasoning
+> below is kept because it was right when written and because it is the record of a
+> marker being refused rather than rounded up; read it in the past tense. Every one of
+> the four is now `LANDED` by the legend's own four-part definition: merged, the source
+> files exist, they are tested, and they pass the coverage gate.
+>
+> **Two of the four carry a correction rather than a plain promotion**, and rounding
+> those up would repeat the mistake this note is about. ISSUE-002's ribbon renderer was
+> **deleted** by the native-host pivot's Phase 4 and replaced by one command registry
+> with four surfaces; the pane layout it also specified is what survives. And
+> ISSUE-004's `VirtualizedList` landed with **zero consumers** and still has none — see
+> #91 and `HANDOFF.md` §6.7. Closing #27.
+
+**No marker in the legend fitted ISSUE-002 exactly, and it was recorded that way
 rather than rounded up.** `LANDED` is defined as four things: *merged*, the source
 files exist, they are tested, and they pass the coverage gate. The last three are
 true — `src/components/layout/ShellLayout.tsx`,

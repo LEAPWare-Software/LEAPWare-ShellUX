@@ -37,12 +37,17 @@ landed**: `src/core/types.ts`, `src/core/RegistryContext.tsx` and
 this guide are now printed from those files rather than withheld. See
 [`README.md`](README.md#project-status).
 
-**ISSUE-002 — the three-pane resizable layout and the ribbon renderer — has now
-been implemented and is covered by tests**, so the passages describing the ribbon
-and the panes are written in the present tense and name the tests that hold them.
-It has **not yet been merged**; see the status note against ISSUE-002 in
-[`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md), which explains why it
-is not marked `LANDED`.
+**ISSUE-002 — the three-pane resizable layout — is implemented, tested and
+merged**, so the passages describing the panes are written in the present tense
+and name the tests that hold them.
+
+> **CORRECTED 2026-08-03.** This paragraph said ISSUE-002 "has **not yet been
+> merged**". It merged on 2026-08-02. It also promised a **ribbon renderer**, and
+> that half no longer exists: the native-host pivot's Phase 4 **deleted the
+> ribbon** and replaced it with one command registry and four surfaces — a 32px
+> context bar, a Cmd-K palette, a selection-triggered floating toolbar and a
+> docked omnibox composer. Where this guide still says "ribbon", read "command",
+> and read the command sections as current. Closing #27.
 
 **ISSUE-003's hydration engine now exists, is tested, and the shell consumes it.**
 `src/core/services/HydrationEngine.ts` and `src/hooks/useLocalStorageState.ts` are
