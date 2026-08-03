@@ -1200,7 +1200,10 @@ below.
 > **can** throw an arbitrary exception into your writing statement — including one that
 > is not a `ShellUXError`, and including one that starves a subscribed pane so it keeps
 > rendering a stale snapshot. Reproduced in `src/core/__tests__/subscribe.test.tsx`,
-> the whole file. Freezing the store does not touch any of it, and neither will
+> the whole file. **"In this page" is load-bearing and becomes narrower under the
+> native host:** with a pane per process an extension shares a page with fewer
+> holders, and a listener in another pane runs a message later rather than inside
+> your frame — see `src/core/ipc/ReplicaStore.ts`. Freezing the store does not touch any of it, and neither will
 > anything else in-page: a store that notifies nobody is a store no pane can render
 > off.
 >
@@ -2227,7 +2230,14 @@ this page can:
   re-renders it.
 
 All four are reproduced in `src/core/__tests__/subscribe.test.tsx`. None of them is
-closable in-page: a store that notifies nobody is a store no pane can render off. **If
+closable in-page: a store that notifies nobody is a store no pane can render off.
+**All four are also scoped to one page, and that scope shrinks under the native
+host.** When a pane is a process, your store is a replica: a write is validated,
+applied and notified locally — so a listener in YOUR renderer still does all four —
+and then posted, so a listener in another renderer sees it a message later and
+cannot throw into your statement at all. What you must not conclude from that is
+that the four become impossible; they become pane-local. See
+`src/core/ipc/ReplicaStore.ts`. **If
 your extension's behaviour must be tamper-evident against another extension in the same
 page, this architecture does not give you that** — and if you must guard one of your own
 writes, wrap the call yourself, which is what the host does at the one call site it

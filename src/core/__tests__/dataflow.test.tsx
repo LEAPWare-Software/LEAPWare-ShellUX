@@ -144,7 +144,7 @@ describe('cross-pane reactivity', () => {
     expect(screen.getByTestId('observer')).toHaveTextContent('msg-42');
   });
 
-  it('gives every subscriber the same snapshot, so panes cannot tear', () => {
+  it('gives every subscriber in one renderer the same snapshot, so panes in it cannot tear', () => {
     const seen: Array<Readonly<RibbonContext>> = [];
 
     function Recorder(): ReactElement {

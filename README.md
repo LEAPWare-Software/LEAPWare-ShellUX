@@ -976,15 +976,21 @@ defending one extension from another.
   > limit stated immediately below.
 - **The limit of the bullet above: a listener is untrusted code inside your write.**
   `subscribe` is one of the six frozen members and is reachable through the public
-  `useShellStore()`. A listener runs **synchronously inside another holder's write**,
-  so it can *observe* every value written, *re-enter* the store and leave its own
-  value standing instead, and *throw into the writing frame* — including a
-  non-`ShellUXError`, and including a throw that starves every listener ordered after
-  it, a subscribed pane included. Freezing the store does not touch any of this,
-  because nothing is replaced. It is not closable either: a store that notifies
-  nobody is a store no pane can render off.
+  `useShellStore()`. A listener runs **synchronously inside another holder's write
+  in the same renderer**, so it can *observe* every value written there, *re-enter*
+  the store and leave its own value standing instead, and *throw into the writing
+  frame* — including a non-`ShellUXError`, and including a throw that starves every
+  listener ordered after it, a subscribed pane in that renderer included. Freezing
+  the store does not touch any of this, because nothing is replaced. It is not
+  closable either: a store that notifies nobody is a store no pane can render off.
+  **The "in the same renderer" qualifier is a correction, not a hedge**: once panes
+  are separate processes (`src/core/ipc/**`) a write is applied and notified locally
+  and then posted, so a listener in another renderer runs a message later and has no
+  frame of yours to throw into. The favourable half and the unfavourable half of that
+  are both real — see `ShellStateStore.subscribe` in `src/core/ShellAPI.ts`.
   *Tests:* `src/core/__tests__/subscribe.test.tsx` — the whole file, in particular
-  "sees the new value synchronously, before the writer returns", "leaves the
+  "sees the new value synchronously, before the writer returns, within one
+  renderer", "leaves the
   attacker's value in place and not the host's", "desynchronises a victim pane that
   subscribed through useShellContext" and "delivers a raw TypeError out of
   patchContext".

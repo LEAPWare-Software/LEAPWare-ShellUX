@@ -141,10 +141,12 @@ export interface ShellStateStore {
    * concluded that the frozen store cannot be intercepted. Three consequences,
    * each pinned in `src/core/__tests__/subscribe.test.tsx`:
    *
-   *  - **It observes.** `listener` runs after the commit and BEFORE the writing
-   *    statement returns, so it reads every value any other holder writes —
-   *    including one writing through its own deep-frozen `IShellAPI`. See "sees
-   *    the new value synchronously, before the writer returns".
+   *  - **It observes, WITHIN ONE RENDERER.** `listener` runs after the commit and
+   *    BEFORE the writing statement returns, so it reads every value any other
+   *    holder IN THE SAME REALM writes — including one writing through its own
+   *    deep-frozen `IShellAPI`. See "sees the new value synchronously, before the
+   *    writer returns, within one renderer". The scope qualifier is not
+   *    decoration; see the correction below.
    *  - **It re-enters.** `listener` may call `patchContext` from inside the
    *    notification. One shallow cascade is well short of `MAX_NOTIFY_DEPTH`, so
    *    the re-entrant value is simply the one left standing. See "leaves the
@@ -162,6 +164,30 @@ export interface ShellStateStore {
    * at which this store's guarantee stops. A host that treats listeners as
    * untrusted must guard its own writes — and `ActivationContext.tsx` does
    * exactly that at the one call site a host cannot reach.
+   *
+   * --------------------------------------------------------------------------
+   * **CORRECTION — THE SYNCHRONOUS GUARANTEE IS SCOPED TO ONE RENDERER.**
+   * --------------------------------------------------------------------------
+   * The three bullets above are stated as though every holder of every handle
+   * were in one realm, which was true when they were written and is not once
+   * `src/core/ipc/**` puts a replica in each renderer. Across renderers the
+   * guarantee is FALSE: pane 2's write is applied and notified locally, then
+   * posted, and pane 3's listeners run when the commit arrives — a message
+   * later. So a listener does NOT read every value any other holder writes; it
+   * reads every value written IN ITS OWN REALM, and learns about the rest
+   * afterwards.
+   *
+   * **The security consequence runs the favourable way, which is why this is a
+   * correction rather than a regression.** A listener can no longer throw into
+   * ANOTHER PANE'S writer frame, because across the boundary there is no shared
+   * frame to throw into — the third bullet's "it throws into the writer's frame"
+   * narrows to the writer's own realm. What is lost with it is the assumption
+   * that a cross-pane read is instantaneous, which no correct consumer should
+   * have been making. *Tests:*
+   * `src/core/ipc/__tests__/replicaStore.test.ts` — "a listener runs before the
+   * writing statement returns, within the writing renderer" and "a listener in
+   * another renderer does not run before the writing statement returns, and
+   * cannot throw into it".
    * ==========================================================================
    */
   subscribe(listener: () => void): () => void;
@@ -1659,6 +1685,25 @@ export interface RevocableShellAPI {
  * live IShellAPI on activation and revokes it on release" in
  * `src/core/__tests__/dataflow.test.tsx`.
  *
+ * **CORRECTION, ONCE THE PANES ARE PROCESSES: `REVOKED` BECOMES AN ADVISORY
+ * CACHED CHECK.** Nothing below changes — `revoked` is still a latch, `isLive`
+ * is still consulted on entry to every member, and the ordinary case still throws
+ * synchronously in the caller's own frame. What changes is what the flag MEANS.
+ * The question "does this extension still exist?" is main's to answer, and a
+ * pane holds a cached answer to it: main unregisters an extension, and until the
+ * pane hears, the pane's `isLive` says the handle is live and a write through it
+ * is applied optimistically to that pane's replica.
+ *
+ * **The window is closed at the PANE level instead, and that is stronger than
+ * making the check asynchronous would be.** Main tears the pane's view down on
+ * `unregister`, so the whole realm stops existing — the handle, the closure it
+ * captured, and the timer that was about to call through it. An `await`ed
+ * liveness check would have left every member of `IShellAPI` returning a promise,
+ * which is the contract change `src/core/ipc/ReplicaStore.ts` exists to avoid;
+ * a `revoke` MESSAGE would have left the realm alive and racing. See the
+ * `REVOKED` correction in that module's banner, and "is not where REVOKED lives,
+ * and does not pretend to be" in `src/core/ipc/__tests__/replicaStore.test.ts`.
+ *
  * **3. Liveness is re-checked at every call, not only when `revoke` is called.**
  * `isLive` is the host's answer to "does this extension still exist?", consulted
  * on entry to every member. It exists because the host's other end of revocation
@@ -1916,8 +1961,20 @@ export function useShellStore(): ShellStateStore {
  * and re-renders synchronously if it moved. Every subscriber that RE-READS therefore
  * reads one snapshot object, so two panes cannot show two different values of the
  * same field for the same commit. That is tearing, and it is pinned by "gives every
- * subscriber the same snapshot, so panes cannot tear" in
+ * subscriber in one renderer the same snapshot, so panes in it cannot tear" in
  * `src/core/__tests__/dataflow.test.tsx`.
+ *
+ * **CORRECTION, SINCE `src/core/ipc/**`: the claim holds within ONE RENDERER and
+ * says nothing about two.** `useSyncExternalStore` closes a window inside a React
+ * tree; it has no view of another process's tree. Two panes reading two replicas
+ * can therefore hold different snapshots for one frame — the writing pane applies
+ * optimistically and the other one hears about it a message later. That is SKEW,
+ * not tearing: neither pane is internally inconsistent, and each is showing one
+ * coherent snapshot. §5 of the native-host plan says to state it and not fix it,
+ * because the only fix is a synchronous cross-process read, which is what the
+ * replicated design exists to avoid. *Tests:*
+ * `src/core/ipc/__tests__/replicaStore.test.ts` — "two replicas hold different
+ * snapshots between a write and its commit, and converge on it".
  *
  * **It is not a claim that every pane is told.** `subscribe` is public and a
  * notification pass is aborted by the first listener that throws, so a hostile
