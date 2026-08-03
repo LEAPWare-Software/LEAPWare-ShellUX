@@ -41,7 +41,24 @@ export default defineConfig({
     },
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // -----------------------------------------------------------------------
+    // TWO ROOTS, AND THE SECOND ONE IS PHASE 7's.
+    //
+    // `electron/**` was outside this list for six phases and correctly so: it
+    // was a window and a preload, neither of which has a unit worth testing
+    // without Electron running. Phase 7 put three testable things there — the
+    // focus ring's arbitration, the `MessagePortMain` adapter, and the scan that
+    // replaces `src/__tests__/noEventListener.test.ts` for a directory that file
+    // has never visited — and a test nothing runs is not a test.
+    //
+    // These run under jsdom like everything else. None of them touches a DOM;
+    // the environment is shared because a second environment for three files
+    // would be configuration nobody reads. **Coverage is deliberately NOT
+    // widened to match**: the 100% gate below still covers `src/core/**`,
+    // `src/components/**` and `src/hooks/**` only, so `electron/**` is tested
+    // rather than gated — and those are not the same word.
+    // -----------------------------------------------------------------------
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'electron/**/*.{test,spec}.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

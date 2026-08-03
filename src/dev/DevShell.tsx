@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { ReactElement } from 'react';
-import { ShellLayout } from '../components/layout/ShellLayout';
-import { ShellHostProvider } from '../core/ActivationContext';
-import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext';
+import App from '../App';
+import { useRegistry } from '../core/RegistryContext';
 import type { LEAPExtensionBlueprintInput } from '../core/types';
 import { DatabasePlugin } from '../mocks/DatabasePlugin';
 import { MailPlugin } from '../mocks/MailPlugin';
@@ -23,13 +22,20 @@ import { MailPlugin } from '../mocks/MailPlugin';
  * **How "dev-only" is enforced, and why it is not an environment variable.**
  * ADR-0002 forbids a local-environment dependency without a working default, so
  * a `VITE_MOCKS=1` switch was not an option. Instead this surface is reached
- * through its own HTML document, `dev.html`, and Vite's production input is
- * `index.html` alone — `build.rollupOptions.input` is left at its default, so a
- * root HTML file that `index.html` does not reference is served by the dev
- * server and is **not** emitted into `dist/`. Nothing here is imported by
- * `src/main.tsx` or by `src/App.tsx`, so what the production bundle renders is
- * exactly what it rendered before this file existed. There is no flag to set and
- * no way for a mock to reach a user.
+ * through its own HTML document, `dev.html`, which is **not** a build input:
+ * `vite.config.ts` declares `build.rollupOptions.input` explicitly, and the two
+ * entries in it are `index.html` and `paneview.html`. A root HTML file that is
+ * not in that list is served by the dev server and is **not** emitted into
+ * `dist/`. Nothing here is imported by `src/main.tsx` or by `src/App.tsx`, so
+ * what the production bundle renders is exactly what it rendered before this
+ * file existed. There is no flag to set and no way for a mock to reach a user.
+ *
+ * **That input list used to be Vite's default, and the sentence here used to say
+ * "`index.html` alone".** Phase 7's process split gave the shell a second
+ * production document — the extension surface — so the default stopped being the
+ * right answer and the exclusion of `dev.html` became something to state rather
+ * than something to inherit. The guarantee is unchanged; what defends it moved
+ * from a default to a list.
  *
  * **The dev server also serves this at `/`, and that changes neither half of the
  * paragraph above.** `vite.config.ts` installs a middleware that rewrites the one
@@ -85,17 +91,34 @@ function Registrar(): null {
 }
 
 /**
- * The provider order is load-bearing and is the same as `src/App.tsx`'s.
- * `ShellHostProvider` resolves blueprints through the registry, so it must sit
- * inside `ExtensionRegistryProvider`; inverting the two throws at mount.
+ * `App` with the two verification remotes registered, and nothing else.
+ *
+ * **It renders `App` rather than restating its provider stack**, which it used to
+ * do. That stack's order is load-bearing — `ShellHostProvider` resolves
+ * blueprints through the registry, so inverting the two throws at mount — and a
+ * second copy of a load-bearing order is a second thing to get wrong. `App`
+ * takes a `children` slot rendered inside both providers, which is exactly where
+ * a plug-in registers itself from, so this file is now the registrar and the
+ * import list that reaches the mocks.
+ *
+ * **It names no surface either**, for the reason `src/main.tsx` gives:
+ * `dev.html` is two things — the browser lane's fixture, and the document host
+ * chrome's `WebContentsView` loads in a DEVELOPMENT run of the native host,
+ * because `electron/main/index.ts` decision 4 points that view at the dev
+ * server's root on purpose — and `App` decides which from the presence of the
+ * host bridge. A prop here would be a second answer to a question that already
+ * has one.
+ *
+ * A consequence worth naming rather than discovering: this surface is now inside
+ * `RootBoundary` too. That is a strict improvement — the fixture used to be the
+ * one document in the repository where a throw above the pane boundaries emptied
+ * `#root` with nothing to report — and it changes no markup, because the
+ * boundary renders its children untouched until something throws.
  */
 export function DevShell(): ReactElement {
   return (
-    <ExtensionRegistryProvider>
-      <ShellHostProvider>
-        <Registrar />
-        <ShellLayout />
-      </ShellHostProvider>
-    </ExtensionRegistryProvider>
+    <App>
+      <Registrar />
+    </App>
   );
 }

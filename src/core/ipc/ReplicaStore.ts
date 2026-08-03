@@ -42,16 +42,32 @@ import type { StoreOperation } from './protocol';
  * `ShellStateStore.subscribe` says a listener "runs after the commit and BEFORE
  * the writing statement returns, so it reads every value any other holder
  * writes". **That is true WITHIN a renderer and false ACROSS renderers**, and
- * the difference is step 4 above: pane 2's listener runs inside pane 2's write,
- * and pane 3 hears about it one message later. The claim is not weakened
- * everywhere — a pane-local subscriber still observes a pane-local write before
- * the writer returns — it is SCOPED to the realm the write happened in.
+ * the difference is step 4 above: host chrome's listener runs inside host
+ * chrome's write, and the extension surface hears about it one message later.
+ * The claim is not weakened everywhere — a subscriber in the writing realm still
+ * observes the write before the writer returns — it is SCOPED to the realm the
+ * write happened in.
+ *
+ * **This paragraph used to say "pane 2's listener … and pane 3 hears about it
+ * one message later", and Phase 7 made that false rather than merely dated.**
+ * The topology that was built is the two-process one: panes 2 and 3 are ONE
+ * document in ONE renderer (`electron/main/surfaces.ts`,
+ * `src/paneview/PaneViewShell.tsx`), so a pane-2 write reaches a pane-3 listener
+ * **synchronously**, through the same store, exactly as it did before any of
+ * this existed. The pair that is genuinely a message apart is **host chrome and
+ * the extension surface**. Naming the wrong pair would have been worse than
+ * saying nothing: it would have told a reader that the pane pair with the
+ * strongest relationship in the product — a list and its detail — had become
+ * asynchronous, which is precisely the cost the two-process topology was chosen
+ * to avoid paying.
  *
  * The security consequence runs the favourable way, and it is worth stating
  * because the original docblock treats the synchronous listener as a hazard: a
- * listener can no longer throw into ANOTHER PANE'S writer frame, because there
- * is no shared frame to throw into. A pane's own listeners can still throw into
- * its own writers. *Tests:*
+ * listener can no longer throw into ANOTHER REALM'S writer frame, because there
+ * is no shared frame to throw into. A realm's own listeners can still throw into
+ * its own writers — and under the two-process topology "its own" includes both
+ * extension panes, which is the same exposure the single-process shell had and
+ * not a new one. *Tests:*
  * `src/core/ipc/__tests__/replicaStore.test.ts` — "a listener runs before the
  * writing statement returns, within the writing renderer" and "a listener in
  * another renderer does not run before the writing statement returns, and cannot
@@ -63,13 +79,22 @@ import type { StoreOperation } from './protocol';
  * `useShellContext`'s docblock says `useSyncExternalStore` gives every subscriber
  * one snapshot object, so two panes cannot show two different values of the same
  * field for the same commit. **That remains exactly true and its scope is one
- * renderer.** It cannot prevent SKEW between renderers: pane 2 applies its own
- * write at step 2 and pane 3 sees it after a message, so for one frame the two
- * panes hold different snapshots. That is not tearing — neither pane is
+ * renderer.** It cannot prevent SKEW between renderers: the writing realm applies
+ * its own write at step 2 and the other realm sees it after a message, so for one
+ * frame the two hold different snapshots. That is not tearing — neither realm is
  * internally inconsistent — and it is not fixed here. §5 says to state it and not
  * fix it, and the reason is that the fix is a synchronous cross-process read,
  * which is the thing this whole design exists to avoid. *Tests:* "two replicas
  * hold different snapshots between a write and its commit, and converge on it".
+ *
+ * **The re-scoping is the same one correction 1 needed, and for the same
+ * reason.** This paragraph used to name panes 2 and 3 as the skewing pair. Under
+ * the topology Phase 7 built they are one document and cannot skew from each
+ * other at all; the pair that can is host chrome and the extension surface —
+ * pane 1's nav tree, the context bar and the palette on one side, the list and
+ * the detail on the other. That is a narrower exposure than the original text
+ * claimed, and it is narrower in the place it matters most: the surfaces a user
+ * watches change together are the ones that still change together.
  *
  * ---------------------------------------------------------------------------
  * CORRECTION 2 — `REVOKED` BECOMES AN ADVISORY CACHED CHECK
@@ -83,12 +108,22 @@ import type { StoreOperation } from './protocol';
  * owns: main unregisters an extension, and until the pane hears about it the
  * pane's copy of `isLive` says the handle is live.
  *
- * **The window is closed at the PANE level instead, and that is stronger than a
- * message would be.** Main tears down the `WebContentsView` on `unregister`, so
- * the entire realm — the handle, the closure it captured, the timer that was
- * about to call through it — stops existing. A `revoke` message would leave the
- * realm alive and racing; killing the view does not race. That is why there is no
- * `revoke` member in the protocol; see the banner in `./protocol`.
+ * **The window is closed at the VIEW level instead, and that is stronger than a
+ * message would be.** Main tears down the extension `WebContentsView` on
+ * `unregister`, so the entire realm — the handle, the closure it captured, the
+ * timer that was about to call through it — stops existing. A `revoke` message
+ * would leave the realm alive and racing; killing the view does not race. That is
+ * why there is no `revoke` member in the protocol; see the banner in
+ * `./protocol`.
+ *
+ * **This correction survived Phase 7 with one word changed, and the word matters
+ * more than it looks.** It said "the `WebContentsView`", singular, at a time when
+ * the plan drafted three of them; the topology that was built has ONE extension
+ * view holding both panes, so tearing it down ends both panes' realm at once.
+ * That makes the correction stronger rather than weaker — there is no second
+ * extension realm left holding a stale handle — and it is the same fact that
+ * makes the crash containment claim narrower: a pane-3 crash takes pane 2 with
+ * it, which docs/adr/0005-pane-topology.md's consequences state outright.
  * ============================================================================
  */
 

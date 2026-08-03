@@ -95,6 +95,30 @@ import { describe, expect, it } from 'vitest';
  * infrastructure but it is not a test, and nothing in it should be attaching a
  * listener either. A global `ResizeObserver` stub is deliberately NOT installed
  * there for the same family of reasons — see `VirtualizedList.tsx` decision 4.
+ *
+ * ---------------------------------------------------------------------------
+ * THE SCOPE LIMIT, NAMED — AND WHAT NOW COVERS THE REST
+ * ---------------------------------------------------------------------------
+ * **`SRC_ROOT` below is resolved from this file's own location, so this scan
+ * walks `src/` and nothing else.** That is not a bug and it never was; what
+ * would be a defect is reading a green result here as a statement about the
+ * repository. It is not. `electron/` — the native host's main process and its
+ * preload — has never been visited by this file, and could grow a keyboard
+ * layer, a second window handler or a stray `addEventListener` without failing a
+ * single assertion in it.
+ *
+ * Phase 7 made that gap load-bearing by putting a real process there, so the
+ * limit is stated here and **replaced** rather than left implied:
+ * `electron/__tests__/noElectronListener.test.ts` scans `electron/**` with the
+ * patterns that actually constrain a main process. It is deliberately not a copy
+ * of this file pointed at another directory — Electron's API is
+ * `EventEmitter`-shaped, so `addEventListener` appears zero times there today and
+ * would go on appearing zero times through any amount of listener growth, and a
+ * scan that cannot fail is a green tick that discharges an invariant nobody is
+ * checking. What it asserts instead is a per-module census of every `.on`/`.once`
+ * registration, exact in both directions, plus the rule that
+ * `before-input-event` — the one door that bypasses the suppression logic in
+ * `src/core/hotkeyDispatch.ts` — exists in exactly one module, exactly once.
  * ============================================================================
  */
 

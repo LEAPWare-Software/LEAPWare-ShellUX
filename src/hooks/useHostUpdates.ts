@@ -33,23 +33,18 @@ import type { HostUpdateState, HostUpdates } from '../core/updates/hostUpdates';
  */
 
 /**
- * The shape the preload exposes. Declared here because this is the only module
- * that reads it, and a global augmentation that lives beside its single reader
- * cannot drift away from it.
+ * The `Window.shelluxHost` augmentation used to be declared HERE, beside its
+ * single reader, and the sentence justifying that said "a global augmentation
+ * that lives beside its single reader cannot drift away from it".
+ *
+ * **It stopped being a single reader in Phase 7 and the declaration moved to
+ * `src/App.tsx`.** The bridge now carries three members — the updater,
+ * the pane split, and the replicated store's transport — and TypeScript merges
+ * `interface Window` across files but not a PROPERTY declared twice with two
+ * shapes, so two modules each declaring `shelluxHost` for their own half is an
+ * error rather than a merge. One declaration, in the module that owns what the
+ * bridge is for, and this hook reads one member of it.
  */
-declare global {
-  interface Window {
-    readonly shelluxHost?: {
-      readonly updates?: {
-        getState(): HostUpdateState;
-        check(): void;
-        restart(): void;
-        subscribe(listener: (state: HostUpdateState) => void): () => void;
-      };
-    };
-  }
-}
-
 type HostUpdateBridge = NonNullable<NonNullable<Window['shelluxHost']>['updates']>;
 
 /** The bridge, or `null` when this document is not running inside the host. */

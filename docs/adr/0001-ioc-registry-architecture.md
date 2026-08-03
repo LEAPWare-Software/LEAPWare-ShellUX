@@ -3330,6 +3330,243 @@ table's treatment stated rather than left to inference.
 
 ---
 
+## Amendment O — The process split, built as two views, and the three things that were measured rather than assumed
+
+**Date:** 2026-08-03 · **Status:** Accepted · **Amends:** Amendment E (what a
+boundary in this project can and cannot be), the three contract corrections
+Phase 6 recorded in `src/core/ipc/**`, and the scope claim of
+`src/__tests__/noEventListener.test.ts`
+
+> **A note on the letter.** `docs/plans/native-host-pivot.md` §8 says Phase 7
+> should "Land ADR-0001 Amendment L". L was taken in Phase 5 by the structured
+> payload channel, and M and N followed it. The plan's letter is stale; this is O.
+> Recorded so that the next reader does not go looking for a missing amendment.
+
+**This amendment does not decide `docs/adr/0005-pane-topology.md`.** That ADR is
+`Proposed`, its deciding arm — arm B, NVDA on Windows — has not been run, and the
+decision belongs to a human running it. What is recorded here is which option was
+**built**, why building it does not pre-empt the decision, and what was learned by
+building it.
+
+### Context
+
+Phase 6 ended with a named topology gate: three processes (host chrome, pane 2,
+pane 3) or two (host chrome, and one extension view holding both panes). Phase 7
+had to create views, and the number of them is that gate.
+
+The spike at `spike/topology/` has been built and its machine-observable half
+run, on **Electron 43.2.0 / Chromium 150.0.7871.129**. Three of its measurements
+bear directly on this amendment, and each is a value rather than an inference:
+
+1. `Tab` from the last control of pane A in a two-view build **wraps inside pane
+   A**. It never reaches pane B. Getting focus across required
+   `webContents.focus()` from the main process.
+2. A cross-view `aria-labelledby` **did not resolve** — Chromium marked the name
+   source `invalid` and fell back to the control's own text — and the readings
+   were **byte-identical** to the same markup as two `<iframe>`s in ONE web
+   contents. So the boundary that costs the reference is the **document** edge,
+   not the view edge.
+3. Both pane documents reported `document.hasFocus() === true` **simultaneously**,
+   in every reading, with no signal in either renderer distinguishing them.
+
+### Decision 1 — Two views, and why that is the option that is safe either way
+
+Phase 7 builds **host chrome + one extension view holding panes 2 and 3 in one
+document**. Panes 2 and 3 are always the same extension — `ExtensionViews`
+declares both on one blueprint — so keeping them in one document costs nothing
+structurally and buys their ARIA relationships and their focus order for free.
+Measurement 2 is why that matters: a list and its detail is the pair that would
+most use `aria-controls` and `aria-activedescendant`, and a document edge between
+them breaks both.
+
+**The reasoning that makes this not a pre-emption of ADR-0005 is asymmetry, not
+confidence.** If arm B comes back clean, three processes become *available* and a
+third surface is an additive change: `PaneSurfaceId` in
+`electron/main/surfaces.ts` is a union, so every table keyed on it — the focus
+ring's cycle order, the geometry map, the transport origins — is a compile error
+until a third member is handled. If arm B comes back bad, two processes are
+already what shipped. **Building three first would have been the bet that cannot
+be unwound**, because it would have put a document boundary in the one place the
+research says is worst and then required it to be removed.
+
+### Decision 2 — Focus arbitration is mandatory, and the spike says two things the issue does not
+
+electron/electron#42339 is open, was confirmed so on 2026-08-03, and reproduces
+on 43.2.0: adding a `WebContentsView` steals keyboard focus. Two further findings
+decide the shape of `electron/main/focusRing.ts`:
+
+- **The steal is not synchronous with `addChildView`.** It had not happened at
+  the reading immediately after the call and had happened once the new view's
+  document had loaded. **A host that re-asserts focus on the next line re-asserts
+  too early.** The ring therefore asserts on load completion (`noteReady`) and
+  never on creation.
+- **The losing renderer is never told.** After the steal it still reported its own
+  `activeElement` and `document.hasFocus(): true`. Only the main process can see
+  it, which is why this is a main-process module and not a hook.
+
+And the consequence of having neither, over five identical launches: focus landed
+on the last-added view four times and on the first once. **Which pane the user was
+typing into after startup was undefined.**
+
+The ring is written against an injected `FocusableSurface` seam — four members,
+no Electron types — for the same reason `ShellStorage` is two members and
+`PortLike` is two. That is not tidiness: **a single launch of a broken ring passes
+80% of the time**, so "launch it and look" cannot be the test for this. *Tests:*
+`electron/__tests__/focusRing.test.ts` — "lands on host chrome when the platform
+focused the LAST view added, which it did four times in five", "lands on host
+chrome when the platform focused the FIRST view, which is launch 3" and "does not
+assert until every surface has reported ready, because the steal is not
+synchronous with addChildView".
+
+### Decision 3 — `before-input-event` is used for exactly one thing, and a test says so
+
+It fires in main before DOM handling and carries **no DOM target and no
+`defaultPrevented`**, so `isSuppressed` and `isEditableTarget` in
+`src/core/hotkeyDispatch.ts` structurally cannot run there. The renderer keeps the
+unchanged suppression logic; main's handler exists solely as an escape hatch for
+a chord that must fire when a renderer is wedged, and returns focus to host
+chrome. *Tests:*
+`electron/__tests__/noElectronListener.test.ts` — "holds before-input-event to
+exactly one module and exactly one registration".
+
+### Decision 4 — The `src/` listener scan never covered `electron/`, and that is now stated and replaced
+
+`src/__tests__/noEventListener.test.ts` resolves its root from its own location
+and walks `src/`. **`electron/` was outside it by construction and always had
+been**, so a native host that grew a keyboard layer would have failed nothing.
+The limit is now written into that file and discharged by
+`electron/__tests__/noElectronListener.test.ts`.
+
+That file is deliberately **not** the same scan pointed at another directory. A
+copy would pass vacuously: Electron's API is `EventEmitter`-shaped, so
+`addEventListener` appears zero times in the main process and would go on
+appearing zero times through any amount of listener growth. What it asserts
+instead is a per-module census of every `on`/`once`/`off` registration, exact in
+both directions, plus decision 3's rule. **A scan that cannot fail is a green tick
+that discharges an invariant nobody is checking**, which is the pattern Amendment
+G exists to stop.
+
+The third scan Phase 7 owes is `src/__tests__/crossDocumentIdref.test.ts`. WAI-ARIA
+1.2 defines a valid IDREF as a reference to an element *in the same document*, and
+the shell now has two — so an `aria-labelledby` written in host chrome that names
+an element in the extension surface produces `getElementById → null`, a name
+source Chromium marks `invalid`, a silent fallback to the control's own text, and
+**identical rendered pixels**. The scan walks the relative-import graph from each
+document's own entry point rather than trusting a directory convention, and makes
+two claims: every literal IDREF resolves inside its own document, and **no module
+rendered in BOTH documents mints a literal DOM `id`** — because a shared component
+with a hardcoded id produces the same id twice and an IDREF naming it is ambiguous
+in exactly the way the spike measured. The first claim is vacuous against the
+current tree, which contains no literal IDREF at all; that is stated in the file
+and is why the planted cases are the evidence rather than the decoration. A
+computed IDREF is invisible to it, and every one in this repository is computed —
+but all of them are minted and consumed inside one component, so there is no
+source here for a computed reference that could cross.
+
+### Decision 5 — The three Phase 6 contract corrections were re-scoped, because two of them named the wrong pair
+
+They were written while the plan drafted three views, and two became false rather
+than merely dated:
+
+| Correction | Was | Is |
+|---|---|---|
+| 1 — `subscribe` is scoped | "pane 2's listener runs inside pane 2's write, and pane 3 hears about it one message later" | **False.** Panes 2 and 3 are one renderer. The pair a message apart is host chrome and the extension surface. |
+| 3 — skew between renderers | "pane 2 applies its own write and pane 3 sees it after a message" | **False**, same reason. The skewing pair is host chrome and the extension surface. |
+| 2 — `REVOKED` is advisory | "main tears down the `WebContentsView` on `unregister`" | **True, and stronger.** There is one extension view, so tearing it down ends both panes' realm at once. |
+
+Naming the wrong pair would have been worse than saying nothing: it would have
+told a reader that a list and its detail had become asynchronous, which is exactly
+the cost this topology was chosen to avoid. The same re-scoping was applied to
+`AuthoritativeStore`'s per-origin severing claim — panes 2 and 3 share one origin,
+so a storm in either severs both.
+
+### Decision 6 — The seam's SHAPE was right and its PLACEMENT assumption was never checked
+
+`src/core/ipc/PortLike.ts` predicted `electron/main/portAdapter.ts` and wrote its
+body in a comment. **The body held, line for line, and it is nine lines.** Two
+claims around it did not:
+
+1. ~~"the only code in the pivot's state design that no unit test covers"~~.
+   `MessagePortMain` is structurally three members, so a fake satisfies it and
+   both facts the adapter absorbs — the `MessageEvent` wrapper and the mandatory
+   `start()` — are directly observable. It is **tested but not gated**: the 100%
+   threshold covers `src/core/**`, `src/components/**` and `src/hooks/**`, and
+   `electron/**` is outside it.
+2. **The main process cannot import `src/` at all.** `electron/tsconfig.json`
+   compiles with `module: "NodeNext"` — it must, because Node resolves those files
+   and the sandboxed preload's `.cjs` emit depends on it — and every relative
+   import under `src/` is *extensionless*, because a bundler resolves the
+   renderer. Compiling `src/core/ipc/AuthoritativeStore.ts` into that program
+   answers `TS2835: Relative import paths need explicit file extensions … Did you
+   mean '../types.js'?` on **every** relative import in the graph, before any
+   question of `lib` or of React arises. `HydrationEngine` has a second, separate
+   blocker on top of it: `resolveAmbientStorage` reads `globalThis.localStorage`,
+   which forces `DOM` into the `lib` of any program that includes it — and
+   `electron/tsconfig.json` argues at length for `lib: ["ES2023"]` precisely so
+   that a real mistake in a process with no `document` does not compile cleanly.
+
+**So `AuthoritativeStore` and `HydrationEngine` did not move to main in this
+phase, and that is recorded as an interim rather than absorbed as a design.** §5's
+"main owns truth, and a renderer is not trusted" is unchanged as the target. Two
+routes are available and neither was taken here, because both are build-system
+surgery on the lane `verify` depends on and the phase's stated priority was a
+green tree with the views, the adapter and a deterministic focus ring:
+
+- **Bundle the main process** with the Vite already in `devDependencies` (an SSR
+  build, `electron` and the Node builtins external). This is what `electron-vite`
+  does and it dissolves the resolution problem outright. It needs a second
+  type-check program for the bundled entry, and that program is where the `DOM`
+  question above has to be answered honestly rather than by adding `DOM` to the
+  config that argues against it.
+- **Give `src/`'s relative imports the `.js` suffix**, which TypeScript and Vite
+  both resolve back to `.ts`. Mechanical, and touches ~100 files in the directory
+  under the 100% coverage gate.
+
+### Consequences
+
+- **Positive.** A `process.crash()`-equivalent in the extension view leaves the
+  rail, pane 1, the context bar and the palette alive; main reloads the view.
+  Observed, not asserted: killing the extension renderer produced *"the extension
+  view stopped (reason: crashed, exit code: -1); reloading it"* followed by the
+  focus ring re-asserting host chrome after the reload — which is the same steal,
+  caught a second time.
+- **Positive.** Startup focus is deterministic. Every `setBounds` call in the
+  application is in one function in one process.
+- **Negative — accepted, and it is the trade ADR-0005 names.** A pane-3 crash
+  takes pane 2 with it. Per-pane memory accounting is not available;
+  per-extension accounting is.
+- **Negative — outstanding, and it is the largest.** `ShellLayout` has not been
+  split into a chrome surface and an extension surface, so host chrome still
+  renders three panes of its own — plus the omnibox — beside the extension view,
+  and the two surfaces hold independent registries and independent stores.
+  Clicking an extension in host chrome's navigation does not populate the
+  extension view. **The default `electron .` launch is therefore a visible
+  regression against Phase 1's single working window**, and that is recorded here
+  rather than softened: what Phase 7 delivered is a topology, not a working
+  two-surface shell. The cross-process state link is blocked behind decision 6;
+  the surface split is blocked behind a `ShellLayout` refactor, and neither is
+  blocked behind the topology.
+- **Negative — outstanding, and it follows from the one above.** "Unmatched chords
+  go to main" is not implemented. `src/core/hotkeyDispatch.ts` is unchanged: it
+  still runs the full suppression logic and still dispatches host and foreground
+  chords locally, and `electron/main/paneKeyBridge.ts` is the escape hatch only.
+  Forwarding is defensible to defer *in this phase specifically* — with
+  independent registries in the two surfaces there is nothing on the other side
+  for a forwarded chord to reach, so it would be a message into a process that
+  could not act on it — but it is a named part of §5's hybrid keyboard design and
+  it is owed.
+- **Neutral.** `vite.config.ts` gains a declared `rollupOptions.input` with two
+  entries. The banner that said "`index.html` remains the only build input" was
+  rewritten in the same change; `dev.html`'s exclusion is now a statement rather
+  than an inherited default.
+- **Neutral.** `updater.ts` moved from `BrowserWindow.getAllWindows()` to
+  `webContents.getAllWebContents()` and from `browser-window-created` to
+  `web-contents-created`. This was a correction and not a refactor: a `BaseWindow`
+  is not a `BrowserWindow`, so the old walk found zero and the updater silently
+  told nobody anything, on a code path with no error in it.
+
+---
+
 ## Related
 
 - [`.github/ISSUES_MANIFEST.md`](../../.github/ISSUES_MANIFEST.md) — ISSUE-001

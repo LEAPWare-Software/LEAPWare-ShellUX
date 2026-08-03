@@ -857,6 +857,127 @@ function ShellResizeHandle({ label }: ShellResizeHandleProps): ReactElement {
   );
 }
 
+/**
+ * ============================================================================
+ * ONE HOST CHORD, TWO DOCUMENTS, AND THE SURFACE THAT OWNS THE PALETTE.
+ * ============================================================================
+ * The command palette is host chrome's — `HOST_CHORDS` in
+ * `src/core/hotkeyDispatch.ts` holds exactly one entry, and
+ * `src/components/command/__tests__/hostChrome.test.tsx` pins three independent
+ * spellings of "an extension cannot declare it". Phase 7 put panes 2 and 3 in a
+ * different document, and that made a question out of something that had never
+ * been one: **what happens when the chord is pressed in the surface that does
+ * not have the palette in it?**
+ *
+ * Before this hook, nothing. The extension surface's dispatcher matched the
+ * chord, called its handler, set a piece of state no rendered component reads,
+ * and the user got silence from a keystroke they use constantly.
+ *
+ * ---------------------------------------------------------------------------
+ * RENDERER-FIRST, AND MAIN ROUTES WHAT THE RENDERER COULD NOT ACT ON
+ * ---------------------------------------------------------------------------
+ * The obvious alternative is to match the chord in the main process, which
+ * already watches `before-input-event` for the escape hatch. It is refused for
+ * the reason `electron/main/paneKeyBridge.ts` sets out at length: that event
+ * fires BEFORE the renderer's DOM handling and carries neither a target nor
+ * `defaultPrevented`, so main cannot tell `Ctrl+K` aimed at the shell from
+ * `Ctrl+K` aimed at the omnibox composer the user is typing in. Every
+ * suppression rule that answers that question — `isEditableTarget`,
+ * `isComposing`, the repeat guard — lives in the renderer and stays there.
+ *
+ * So the chord is recognised where it always was, and only the surviving INTENT
+ * crosses. Main focuses host chrome and tells it to open; see
+ * `registerPaletteRouting` in `electron/main/index.ts` for why focus moves as
+ * well as the palette opening.
+ *
+ * ---------------------------------------------------------------------------
+ * ONE HOOK FOR BOTH DIRECTIONS, AND IT LIVES HERE RATHER THAN IN `src/hooks/`
+ * ---------------------------------------------------------------------------
+ * A surface that can ASK is a surface that must also be able to HEAR: host
+ * chrome and the extension view load the same preload and the same component,
+ * and which of them is which is a prop rather than a build. Splitting this into
+ * a sender hook and a receiver hook would have made "who subscribes" a second
+ * decision that could disagree with the first one.
+ *
+ * It sits beside its one caller rather than in `src/hooks/` because it has
+ * exactly one caller and no meaning away from it: `useHostUpdates` is a general
+ * reading of host state that any surface could want, and this is the answer to
+ * one question this component asks about itself.
+ * ============================================================================
+ */
+
+/** The `panes` half of the preload bridge. Declared in `src/App.tsx`. */
+type HostPanesBridge = NonNullable<NonNullable<Window['shelluxHost']>['panes']>;
+
+/** The bridge, or `null` when this document is not running inside the host. */
+function hostPanesBridge(): HostPanesBridge | null {
+  return window.shelluxHost?.panes ?? null;
+}
+
+/**
+ * Subscribe to the host's request to open the palette, and get the way to make
+ * one.
+ *
+ * @param onRequested called when another surface's chord reached this one.
+ *   **Its identity must be stable** — wrap it in `useCallback` — because it is
+ *   the subscription's dependency, and a fresh function every render would
+ *   detach and re-attach the listener on every render.
+ * @returns the way to hand the chord to the host, or `null` in a browser
+ *   document, where there is no other surface and the caller's own palette is
+ *   the whole answer.
+ */
+function useHostPalette(onRequested: () => void): (() => void) | null {
+  const panes = hostPanesBridge();
+
+  useEffect(() => {
+    if (panes === null) {
+      return undefined;
+    }
+    // `onPaletteRequest` returns its own unsubscribe, so the cleanup is the
+    // host's rather than a second bookkeeping scheme built on top of it — the
+    // same shape `useHostUpdates` uses.
+    return panes.onPaletteRequest(onRequested);
+  }, [panes, onRequested]);
+
+  return panes === null ? null : panes.requestPalette;
+}
+
+/**
+ * ============================================================================
+ * WHICH PART OF THE SHELL ONE DOCUMENT DRAWS.
+ * ============================================================================
+ * Phase 7 gave the desktop host two `WebContentsView`s and therefore two
+ * documents — `electron/main/paneViews.ts`, `electron/main/surfaces.ts` — and a
+ * document cannot draw a pane that lives in the other one. This union is how
+ * that fact reaches the renderer, and it is a PROP rather than a fork of this
+ * file, because the layout arithmetic, the persistence rule, the fault
+ * boundaries and the density contract are one implementation with tests against
+ * them and duplicating any of it would duplicate all of it.
+ *
+ *  - `'full'` — all three panes, every command surface, one document. **This is
+ *    the default and it is byte-identical to what this file has always
+ *    rendered.** It is what a browser tab gets, what `e2e/` drives, and what
+ *    every existing test in `src/components/__tests__/` renders.
+ *  - `'chrome'` — the host-chrome view: the context bar, the command palette and
+ *    pane 1. Panes 2 and 3 are in the other document, so there is no panel group
+ *    here at all: pane 1 fills the view, and the boundary at its trailing edge
+ *    is the NATIVE view edge that `paneViews.ts` owns and `setBounds` is the
+ *    only writer of.
+ *  - `'extension'` — the extension view: panes 2 and 3, the divider between
+ *    them, the floating toolbar, the block ledger and the omnibox composer. Pane
+ *    1, the context bar and the palette are in the other document.
+ *
+ * **The surface is chosen at an ENTRY POINT and never inside a component.**
+ * `src/main.tsx` and `src/dev/main.dev.tsx` pass `'chrome'` when a native host is
+ * beside them and nothing otherwise; `src/paneview/main.paneview.tsx` passes
+ * `'extension'`. That is what keeps every browser-lane test — 51 Playwright
+ * specs and every unit test that renders this component — on `'full'` without
+ * one of them naming a surface. Moving the decision into a hook here would break
+ * that silently.
+ * ============================================================================
+ */
+export type ShellSurface = 'full' | 'chrome' | 'extension';
+
 export interface ShellLayoutProps {
   /**
    * Where this shell persists its layout. Defaults to the process-wide engine
@@ -869,10 +990,18 @@ export interface ShellLayoutProps {
    * one is — because the restored snapshot below is taken once, at mount.
    */
   readonly engine?: HydrationEngine;
+  /**
+   * Which part of the shell this document draws. Defaults to `'full'`, which is
+   * every part of it. See `ShellSurface`.
+   */
+  readonly surface?: ShellSurface | undefined;
 }
 
 /** The assembled shell: ribbon above three horizontally resizable panes. */
-export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): ReactElement {
+export function ShellLayout({
+  engine: suppliedEngine,
+  surface = 'full',
+}: ShellLayoutProps = {}): ReactElement {
   const registry = useRegistry();
   // The revision is a CHANGE TRIGGER, not an input: its value carries no meaning
   // and is deliberately not read for one. What it announces is that the
@@ -889,6 +1018,12 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   const context = useShellContext();
 
   const engine = suppliedEngine ?? getDefaultHydrationEngine();
+
+  // The two questions every conditional below asks, derived once so that no site
+  // spells the union out a second time. `'full'` answers yes to both, which is
+  // why the default path is unchanged by construction rather than by inspection.
+  const showChrome = surface !== 'extension';
+  const showExtensionPanes = surface !== 'chrome';
 
   const [groupWidth, setGroupWidth] = useState<number | null>(null);
   // Bound LIVE, because this flag decides which component tree renders — see
@@ -937,8 +1072,30 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // the honest fix: the compiler rejects a second host chord here rather than the
   // test suite failing to reach it, so adding one is a type error at this call
   // site instead of an invisible uncovered branch.
-  useHotkeyDispatch(() => {
+  //
+  // **WHERE THE PALETTE ACTUALLY IS, WHEN IT IS NOT HERE.** The dispatcher runs
+  // in both documents and the palette is rendered in one of them. Left alone,
+  // the chord pressed in the extension view set a piece of state nothing reads
+  // and the user got silence from a keystroke they use constantly. So the
+  // extension surface hands the surviving intent to the host, which focuses host
+  // chrome and asks it to open — see `src/hooks/useHostPalette.ts` for why the
+  // MATCHING stays in the renderer and only the intent crosses.
+  //
+  // `showChrome` first, so the surface that owns the palette never takes a round
+  // trip to open its own; `requestPalette === null` second, so a browser
+  // document — where there is no host and no second surface — still opens the
+  // one it renders.
+  const openPalette = useCallback((): void => {
     setPaletteOpen(true);
+  }, []);
+  const requestPalette = useHostPalette(openPalette);
+
+  useHotkeyDispatch(() => {
+    if (showChrome || requestPalette === null) {
+      openPalette();
+      return;
+    }
+    requestPalette();
   });
 
   // A mount-time SNAPSHOT, not a subscription. `defaultSize` means "where this
@@ -1044,10 +1201,23 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
    * The collapsed group is refused before either, and refused from LEARNING as
    * well: those two panes divide the different denominator, so the numbers are
    * not this layout's at all.
+   *
+   * **THE EXTENSION SURFACE IS REFUSED BY EXACTLY THAT RULE, ONE LAYER UP.** Its
+   * group holds panes 2 and 3 and no pane 1, so every size it announces is a
+   * share of a width that EXCLUDES pane 1 — the same "ratio against a different
+   * denominator" the collapsed case is refused for, and one this shell has never
+   * learned either. Writing those two numbers into a three-pane record would
+   * leave percentages that do not divide the whole, and the browser lane reads
+   * that same record. So the extension surface reads the record and never writes
+   * it, and the pane-1 half of the layout is owned by main's window split
+   * (`PaneWindow.setSplit`) rather than by this slot. The chrome surface has no
+   * resizable pane at all, so it never reaches here.
+   * *Tests:* `src/components/__tests__/ShellLayoutSurfaces.test.tsx` — "does not
+   * write pane sizes from the extension surface, whose group excludes pane 1".
    */
   const persistPaneSize = useCallback(
     (pane: PaneId, size: number, previousSize: number | undefined): void => {
-      if (isNavCollapsed) {
+      if (isNavCollapsed || surface !== 'full') {
         return;
       }
       const known = announcedLayout.current;
@@ -1064,10 +1234,35 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
         pane3: clampPanePercent(next.pane3),
       });
     },
-    [engine, isNavCollapsed],
+    [engine, isNavCollapsed, surface],
   );
 
   useEffect(() => {
+    // ======================================================================
+    // THE EXTENSION SURFACE NEITHER RESTORES THE FOREGROUND NOR RECORDS IT,
+    // AND THIS GUARD IS THE FIX FOR A RACE THAT WAS OBSERVED RATHER THAN
+    // ANTICIPATED.
+    // ======================================================================
+    // Both documents run in one origin and therefore over one `localStorage`.
+    // With both of them restoring `activeExtensionId` from it, each published
+    // the same foreground independently, and `publishForeground` publishes a
+    // handover as TWO writes — `clearContextKeys`, then the patch. The
+    // interleaving that produced was real and reproducible in the launched
+    // window: host chrome's `clear` was ordered by the authority while its
+    // carried context still said `null`, the extension's replica applied
+    // another renderer's commit and rolled its optimistic `mail` back to
+    // `null`, `ExtensionSurface` in `src/paneview/PaneViewShell.tsx` read that as
+    // "the user closed the extension" and blurred — and the blur was ordered
+    // AFTER host chrome's patch. Both documents then agreed on nothing being
+    // in the foreground, having both restored the same extension.
+    //
+    // There is one navigation pane and it is host chrome's, so the persisted
+    // foreground is host chrome's too. The extension surface learns which
+    // extension it is showing from the replicated context, which is the same
+    // route a user's click takes and has no second writer.
+    if (!showChrome) {
+      return;
+    }
     // `revision` is in the dependency list and is deliberately not read here: it
     // is the change trigger that gives a pending restore another chance every
     // time the registry moves. See the comment on `useRegistryRevision` above.
@@ -1116,7 +1311,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
         // Reporting is best-effort. Staying mounted is not.
       }
     }
-  }, [activation, activeId, engine, registry, revision]);
+  }, [activation, activeId, engine, registry, revision, showChrome]);
 
   // `?? 0` is the not-yet-measured render, which draws no panel group at all;
   // `percentOf` answers with the fallback band for it, and for any width a
@@ -1142,8 +1337,28 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   const navDefaultPercent = hasRestoredLayout
     ? clampToBand(restoredSizes.pane1, navMinPercent, navMaxPercent)
     : percentOf(PANE_PX.navDefault, width, PANE_FALLBACK_PERCENT.navDefault);
+  // A RESTORED PANE-2 SHARE IS RE-BASED ONTO THE GROUP THAT IS ACTUALLY LIVE,
+  // and this is arithmetic rather than taste. The record stores three
+  // percentages of one width. The extension surface's group holds two of those
+  // panes, so `restoredSizes.pane2` is a share of a denominator this group does
+  // not have: handed over unchanged it would ask for roughly three quarters of
+  // what the user chose, the two panels would sum to well under 100, and
+  // `react-resizable-panels` would renormalise them into proportions nobody
+  // picked. Dividing by the pair's own total is the same layout expressed
+  // against the width it is being laid out in.
+  //
+  // The denominator cannot be zero: the engine clamps every stored slot into
+  // `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]`, whose floor is above zero, so the
+  // division is safe on every record the engine can produce — including the
+  // untouched defaults. It is evaluated unconditionally and `hasRestoredLayout`
+  // decides only whether the RESULT is used; that is worth stating, because the
+  // guard sits on the next expression and reads at a glance as if it guarded
+  // this one.
+  const restoredListPercent = showChrome
+    ? restoredSizes.pane2
+    : (restoredSizes.pane2 / (restoredSizes.pane2 + restoredSizes.pane3)) * 100;
   const listDefaultPercent = hasRestoredLayout
-    ? clampToBand(restoredSizes.pane2, listMinPercent, listMaxPercent)
+    ? clampToBand(restoredListPercent, listMinPercent, listMaxPercent)
     : percentOf(PANE_PX.listDefault, width, PANE_FALLBACK_PERCENT.listDefault);
   // Declared rather than left implicit: the library warns about a panel with no
   // `defaultSize`, and the remainder is what pane 3 would have been given anyway.
@@ -1152,9 +1367,16 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // up: when pane 1 or pane 2 was corrected above, pane 3 absorbs the difference
   // rather than the three of them summing to something the library has to
   // renormalise.
+  //
+  // **The pane-1 term is zero on the extension surface**, and leaving it in
+  // would be the same denominator error one paragraph up, in the other
+  // direction: pane 1 is not in this group, so the remainder pane 3 gets is
+  // everything the list did not take rather than everything the list and a
+  // pane in another document did not take.
+  const paneOneShare = showChrome ? navDefaultPercent : 0;
   const detailDefaultPercent = Math.max(
     detailMinPercent,
-    100 - navDefaultPercent - listDefaultPercent,
+    100 - paneOneShare - listDefaultPercent,
   );
 
   const hostCommands: readonly HostCommand[] = [
@@ -1321,248 +1543,315 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     </FaultBoundary>
   );
 
+  /**
+   * PANES 2 AND 3, AND THE DIVIDER BETWEEN THEM.
+   *
+   * Hoisted out of the tree below so that the two surfaces which draw them —
+   * `'full'` and `'extension'` — draw the SAME element rather than two copies
+   * of it that can drift. They are always the same extension (plan §2:
+   * `ExtensionViews` declares `pane2` and `pane3` on one blueprint), so they
+   * travel together, which is also why the process split put them in one
+   * document. See `electron/main/surfaces.ts`.
+   */
+  const extensionPanes = (
+    <>
+      <Panel
+        id="pane2"
+        order={2}
+        className="min-h-0 min-w-0"
+        defaultSize={listDefaultPercent}
+        minSize={listMinPercent}
+        maxSize={listMaxPercent}
+        onResize={(size, previousSize) => {
+          persistPaneSize('pane2', size, previousSize);
+        }}
+      >
+        <PaneWrapper
+          paneId="pane2"
+          label="List"
+          header={<span className="truncate font-semibold">List</span>}
+        >
+          <FaultBoundary
+            boundaryLabel="The List pane"
+            extensionId={activeId}
+            resetKey={activeId}
+          >
+            {active === null ? (
+              <EmptyPane>Select an extension to fill this pane.</EmptyPane>
+            ) : (
+              <ExtensionPane
+                active={active}
+                pane="pane2"
+                label="The list view"
+                context={context}
+              />
+            )}
+          </FaultBoundary>
+        </PaneWrapper>
+      </Panel>
+      <ShellResizeHandle label="Resize the list pane" />
+      <Panel
+        id="pane3"
+        order={3}
+        className="min-h-0 min-w-0"
+        defaultSize={detailDefaultPercent}
+        minSize={detailMinPercent}
+        onResize={(size, previousSize) => {
+          persistPaneSize('pane3', size, previousSize);
+        }}
+      >
+        <PaneWrapper
+          paneId="pane3"
+          label="Detail"
+          header={
+            <span className="truncate font-semibold">
+              {active === null ? 'No extension selected' : active.blueprint.name}
+            </span>
+          }
+          trailing={
+            isDrawerOpen ? (
+              <div className="flex flex-col gap-1">
+                <h2
+                  className={`text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}
+                >
+                  Utilities
+                </h2>
+                <p className={`text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}>
+                  Reserved for extension-supplied utilities.
+                </p>
+              </div>
+            ) : undefined
+          }
+        >
+          {/*
+            PANE 3 IS THREE THINGS STACKED, AND THE ORDER IS THE DESIGN.
+            The floating toolbar rides above the view because it is
+            triggered by a selection made INSIDE the view; the composer is
+            docked below it because it is persistent and must not move
+            when the toolbar appears. Both are host chrome around a
+            plug-in view, so both sit OUTSIDE the fault boundary: a
+            plug-in render that throws must not take the shell's own input
+            surface down with it, which is the whole point of putting a
+            boundary there at all.
+          */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+            <FloatingToolbar registry={commandRegistry} context={context} />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <FaultBoundary
+                boundaryLabel="The Detail pane"
+                extensionId={activeId}
+                resetKey={activeId}
+              >
+                {active === null ? (
+                  <EmptyPane>
+                    No extension is active, so there is nothing to detail.
+                  </EmptyPane>
+                ) : (
+                  <ExtensionPane
+                    active={active}
+                    pane="pane3"
+                    label="The detail view"
+                    context={context}
+                  />
+                )}
+              </FaultBoundary>
+            </div>
+            {/*
+              THE BLOCK LEDGER. HOST CHROME, AND THE FIRST SURFACE IN
+              THIS SHELL THAT DRAWS A CHART LIBRARY.
+
+              Outside the fault boundary above, for the reason the
+              composer and the floating toolbar are: a plug-in render
+              that throws must not take the shell's own surfaces with
+              it. That is safe here rather than merely hoped for,
+              because every reader under `src/core/ledger/` is TOTAL —
+              a malformed payload draws a complaint, never a throw.
+
+              `echartsRenderer` is injected at this one point. It is
+              the only production import of a chart library in `src/`,
+              which is what makes the renderer swappable and what makes
+              the measured bundle delta attributable to one line.
+            */}
+            {active === null ? null : (
+              <BlockLedger
+                shell={active.shell}
+                context={context}
+                renderer={echartsRenderer}
+                onSubmit={(blockId, values) => {
+                  setLastBlockSubmission(
+                    `${blockId}: ${Object.entries(values)
+                      .map(([name, value]) => `${name}=${value}`)
+                      .join(', ')}`,
+                  );
+                }}
+              />
+            )}
+            {lastBlockSubmission === null ? null : (
+              <p
+                data-shell-region="ledger-echo"
+                className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
+              >
+                <span className="font-semibold">block</span>
+                {`: ${lastBlockSubmission}`}
+              </p>
+            )}
+            {lastSubmission === null ? null : (
+              /*
+                The submission, echoed back in the host's own words. It is
+                the honest thing to draw: the user typed something, the
+                host detected an intent, and nothing has consumed it yet.
+                `text` is the USER's string, not a plug-in's, and it is
+                rendered as a text node regardless.
+              */
+              <p
+                data-shell-region="omnibox-echo"
+                className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
+              >
+                <span className="font-semibold">{lastSubmission.intent}</span>
+                {`: ${lastSubmission.text}`}
+              </p>
+            )}
+            <OmniboxComposer
+              registry={commandRegistry}
+              context={context}
+              onSubmit={(submission) => {
+                // The host owns no filter and answers no question, and
+                // says so rather than pretending. Reaching into the
+                // active extension's view to apply a filter would be host
+                // chrome operating a plug-in's UI, which nothing in this
+                // repository grants; publishing the text as a context key
+                // would write into a namespace that is the extension's.
+                // The submission is recorded, and the surface that
+                // would consume it — the block ledger below — is fed by
+                // the structured payload channel, which only the
+                // EXTENSION may publish on. The host has no door to it
+                // that would not be the host impersonating the
+                // extension.
+                setLastSubmission(submission);
+              }}
+            />
+          </div>
+        </PaneWrapper>
+      </Panel>
+    </>
+  );
+
   return (
     <div
       data-shell-region="root"
+      data-shell-surface={surface}
       className={
         'flex h-full min-h-0 w-full flex-col overflow-hidden text-[12px] ' +
         `${TOKEN_CLASS.appSurface} ${TOKEN_CLASS.appText}`
       }
     >
-      <FaultBoundary boundaryLabel="The context bar" extensionId={activeId} resetKey={activeId}>
-        <ContextBar registry={commandRegistry} context={context} />
-      </FaultBoundary>
-      <FaultBoundary boundaryLabel="The command palette" extensionId={activeId} resetKey={activeId}>
-        <CommandPalette
-          registry={commandRegistry}
-          context={context}
-          open={isPaletteOpen}
-          onOpenChange={setPaletteOpen}
-        />
-      </FaultBoundary>
+      {/*
+        THE TWO COMMAND SURFACES THAT ARE HOST CHROME'S AND NOT A PANE'S.
+        The 32px context bar and the palette both act on the whole shell and both
+        outlive any one extension, so they belong to the surface that also owns
+        navigation. The extension view draws neither; the two surfaces it does
+        draw — the floating toolbar and the omnibox composer — are inside pane 3,
+        because both are triggered by, and act on, what is selected in there.
+      */}
+      {showChrome ? (
+        <>
+          <FaultBoundary boundaryLabel="The context bar" extensionId={activeId} resetKey={activeId}>
+            <ContextBar registry={commandRegistry} context={context} />
+          </FaultBoundary>
+          <FaultBoundary
+            boundaryLabel="The command palette"
+            extensionId={activeId}
+            resetKey={activeId}
+          >
+            <CommandPalette
+              registry={commandRegistry}
+              context={context}
+              open={isPaletteOpen}
+              onOpenChange={setPaletteOpen}
+            />
+          </FaultBoundary>
+        </>
+      ) : null}
       <div
         data-shell-region="panes"
         className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden"
       >
-        {isNavCollapsed ? (
-          <div
-            data-shell-region="nav-track"
-            className="flex-none"
-            style={{ width: `${PANE_PX.navCollapsed}px` }}
-          >
-            <PaneWrapper paneId="pane1" label="Navigation">
+        {showExtensionPanes ? (
+          <>
+            {showChrome && isNavCollapsed ? (
+              <div
+                data-shell-region="nav-track"
+                className="flex-none"
+                style={{ width: `${PANE_PX.navCollapsed}px` }}
+              >
+                <PaneWrapper paneId="pane1" label="Navigation">
+                  {navigationPane}
+                </PaneWrapper>
+              </div>
+            ) : null}
+            <div ref={attachGroup} className="flex min-h-0 min-w-0 flex-1">
+              {groupWidth === null ? null : (
+                <PanelGroup id="shell-panes" direction="horizontal" className="flex min-w-0 flex-1">
+                  {isNavCollapsed || !showChrome ? null : (
+                    <>
+                      <Panel
+                        id="pane1"
+                        order={1}
+                        className="min-h-0 min-w-0"
+                        defaultSize={navDefaultPercent}
+                        minSize={navMinPercent}
+                        maxSize={navMaxPercent}
+                        onResize={(size, previousSize) => {
+                          persistPaneSize('pane1', size, previousSize);
+                        }}
+                      >
+                        <PaneWrapper
+                          paneId="pane1"
+                          label="Navigation"
+                          header={<span className="truncate font-semibold">Navigation</span>}
+                        >
+                          {navigationPane}
+                        </PaneWrapper>
+                      </Panel>
+                      <ShellResizeHandle label="Resize the navigation pane" />
+                    </>
+                  )}
+                  {extensionPanes}
+                </PanelGroup>
+              )}
+            </div>
+          </>
+        ) : (
+          /*
+            PANE 1 ALONE, AND DELIBERATELY NOT IN A `PanelGroup`.
+            On the chrome surface the boundary at pane 1's trailing edge is the
+            edge of a `WebContentsView`, and main is the only writer of it —
+            `layout()` in `electron/main/paneViews.ts`. A single `Panel` carrying
+            pane 1's own `maxSize` inside a group that holds nothing else is a
+            contradiction the library resolves by renormalising to 100% and
+            warning; expressing "this pane is the whole view" as ordinary flex is
+            the honest spelling of a width this document does not decide.
+
+            The collapsed flag still reaches the tree — `navigation` reads it, so
+            the rows go icon-only — but there is no 48px track, because a 48px
+            track inside a view that is not 48px wide is a rail beside an empty
+            rectangle. Narrowing the VIEW when navigation collapses is main's
+            half of that, and it is not built; see the report on this phase.
+          */
+          <div data-shell-region="nav-pane" className="flex min-h-0 min-w-0 flex-1">
+            <PaneWrapper
+              paneId="pane1"
+              label="Navigation"
+              // `PANE_CHROME` sets `h-full` and no width, because everywhere else
+              // a `Panel` has already decided how wide the pane is. Nothing has
+              // here, so the section is told to take the row.
+              className="min-w-0 flex-1"
+              header={<span className="truncate font-semibold">Navigation</span>}
+            >
               {navigationPane}
             </PaneWrapper>
           </div>
-        ) : null}
-        <div ref={attachGroup} className="flex min-h-0 min-w-0 flex-1">
-          {groupWidth === null ? null : (
-            <PanelGroup id="shell-panes" direction="horizontal" className="flex min-w-0 flex-1">
-              {isNavCollapsed ? null : (
-                <>
-                  <Panel
-                    id="pane1"
-                    order={1}
-                    className="min-h-0 min-w-0"
-                    defaultSize={navDefaultPercent}
-                    minSize={navMinPercent}
-                    maxSize={navMaxPercent}
-                    onResize={(size, previousSize) => {
-                      persistPaneSize('pane1', size, previousSize);
-                    }}
-                  >
-                    <PaneWrapper
-                      paneId="pane1"
-                      label="Navigation"
-                      header={<span className="truncate font-semibold">Navigation</span>}
-                    >
-                      {navigationPane}
-                    </PaneWrapper>
-                  </Panel>
-                  <ShellResizeHandle label="Resize the navigation pane" />
-                </>
-              )}
-              <Panel
-                id="pane2"
-                order={2}
-                className="min-h-0 min-w-0"
-                defaultSize={listDefaultPercent}
-                minSize={listMinPercent}
-                maxSize={listMaxPercent}
-                onResize={(size, previousSize) => {
-                  persistPaneSize('pane2', size, previousSize);
-                }}
-              >
-                <PaneWrapper
-                  paneId="pane2"
-                  label="List"
-                  header={<span className="truncate font-semibold">List</span>}
-                >
-                  <FaultBoundary
-                    boundaryLabel="The List pane"
-                    extensionId={activeId}
-                    resetKey={activeId}
-                  >
-                    {active === null ? (
-                      <EmptyPane>Select an extension to fill this pane.</EmptyPane>
-                    ) : (
-                      <ExtensionPane
-                        active={active}
-                        pane="pane2"
-                        label="The list view"
-                        context={context}
-                      />
-                    )}
-                  </FaultBoundary>
-                </PaneWrapper>
-              </Panel>
-              <ShellResizeHandle label="Resize the list pane" />
-              <Panel
-                id="pane3"
-                order={3}
-                className="min-h-0 min-w-0"
-                defaultSize={detailDefaultPercent}
-                minSize={detailMinPercent}
-                onResize={(size, previousSize) => {
-                  persistPaneSize('pane3', size, previousSize);
-                }}
-              >
-                <PaneWrapper
-                  paneId="pane3"
-                  label="Detail"
-                  header={
-                    <span className="truncate font-semibold">
-                      {active === null ? 'No extension selected' : active.blueprint.name}
-                    </span>
-                  }
-                  trailing={
-                    isDrawerOpen ? (
-                      <div className="flex flex-col gap-1">
-                        <h2
-                          className={`text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}
-                        >
-                          Utilities
-                        </h2>
-                        <p className={`text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}>
-                          Reserved for extension-supplied utilities.
-                        </p>
-                      </div>
-                    ) : undefined
-                  }
-                >
-                  {/*
-                    PANE 3 IS THREE THINGS STACKED, AND THE ORDER IS THE DESIGN.
-                    The floating toolbar rides above the view because it is
-                    triggered by a selection made INSIDE the view; the composer is
-                    docked below it because it is persistent and must not move
-                    when the toolbar appears. Both are host chrome around a
-                    plug-in view, so both sit OUTSIDE the fault boundary: a
-                    plug-in render that throws must not take the shell's own input
-                    surface down with it, which is the whole point of putting a
-                    boundary there at all.
-                  */}
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
-                    <FloatingToolbar registry={commandRegistry} context={context} />
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                      <FaultBoundary
-                        boundaryLabel="The Detail pane"
-                        extensionId={activeId}
-                        resetKey={activeId}
-                      >
-                        {active === null ? (
-                          <EmptyPane>
-                            No extension is active, so there is nothing to detail.
-                          </EmptyPane>
-                        ) : (
-                          <ExtensionPane
-                            active={active}
-                            pane="pane3"
-                            label="The detail view"
-                            context={context}
-                          />
-                        )}
-                      </FaultBoundary>
-                    </div>
-                    {/*
-                      THE BLOCK LEDGER. HOST CHROME, AND THE FIRST SURFACE IN
-                      THIS SHELL THAT DRAWS A CHART LIBRARY.
-
-                      Outside the fault boundary above, for the reason the
-                      composer and the floating toolbar are: a plug-in render
-                      that throws must not take the shell's own surfaces with
-                      it. That is safe here rather than merely hoped for,
-                      because every reader under `src/core/ledger/` is TOTAL —
-                      a malformed payload draws a complaint, never a throw.
-
-                      `echartsRenderer` is injected at this one point. It is
-                      the only production import of a chart library in `src/`,
-                      which is what makes the renderer swappable and what makes
-                      the measured bundle delta attributable to one line.
-                    */}
-                    {active === null ? null : (
-                      <BlockLedger
-                        shell={active.shell}
-                        context={context}
-                        renderer={echartsRenderer}
-                        onSubmit={(blockId, values) => {
-                          setLastBlockSubmission(
-                            `${blockId}: ${Object.entries(values)
-                              .map(([name, value]) => `${name}=${value}`)
-                              .join(', ')}`,
-                          );
-                        }}
-                      />
-                    )}
-                    {lastBlockSubmission === null ? null : (
-                      <p
-                        data-shell-region="ledger-echo"
-                        className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
-                      >
-                        <span className="font-semibold">block</span>
-                        {`: ${lastBlockSubmission}`}
-                      </p>
-                    )}
-                    {lastSubmission === null ? null : (
-                      /*
-                        The submission, echoed back in the host's own words. It is
-                        the honest thing to draw: the user typed something, the
-                        host detected an intent, and nothing has consumed it yet.
-                        `text` is the USER's string, not a plug-in's, and it is
-                        rendered as a text node regardless.
-                      */
-                      <p
-                        data-shell-region="omnibox-echo"
-                        className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
-                      >
-                        <span className="font-semibold">{lastSubmission.intent}</span>
-                        {`: ${lastSubmission.text}`}
-                      </p>
-                    )}
-                    <OmniboxComposer
-                      registry={commandRegistry}
-                      context={context}
-                      onSubmit={(submission) => {
-                        // The host owns no filter and answers no question, and
-                        // says so rather than pretending. Reaching into the
-                        // active extension's view to apply a filter would be host
-                        // chrome operating a plug-in's UI, which nothing in this
-                        // repository grants; publishing the text as a context key
-                        // would write into a namespace that is the extension's.
-                        // The submission is recorded, and the surface that
-                        // would consume it — the block ledger below — is fed by
-                        // the structured payload channel, which only the
-                        // EXTENSION may publish on. The host has no door to it
-                        // that would not be the host impersonating the
-                        // extension.
-                        setLastSubmission(submission);
-                      }}
-                    />
-                  </div>
-                </PaneWrapper>
-              </Panel>
-            </PanelGroup>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

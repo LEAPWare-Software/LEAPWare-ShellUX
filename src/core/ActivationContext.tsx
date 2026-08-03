@@ -275,6 +275,35 @@ const ExtensionScopeContext = createContext<string | null>(null);
 
 export interface ShellHostProviderProps {
   readonly children: ReactNode;
+  /**
+   * The shell state store this provider owns. Defaults to a fresh local one.
+   *
+   * ==========================================================================
+   * **THE ONE DOOR THROUGH WHICH TWO DOCUMENTS BECOME ONE SHELL.**
+   * ==========================================================================
+   * `createReplicaStore` in `src/core/ipc/ReplicaStore.ts` returns a
+   * `ShellStateStore` — the same interface, the same validators, the same
+   * notification semantics — that additionally posts every write it accepts over
+   * a `PortLike` and applies the commits that come back. Handing one in here is
+   * the whole of the wiring: everything below this provider goes on calling
+   * `patchContext` and `setSelectedItem` exactly as it did in one process, and
+   * the selection made in host chrome's pane 1 arrives in the extension view's
+   * panes 2 and 3 because the store underneath is replicated rather than because
+   * anything above it knows there are two documents.
+   *
+   * It is optional and the default is a plain local store, so the browser lane
+   * and every existing test are unchanged: a document with no host beside it
+   * replicates to nobody, which is the correct description of a shell that is
+   * the only copy of itself.
+   *
+   * **Its identity must be stable across renders.** It is captured once, at
+   * mount, exactly as the store it replaces was — a second store swapped in
+   * later would be a second view of the context that no subscriber is watching.
+   * The entry points create it at module scope for that reason, which is also
+   * the reason it is not created in an effect: both documents render under
+   * `StrictMode`, and an effect-time `connect` would open the port twice.
+   */
+  readonly store?: ShellStateStore | undefined;
 }
 
 /**
@@ -284,15 +313,19 @@ export interface ShellHostProviderProps {
  * blueprint through the registry, and it watches the registry's revision so that
  * unregistering an extension revokes its handle.
  */
-export function ShellHostProvider({ children }: ShellHostProviderProps): ReactElement {
+export function ShellHostProvider({
+  children,
+  store: suppliedStore,
+}: ShellHostProviderProps): ReactElement {
   const registry = useRegistry();
   const revision = useRegistryRevision();
 
   // One store, created once, for the provider's whole lifetime. Guarded rather
   // than passed straight to `useRef`, which would build and discard a store on
-  // every render.
+  // every render — and, with a supplied store, would be the harmless-looking
+  // line that discards a REPLICA and its port.
   const storeRef = useRef<ShellStateStore | null>(null);
-  storeRef.current ??= createShellStateStore();
+  storeRef.current ??= suppliedStore ?? createShellStateStore();
   const store: ShellStateStore = storeRef.current;
 
   // The structured payload channels, and they are a SECOND STORE rather than a

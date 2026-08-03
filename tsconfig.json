@@ -24,5 +24,18 @@
     "allowImportingTsExtensions": false,
     "noEmit": true
   },
-  "include": ["src", "e2e", "vite.config.ts", "vitest.config.ts", "playwright.config.ts"]
+  // `electron/__tests__` and NOT `electron/`. The main and preload programs are
+  // compiled by `electron/tsconfig.json`, which describes a Node process with no
+  // DOM and EMITS to `dist-electron/`; their tests are vitest files that must be
+  // type-checked and must never be emitted, because `electron-builder.yml` packs
+  // `dist-electron/**` into the asar and a test in there is a disclosure. Two
+  // programs, split exactly where the emit boundary is.
+  "include": [
+    "src",
+    "e2e",
+    "electron/__tests__",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
 }

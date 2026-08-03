@@ -1,26 +1,33 @@
-import { app, BrowserWindow, dialog, nativeTheme, net, protocol, shell } from 'electron';
+import { app, BaseWindow, dialog, ipcMain, net, protocol } from 'electron';
 import { initializeUpdater } from './updater.js';
-import { release } from 'node:os';
+import { openShellSurfaces, followSystemAppearance } from './paneViews.js';
+import type { PaneWindow } from './paneViews.js';
+import type { PaneSurfaceId } from './surfaces.js';
 import { join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /**
  * ============================================================================
- * THE NATIVE HOST — PHASE 1. ONE WINDOW, AND THE ARGUMENT FOR EVERY SETTING.
+ * THE NATIVE HOST — APPLICATION LIFECYCLE, THE PRIVATE SCHEME, AND THE SPLIT.
  * ============================================================================
  *
- * This file is the whole of the native host at Phase 1: application lifecycle
- * and a single `BrowserWindow` that loads the SPA this repository already
- * builds. There is no `BaseWindow`, no `WebContentsView`, no IPC channel and no
- * `contextBridge` surface.
+ * This file was the whole of the native host at Phase 1: lifecycle and a single
+ * `BrowserWindow` loading the SPA. It said, in as many words, that the split was
+ * not built because the topology was gated on an accessibility spike nobody had
+ * run, and that building it before the gate meant building it twice.
  *
- * That is a decision, not an omission. The three-view topology in
- * docs/plans/native-host-pivot.md section 3.2 is *gated* on an accessibility
- * spike that has not been run (section 9, R1): Electron may expose N views as N
- * separate platform accessibility trees, and if it does, the two-process shape
- * wins instead. Building the split before the gate means building it twice. The
- * full argument, including what per-pane processes do and do not buy, is in
- * docs/adr/0004-native-host-runtime.md.
+ * **Phase 7 built it, in the two-process shape, and the window now lives in
+ * electron/main/paneViews.ts.** The argument for two views rather than three —
+ * and the reason that choosing two does not pre-empt docs/adr/0005-pane-topology.md,
+ * which is still `Proposed` and whose deciding arm still needs a human with NVDA
+ * — is in electron/main/surfaces.ts. The spike's measurements are in
+ * spike/topology/RESULTS.md.
+ *
+ * What stayed here is what was never about the window: the lifecycle, the
+ * private scheme, and the two URLs the views load. Decisions 5, 6, 7 and 8 below
+ * describe behaviour that MOVED rather than behaviour that vanished; each says
+ * where it went, because a decision that is silently deleted is one that gets
+ * re-derived wrongly.
  *
  * Eight decisions are made here. Each is argued rather than asserted, because
  * every one of them is the kind of setting that is copied from a tutorial once
@@ -115,6 +122,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  *    check of its own; that check is here, and it is the reason this function is
  *    longer than it looks like it should be.
  *
+ * 3a. THERE ARE NOW TWO DOCUMENTS, AND THE SCHEME SERVES BOTH.
+ *    `vite build` emits `index.html` and `paneview.html`. The first is host
+ *    chrome; the second is the extension surface holding panes 2 and 3 in ONE
+ *    document, which is the whole of the two-process topology's renderer half.
+ *    The handler in decision 3 is unchanged by this — it resolves any path under
+ *    one root — and `RENDERER_ENTRY` is still the entry the bare path serves.
+ *
  * 4. THE DEV WINDOW LOADS `/`, WHICH IS THE FIXTURE SHELL, AND THAT ASYMMETRY IS
  *    ON PURPOSE.
  *    `vite.config.ts` installs a dev-server-only middleware rewriting `/` to
@@ -133,6 +147,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  *    can reach a packaged bundle by this route.
  *
  * 5. WINDOW OPENING AND TOP-LEVEL NAVIGATION BOTH DENY BY DEFAULT.
+ *    **This rule now lives in `lockDown` in electron/main/paneViews.ts, and the
+ *    move was mandatory rather than tidy.** A `BaseWindow` has no `webContents`,
+ *    so the two handlers below had nothing left to attach to; installed on the
+ *    window they would have denied nothing at all, silently, which is the worst
+ *    available failure for a rule whose whole job is to refuse. They are
+ *    installed per view, so both surfaces carry them.
+ *
  *    `setWindowOpenHandler` returns `{ action: 'deny' }` on every path. An
  *    `https:` target is handed to the operating system's browser first; every
  *    other scheme — `http:`, `file:`, `data:`, anything a plug-in string could
@@ -147,6 +168,15 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  *    from is cancelled.
  *
  * 6. A FAILED LOAD PRODUCES A SENTENCE, NOT A WHITE RECTANGLE.
+ *    **Also moved to electron/main/paneViews.ts, per view, and it grew one
+ *    branch there.** `render-process-gone` was fatal because there was one
+ *    renderer and it was the whole application; there are two now, and the
+ *    extension view dying is the case the split was bought for — it reloads, and
+ *    the rail, pane 1 and the command surfaces stay up. Host chrome dying is
+ *    still fatal, for the reason stated below: there is nothing left that can
+ *    paint. `ready-to-show` does not exist on a `BaseWindow`, so the window is
+ *    shown when host chrome's contents finish loading instead.
+ *
  *    This repository has no top-level React error boundary, and a native window
  *    has no address bar, no reload button a user will find, and no console
  *    anyone will open. Every failure that would otherwise be silent is turned
@@ -186,26 +216,37 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
  *    exist.
  *
  *    Microsoft's guidance is not to apply a backdrop material more than once,
- *    and to keep vertical panes opaque. Phase 1 satisfies both trivially: there
- *    is one window and the SPA paints opaque, so the material is visible only
- *    where the system draws — the title bar and the frame. **The obligation this
- *    creates for Phase 7 is that the `WebContentsView`s must not set
- *    `backgroundMaterial` at all**, and it is written here because that is the
- *    commit where it would be got wrong.
+ *    and to keep vertical panes opaque. Phase 1 satisfied both trivially: one
+ *    window, an opaque SPA, and the material visible only where the system draws
+ *    it — the title bar and the frame. **The obligation this created for Phase 7
+ *    was that the `WebContentsView`s must not set `backgroundMaterial` at all**,
+ *    and it was written here because this was the commit where it would be got
+ *    wrong. **It was discharged**: electron/main/paneViews.ts requests the
+ *    material on the `BaseWindow` and gives both views an opaque colour, which
+ *    is also their fallback for the two states — Transparency-off and Battery
+ *    Saver — that Electron exposes no signal for.
  *
- * 8. macOS KEEPS ITS SYSTEM TITLE BAR IN PHASE 1, AND ITS LIFECYCLE
- *    DIFFERENCE IS HONOURED.
+ * 8. macOS KEEPS ITS SYSTEM TITLE BAR, AND ITS LIFECYCLE DIFFERENCE IS
+ *    HONOURED.
  *    `titleBarStyle` is set explicitly to `'default'`. `'hiddenInset'` is where
  *    this ends up — a shell that owns a 48px rail should own the traffic-light
  *    inset too — but it is wrong *now*: the renderer has no drag region and no
  *    top inset, so hiding the bar puts the traffic lights over pane content in a
  *    window that can only be moved by whatever empty space the SPA happens to
- *    have. `'hiddenInset'` lands in the same commit as the rail and its
- *    `-webkit-app-region` rules, in Phase 7, or not at all.
+ *    have. It lands in the same commit as the rail and its `-webkit-app-region`
+ *    rules, which is the commit that splits `ShellLayout` into a chrome surface
+ *    and an extension surface. That commit has not happened, so this is still a
+ *    live reason rather than a historical one.
  *
  *    On macOS, closing the last window does not quit the application and the
  *    dock icon re-opens one. Both halves are implemented, because implementing
- *    only the first gives a process with no way back to a window.
+ *    only the first gives a process with no way back to a window. **The counter
+ *    is `BaseWindow.getAllWindows()` and not `BrowserWindow.getAllWindows()`,
+ *    which is a correction rather than a preference:** this application no
+ *    longer creates a `BrowserWindow` at all, so the old call would have
+ *    reported zero forever — opening a second window on every dock click, and
+ *    answering `window-all-closed` about a class of window that no longer
+ *    exists.
  * ============================================================================
  */
 
@@ -219,8 +260,19 @@ const APP_SCHEME = 'shellux';
 /** Origin of the packaged renderer. Also the navigation allowlist of decision 5. */
 const APP_ORIGIN = `${APP_SCHEME}://renderer`;
 
-/** The one document `vite build` produces, and the only entry point served. */
+/** Host chrome's document, and what the bare path under the scheme resolves to. */
 const RENDERER_ENTRY = 'index.html';
+
+/**
+ * The extension surface's document — panes 2 and 3, in ONE document.
+ *
+ * A second HTML entry rather than a query string on the first, for the reason
+ * `dev.html` is a second document rather than a `VITE_MOCKS=1` switch: a
+ * document is a build input, so what each surface loads is decided by
+ * `vite.config.ts`'s `rollupOptions.input` and is visible in `dist/`, rather than
+ * being decided at runtime by a string this process happens to append.
+ */
+const EXTENSION_ENTRY = 'paneview.html';
 
 /**
  * The dev server's root, which `vite.config.ts` rewrites to the fixture shell.
@@ -228,12 +280,6 @@ const RENDERER_ENTRY = 'index.html';
  * table ADR-0002 clause 5 refers to; it is not a port this file chose.
  */
 const DEV_SERVER_URL = 'http://localhost:5173/';
-
-/** Windows 11 22H2. Below this build there is no Mica to ask for. */
-const WINDOWS_11_22H2_BUILD = 22621;
-
-/** Chromium's code for a navigation that was cancelled rather than failed. */
-const ERR_ABORTED = -3;
 
 /**
  * Where this file is, and therefore where everything else is.
@@ -343,196 +389,176 @@ function rendererOrigin(): string {
   return app.isPackaged ? `${APP_ORIGIN}/` : DEV_SERVER_URL;
 }
 
-/** Decision 7. Whether this machine can draw the material at all. */
-function supportsBackdropMaterial(): boolean {
-  if (process.platform !== 'win32') return false;
-  const build = Number(release().split('.')[2]);
-  return Number.isFinite(build) && build >= WINDOWS_11_22H2_BUILD;
+/** Decision 2, the other document. Panes 2 and 3, in one renderer. */
+function extensionTarget(): string {
+  return app.isPackaged
+    ? `${APP_ORIGIN}/${EXTENSION_ENTRY}`
+    : `${DEV_SERVER_URL}${EXTENSION_ENTRY}`;
 }
 
-/** Decision 7. `'none'` is a request for no material, not a failure to ask. */
-function backdropMaterial(): 'mica' | 'none' {
-  return supportsBackdropMaterial() && !nativeTheme.shouldUseHighContrastColors ? 'mica' : 'none';
-}
-
-/**
- * Decision 7's fallback, and half of the answer to the flash-of-wrong-theme
- * problem the pivot plan records as R6.
- *
- * The SPA's Tailwind configuration leaves `darkMode` unset, so Tailwind 3
- * defaults to `media` and the operating system decides. This colour is chosen
- * the same way, from the same signal, so the native surface underneath agrees
- * with the document that is about to paint on top of it. The two values are the
- * `neutral` endpoints the shell's own classes already use.
- */
-function surfaceColor(): string {
-  return nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff';
-}
-
-/** Decision 6. One shape for every failure a user would otherwise see as blankness. */
+/** Decision 6, for the one position where there is no window to fail in. */
 function reportFailure(headline: string, detail: string): void {
   warn(`${headline} — ${detail}`);
   dialog.showErrorBox('LEAPWare ShellUX could not start', `${headline}\n\n${detail}`);
 }
 
-function attachDiagnostics(window: BrowserWindow): void {
-  const contents = window.webContents;
+/**
+ * The one window, and both of its surfaces.
+ *
+ * Held so that the split channel below has something to address and so that
+ * `activate` can tell "no window" from "a window that is not focused".
+ */
+let paneWindow: PaneWindow | null = null;
 
-  contents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    if (!isMainFrame) return;
-    if (errorCode === ERR_ABORTED) return;
-    const advice = app.isPackaged
-      ? 'The packaged renderer did not load. This is a packaging fault, not a runtime one.'
-      : 'The Vite dev server did not answer. Start it with "npm run dev" and reopen the window.';
-    reportFailure(
-      `Could not load ${validatedURL}`,
-      `${errorDescription} (${String(errorCode)})\n${advice}`,
-    );
-    // The window is created with `show: false` and is shown from
-    // `ready-to-show`. Chromium paints its own error document on a failed
-    // navigation, so that event normally still fires — but "normally" is not a
-    // guarantee, and the failure it does not cover is the worst one available: a
-    // dismissed dialog followed by a process with no window, which on macOS does
-    // not even quit. Showing it here costs nothing when it is already visible.
-    if (!window.isDestroyed() && !window.isVisible()) window.show();
-  });
-
-  contents.on('render-process-gone', (_event, details) => {
-    // Phase 1 has one renderer, so this is the whole window. Phase 7 is where
-    // this event stops being fatal and starts being the crash containment the
-    // ADR claims — and where this handler has to learn which view died.
-    reportFailure(
-      'The window process stopped',
-      `reason: ${details.reason}, exit code: ${String(details.exitCode)}`,
-    );
-    // A window whose renderer is gone never paints again. Reporting and
-    // returning would leave exactly the blank native rectangle this whole
-    // handler exists to prevent, with the added insult that the user has just
-    // been told why and can now do nothing about it. Destroying it ends the
-    // application on Windows through `window-all-closed`, and on macOS leaves
-    // the dock icon as the way back — both of which are states a user can act
-    // on. It is not reloaded: a deterministic crash would reload into itself,
-    // and Phase 1 has no state a reload would preserve.
-    if (!window.isDestroyed()) window.destroy();
-  });
-
-  contents.on('preload-error', (_event, preloadPath, error) => {
-    // Wired in Phase 1 on purpose. The preload is inert today, so the only
-    // thing this can report is that the file is missing or in the wrong module
-    // format — which is exactly the failure Phase 6 would otherwise meet for
-    // the first time while also debugging a new IPC surface.
-    reportFailure('The preload script failed', `${preloadPath}\n${describeError(error)}`);
-  });
-}
-
-function createWindow(): BrowserWindow {
-  const window = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    // 800 is not a round number chosen for looks. `ShellLayout`'s pixel
-    // minimums stop fitting simultaneously below roughly 700 CSS px, at which
-    // point `react-resizable-panels` warns on every render; 800 keeps the shell
-    // inside its own documented range at the smallest size this window offers.
-    minWidth: 800,
-    minHeight: 600,
-    backgroundColor: surfaceColor(),
-    backgroundMaterial: backdropMaterial(),
-    // Decision 8.
-    titleBarStyle: 'default',
-    // Nothing is shown until the renderer has something to show. Without this
-    // the user sees the browser's default white document for one frame, which
-    // in a dark appearance is the most visible defect the app can have before
-    // it has done anything at all.
-    show: false,
-    webPreferences: {
-      preload: PRELOAD_SCRIPT,
-      // Decision 1. All three, and no exceptions.
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-    },
-  });
-
-  attachDiagnostics(window);
-
-  window.once('ready-to-show', () => {
-    window.show();
-  });
-
-  // Decision 5.
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    let protocolOfTarget = '';
-    try {
-      protocolOfTarget = new URL(url).protocol;
-    } catch {
-      protocolOfTarget = '';
+/**
+ * Host chrome's report of where the user put the divider, as a fraction.
+ *
+ * **Registered unconditionally and validated in `setSplit`.** The renderer that
+ * posts this is where plug-in code runs, so a fraction is treated exactly as a
+ * store write is: refused if it is not a finite number, clamped otherwise, and
+ * never trusted to name a pixel column. See `PaneWindow.setSplit`.
+ *
+ * The host-chrome half of this — a divider that posts as it is dragged — lands
+ * with the `ShellLayout` surface split. Until then the door exists, is policed,
+ * and the window opens on the default share.
+ */
+function registerSplitChannel(): void {
+  ipcMain.on('shellux:panes:split', (_event, fraction: unknown) => {
+    if (paneWindow === null) return;
+    if (typeof fraction !== 'number') {
+      warn(`refused a pane split of type "${typeof fraction}".`);
+      return;
     }
-    if (protocolOfTarget === 'https:') {
-      shell.openExternal(url).catch((error: unknown) => {
-        warn(`could not hand ${url} to the system browser: ${describeError(error)}`);
-      });
-    } else {
-      warn(`refused to open a window for ${url}`);
-    }
-    return { action: 'deny' };
+    paneWindow.setSplit(fraction);
   });
-
-  window.webContents.on('will-navigate', (event, url) => {
-    if (url.startsWith(rendererOrigin())) return;
-    event.preventDefault();
-    warn(`refused a top-level navigation to ${url}`);
-  });
-
-  // `loadURL` REJECTS on the same failures `did-fail-load` reports, and an
-  // unhandled rejection in the main process is fatal under Node's default — so
-  // `void` here would kill the process before the dialog decision 6 promises
-  // could be shown. The rejection is swallowed on purpose: it is the same event,
-  // already reported, and reporting it twice would produce two dialogs for one
-  // fault.
-  window.loadURL(rendererTarget()).catch(() => {
-    /* reported by the did-fail-load handler above. */
-  });
-
-  return window;
 }
 
 /**
- * Decision 7. The material and the surface colour both follow the system, so
- * both are re-derived when it changes.
+ * ============================================================================
+ * THE STORE RELAY. MAIN CARRIES THE MESSAGES AND OWNS NONE OF THEM.
+ * ============================================================================
+ * The replicated store's design puts the `AuthoritativeStore` in the main
+ * process, and it is not there. The reason is measured rather than deferred and
+ * is written up in `electron/main/portAdapter.ts` and in ADR-0001 Amendment O:
+ * **this process cannot import `src/` at all under its current compilation
+ * model** — `electron/tsconfig.json` is `NodeNext` because a sandboxed preload's
+ * `.cjs` emit depends on it, every relative import under `src/` is extensionless
+ * because a bundler resolves the renderer, and pulling
+ * `src/core/ipc/AuthoritativeStore.ts` into this program reports `TS2835` on
+ * every relative import in its graph.
  *
- * `setBackgroundMaterial` is a Windows call and is guarded as one. The colour is
- * not — every platform has an appearance and every platform can change it while
- * the window is open.
+ * So the authority sits one document away, in host chrome — the surface that
+ * already owns navigation, the palette and the context bar, and the one that is
+ * FATAL when it dies (see `attachDiagnostics`). The extension view holds a
+ * replica. What main does between them is carry bytes:
+ *
+ *  - it does not read the payload, so no protocol version lives here;
+ *  - it does not validate it, because `AuthoritativeStore.readWrite` does, in the
+ *    module that is 100% covered and that would have to do it again anyway;
+ *  - it sends to every surface EXCEPT the sender, because a replica that
+ *    received its own post would double-apply it.
+ *
+ * **What is genuinely lost by main not being the authority**, stated rather than
+ * glossed: the per-origin rate limit and the severing that goes with it now
+ * protect host chrome's document from the extension view rather than protecting
+ * the host process from both. A wedged host chrome is already fatal by design, so
+ * the limit still guards the one boundary it was written for. Moving the store
+ * here is the build-system change Amendment O records two routes to; it is not
+ * this phase's, and this relay is deleted rather than migrated when it happens.
+ * ============================================================================
  */
-function followSystemAppearance(window: BrowserWindow): void {
-  const update = (): void => {
-    if (window.isDestroyed()) return;
-    window.setBackgroundColor(surfaceColor());
-    if (process.platform === 'win32') window.setBackgroundMaterial(backdropMaterial());
-  };
-  nativeTheme.on('updated', update);
-  window.on('closed', () => {
-    nativeTheme.off('updated', update);
+function registerStoreRelay(): void {
+  ipcMain.on('shellux:store:post', (event, message: unknown) => {
+    if (paneWindow === null) return;
+    for (const surface of ['chrome', 'extension'] as const) {
+      const contents = paneWindow.contentsOf(surface);
+      // `!== event.sender` is the echo suppression, and it is here rather than in
+      // the renderer because here is the only place that knows which contents
+      // spoke. `isDestroyed` because a view can die between the post and the
+      // relay, and `send` on dead contents throws.
+      if (contents === null || contents === event.sender || contents.isDestroyed()) continue;
+      contents.send('shellux:store:deliver', message);
+    }
+  });
+}
+
+/**
+ * Tell host chrome that the extension surface has a live document again.
+ *
+ * Only that direction, and only that surface. Host chrome holds the authority, so
+ * it is the end that has to re-attach a port and re-send a snapshot; the
+ * extension view has nothing to do with the news that host chrome loaded, and it
+ * cannot load without host chrome having loaded first anyway — the window is not
+ * even shown until chrome's contents finish.
+ */
+function announceSurfaceReady(surface: PaneSurfaceId): void {
+  if (surface !== 'extension' || paneWindow === null) return;
+  const chrome = paneWindow.contentsOf('chrome');
+  if (chrome === null || chrome.isDestroyed()) return;
+  chrome.send('shellux:panes:peer-ready');
+}
+
+/**
+ * Route the one host chord to the one surface that can act on it.
+ *
+ * **Renderer-first, and main is the router rather than the matcher.** The chord
+ * was recognised by `src/core/hotkeyDispatch.ts` in whichever renderer had focus,
+ * AFTER that module's suppression rules — an editable target, a composition, a
+ * `defaultPrevented` — had their say. None of those rules can run in this
+ * process; `electron/main/paneKeyBridge.ts` explains why at length, and that is
+ * the reason the escape hatch is the only thing matched here and this is a
+ * message rather than a second `before-input-event` case.
+ *
+ * Two things happen and both are needed. Focus moves to host chrome, because a
+ * palette that opens in a view the keyboard is not in is a dialog the user cannot
+ * type into — the spike measured that `Tab` does not cross a view boundary and
+ * that no renderer can tell whether it holds real focus, so this is main's call
+ * to make. Then host chrome is told to open it.
+ */
+function registerPaletteRouting(): void {
+  ipcMain.on('shellux:panes:palette-request', () => {
+    if (paneWindow === null) return;
+    paneWindow.focusRing.request('chrome');
+    const chrome = paneWindow.contentsOf('chrome');
+    if (chrome === null || chrome.isDestroyed()) return;
+    chrome.send('shellux:panes:palette-open');
   });
 }
 
 function openShellWindow(): void {
-  followSystemAppearance(createWindow());
+  const opened = openShellSurfaces({
+    chromeUrl: rendererTarget(),
+    extensionUrl: extensionTarget(),
+    origin: rendererOrigin(),
+    preload: PRELOAD_SCRIPT,
+    warn,
+    onSurfaceReady: announceSurfaceReady,
+  });
+  followSystemAppearance(opened);
+  opened.window.on('closed', () => {
+    if (paneWindow === opened) paneWindow = null;
+  });
+  paneWindow = opened;
 }
 
 app
   .whenReady()
   .then(() => {
     registerRendererProtocol();
-    // Before the first window, so that the `browser-window-created` listener it
-    // installs sees that window rather than only the ones opened afterwards.
+    registerSplitChannel();
+    registerStoreRelay();
+    registerPaletteRouting();
+    // Before the first window, so that the `web-contents-created` listener it
+    // installs sees both views rather than only whatever is created afterwards.
     initializeUpdater();
     openShellWindow();
 
     // Decision 8. macOS keeps the process alive with no windows, and the dock
-    // icon is how a user asks for one back.
+    // icon is how a user asks for one back. `BaseWindow`, not `BrowserWindow`:
+    // this application creates none of the latter, so the old call reported zero
+    // forever and would have opened a window per dock click.
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) openShellWindow();
+      if (BaseWindow.getAllWindows().length === 0) openShellWindow();
     });
   })
   .catch((error: unknown) => {
