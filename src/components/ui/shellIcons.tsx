@@ -26,8 +26,9 @@ import type { ReactElement } from 'react';
  * prototype chain to inherit from, so a prototype-shaped key resolves to nothing
  * and falls back like any other unknown key. That property is the reason this is
  * a `Map` and it must survive any edit to this file. *Tests:*
- * `src/components/__tests__/RibbonToolbar.test.tsx` — "does not resolve a
- * prototype-shaped icon key to anything inherited";
+ * `src/components/command/__tests__/commandSurfaces.test.tsx` — "the context bar
+ * does not resolve a prototype-shaped icon key to anything inherited", and the
+ * same case once per command surface;
  * `src/components/__tests__/ShellLayoutIcons.test.tsx` — "does not resolve a
  * prototype-shaped node icon key to anything inherited".
  *
@@ -107,3 +108,28 @@ export const FALLBACK_ICON: ReactElement = glyph(['M3.5 3.5h9v9h-9z']);
  * ever reach.
  */
 export const OVERFLOW_ICON: ReactElement = glyph(['M4 8h.01', 'M8 8h.01', 'M12 8h.01']);
+
+/**
+ * The command-palette glyph. **Host chrome, and absent from `SHELL_ICONS` for
+ * exactly the reason `OVERFLOW_ICON` is.**
+ *
+ * The palette is not plug-in-declarable: its chord is registered by
+ * `useHotkeyDispatch` before the extension chord table is consulted, and its
+ * button is a `HostCommand`, which carries no `hotkey` field at all. Publishing
+ * its glyph in the vocabulary offered to extensions would invite a plug-in to
+ * draw a command that looks like host chrome, and would add a fallback branch to
+ * a lookup no untrusted key ever performs.
+ *
+ * *Test:* `src/components/command/__tests__/hostChrome.test.tsx` — "keeps every
+ * host-chrome glyph out of the vocabulary published to extensions".
+ */
+export const PALETTE_ICON: ReactElement = glyph([
+  'M2.5 3.5h11v9h-11z',
+  'M5 6.5 7 8l-2 1.5',
+  'M8.5 9.5h3',
+]);
+
+/**
+ * The omnibox submit glyph. Host chrome, same rule, same reason.
+ */
+export const SUBMIT_ICON: ReactElement = glyph(['M2.5 8h10', 'M9 4.5 12.5 8 9 11.5']);

@@ -38,7 +38,7 @@ interface FocusStyle {
   readonly textDecorationLine: string;
 }
 
-/** How far to walk the tab order. Comfortably past the ribbon and the panes. */
+/** How far to walk the tab order. Comfortably past the context bar and the panes. */
 const TAB_STEPS = 14;
 
 async function styleOf(element: ElementHandle<Element>): Promise<FocusStyle> {

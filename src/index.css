@@ -1,3 +1,21 @@
+/*
+ * The generated token set, first, because every `var(--x)` a Tailwind utility
+ * emits has to find a declaration on `:root`.
+ *
+ * `@import` sits above `@tailwind` because CSS requires `@import` to precede
+ * every rule in the file. There is no `postcss-import` in `postcss.config.js`
+ * and none is added: Vite inlines CSS `@import` itself, before PostCSS runs.
+ * That is proven rather than assumed — `npm run build` and a grep of
+ * `dist/assets/*.css` for `--surface-pane` is the check, and it is what the
+ * `e2e/theme.spec.ts` lane depends on being true.
+ *
+ * `tokens.generated.css` is COMMITTED, not built. README's acceptance test is
+ * `npm ci && npm run verify` with no local setup, and an artefact produced only
+ * at build time would falsify it. `npm run tokens:check` regenerates into a
+ * scratch directory and diffs, so drift fails rather than rots.
+ */
+@import './styles/tokens.generated.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

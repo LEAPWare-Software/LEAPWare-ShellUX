@@ -1,4 +1,5 @@
 import { EXTENSION_ID_PATTERN, RESERVED_IDS } from '../RegistryContext';
+import { MAX_RECENT_COMMANDS, MAX_RECENT_KEY_LENGTH } from '../commands/CommandRegistry';
 import type { PaneId } from '../types';
 import { ShellUXError } from '../types';
 
@@ -170,6 +171,28 @@ export interface PersistedShellState {
   readonly paneSizes: PaneSizes;
   readonly isPane1Collapsed: boolean;
   readonly activeExtensionId: string | null;
+  /**
+   * Recently executed command keys, most recent first. **The fourth slot.**
+   *
+   * HOST-MINTED and namespaced — `host:<id>` and `ext:<extension>:<id>` — so a key
+   * carries the extension it belongs to and cannot resolve against a different
+   * foreground. They are compared for equality and held in a `Map`, never used as
+   * an object key, which is why they are held to a length bound and a count bound
+   * rather than to `EXTENSION_ID_PATTERN`: the pattern would refuse the two
+   * namespace separators the keys are built from, and the property it buys —
+   * safety as an object key — is not one this value needs.
+   *
+   * **Read tolerantly, written unconditionally.** A record written by a build
+   * from before this slot existed simply has no `recentCommandIds` field, and
+   * that is not a malformed record — it is a shell that had no recents, which is
+   * exactly what an empty list says. Treating it as `MISSING_FIELD` would discard
+   * a whole valid layout to recover a list whose correct value is empty. It is
+   * the same judgement `normalizeActiveExtensionId` makes about `undefined`, and
+   * the reason `SCHEMA_VERSION` does not move for this change. Pinned by
+   * "restores a record written before recents existed, with an empty recents
+   * list" in `src/core/services/__tests__/hydrationEngine.test.ts`.
+   */
+  readonly recentCommandIds: readonly string[];
 }
 
 /** A slot of `PersistedShellState` a caller may write. */
@@ -208,7 +231,7 @@ export const DEFAULT_DEBOUNCE_MS = 120;
  * cannot make the host walk forever, and this engine cannot become the reason
  * the origin's storage quota is exhausted.
  */
-export const HYDRATION_LIMITS = {
+export const HYDRATION_LIMITS = Object.freeze({
   /** Max characters of the stored record. A longer entry is discarded unparsed. */
   MAX_RAW_LENGTH: 65536,
   /** Max length of any single persisted string. */
@@ -246,7 +269,7 @@ export const HYDRATION_LIMITS = {
    * something caps it.
    */
   MAX_NOTIFY_DEPTH: 16,
-} as const;
+} as const);
 
 /**
  * The layout a shell that has never been used starts from.
@@ -274,6 +297,7 @@ export const DEFAULT_SHELL_STATE: PersistedShellState = Object.freeze({
   paneSizes: DEFAULT_PANE_SIZES,
   isPane1Collapsed: false,
   activeExtensionId: null,
+  recentCommandIds: Object.freeze([]),
 });
 
 /**
@@ -717,6 +741,68 @@ function normalizeActiveExtensionId(value: unknown, path: string): string | null
 }
 
 /**
+ * Validate the recents list into a host-owned frozen copy of strings.
+ *
+ * `undefined` is the empty list — see `PersistedShellState.recentCommandIds`.
+ * Everything else is held to the shape the host writes: an array, no longer than
+ * `MAX_RECENT_COMMANDS`, of strings no longer than `MAX_RECENT_KEY_LENGTH`, with
+ * no repeats. A repeat is refused rather than collapsed, in the register
+ * `setSelectedItems` refuses one: a recents list naming the same command twice is
+ * a corrupt payload, and quietly fixing it would restore a list nobody wrote.
+ *
+ * The length is captured ONCE and the host array is filled with exactly that many
+ * entries, so the bound applies to what is STORED rather than to a `length` a
+ * hand-edited payload could revise afterwards.
+ */
+function normalizeRecentCommandIds(value: unknown, path: string): readonly string[] {
+  if (value === undefined || value === null) {
+    return Object.freeze([]);
+  }
+  if (typeof value !== 'object' || classifyObject(value) !== 'array') {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must be an array of strings; received ${describeUntrusted(value)}.`,
+      path,
+    );
+  }
+  const source = value as readonly unknown[];
+  const count = source.length;
+  if (count > MAX_RECENT_COMMANDS) {
+    throw new ShellUXError(
+      'PAYLOAD_TOO_LARGE',
+      `Field "${path}" exceeds the maximum of ${MAX_RECENT_COMMANDS} entries.`,
+      path,
+    );
+  }
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const entryPath = `${path}[${index}]`;
+    const entry: unknown = source[index];
+    if (typeof entry !== 'string') {
+      throw new ShellUXError(
+        'INVALID_FIELD',
+        `Field "${entryPath}" must be a string; received ${describeUntrusted(entry)}.`,
+        entryPath,
+      );
+    }
+    if (entry.length > MAX_RECENT_KEY_LENGTH) {
+      throw new ShellUXError(
+        'PAYLOAD_TOO_LARGE',
+        `Field "${entryPath}" exceeds the maximum length of ${MAX_RECENT_KEY_LENGTH} characters.`,
+        entryPath,
+      );
+    }
+    if (seen.has(entry)) {
+      throw new ShellUXError('INVALID_FIELD', `Field "${entryPath}" repeats a command key.`, entryPath);
+    }
+    seen.add(entry);
+    keys.push(entry);
+  }
+  return Object.freeze(keys);
+}
+
+/**
  * The validator for every writable slot, in one table.
  *
  * `Record<PersistedSlot, ...>` makes the compiler reject both a slot this table
@@ -730,6 +816,7 @@ const SLOT_NORMALIZERS: Readonly<{
   paneSizes: normalizePaneSizes,
   isPane1Collapsed: normalizeCollapsed,
   activeExtensionId: normalizeActiveExtensionId,
+  recentCommandIds: normalizeRecentCommandIds,
 });
 
 /** The writable slots, as a runtime membership test. */
@@ -793,6 +880,7 @@ function serializeOf(
     paneSizes: state.paneSizes,
     isPane1Collapsed: state.isPane1Collapsed,
     activeExtensionId: state.activeExtensionId,
+    recentCommandIds: state.recentCommandIds,
     extensions,
   });
 }
@@ -917,6 +1005,13 @@ function loadFrom(storage: ShellStorage | null, key: string): LoadResult {
       activeExtensionId: normalizeActiveExtensionId(
         requirePersistedField(envelope, 'activeExtensionId'),
         'activeExtensionId',
+      ),
+      // Read WITHOUT `requirePersistedField`: an absent recents list is a record
+      // written before this slot existed, not a corrupt one. See the docblock on
+      // `PersistedShellState.recentCommandIds`.
+      recentCommandIds: normalizeRecentCommandIds(
+        envelope['recentCommandIds'],
+        'recentCommandIds',
       ),
     });
     const extensions = normalizeExtensionMap(

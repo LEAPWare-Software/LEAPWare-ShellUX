@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ExtensionHostBoundary, useActivation } from '../../core/ActivationContext';
 import type { ActiveExtension } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
-import { useBadgeCount, useShellContext, useShellStore } from '../../core/ShellAPI';
+import { useBadgeCount, useNavMetric, useShellContext, useShellStore } from '../../core/ShellAPI';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { useHotkeyDispatch } from '../../core/hotkeyDispatch';
 import {
   DEFAULT_SHELL_STATE,
@@ -13,11 +14,22 @@ import {
   selectActiveExtensionId,
 } from '../../core/services/HydrationEngine';
 import type { HydrationEngine, PaneSizes } from '../../core/services/HydrationEngine';
-import type { NavigationNode, PaneId, RibbonContext } from '../../core/types';
+import type { NavigationMetric, NavigationNode, PaneId, RibbonContext } from '../../core/types';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
+import { useElementWidth } from '../../hooks/useElementWidth';
+import { useHostUpdates } from '../../hooks/useHostUpdates';
+import { hostUpdateCommands } from '../../core/updates/hostUpdates';
+import { MetricGlyph } from '../ui/MetricGlyph';
+import { createCommandRegistry, withRecent } from '../../core/commands/CommandRegistry';
+import type { ExtensionCommands, HostCommand } from '../../core/commands/CommandRegistry';
+import { CommandPalette } from '../command/CommandPalette';
+import { ContextBar } from '../command/ContextBar';
+import { FloatingToolbar } from '../command/FloatingToolbar';
+import { OmniboxComposer } from '../command/OmniboxComposer';
+import type { OmniboxSubmission } from '../command/OmniboxComposer';
+import { echartsRenderer } from '../../core/chart/echartsRenderer';
+import { BlockLedger } from '../ledger/BlockLedger';
 import { FaultBoundary } from '../error/FaultBoundary';
-import { RibbonToolbar } from '../ui/RibbonToolbar';
-import type { HostRibbonAction, RibbonExtensionActions } from '../ui/RibbonToolbar';
 import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
 import { PaneWrapper } from './PaneWrapper';
 
@@ -62,12 +74,36 @@ import { PaneWrapper } from './PaneWrapper';
  *    only while the pixel minimums fit, which is 800px and wider" in
  *    `src/components/__tests__/ShellLayout.test.tsx`.
  *
- *    **The measurement is not repeated.** There is no observer here. A later
- *    viewport change rescales the panes proportionally and leaves the
- *    percentage minimums where they were, which is predictable and — by the
- *    flex-ratio argument above — still cannot overflow. When the width is
+ *    **THE MEASUREMENT IS NOT REPEATED FOR `defaultSize`, AND IT IS REPEATED
+ *    FOR THE BANDS. THIS PARAGRAPH USED TO SAY "THERE IS NO OBSERVER HERE" AND
+ *    THAT IS NO LONGER TRUE.** `measureGroup` is unchanged and is still the only
+ *    thing `defaultSize` is derived from, for the timing reason above: it runs
+ *    during commit, so the first layout is the right one. What is added beside it
+ *    is `useElementWidth` (`src/hooks/useElementWidth.ts`), which observes the
+ *    same element and reports its live width.
+ *
+ *    The split is what makes both halves correct. `defaultSize` means "where this
+ *    panel STARTS", so re-deriving it from a live width would feed the number
+ *    being dragged back in as the starting point — the defect decision 6
+ *    describes for the restored layout. `minSize` and `maxSize` mean "what
+ *    `PANE_PX` is worth as a share of the group", which is a different number at
+ *    every window width and was previously frozen at the width the shell happened
+ *    to open on: a window dragged from 1400px to 700px kept a 176px minimum
+ *    expressed as 12.6%, which is 88px. Only the BANDS move.
+ *
+ *    A runtime with no `ResizeObserver` — jsdom, and some older embedded
+ *    WebViews — reports `null` and every band falls back to the mount-time
+ *    measurement, which is exactly what this shell did before. That branch is not
+ *    stubbed away in `src/test/setup.ts`; see the hook's banner. When the width is
  *    unmeasurable — 0, as it is in jsdom — `percentOf` falls back to
- *    `PANE_FALLBACK_PERCENT` rather than dividing by zero.
+ *    `PANE_FALLBACK_PERCENT` rather than dividing by zero. *Tests:*
+ *    `src/hooks/__tests__/useElementWidth.test.tsx` — "reports null and observes
+ *    nothing when ResizeObserver is absent", "reports the observed width when
+ *    ResizeObserver is present", "disconnects the observer when the element
+ *    detaches" and "floors a sub-pixel width at one whole pixel";
+ *    `src/components/__tests__/ShellLayout.test.tsx` — "recomputes the percentage
+ *    bands from an observed width, and leaves defaultSize on the mount-time
+ *    measurement".
  *
  *    A restored size is held to the SAME minimums, at the width measured on this
  *    load — see decision 6. That is the question this paragraph used to defer to
@@ -139,14 +175,14 @@ import { PaneWrapper } from './PaneWrapper';
  *    The ribbon has its own boundary for the same reason the panes do: "the
  *    ribbon and other panes stay interactive" is only guaranteed if the ribbon's
  *    own failure is contained too. Nothing an extension can register makes the
- *    ribbon or pane 1 throw during render — both render validated primitive
- *    strings — so those two boundaries are defence-in-depth, and the ribbon's is
- *    tested by substituting a throwing ribbon rather than by pretending a
- *    plug-in could cause it. *Tests:*
+ *    context bar or pane 1 throw during render — both render validated primitive
+ *    strings — so those two boundaries are defence-in-depth, and the context
+ *    bar's is tested by substituting a throwing context bar rather than by
+ *    pretending a plug-in could cause it. *Tests:*
  *    `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing
- *    pane-2 view to pane 2, leaving the ribbon and pane 3 interactive", "contains
- *    a throwing ribbon without taking the panes down" and "clears a pane error
- *    surface when the active extension changes".
+ *    pane-2 view to pane 2, leaving the context bar and pane 3 interactive",
+ *    "contains a throwing context bar without taking the panes down" and "clears
+ *    a pane error surface when the active extension changes".
  *
  * 6. PERSISTENCE IS READ ONCE PER MOUNT AND WRITTEN THROUGH THE ENGINE.
  *    ISSUE-003's `HydrationEngine` is consumed here, and this is the file that
@@ -169,6 +205,38 @@ import { PaneWrapper } from './PaneWrapper';
  *    persist a pane size while pane 1 is collapsed, because the two panes divide
  *    a different width" and "persists no drawer state, so a reload opens with the
  *    drawer shut".
+ *
+ *    **NOR THE SIZES PANE 1 COMING BACK PRODUCES, AND THAT OMISSION USED TO BE
+ *    MISSING.** Re-adding pane 1's `Panel` makes the library renormalise a
+ *    two-panel group into a three-panel one and report the result on every
+ *    panel. Panes 2 and 3 report a real previous size, so the collapsed refusal
+ *    above did not cover them — and what they reported was their share of the
+ *    width that excluded the 48px track, written into a three-pane record. The
+ *    layout the user had chosen was discarded by a collapse and a re-expansion
+ *    that changed nothing, and what replaced it did not divide the whole.
+ *    `persistPaneSize` refuses it now, by the one rule stated on that function.
+ *
+ *    **A WRITE IS THE WHOLE LAYOUT, NOT ONE SLOT.** One divider moves exactly
+ *    two panes, so patching only the panes that reported left the third holding
+ *    whatever it held last — for a shell nobody had resized, the engine's
+ *    1360px-reference default beside two percentages measured at this width, and
+ *    three numbers that did not add up. *Tests:* same file — "records one
+ *    three-pane layout, so the persisted percentages divide the whole", "leaves
+ *    the persisted layout exactly as it was across a collapse and a
+ *    re-expansion", "leaves it alone even when the collapsed group was resized
+ *    before pane 1 came back" and "records a whole layout for the first resize
+ *    after a shell that opened collapsed"; `e2e/shell-layout.spec.ts` — "leaves
+ *    the stored layout alone, so a reload still opens on the dragged widths".
+ *
+ *    **"A RECORD EXISTS" IS NOT "THE USER CHOSE A LAYOUT", AND CONFUSING THE TWO
+ *    THREW `PANE_PX` AWAY.** Any slot write produces a record, and a record that
+ *    is read back is a parsed object whatever it holds. See
+ *    `isEngineDefaultLayout` for the sentinel that used to infer the answer from
+ *    that object's identity, what it cost at a 1920px viewport, and what
+ *    comparing the three numbers instead trades away. *Tests:* same file —
+ *    "keeps the pixel intent after a write nobody made about the panes, at a
+ *    width where the two differ"; `e2e/shell-layout.spec.ts` — "survives a reload
+ *    whose stored record was written for another slot entirely".
  *
  *    **THE READ IS A MOUNT-TIME SNAPSHOT, AND THAT IS WHAT MAKES `defaultSize`
  *    HONEST.** `restoredSizes` comes from a lazy `useState` initializer, so it is
@@ -204,9 +272,10 @@ import { PaneWrapper } from './PaneWrapper';
  *    change the library commits calls `onResize` on each panel — once per frame
  *    of a drag — and each of those is a `setSlot`; the engine holds them in one
  *    debounce window and performs a single `setItem`. The mount notification is
- *    skipped, because `onResize` reports `undefined` for the previous size
- *    exactly when the group is announcing its own initial layout rather than a
- *    change somebody made: a shell nobody has resized therefore writes nothing.
+ *    skipped, because `onResize` reports `undefined` for the previous size when
+ *    the group is announcing its own initial layout, and `undefined` is not a
+ *    size this shell ever saw — the same one rule that refuses the re-expansion
+ *    pass: a shell nobody has resized therefore writes nothing.
  *    *Tests:* same file — "coalesces a keyboard-driven resize into one storage
  *    write rather than one per frame" and "writes nothing at all for a mount
  *    nobody resized".
@@ -266,6 +335,38 @@ import { PaneWrapper } from './PaneWrapper';
  *    deliberately unsubscribed: an extension is not a navigation node, it has no
  *    node id, and there is no scope under which the store could hold a badge for
  *    one.
+ *
+ * 8. A NAVIGATION METRIC IS A DECLARATIVE FIELD, NOT A `views.pane1`.
+ *    Decision 5 above says nothing an extension can register makes pane 1 throw
+ *    during render. A `views.pane1` would make that FALSE — pane 1 renders every
+ *    registered extension's rows in one tree, so one vendor's renderer throwing
+ *    would take the whole navigation surface, and every route back to the other
+ *    vendors, down to a fault surface. So a metric arrives as
+ *    `NavigationNode.metric`: four registry-validated primitives and a bounded
+ *    array of numbers, drawn by `src/components/ui/MetricGlyph.tsx`, which is
+ *    host-authored geometry and no library. Nothing a plug-in supplies reaches an
+ *    attribute; `description` is a text node in an `sr-only` span.
+ *
+ *    **The liveness rule is decision 7's, applied again rather than reinvented.**
+ *    `NavNodeButton` subscribes through `useNavMetric(extensionId, node.id)` and
+ *    a store value overrides the blueprint's `value` with `??` — never a
+ *    truthiness test, because a metric written down to `0` is a value. The
+ *    override is a FRESH frozen object over the registry's record, so the
+ *    registry's own copy is never mutated and `MetricGlyph` may memoise on the
+ *    metric's identity.
+ *
+ *    **It overrides `value` and NOTHING ELSE, and a runtime write to a node that
+ *    declared no metric draws nothing.** That is deliberately not what a badge
+ *    does, and the asymmetry follows from the shapes: a badge is one number and
+ *    the store can supply the whole of it, while a metric also needs a `kind` and
+ *    a `description`, and the host will not invent either. *Tests:*
+ *    `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "renders a declared
+ *    navigation metric as a host-drawn glyph with its description", "lets a
+ *    setNavMetric write through a live IShellAPI change the glyph the sidebar
+ *    draws", "overrides a blueprint metric value with the store value, including
+ *    down to zero", "draws nothing for a runtime metric on a node that declared
+ *    none" and "keeps the metric description in the collapsed track and drops the
+ *    glyph".
  *
  * NOT HERE, DELIBERATELY: `ShellLayout` does not itself window pane 2 —
  * `VirtualizedList` is a component an extension's own `views.pane2` renders, not
@@ -358,6 +459,36 @@ function clampPanePercent(value: number): number {
   );
 }
 
+/**
+ * Whether a restored record's pane sizes are the engine's own untouched
+ * defaults.
+ *
+ * BY VALUE, AND THE IDENTITY TEST THIS REPLACES WAS A FALSE SENTINEL. It read
+ * `restoredSizes !== DEFAULT_SHELL_STATE.paneSizes` and called the answer
+ * "somebody chose a layout". Identity only survives the paths that hand the one
+ * shared frozen default straight back — an absent or discarded record. A record
+ * that was PARSED gets a fresh `paneSizes` object whatever it holds, so a shell
+ * whose record exists only because the user collapsed pane 1, or opened an
+ * extension, answered "somebody chose a layout" for a record holding nothing but
+ * defaults, and `PANE_PX` was never consulted again on that machine. Comparing
+ * the three numbers is the fact the sentinel was reaching for.
+ *
+ * What that trades away, stated rather than glossed: a user who drags the panes
+ * to exactly the engine's default percentages and reloads gets the pixel intent
+ * for this width instead of those percentages back. The two are the same layout
+ * at the 1360px reference width `PANE_FALLBACK_PERCENT` was written for and
+ * differ elsewhere, so that user's reload can move the dividers. It is the
+ * narrower error of the two, and it needs a coincidence to reach.
+ *
+ * The keys come from the defaults themselves rather than from a list written
+ * here, so a fourth pane cannot be added to the record and quietly skipped, and
+ * `every` rather than a chain of `||` so there is one exit.
+ */
+function isEngineDefaultLayout(sizes: PaneSizes): boolean {
+  const defaults = DEFAULT_SHELL_STATE.paneSizes;
+  return (Object.keys(defaults) as PaneId[]).every((pane) => sizes[pane] === defaults[pane]);
+}
+
 interface ShellNavButtonProps {
   /** UNTRUSTED plug-in text. Rendered as a text node in both pane-1 states. */
   readonly label: string;
@@ -369,6 +500,14 @@ interface ShellNavButtonProps {
   readonly icon: string | undefined;
   /** Registry-validated non-negative integer, or `undefined` for no badge. */
   readonly badgeCount: number | undefined;
+  /**
+   * The host-owned metric to draw beside the row, or `undefined` for none.
+   *
+   * Already resolved against the store by `NavNodeButton` — see decision 8 in
+   * the banner. Every field on it is registry-validated, and the only one this
+   * component's caller can have moved is `value`.
+   */
+  readonly metric: NavigationMetric | undefined;
   readonly isCollapsed: boolean;
   readonly isCurrent: boolean;
   readonly onSelect: () => void;
@@ -406,14 +545,27 @@ interface ShellNavButtonProps {
  *
  * THE SELECTED STATE IS A RULE AND A WEIGHT, NOT ONLY A FILL. `aria-current` was
  * always set, so a screen-reader user was always told which extension was
- * active. A sighted user was not: `bg-neutral-100` on white is 1.09:1 and the
- * `border-neutral-200` beside it 1.26:1, against the 3:1 that WCAG 1.4.11 asks
- * of a non-text state indicator. Both are far below it, and no fill reaches 3:1
- * against white without going dark enough to read as a different control
- * entirely. So the fill stays — it is a pleasant hint for anyone who can see it —
- * and the state is actually CARRIED by two things that clear the bar on their
- * own: a 2px leading rule at `neutral-500` (4.74:1 on white, 4.35:1 on the fill)
- * or `neutral-400` in dark (7.85:1 on `neutral-950`), and a semibold label.
+ * active. A sighted user was not: the fill measured 1.09:1 against white and the
+ * outline beside it 1.26:1, against the 3:1 that WCAG 1.4.11 asks of a non-text
+ * state indicator. Both were far below it, and no fill reaches 3:1 against white
+ * without going dark enough to read as a different control entirely. So the fill
+ * stays — it is a pleasant hint for anyone who can see it — and the state is
+ * actually CARRIED by two things that clear the bar on their own: a 2px leading
+ * rule at `--border-selected`, and a semibold label.
+ *
+ * The rule and the fill are now `TOKEN_CLASS.navSelectedRule` and
+ * `navSelectedSurface`, so there is one declaration per affordance instead of a
+ * light one and a `dark:` twin. The ratios above are no longer restated per
+ * theme here on purpose: they are measured for all three themes, against every
+ * surface each token is drawn on, by `design/check-contrast.mjs` and by
+ * `npm run check:tokens`. A number copied into a comment is a number that goes
+ * stale silently, and this file had three such paragraphs before this change.
+ *
+ * The 1px outline is the decorative tier, `--border-subtle`, and that is a
+ * decision `design/README.md` explicitly declined to make for us — see its "For
+ * whoever wires this" section. `--border-default` would make a selected row's
+ * edge as heavy as a pane's; the outline is not what carries the state, so it
+ * gets the tier that keeps weight off decoration.
  *
  * The rule is an inset `box-shadow` rather than a left border. A border would
  * have to grow from 1px to 2px on selection and shift the label sideways by a
@@ -428,6 +580,7 @@ function ShellNavButton({
   label,
   icon,
   badgeCount,
+  metric,
   isCollapsed,
   isCurrent,
   onSelect,
@@ -440,13 +593,10 @@ function ShellNavButton({
       onClick={onSelect}
       className={
         'flex min-h-6 items-center gap-1 rounded-sm border p-1 text-[12px] leading-none ' +
-        'border-transparent aria-[current]:border-neutral-200 ' +
-        'aria-[current]:bg-neutral-100 aria-[current]:font-semibold ' +
-        'aria-[current]:shadow-[inset_2px_0_0_0_theme(colors.neutral.500)] ' +
-        'hover:border-neutral-200 ' +
-        'dark:aria-[current]:border-neutral-800 dark:aria-[current]:bg-neutral-900 ' +
-        'dark:aria-[current]:shadow-[inset_2px_0_0_0_theme(colors.neutral.400)] ' +
-        'dark:hover:border-neutral-800 ' +
+        'aria-[current]:font-semibold ' +
+        `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
+        `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.navSelectedRule} ` +
+        `${TOKEN_CLASS.controlHoverBorder} ` +
         (isCollapsed ? 'relative h-8 w-8 justify-center' : 'w-full min-w-0 justify-start')
       }
     >
@@ -466,11 +616,19 @@ function ShellNavButton({
         </span>
       ) : null}
       <span className={isCollapsed ? 'sr-only' : 'truncate'}>{label}</span>
+      {/*
+        Host-drawn geometry and an `sr-only` description; nothing a plug-in
+        supplied reaches an attribute. `MetricGlyph` decides what a collapsed
+        row keeps, which is the text channel — see its `isGlyphHidden`
+        docblock — so there is no second copy of that rule here.
+      */}
+      {metric === undefined ? null : (
+        <MetricGlyph metric={metric} isGlyphHidden={isCollapsed} />
+      )}
       {badgeCount === undefined ? null : (
         <span
           className={
-            'flex-none rounded-sm bg-neutral-200 px-1 text-[11px] leading-4 ' +
-            'dark:bg-neutral-800 ' +
+            `flex-none rounded-sm ${TOKEN_CLASS.badgeSurface} px-1 text-[11px] leading-4 ` +
             (isCollapsed ? 'absolute -right-1 -top-1' : 'ml-auto')
           }
         >
@@ -518,6 +676,21 @@ function NavNodeButton({
   onSelect,
 }: NavNodeButtonProps): ReactElement {
   const liveBadge = useBadgeCount(extensionId, node.id);
+  const liveMetric = useNavMetric(extensionId, node.id);
+  // The override reaches `value` and nothing else, and it produces a FRESH
+  // frozen object rather than mutating the registry's record — which is what
+  // makes `MetricGlyph`'s `useMemo` on the metric identity correct. When the
+  // node declared no metric there is nothing to draw a store value ON: a metric
+  // needs a `kind` and a `description` and the host will not invent either, so
+  // the write is stored, readable through `getNavMetric`, and drawn by nobody.
+  // See decision 8 in the banner.
+  const metric = useMemo((): NavigationMetric | undefined => {
+    const declared = node.metric;
+    if (declared === undefined || liveMetric === undefined) {
+      return declared;
+    }
+    return Object.freeze({ ...declared, value: liveMetric });
+  }, [node.metric, liveMetric]);
   return (
     <ShellNavButton
       label={node.label}
@@ -525,6 +698,7 @@ function NavNodeButton({
       // `??`, not `||`: a badge written down to `0` is a value, and a truthiness
       // test would silently fall back to the blueprint's stale number for it.
       badgeCount={liveBadge ?? node.badgeCount}
+      metric={metric}
       isCollapsed={isCollapsed}
       isCurrent={isCurrent}
       onSelect={() => {
@@ -614,17 +788,17 @@ function ExtensionPane({ active, pane, label, context }: ExtensionPaneProps): Re
 /**
  * Body text for a pane with nothing to show.
  *
- * `dark:text-neutral-400` is not decoration. `text-neutral-500` is `#737373`,
- * and every one of these sits inside a `PaneWrapper`, whose dark background is
- * `neutral-950` (`#0a0a0a`) — 4.18:1, under the 4.5:1 that WCAG 1.4.3 requires
- * of 12px body text. `neutral-400` on the same background is 7.85:1. The LIGHT
- * value is deliberately left alone: `neutral-400` on white is 2.52:1 and would
- * trade one failure for a worse one.
+ * This used to be `text-neutral-500` with a `dark:text-neutral-400` beside it,
+ * and that pair is the clearest single illustration of what the token set
+ * replaces. `#737373` measured 4.18:1 on the dark pane — under the 4.5:1 WCAG
+ * 1.4.3 requires of 12px body text — while measuring fine in light, so the fix
+ * had to be a per-theme override written by hand at every muted string in the
+ * shell. `--text-muted` is resolved per theme by the generator and validated
+ * against all eight surfaces in all three themes, so the override has nothing
+ * left to correct and one declaration replaces two.
  */
 function EmptyPane({ children }: { readonly children: string }): ReactElement {
-  return (
-    <p className="p-1 text-[12px] leading-5 text-neutral-500 dark:text-neutral-400">{children}</p>
-  );
+  return <p className={`p-1 text-[12px] leading-5 ${TOKEN_CLASS.mutedText}`}>{children}</p>;
 }
 
 interface ShellResizeHandleProps {
@@ -638,14 +812,22 @@ interface ShellResizeHandleProps {
  * THREE THINGS HERE ARE ACCESSIBILITY FIXES, AND ALL THREE ARE EASY TO UNDO BY
  * ACCIDENT.
  *
- * COLOUR. `bg-neutral-200` was the SAME token as the 1px border on the panes
- * either side of it, so the divider did not read as a control at all — it read
- * as one more pane border, at 1.26:1 against the panes it separates. WCAG 1.4.11
- * wants 3:1 for a control's visual boundary. `neutral-500` is 4.74:1 on white
- * and 4.54:1 on the `neutral-50` behind the group; `neutral-400` in dark is
- * 7.85:1 on `neutral-950`. The hover and drag states move AWAY from the page
- * background in each theme — darker in light, lighter in dark — which is why
- * they are not simply the old values.
+ * COLOUR. The divider once used the SAME value as the 1px border on the panes
+ * either side of it, so it did not read as a control at all — it read as one
+ * more pane border, at 1.26:1 against the panes it separates. WCAG 1.4.11 wants
+ * 3:1 for a control's visual boundary.
+ *
+ * It now uses `--control-divider` and `--control-divider-hover`, which are their
+ * own token group rather than a shade of `--border-*`. `design/README.md`
+ * "Honest limits" item 9 records why: this is a filled 4px bar with hover and
+ * drag states, not a border, and folding it into `--border-strong` would have
+ * made one token answer to two different measurements. `--control-divider`
+ * measures 5.94:1 on `--surface-app` in light and 8.10:1 in dark.
+ *
+ * The hover and drag states still move AWAY from the page background in each
+ * theme — darker in light, lighter in dark — but that direction now lives in the
+ * token values rather than in a `dark:` variant here, which is why there are two
+ * declarations where there were six.
  *
  * TARGET SIZE. The visual divider stays 4px, because a 24px bar between two
  * panes would look broken. `hitAreaMargins` widens the region the library's own
@@ -667,12 +849,9 @@ function ShellResizeHandle({ label }: ShellResizeHandleProps): ReactElement {
       aria-orientation="vertical"
       hitAreaMargins={{ coarse: 15, fine: 12 }}
       className={
-        'w-1 flex-none cursor-col-resize bg-neutral-500 outline-none ' +
-        'hover:bg-neutral-700 focus-visible:bg-neutral-700 ' +
-        'data-[resize-handle-state=drag]:bg-neutral-700 ' +
-        'dark:bg-neutral-400 dark:hover:bg-neutral-200 ' +
-        'dark:focus-visible:bg-neutral-200 ' +
-        'dark:data-[resize-handle-state=drag]:bg-neutral-200'
+        'w-1 flex-none cursor-col-resize outline-none ' +
+        `${TOKEN_CLASS.dividerIdle} ${TOKEN_CLASS.dividerHover} ` +
+        `${TOKEN_CLASS.dividerFocus} ${TOKEN_CLASS.dividerDrag}`
       }
     />
   );
@@ -709,12 +888,6 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   const store = useShellStore();
   const context = useShellContext();
 
-  // The shell's one keyboard listener. Called HERE — see decision 3 in the banner
-  // and decision 1 in `hotkeyDispatch.ts` — because this component is host
-  // territory above every `ExtensionHostBoundary` and already renders the ribbon,
-  // so the chord path and the button path read one source of truth.
-  useHotkeyDispatch();
-
   const engine = suppliedEngine ?? getDefaultHydrationEngine();
 
   const [groupWidth, setGroupWidth] = useState<number | null>(null);
@@ -724,16 +897,59 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // no-flash property.
   const [isNavCollapsed, setNavCollapsed] = useLocalStorageState('isPane1Collapsed', { engine });
   const [isDrawerOpen, setDrawerOpen] = useState(false);
+  // The fourth persisted slot. Bound live for the same reason the collapse flag
+  // is: a command run in one tab should be recent in the next render, not after
+  // a reload.
+  const [recentCommandIds, setRecentCommandIds] = useLocalStorageState('recentCommandIds', {
+    engine,
+  });
+  // NOT persisted, deliberately. A palette that was open when the app closed and
+  // is open again when it opens is a modal the user did not ask for.
+  const [isPaletteOpen, setPaletteOpen] = useState(false);
+  // The last thing the composer submitted that was not a command. Held so the
+  // surface is demonstrably wired end to end and its text is visible to the user
+  // who typed it; there is nothing else the host can honestly do with a `filter`
+  // or an `ask` until the structured payload channel exists. See the composer's
+  // `onSubmit` below.
+  const [lastSubmission, setLastSubmission] = useState<OmniboxSubmission | null>(null);
+  /**
+   * The last `form` block a user submitted, echoed rather than consumed.
+   *
+   * The same answer the composer's submission gets, for the same reason: writing
+   * it back onto the publisher's channel would be host chrome publishing under
+   * an extension's scope, which is the host impersonating the extension.
+   */
+  const [lastBlockSubmission, setLastBlockSubmission] = useState<string | null>(null);
+
+  // The shell's one keyboard listener. Called HERE — see decision 3 in the banner
+  // and decision 1 in `hotkeyDispatch.ts` — because this component is host
+  // territory above every `ExtensionHostBoundary` and renders the context bar, so
+  // the chord path and the button path read one source of truth.
+  //
+  // **The host chord table is the dispatcher's, not this caller's.** All that is
+  // passed is what to DO about a host chord; there is no table to register into
+  // here, which is what keeps "host chrome is not plug-in-declarable" a structure
+  // rather than a lookup order. See `HOST_CHORDS` in `hotkeyDispatch.ts`.
+  // No `if` on the id, and that is a coverage fact as much as a style one.
+  // `HOST_CHORDS` holds exactly ONE entry, so an `if (id === 'open-command-palette')`
+  // has an implicit `else` no input can reach — vitest 2 did not count that branch
+  // and vitest 4 does, which is how it surfaced. Narrowing the parameter type is
+  // the honest fix: the compiler rejects a second host chord here rather than the
+  // test suite failing to reach it, so adding one is a type error at this call
+  // site instead of an invisible uncovered branch.
+  useHotkeyDispatch(() => {
+    setPaletteOpen(true);
+  });
 
   // A mount-time SNAPSHOT, not a subscription. `defaultSize` means "where this
   // panel starts"; see decision 6 for why binding it live would feed the value
   // being dragged back in as the starting point.
   const [restoredSizes] = useState<PaneSizes>(() => engine.getState().paneSizes);
-  // Identity, not equality. Every discard path in the engine returns the one
-  // shared frozen `DEFAULT_SHELL_STATE`, and every restore and every write build
-  // a fresh record — so this is exactly "somebody chose a layout", and it stays
-  // true for a user who happens to have dragged back to the default numbers.
-  const hasRestoredLayout = restoredSizes !== DEFAULT_SHELL_STATE.paneSizes;
+  const hasRestoredLayout = !isEngineDefaultLayout(restoredSizes);
+
+  // The three-pane layout as the group last ANNOUNCED it, which is not the same
+  // fact as the layout this shell has persisted. See `persistPaneSize`.
+  const announcedLayout = useRef<Record<PaneId, number>>({ ...restoredSizes });
 
   // Whether a persisted foreground extension is still waiting to be restored.
   // Read once, at mount, and cleared by the effect below the moment the restore
@@ -750,6 +966,29 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     }
     setGroupWidth(node.getBoundingClientRect().width);
   }, []);
+
+  // The live half. `observeGroup.ref` has a stable identity for this component's
+  // whole lifetime, so composing the two here does not detach and reattach — and
+  // therefore does not disconnect and rebuild the observer — on every render.
+  // `measureGroup` runs FIRST, so the commit-time snapshot `defaultSize` depends
+  // on is taken before anything else touches the node.
+  // DESTRUCTURED, and that is load-bearing rather than tidy: the hook returns a
+  // fresh object every render, so depending on the object would rebuild
+  // `attachGroup` on every render, which would detach and reattach the ref and so
+  // disconnect and rebuild the observer. `ref` alone is stable for the lifetime.
+  const { width: observedWidth, ref: observeGroupRef } = useElementWidth();
+
+  // The native host's updater, or `null` in a browser document. Read here, with
+  // the other hooks, and used exactly once — in `hostCommands` below.
+  const hostUpdates = useHostUpdates();
+
+  const attachGroup = useCallback(
+    (node: HTMLDivElement | null): void => {
+      measureGroup(node);
+      observeGroupRef(node);
+    },
+    [measureGroup, observeGroupRef],
+  );
 
   const selectNavNode = useCallback(
     (nodeId: string): void => {
@@ -774,29 +1013,56 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   const activeId = active === null ? null : active.id;
 
   /**
-   * Record one pane's new size, or decide that this is not a size worth
-   * recording. See decision 6 in the banner for both refusals.
+   * Learn one pane's new size, and decide separately whether it is a size worth
+   * recording. See decision 6 in the banner for both halves.
    *
-   * `previousSize` is `undefined` exactly when the group is announcing its own
-   * initial layout, so a mount nobody has resized writes nothing at all.
+   * KNOWING THE LAYOUT AND RECORDING IT ARE TWO DIFFERENT THINGS, AND SPLITTING
+   * THEM IS WHAT MAKES THE RECORD A LAYOUT RATHER THAN A PILE OF SLOTS. One
+   * divider moves exactly two panes, so the third never reports and its slot
+   * keeps whatever it held — which, for a shell nobody had resized, is the
+   * engine's 1360px-reference default beside two percentages measured at THIS
+   * width. `announcedLayout` therefore takes every report the group makes about
+   * a three-pane group, including the announcements below that are refused, and
+   * a write sends all three panes at once.
+   *
+   * THE REFUSAL IS ONE RULE: a report whose `previousSize` is not the size this
+   * shell last saw for that pane did not come out of the layout this shell
+   * knows about, so it is not a change the user made to it. That covers both
+   * cases exactly, and the second is the one the identity test above used to
+   * miss:
+   *
+   *   - The group announcing its own initial layout reports `undefined`, which
+   *     is never a size — so a mount nobody resized writes nothing at all.
+   *   - Re-adding pane 1 after a collapse makes the library renormalise a
+   *     two-panel group into a three-panel one. Panes 2 and 3 report a real
+   *     previous size, but it is their share of a width that EXCLUDED the 48px
+   *     track — a ratio against a different denominator, and one this shell
+   *     deliberately never learned. Writing it discarded the layout the user had
+   *     actually chosen and left a record whose percentages did not divide the
+   *     whole.
+   *
+   * The collapsed group is refused before either, and refused from LEARNING as
+   * well: those two panes divide the different denominator, so the numbers are
+   * not this layout's at all.
    */
   const persistPaneSize = useCallback(
     (pane: PaneId, size: number, previousSize: number | undefined): void => {
-      if (previousSize === undefined || isNavCollapsed) {
+      if (isNavCollapsed) {
         return;
       }
-      // Re-read rather than closed over: three panels report their new sizes one
-      // after another inside one layout pass, and each has to build on the one
-      // before it rather than on the record as it stood when this callback was
-      // created.
-      const current = engine.getState().paneSizes;
-      const next: Record<PaneId, number> = {
-        pane1: current.pane1,
-        pane2: current.pane2,
-        pane3: current.pane3,
-      };
-      next[pane] = clampPanePercent(size);
-      engine.setSlot('paneSizes', next);
+      const known = announcedLayout.current;
+      const isKnownChange = previousSize === known[pane];
+      const next: Record<PaneId, number> = { ...known };
+      next[pane] = size;
+      announcedLayout.current = next;
+      if (!isKnownChange) {
+        return;
+      }
+      engine.setSlot('paneSizes', {
+        pane1: clampPanePercent(next.pane1),
+        pane2: clampPanePercent(next.pane2),
+        pane3: clampPanePercent(next.pane3),
+      });
     },
     [engine, isNavCollapsed],
   );
@@ -856,11 +1122,18 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
   // `percentOf` answers with the fallback band for it, and for any width a
   // browser reports as zero.
   const width = groupWidth ?? 0;
-  const navMinPercent = percentOf(PANE_PX.navMin, width, PANE_FALLBACK_PERCENT.navMin);
-  const navMaxPercent = percentOf(PANE_PX.navMax, width, PANE_FALLBACK_PERCENT.navMax);
-  const listMinPercent = percentOf(PANE_PX.listMin, width, PANE_FALLBACK_PERCENT.listMin);
-  const listMaxPercent = percentOf(PANE_PX.listMax, width, PANE_FALLBACK_PERCENT.listMax);
-  const detailMinPercent = percentOf(PANE_PX.detailMin, width, PANE_FALLBACK_PERCENT.detailMin);
+  // The BANDS, and only the bands, follow the observed width. `?? width` is the
+  // no-observer answer — jsdom, an older WebView, or the render before the
+  // observer has delivered anything — and it is the mount-time measurement, which
+  // is what every band was derived from before this hook existed. `??` rather
+  // than a truthiness test because the floor in `useElementWidth` is 1, so a
+  // reported width is never falsy, but `null` genuinely means "nothing observed".
+  const bandWidth = observedWidth ?? width;
+  const navMinPercent = percentOf(PANE_PX.navMin, bandWidth, PANE_FALLBACK_PERCENT.navMin);
+  const navMaxPercent = percentOf(PANE_PX.navMax, bandWidth, PANE_FALLBACK_PERCENT.navMax);
+  const listMinPercent = percentOf(PANE_PX.listMin, bandWidth, PANE_FALLBACK_PERCENT.listMin);
+  const listMaxPercent = percentOf(PANE_PX.listMax, bandWidth, PANE_FALLBACK_PERCENT.listMax);
+  const detailMinPercent = percentOf(PANE_PX.detailMin, bandWidth, PANE_FALLBACK_PERCENT.detailMin);
 
   // A restored size wins over the pixel-derived default, and is held to the same
   // band that default would have been held to — see decision 6. With nothing
@@ -884,9 +1157,10 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     100 - navDefaultPercent - listDefaultPercent,
   );
 
-  const hostActions: readonly HostRibbonAction[] = [
+  const hostCommands: readonly HostCommand[] = [
     {
       id: 'host-toggle-navigation',
+      category: 'view',
       label: isNavCollapsed ? 'Expand navigation' : 'Collapse navigation',
       icon: 'navigation',
       onSelect: () => {
@@ -900,6 +1174,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
       id: 'host-toggle-drawer',
       label: isDrawerOpen ? 'Hide utility drawer' : 'Show utility drawer',
       icon: 'drawer',
+      category: 'view',
       onSelect: () => {
         setDrawerOpen((open) => !open);
       },
@@ -908,15 +1183,70 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
       id: 'host-close-extension',
       label: 'Close extension',
       icon: 'close',
+      category: 'navigate',
       isDisabled: active === null,
       onSelect: () => {
         activation.blur();
       },
     },
+    // THE "SWITCH EXTENSION" VERB. It is what makes cross-extension reach
+    // activate-then-execute — two visible steps — rather than a palette that
+    // lists a background extension's commands. See `CommandRegistry`'s
+    // containment block for why the second shape is refused.
+    //
+    // It is a HOST command, so it carries no predicate and no chord, and it is
+    // deliberately confined to the palette: a "switch extension" button on the
+    // 32px context bar would spend a contextual slot on navigation.
+    {
+      id: 'host-switch-extension',
+      label: 'Switch extension',
+      icon: 'navigation',
+      category: 'navigate',
+      surfaces: ['palette'],
+      isDisabled: extensions.length === 0,
+      onSelect: () => {
+        // Focus the navigation pane's own list rather than choosing for the
+        // user. The host does not know which extension they meant, and picking
+        // one would be the shell arguing.
+        setNavCollapsed(false);
+      },
+    },
+    // AUTO-UPDATE, AND NOTHING ELSE IN THIS FILE KNOWS ABOUT IT. The list is
+    // empty in the browser lane and in a development run of the native host, so
+    // this spread is the whole of the integration; the decisions about which
+    // commands exist for which status live in `src/core/updates/hostUpdates.ts`,
+    // where they can be unit-tested without a shell around them.
+    ...hostUpdateCommands(hostUpdates),
   ];
 
-  const ribbonExtension: RibbonExtensionActions | null =
-    active === null ? null : { actions: active.blueprint.ribbonActions, shell: active.shell };
+  const commandExtension: ExtensionCommands | null =
+    active === null
+      ? null
+      : { extensionId: active.id, commands: active.blueprint.commands, shell: active.shell };
+
+  // ONE registry, four surfaces, and it is REBUILT ON EVERY RENDER RATHER THAN
+  // MEMOISED. That is a decision and not an omission.
+  //
+  // `createCommandRegistry` holds no subscription, no listener and no mutable
+  // state beyond the arrays it was handed; `hostCommands` and `commandExtension`
+  // are already rebuilt every render, because they close over the current labels
+  // and the live revocable handle; and none of the four surfaces is `React.memo`'d,
+  // so a stable identity would be compared by nothing. A `useMemo` here would have
+  // to list every value those two are built from — which is a dependency array
+  // spelling "everything" — and its only real effect would be a stale
+  // `recentCommandIds` inside `onExecuted` on the render where the list has moved
+  // and the memo has not. Building it fresh makes the recents list
+  // current-by-construction instead of current-by-dependency-list.
+  const commandRegistry = createCommandRegistry({
+    hostCommands,
+    extension: commandExtension,
+    recentKeys: recentCommandIds,
+    onExecuted: (key) => {
+      // Host state, bounded and persisted. `withRecent` is the one definition of
+      // "recent", shared with the tests and with the hydration validator.
+      setRecentCommandIds(withRecent(recentCommandIds, key));
+    },
+  });
 
   const navigation = (
     <div className="flex min-w-0 flex-col gap-2">
@@ -925,7 +1255,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
           className={
             isNavCollapsed
               ? 'sr-only'
-              : 'px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400'
+              : `px-1 text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`
           }
         >
           Extensions
@@ -939,6 +1269,10 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                 // `ShellNavButton` docblock for why the host does not invent one.
                 icon={undefined}
                 badgeCount={undefined}
+                // Nor a metric: a blueprint has no such field, and an extension
+                // row is not a navigation node, so there is no scope under which
+                // the store could hold one for it. Same reason as the badge.
+                metric={undefined}
                 isCollapsed={isNavCollapsed}
                 isCurrent={active !== null && active.id === extension.id}
                 onSelect={() => {
@@ -961,7 +1295,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
             className={
               isNavCollapsed
                 ? 'sr-only'
-                : 'px-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400'
+                : `px-1 text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`
             }
           >
             Navigation
@@ -991,12 +1325,20 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
     <div
       data-shell-region="root"
       className={
-        'flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-50 ' +
-        'text-[12px] text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100'
+        'flex h-full min-h-0 w-full flex-col overflow-hidden text-[12px] ' +
+        `${TOKEN_CLASS.appSurface} ${TOKEN_CLASS.appText}`
       }
     >
-      <FaultBoundary boundaryLabel="The ribbon" extensionId={activeId} resetKey={activeId}>
-        <RibbonToolbar hostActions={hostActions} extension={ribbonExtension} context={context} />
+      <FaultBoundary boundaryLabel="The context bar" extensionId={activeId} resetKey={activeId}>
+        <ContextBar registry={commandRegistry} context={context} />
+      </FaultBoundary>
+      <FaultBoundary boundaryLabel="The command palette" extensionId={activeId} resetKey={activeId}>
+        <CommandPalette
+          registry={commandRegistry}
+          context={context}
+          open={isPaletteOpen}
+          onOpenChange={setPaletteOpen}
+        />
       </FaultBoundary>
       <div
         data-shell-region="panes"
@@ -1013,7 +1355,7 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
             </PaneWrapper>
           </div>
         ) : null}
-        <div ref={measureGroup} className="flex min-h-0 min-w-0 flex-1">
+        <div ref={attachGroup} className="flex min-h-0 min-w-0 flex-1">
           {groupWidth === null ? null : (
             <PanelGroup id="shell-panes" direction="horizontal" className="flex min-w-0 flex-1">
               {isNavCollapsed ? null : (
@@ -1096,32 +1438,126 @@ export function ShellLayout({ engine: suppliedEngine }: ShellLayoutProps = {}): 
                   trailing={
                     isDrawerOpen ? (
                       <div className="flex flex-col gap-1">
-                        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                        <h2
+                          className={`text-[11px] font-semibold uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}
+                        >
                           Utilities
                         </h2>
-                        <p className="text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
+                        <p className={`text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}>
                           Reserved for extension-supplied utilities.
                         </p>
                       </div>
                     ) : undefined
                   }
                 >
-                  <FaultBoundary
-                    boundaryLabel="The Detail pane"
-                    extensionId={activeId}
-                    resetKey={activeId}
-                  >
-                    {active === null ? (
-                      <EmptyPane>No extension is active, so there is nothing to detail.</EmptyPane>
-                    ) : (
-                      <ExtensionPane
-                        active={active}
-                        pane="pane3"
-                        label="The detail view"
+                  {/*
+                    PANE 3 IS THREE THINGS STACKED, AND THE ORDER IS THE DESIGN.
+                    The floating toolbar rides above the view because it is
+                    triggered by a selection made INSIDE the view; the composer is
+                    docked below it because it is persistent and must not move
+                    when the toolbar appears. Both are host chrome around a
+                    plug-in view, so both sit OUTSIDE the fault boundary: a
+                    plug-in render that throws must not take the shell's own input
+                    surface down with it, which is the whole point of putting a
+                    boundary there at all.
+                  */}
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+                    <FloatingToolbar registry={commandRegistry} context={context} />
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <FaultBoundary
+                        boundaryLabel="The Detail pane"
+                        extensionId={activeId}
+                        resetKey={activeId}
+                      >
+                        {active === null ? (
+                          <EmptyPane>
+                            No extension is active, so there is nothing to detail.
+                          </EmptyPane>
+                        ) : (
+                          <ExtensionPane
+                            active={active}
+                            pane="pane3"
+                            label="The detail view"
+                            context={context}
+                          />
+                        )}
+                      </FaultBoundary>
+                    </div>
+                    {/*
+                      THE BLOCK LEDGER. HOST CHROME, AND THE FIRST SURFACE IN
+                      THIS SHELL THAT DRAWS A CHART LIBRARY.
+
+                      Outside the fault boundary above, for the reason the
+                      composer and the floating toolbar are: a plug-in render
+                      that throws must not take the shell's own surfaces with
+                      it. That is safe here rather than merely hoped for,
+                      because every reader under `src/core/ledger/` is TOTAL —
+                      a malformed payload draws a complaint, never a throw.
+
+                      `echartsRenderer` is injected at this one point. It is
+                      the only production import of a chart library in `src/`,
+                      which is what makes the renderer swappable and what makes
+                      the measured bundle delta attributable to one line.
+                    */}
+                    {active === null ? null : (
+                      <BlockLedger
+                        shell={active.shell}
                         context={context}
+                        renderer={echartsRenderer}
+                        onSubmit={(blockId, values) => {
+                          setLastBlockSubmission(
+                            `${blockId}: ${Object.entries(values)
+                              .map(([name, value]) => `${name}=${value}`)
+                              .join(', ')}`,
+                          );
+                        }}
                       />
                     )}
-                  </FaultBoundary>
+                    {lastBlockSubmission === null ? null : (
+                      <p
+                        data-shell-region="ledger-echo"
+                        className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
+                      >
+                        <span className="font-semibold">block</span>
+                        {`: ${lastBlockSubmission}`}
+                      </p>
+                    )}
+                    {lastSubmission === null ? null : (
+                      /*
+                        The submission, echoed back in the host's own words. It is
+                        the honest thing to draw: the user typed something, the
+                        host detected an intent, and nothing has consumed it yet.
+                        `text` is the USER's string, not a plug-in's, and it is
+                        rendered as a text node regardless.
+                      */
+                      <p
+                        data-shell-region="omnibox-echo"
+                        className={`px-1 text-[11px] leading-4 ${TOKEN_CLASS.mutedText}`}
+                      >
+                        <span className="font-semibold">{lastSubmission.intent}</span>
+                        {`: ${lastSubmission.text}`}
+                      </p>
+                    )}
+                    <OmniboxComposer
+                      registry={commandRegistry}
+                      context={context}
+                      onSubmit={(submission) => {
+                        // The host owns no filter and answers no question, and
+                        // says so rather than pretending. Reaching into the
+                        // active extension's view to apply a filter would be host
+                        // chrome operating a plug-in's UI, which nothing in this
+                        // repository grants; publishing the text as a context key
+                        // would write into a namespace that is the extension's.
+                        // The submission is recorded, and the surface that
+                        // would consume it — the block ledger below — is fed by
+                        // the structured payload channel, which only the
+                        // EXTENSION may publish on. The host has no door to it
+                        // that would not be the host impersonating the
+                        // extension.
+                        setLastSubmission(submission);
+                      }}
+                    />
+                  </div>
                 </PaneWrapper>
               </Panel>
             </PanelGroup>

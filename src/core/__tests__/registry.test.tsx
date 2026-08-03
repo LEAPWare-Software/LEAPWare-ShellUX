@@ -77,6 +77,18 @@ describe('useRegistry', () => {
   });
 });
 
+/**
+ * A fixture as the registry stores it: one collection under both names.
+ *
+ * `makeBlueprint` declares the deprecated `ribbonActions` because that is the
+ * legacy route these cases exercise. A normalised record always carries
+ * `commands` beside it, referencing the identical frozen array, so a comparison
+ * against the raw fixture would fail on a field the registry is contracted to add.
+ */
+function normalizedOf(blueprint: Record<string, unknown>): Record<string, unknown> {
+  return { ...blueprint, commands: blueprint['ribbonActions'] };
+}
+
 describe('register — happy path', () => {
   it('registers a valid blueprint and exposes it', () => {
     const probe = setup();
@@ -93,7 +105,11 @@ describe('register — happy path', () => {
     const stored = probe.current.registry.getExtension('sample-ext');
     expect(stored).not.toBe(blueprint);
     expect(stored?.id).toBe('sample-ext');
-    expect(probe.current.registry.listExtensions()).toEqual([blueprint]);
+    // `commands` is the same collection under its new name — see
+    // `LEAPExtensionBlueprint` — so a stored record carries both and a fixture
+    // that declared only the deprecated one is compared against both.
+    expect(probe.current.registry.listExtensions()).toEqual([normalizedOf(blueprint)]);
+    expect(stored?.commands).toBe(stored?.ribbonActions);
     expect(probe.current.revision).toBe(1);
   });
 
@@ -105,7 +121,10 @@ describe('register — happy path', () => {
     callRegister(probe, first);
     callRegister(probe, second);
 
-    expect(probe.current.registry.listExtensions()).toEqual([first, second]);
+    expect(probe.current.registry.listExtensions()).toEqual([
+      normalizedOf(first),
+      normalizedOf(second),
+    ]);
     expect(probe.current.revision).toBe(2);
   });
 

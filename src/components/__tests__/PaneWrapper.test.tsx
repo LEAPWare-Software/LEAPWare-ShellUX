@@ -1,12 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { PaneWrapper } from '../layout/PaneWrapper';
 
 /**
  * `PaneWrapper` is presentational, so these are DOM-shape assertions and nothing
  * more. What they defend is the part of the pane contract that other components
  * depend on and cannot see: which element is the scroll container, which slots
- * exist, and that the border tokens are the ones the density contract names.
+ * exist, and that the pane's chrome comes from the shell's token roles rather
+ * than from a colour this file spells out for itself.
+ *
+ * **The colour assertions below are weaker than the ones they replace, and the
+ * comment in `src/core/theme/tokenClasses.ts` is the honest account of how.** In
+ * short: this file and the component now read the same constant, so an assertion
+ * here proves the pane uses the shell's pane-border ROLE and can no longer prove
+ * the role resolves to a sane colour. `scripts/check-tokens.mjs` measures the
+ * values and `e2e/theme.spec.ts` measures the compiled stylesheet; neither is
+ * optional cover, and neither can run in jsdom.
  */
 
 /** The pane box for `label`, i.e. the element carrying the chrome classes. */
@@ -24,7 +34,7 @@ describe('PaneWrapper', () => {
     expect(paneBox('List')).toHaveAttribute('data-pane', 'pane2');
   });
 
-  it('carries a 1px neutral border in both themes', () => {
+  it('carries a 1px token border, as one declaration rather than a light and dark pair', () => {
     render(
       <PaneWrapper paneId="pane1" label="Navigation">
         body
@@ -33,8 +43,22 @@ describe('PaneWrapper', () => {
     const box = paneBox('Navigation');
     // `border` with no width utility is Tailwind's 1px border.
     expect(box).toHaveClass('border');
-    expect(box).toHaveClass('border-neutral-200');
-    expect(box).toHaveClass('dark:border-neutral-800');
+    expect(box).toHaveClass(TOKEN_CLASS.paneBorder);
+    // ...and the surface and text come from the same place, so a theme swap
+    // cannot move one and leave another behind.
+    expect(box).toHaveClass(TOKEN_CLASS.paneSurface);
+    expect(box).toHaveClass(TOKEN_CLASS.paneText);
+
+    // ONE declaration, not two. This is the half of the claim that is not
+    // circular: it does not matter what `paneBorder` resolves to, there must be
+    // no appearance-conditional variant beside it. Before this change the pane
+    // carried `border-neutral-200 dark:border-neutral-800`, and the `dark:`
+    // half was exercised by nothing at all — jsdom implements no `matchMedia`
+    // and applies no stylesheet — which is issue #67. It is answered by
+    // deleting the variant, and this is what stops one coming back.
+    for (const token of box.className.split(/\s+/)) {
+      expect(token.startsWith('dark:'), `${token} is an untestable variant`).toBe(false);
+    }
   });
 
   it('confines scrolling to the body, so the pane box itself never scrolls', () => {
@@ -94,7 +118,7 @@ describe('PaneWrapper', () => {
     );
     const box = paneBox('Navigation');
     expect(box).toHaveClass('rounded-none');
-    expect(box).toHaveClass('border-neutral-200');
+    expect(box).toHaveClass(TOKEN_CLASS.paneBorder);
   });
 
   it('sets the base type inside the density band', () => {

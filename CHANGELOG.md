@@ -16,6 +16,227 @@ from so a reader can check it.
 
 ### Added
 
+- **A desktop packaging lane that produces a real installer, and auto-update from
+  a static feed (plan §6, Phase 9).** `electron-builder.yml` — a file rather than
+  a `build` key in `package.json`, because JSON cannot carry the argument for each
+  decision and this repository argues every one of them beside the line that takes
+  it. NSIS on Windows, dmg **and** zip on macOS (the zip because electron-updater
+  updates a macOS application from it and a dmg-only release cannot update
+  itself), hardened runtime on, and `notarize` deliberately absent so that
+  notarization runs when the Apple credentials are present and skips with a
+  warning when they are not — which is exactly the "working default when unset"
+  column `docs/signing.md` promises.
+  - **Observed, not merely configured.** `npm run verify:desktop` on Windows
+    produced `leapware-shellux-0.1.0-win-x64.exe` (110 MB), `latest.yml` and a
+    blockmap. The packaged application was launched, and its palette offers
+    *"Check for updates — last check failed"* — the update state having travelled
+    from `electron-updater` through the main process, an IPC channel, the preload
+    bridge, a hook and the Phase 4 command registry. The failure is correct: the
+    feed host is not provisioned, and the running application reports
+    `net::ERR_NAME_NOT_RESOLVED`.
+  - **`electron-updater` against the `generic` provider, never `github`.** This
+    repository is private on a free plan, and the GitHub provider would require a
+    token inside the shipped client, which anyone can extract from an asar in
+    seconds. The feed URL is written in exactly one tracked file; electron-builder
+    bakes it into `app-update.yml` inside the package, so `electron/main/updater.ts`
+    contains no URL and the renderer has no way to name a feed at all.
+  - **The surface is a palette command and never a modal.** `checkForUpdates`
+    rather than `checkForUpdatesAndNotify`; both commands declare
+    `surfaces: ['palette']`. "Check for updates" is offered for every status
+    except a development run — **including `error`**, which is when a user most
+    wants to press it again, and which is also the only positive evidence that the
+    preload bridge loaded at all.
+  - `.github/workflows/desktop.yml` on **tags and `workflow_dispatch` only**, on
+    `windows-latest` and `macos-latest`, always `--publish never`. Not on every
+    pull request: Windows bills at 2x and macOS at 10x, and there is no Linux leg
+    to average them down.
+  - `docs/RELEASE.md` — the checklist, including the clean-VM SmartScreen
+    observation, an actual old-build-updates-itself test, and a section stating
+    what is observed versus what is only configured.
+- **The preload stopped being empty, and changed extension to do it.**
+  `electron/preload/index.cts` compiles to `index.cjs`, because a sandboxed
+  preload is loaded into a CommonJS realm and this package declares
+  `"type": "module"`. It is the one file in the repository whose **extension is a
+  constraint rather than a convention**; `verbatimModuleSyntax` enforces it by
+  rejecting ESM syntax in a CommonJS file, and `eslint.config.js` learned `cts` in
+  the same change so the file could not escape the lint stage.
+
+- **Graphical visualization in all three panes — three tiers, three different
+  problems (plan §3.3).** Panes 2 and 3 are opposite performance problems and no
+  single library wins both, so they do not share one.
+  - **Tier 0, panes 1 and 2 — no library.** `src/components/ui/RowMetric.tsx`
+    composes the existing `MetricGlyph` — the same 32×12 `viewBox`, the same
+    memoised `d` string, the same `stroke="currentColor"` — and adds a value and
+    a delta. A chart *instance* per row is a construct and a destroy on every
+    scroll tick of a virtualized list; a memoised path string has none. Both
+    verification remotes now draw one per pane-2 row: `MailPlugin` a sparkline
+    of thread activity, `DatabasePlugin` a bar of stock against reorder level.
+  - **Tier 1, pane 3 — Apache ECharts 6.1.0 (Apache-2.0), canvas renderer,
+    tree-shaken.** `src/components/chart/Chart.tsx` is the ONE wrapper; the one
+    file in `src/` that names the library is `src/core/chart/echartsRenderer.ts`,
+    reached through the `ChartRenderer` seam in `src/core/chart/ChartRenderer.ts`
+    — the same shape as `HydrationEngine`'s `ShellStorage` and `src/core/ipc/`'s
+    `PortLike`. **Tier 2 (uPlot) is not in this change.**
+- **`normalizeChartSpec` (`src/core/chart/chartSpec.ts`), which makes "never
+  encode meaning by colour alone" a compiler property.** A series input has no
+  `color` member to write, and the normalised series carries `colorIndex`, `dash`
+  AND `marker` as required fields assigned in one statement, so a series with a
+  colour and no second channel is not representable. A `color` arriving through
+  `publishPayload` — where the compiler was never in the loop — is rejected on
+  sight with `INVALID_FIELD`. The series bound is **twelve**, because the colour,
+  dash and marker rotations have periods 12, 3 and 4, so a thirteenth series
+  would repeat the first in all three channels at once.
+- **The pane-3 block ledger.** `src/components/ledger/BlockLedger.tsx` renders a
+  vertically scrolling stack of addressable blocks — chart, table, form, text,
+  agent — each with a stable id that IS its payload channel, and each with a
+  Grafana-style inspector revealing the channel, the kind, the host-assigned
+  `revision` and the raw payload without navigating away. The `form` arm renders
+  real labelled inputs: pane 3 is a canvas and an input surface at once.
+  - **The index rides on a context key and the content on the payload channel.**
+    `src/core/ledger/ledgerIndex.ts` reads a comma-separated block list from the
+    reserved `ledger` context key. A list of addresses is exactly the cheap
+    primitive fact a context key is for; a chart's data is not.
+  - Both verification remotes publish blocks, so the ledger has real consumers.
+- **A text alternative for every chart.** `ChartDataTable` renders the same
+  `ChartSpec` the canvas was built from as a real table — the actual numbers, plus
+  the dash and marker of each series — `sr-only` beside the canvas and visibly in
+  the inspector. One implementation, two placements.
+
+### Changed
+
+- **ADR-0002 gained Amendment A, and the checker gained three rules' worth of
+  teeth.** ADR-0004 clause 8 named four collisions between the desktop lane and
+  the no-local-environment-dependencies mandate *in advance*; all four are settled
+  in the change that caused them.
+  - **`DOCUMENTED_ENDPOINTS`**, a one-row declaration table beside the existing
+    `DOCUMENTED_PORTS`, holding the update feed's host with a written reason. **Not
+    an ALLOWLIST entry**: an allowlist switches the rule off for a path, so a
+    second host arriving in the same file later is never seen; a declaration names
+    one host and leaves every other host still reported. It matches on **exact
+    host equality**, because the reserved-suffix list beside it uses `endsWith`
+    correctly — every name under `example.com` is reserved — while an endpoint is
+    not a suffix and `endsWith` would have accepted a host that merely begins with
+    the declared one and continues into a domain somebody else can register.
+  - **`platform-only-invocation` now catches what its prose always forbade.** The
+    rule matched shells and batch extensions, so `electron-builder --win nsis`
+    matched nothing — a build command that pins its output to one platform, which
+    the mandate plainly forbids. Pattern and prose are fixed together, because
+    relying on the gap is the "written rule with no checker" ADR-0002's own
+    Alternatives section rejects. **The portable form is to name no platform:**
+    `electron-builder` with no flag builds for the machine it is on, so
+    `npm run verify:desktop` is one command everywhere and `desktop.yml` gets its
+    platforms from a `runs-on` matrix.
+  - **`temp-or-scratch-path` no longer reports a path segment inside a URL.**
+    `electron-builder` brought in two packages *named* `tmp` and `temp`, so npm
+    wrote registry tarball URLs into the lockfile carrying each of those names as
+    a path segment — which is the exact shape the rule looks for.
+    Sharpened rather than allowlisted, and the reason is specific: the lockfile
+    already has an ALLOWLIST entry for hostnames, and adding this rule to it would
+    have switched the rule off for a file that **can** carry a genuine local path
+    — a `file:` reference to a directory on the author's disk is exactly what this
+    checker exists to catch. A URL reaching somewhere it should not is
+    `hardcoded-hostname`'s finding on the same line, so the match is reassigned
+    rather than dropped.
+  - Both directions of all three rules are pinned in
+    `scripts/__tests__/check-portability.test.mjs`: a lookalike host that begins
+    with the declared one must still fail, a build command that names no platform
+    must not, and a temporary path being *assembled* beside a URL must still fail.
+  - **`release/` is the third build output directory**, and it landed in
+    `.gitignore` and in `SKIPPED_DIRECTORIES` in `scripts/check-citations.mjs` in
+    the same change. The plan's original instruction to point the packager at
+    `dist/` was wrong — `vite build` empties it. The citation checker walks the
+    working tree rather than the git index, and `release/win-unpacked` measured
+    **419 MB**.
+  - **The acceptance test is unchanged, word for word.** `verify` gains no
+    packaging stage, on the justification already written at `playwright.config.ts`
+    for the browser lane: a download outside `npm ci` and outside the lockfile
+    belongs outside `verify`, and an Electron binary plus a signing certificate is
+    the same argument one step larger. `verify:desktop` is separate and
+    subordinate.
+- **`docs/signing.md` corrected itself in two places while being implemented.**
+  `CSC_IDENTITY_AUTO_DISCOVERY` **cannot** be set from the packaging
+  configuration — it is read from `process.env` and has no config key — so
+  `desktop.yml` sets it and the config cannot; and the checker that file promised
+  "when the packaging configuration exists" is now recorded as **rejected with a
+  reason**, because `electron-builder.yml` names no environment variable at all
+  and such a check would pass vacuously forever. Seven further names the tool
+  reads (`APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`,
+  `APPLE_KEYCHAIN`, `APPLE_KEYCHAIN_PROFILE`, `WIN_CSC_LINK`,
+  `WIN_CSC_KEY_PASSWORD`) are now declared.
+- **Measured bundle delta, because README's performance section forbids quoting
+  unverified numbers as characteristics.** ECharts is the first runtime dependency
+  beyond Radix and React. `npm run build`, before and after, on the same machine:
+
+  | Artefact | Before | After | Delta |
+  |---|---|---|---|
+  | `dist/assets/index-*.js` | 331.39 kB | 893.05 kB | **+561.66 kB** |
+  | …gzipped | 105.76 kB | 295.09 kB | **+189.33 kB** |
+  | `dist/assets/index-*.css` | 20.95 kB | 21.41 kB | +0.46 kB |
+  | …gzipped | 5.08 kB | 5.20 kB | +0.12 kB |
+
+  That is a **169% increase in raw JavaScript** for a tree-shaken build pulling in
+  three chart types and five components. It is stated rather than softened: the
+  shell is a desktop host loading from disk, not a page over a network, and the
+  same figure would be a different decision for a web deployment. `npm audit
+  --omit=dev` still reports **0 vulnerabilities**; four packages were added.
+- **A theme change disposes and re-initialises every chart in the document
+  (risk R7).** ECharts registers a theme at `init` and has no setter for it, so a
+  chart instance's lifetime is exactly a palette's lifetime — expressed in the
+  code as a parameter of `ChartRenderer.create` rather than as a comment. The
+  option is preserved and re-applied inside the same effect, so there is no blank
+  frame; what is NOT preserved is anything the user did to the instance — a zoom,
+  a pan, a legend item toggled off. A DATA change costs one `setOption` and no
+  teardown, and the two are separate effects so the cheap path cannot silently
+  become the expensive one.
+
+### Fixed
+
+- **`sr-only` does not work on a `<table>`, and the shell was shipping one.** CSS
+  table sizing says a table's used width is never below its min-content width, so
+  the `width: 1px` in `sr-only` is ignored; being absolutely positioned with no
+  positioned ancestor, the "hidden" chart data table escaped every
+  `overflow: hidden` in the pane and made the whole page scroll sideways at 320px.
+  `ChartDataTable` now wraps its table in a `div` and the caller's classes go
+  there. Caught by `e2e/shell-layout.spec.ts`, in the browser lane, because jsdom
+  lays nothing out and could not have seen it.
+
+- **The command registry and its four surfaces — the ribbon is deleted.**
+  `src/core/commands/CommandRegistry.ts` holds one collection and four projections
+  — `listForSurface`, `listByCategory`, `recents` and `suggestedFor` — and every
+  one of them filters through the same `isVisible`/`when` guards. The surfaces are
+  `src/components/command/`: `ContextBar.tsx` (32px, replacing the ribbon at about
+  a third of the vertical cost), `CommandPalette.tsx` (Cmd-K, **browsable on an
+  empty query**), `FloatingToolbar.tsx` (selection-triggered, pane 3 only) and
+  `OmniboxComposer.tsx` (docked, with the detected intent labelled before submit).
+  `commandListItem.tsx` is the one row all four render, and the one place a plug-in
+  string reaches the DOM. See ADR-0001 Amendment N.
+- **`Command`, generalising `RibbonAction`.** Four optional fields — `when`,
+  `category`, `surfaces`, `priority` — and nothing removed. `RibbonAction` stays as
+  a deprecated alias of `Command`, so nothing an extension has written breaks.
+  `LEAPExtensionBlueprint` gains `commands` beside `ribbonActions`; **declaring
+  both is rejected** rather than merged.
+- **A host chord table.** Cmd-K / Ctrl-K opens the palette, and it is consulted
+  before the extension chord table, so an extension declaring `Ctrl+K` never
+  receives the keystroke while the host wants it. Host chrome is not
+  plug-in-declarable: `HostCommand` has no `hotkey` field and the palette glyph is
+  absent from `SHELL_ICONS`.
+- **A fourth `HydrationEngine` slot, `recentCommandIds`.** Host-minted, namespaced
+  keys, bounded at 16, and read tolerantly so a record written before the slot
+  existed still restores. `SCHEMA_VERSION` does not move.
+
+### Changed
+
+- **Behavioural regression to expect, stated in advance.** The 32px context bar
+  shows at most four contextual commands inline where the ribbon showed the same
+  four — the count is unchanged — but the bar is a third of the height, so a
+  command that used to be visible at a glance in a taller row is now one keystroke
+  (Cmd-K) or one click (the overflow menu) away. That is the trade the plan asks
+  for and somebody will file it as a bug.
+- **`src/core/ribbonAction.ts` is now `src/core/command.ts`**, with `isVisible`,
+  `execute` and `report` unchanged. The rename is the whole of the change: six
+  routes to a plug-in handler now share the two guards that two routes used to.
+
+
 - **The inversion-of-control extension contract** — `src/core/types.ts`
   (`LEAPExtensionBlueprint`, `IShellAPI`, `RibbonContext`, `ShellUXError` and its
   code enum), `src/core/RegistryContext.tsx` (validation, normalisation, the
@@ -90,6 +311,66 @@ from so a reader can check it.
 
 ### Changed
 
+- **THE SHELL LOOKS HEAVIER, AND THAT IS THE FIX RATHER THAN A BUG.** Every pane
+  edge, the ribbon's bottom edge, the overflow menu's border, every slot divider
+  and the fault surface's boundary are now `--border-default`, which resolves to
+  `#7e8085` in the light theme. They were `border-neutral-200`, `#e5e5e5`. That is
+  **1.26:1 against the pane it bounds, replaced by 3.95:1** — roughly three times
+  the ink, visible at a glance, and the reason it is announced here in advance is
+  that it will otherwise be filed as a rendering regression.
+
+  It is a WCAG 2.2 §1.4.11 correction: a control's visual boundary must clear 3:1,
+  and a 1.26:1 hairline is not a boundary anyone with low vision can find. **There
+  is no version of this that is invisible.** 3:1 on white alone would have landed
+  at exactly `#949494`; the token is darker than that because the manifest
+  measures it against every surface it is actually drawn on, and the binding
+  constraint is `--surface-sunken` at 3.47:1 rather than the pane.
+
+  Two smaller changes ride along, both in the same direction. `--text-muted` moves
+  from `#737373` to `#5c5f64`, 4.74:1 to 6.41:1 on white — bought so that muted
+  text clears 4.5:1 on **all eight** surfaces rather than only on the pane, which
+  is what removes the hand-written dark-theme patch that used to sit beside every
+  muted string. And the selected-row indicator is now carried by a 2px
+  `--border-selected` rule and a semibold label, with the fill demoted to a hint
+  and the 1px outline demoted to `--border-subtle`; no fill reaches 3:1 on white
+  without reading as a different control entirely.
+
+  Decorative rules are deliberately **not** dragged along: the `--border-subtle`
+  tier exists to keep the weight off separation that is not a control boundary,
+  and in-pane section rules use it. The numbers are measured rather than asserted
+  — `design/check-contrast.mjs` over 165 declared pairs in three themes, and now
+  `npm run tokens:check` over the shipped stylesheet as well.
+- **Every colour in the shell is a design token, and all 51 `dark:` variants are
+  gone.** 118 raw colour literals across seven modules — 114 Tailwind palette
+  classes plus four `theme(colors.neutral.*)` spellings inside arbitrary shadow
+  values, which no colour search in this repository had ever found — became
+  `var(--token)` utilities driven by `src/styles/tokens.generated.css`.
+
+  **The `dark:` variants were deleted rather than made testable, and that is the
+  answer to the "exercised by nothing whatsoever" finding.** When a colour is a
+  token whose *value* swaps on `[data-theme]`, `dark:border-neutral-800` beside
+  `border-border-default` is an override of something that already changed. The
+  untested surface is removed instead of tested. `darkMode` stays configured as
+  `['selector', '[data-theme="dark"]']` for the genuinely appearance-conditional
+  cases that will arrive with per-document theme injection; the allowlist in
+  `src/__tests__/noRawColor.test.ts` is **empty**, and the one known future member
+  — the shadow tier, which is black at fixed alphas in every theme and elevates
+  nothing on a near-black pane — is named there with the note that the fix belongs
+  in `design/` rather than in a hand-written variant.
+
+  **What this weakens, stated rather than buried:** the 43 `toHaveClass`
+  assertions that pinned colours now assert against a `TOKEN_CLASS` record the
+  components import, so they can no longer catch a component pointed at the wrong
+  token. `scripts/check-tokens.mjs` measures the values and `e2e/theme.spec.ts`
+  measures the compiled stylesheet; the full account is in
+  `src/core/theme/tokenClasses.ts`.
+- **Tailwind's `content` glob no longer matches test files.** The scanner is a
+  regular expression over raw text with no idea what a file is for, so every
+  planted-violation fixture and every density-scan control string was compiling
+  into the shipped stylesheet — measured, not suspected: seven `.dark\:` rules
+  survived in the built CSS after the last `dark:` utility had been deleted from
+  the shell. A component cannot depend on a class only a test spells, so nothing
+  real is lost.
 - **`getExtension(id)` no longer returns the caller's object.** Validation and
   normalisation became one pass, and what is stored is a fresh host-owned record.
   A breaking change to the registry's read contract, made deliberately; the correct
@@ -128,6 +409,17 @@ from so a reader can check it.
 
 ### Fixed
 
+- **The density scan silently stopped measuring anything it could not parse.**
+  `typeSizeOffenders` returned "clean" for any arbitrary type size it failed to
+  read as a length, so `text-[var(--type-body)]` sailed through contributing
+  nothing while `paddingOffenders` beside it treated the same ambiguity as a
+  violation. Tokenising font size before fixing this would have replaced a
+  measured type scale with values the scan waves through, and every run would
+  have stayed green. Now only Tailwind's explicit `color:`-style data-type hint
+  earns an exemption — that is *proof* the value is not a length — and anything
+  else the scan cannot convert is reported, matching padding. Padding and font
+  size remain deliberately untokenised for this reason, so the scan survives
+  byte for byte.
 - **A registration hijack through a multi-read id getter.** A value the plug-in can
   still reach is a value the plug-in can still edit, so reading each field once was
   necessary and not sufficient; the host now owns the stored record. Single-read

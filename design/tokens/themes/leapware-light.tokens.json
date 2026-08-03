@@ -1,0 +1,30 @@
+{
+  "$description": "LEAPWare Light. The default theme. A theme is three generative inputs plus an optional curve override — base colour, accent colour, contrast multiplier — and nothing else. There is no colour value in this file, and there must never be one: a theme that names a colour directly is a theme that can name a colour that fails the contrast manifest.",
+  "$extensions": {
+    "com.leapware.shellux.theme": {
+      "id": "leapware-light",
+      "name": "LEAPWare Light",
+      "polarity": "light",
+      "builtIn": true,
+      "schemaVersion": 1
+    }
+  },
+
+  "base": {
+    "$description": "The neutral ramp. Chroma is small and non-zero on purpose: a completely achromatic grey next to a chromatic accent reads as dirty rather than as neutral.",
+    "hue": { "$type": "number", "$value": 264 },
+    "chroma": { "$type": "number", "$value": 0.009 }
+  },
+
+  "accent": {
+    "$description": "Focus ring, links, selected-solid fills.",
+    "hue": { "$type": "number", "$value": 252 },
+    "chroma": { "$type": "number", "$value": 0.155 }
+  },
+
+  "contrast": {
+    "$type": "number",
+    "$value": 1.0,
+    "$description": "Multiplier on each step's distance from step 1. 1.0 is the curve as authored."
+  }
+}

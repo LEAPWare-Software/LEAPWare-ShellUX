@@ -1,0 +1,39 @@
+{
+  "$description": "LEAPWare High Contrast. Light polarity, achromatic base, and the contrast multiplier doing real work rather than sitting at 1.0. Two curve steps are overridden because the multiplier alone cannot rescue them: steps 7 and 8 are the decorative border weights, and a high-contrast theme in which the decorative borders stay decorative is a high-contrast theme that did not raise the thing a low-vision user most often cannot see. Overrides are applied FIRST and the multiplier is applied to the result.",
+  "$extensions": {
+    "com.leapware.shellux.theme": {
+      "id": "leapware-high-contrast",
+      "name": "LEAPWare High Contrast",
+      "polarity": "light",
+      "builtIn": true,
+      "schemaVersion": 1
+    }
+  },
+
+  "base": {
+    "$description": "Chroma zero. A high-contrast theme has no business tinting its neutrals: the tint costs contrast and buys nothing a user of this theme asked for.",
+    "hue": { "$type": "number", "$value": 264 },
+    "chroma": { "$type": "number", "$value": 0.0 }
+  },
+
+  "accent": {
+    "$description": "Kept chromatic and kept at the same hue. The accent is how focus is located, and desaturating it would make the focus ring harder to find, not easier.",
+    "hue": { "$type": "number", "$value": 252 },
+    "chroma": { "$type": "number", "$value": 0.16 }
+  },
+
+  "contrast": {
+    "$type": "number",
+    "$value": 1.25,
+    "$description": "Each step's distance from step 1 is multiplied by this. It flattens text-muted towards text-primary, which is the correct behaviour for this theme rather than a defect: at high contrast, 'muted' is a smaller distinction than legibility."
+  },
+
+  "curve": {
+    "$description": "Partial override. Any step not named here comes from core.tokens.json.",
+    "lightness": {
+      "$type": "number",
+      "7": { "$value": 0.72, "$description": "border-subtle. Raised until it clears 3:1 in this theme, where it is no longer decorative." },
+      "8": { "$value": 0.66, "$description": "border-hover, text-disabled." }
+    }
+  }
+}

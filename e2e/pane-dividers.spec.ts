@@ -6,9 +6,19 @@ import { activateExtension, dragHorizontally, openShell, paneWidth } from './she
  * REGRESSION: A DIVIDER DRAG THAT ACTUALLY HAPPENS.
  * ============================================================================
  * The defect this file exists for: a jsdom test named for surviving "a divider
- * drag in flight" **never started a drag**. jsdom reports every rect as 0x0, so
- * a synthesised pointer-down could not intersect the handle's 12px hit area, and
- * the case passed having exercised nothing at all.
+ * drag in flight" **never started a drag**, and passed having exercised nothing
+ * at all.
+ *
+ * The mechanism, measured rather than assumed, because the first version of this
+ * banner named the wrong one. jsdom implements **no `PointerEvent`**, so
+ * `fireEvent.pointerDown` falls back to a plain `Event`; the library's
+ * `getResizeEventCoordinates` reads `clientX`/`clientY` from a pointer event only
+ * when `isPrimary` is true, and a plain `Event` has neither, so it is handed
+ * `{ x: Infinity, y: Infinity }` and never leaves the handle's `inactive` state.
+ * Supplying geometry does not rescue it and neither does supplying a
+ * `PointerEvent` constructor that is really a `MouseEvent` — both were tried, and
+ * the handle stayed `inactive` through the whole sequence. A browser is the only
+ * place this gesture exists, which is what this lane is.
  *
  * Every case below therefore asserts `sawDragState` — `react-resizable-panels`
  * sets `data-resize-handle-state="drag"` only once a drag is genuinely underway.
@@ -92,6 +102,72 @@ test.describe('pane dividers, driven by a real pointer', () => {
     const { sawDragState } = await dragHorizontally(page, handle, 160);
     expect(sawDragState).toBe(true);
     expect(await paneWidth(page, 'pane1')).toBeGreaterThan(atMinimum + 40);
+  });
+
+  /**
+   * The case the jsdom suite cannot carry, carried here.
+   *
+   * `src/components/__tests__/ShellLayout.test.tsx` — "survives a collapse
+   * toggled while a divider drag is in flight" — runs the same shape in jsdom and
+   * says in its own body that no drag starts there: it asserts
+   * `data-resize-handle-state` is still `inactive` and pins only the clean
+   * unmount. This is the half that needs a pointer, and `sawDragState` is proven
+   * true BEFORE the collapse rather than after, so an interruption that never
+   * interrupted anything fails instead of passing.
+   *
+   * The collapse is dispatched rather than clicked: `locator.click()` performs its
+   * own mouse down and up, which would end the very gesture this case is holding
+   * open.
+   */
+  test('ends a drag that is genuinely in flight when the pane collapses under it', async ({
+    page,
+  }) => {
+    const handle = page.getByRole('separator', { name: NAV_DIVIDER });
+    const box = await handle.boundingBox();
+    if (box === null) {
+      throw new Error('e2e: the navigation resize handle has no bounding box.');
+    }
+    const fromX = box.x + box.width / 2;
+    const fromY = box.y + box.height / 2;
+
+    await page.mouse.move(fromX, fromY);
+    await page.mouse.down();
+
+    let sawDragState = false;
+    for (let step = 1; step <= 6; step += 1) {
+      await page.mouse.move(fromX + step * 12, fromY);
+      if (!sawDragState) {
+        sawDragState = (await handle.getAttribute('data-resize-handle-state')) === 'drag';
+      }
+    }
+    expect(sawDragState, 'the pointer never put the handle into its drag state').toBe(true);
+
+    // Unmount the handle mid-gesture, with the button still down.
+    await page.getByRole('button', { name: 'Collapse navigation' }).dispatchEvent('click');
+    await expect(page.locator('[data-shell-region="nav-track"]')).toBeVisible();
+
+    // The pointer keeps moving and then releases over a handle that no longer
+    // exists. Nothing may be left half-applied by it.
+    await page.mouse.move(fromX + 400, fromY);
+    await page.mouse.up();
+
+    const track = await page.locator('[data-shell-region="nav-track"]').boundingBox();
+    expect(track?.width).toBe(48);
+    await expect(page.getByRole('separator')).toHaveCount(1);
+    for (const pane of ['pane2', 'pane3'] as const) {
+      expect(await paneWidth(page, pane)).toBeGreaterThanOrEqual(NO_VOID_FLOOR_PX);
+    }
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+
+    // And the abandoned gesture left the shell usable: expanding restores a pane 1
+    // wide enough to grab, rather than whatever the drag last computed.
+    await page.getByRole('button', { name: 'Expand navigation' }).click();
+    await expect(page.getByRole('separator')).toHaveCount(2);
+    expect(await paneWidth(page, 'pane1')).toBeGreaterThanOrEqual(NO_VOID_FLOOR_PX);
   });
 
   test('keeps the three panes inside the window at every extreme', async ({ page }) => {

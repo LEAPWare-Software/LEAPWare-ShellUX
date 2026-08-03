@@ -1,0 +1,228 @@
+{
+  "$description": "THE SEMANTIC TIER. This is the only tier an extension may read, so it is a PUBLIC CONTRACT and not an implementation detail: a name added here is a name that can never be removed without a breaking change, and a name removed here breaks every extension that bound to it. It is deliberately not a DTCG token file — it holds no values. It maps each contract name onto a position in a ramp, and the theme supplies the ramp.",
+  "schemaVersion": 1,
+
+  "$notes": {
+    "polarityIndependence": "Every source below is a STEP, never a colour. Steps are ordered by distance from the pane background, so step 1 is white in a light theme and near-black in a dark one and the mapping does not change. That is what makes one contract serve three themes.",
+    "consumers": "The `consumers` array names the modules that render this token TODAY, at the point the tier was written. An empty array means the token is reserved for the contract rather than consumed by the host — it is not evidence of dead weight, it is the reason the contract is complete before extensions bind to it. Tokens with empty consumers are still validated by design/check-contrast.mjs like every other.",
+    "notTokenised": "Padding and font-size are deliberately absent. The density scan in src/components/__tests__/ShellLayout.test.tsx parses literal padding and type-size utilities, and it passes SILENTLY on an arbitrary value it cannot parse — so a tokenised type size would sail through contributing nothing. Keeping them literal keeps that scan honest.",
+    "noMotionForThese": "There is deliberately no token for pane-resize, list-scroll or selection-change motion. The absence is the enforcement: a duration that does not exist cannot be referenced."
+  },
+
+  "groups": {
+    "surfaces": {
+      "--surface-app": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 2 },
+        "description": "The desktop behind the panes. Further from the pane than the pane is in both polarities.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (shell root)"]
+      },
+      "--surface-pane": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 1 },
+        "description": "The reading surface. Every pane body.",
+        "consumers": ["src/components/layout/PaneWrapper.tsx (PANE_CHROME)"]
+      },
+      "--surface-raised": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 2 },
+        "description": "Host chrome sitting above the app but outside a pane: the ribbon, the contained-fault surface. Shares a step with --surface-app on purpose — they are the same plane, and separating them would be a distinction with no rendering behind it.",
+        "consumers": ["src/components/ui/RibbonToolbar.tsx", "src/components/error/FaultBoundary.tsx (SURFACE)"]
+      },
+      "--surface-overlay": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 1 },
+        "description": "Floating surfaces: the ribbon overflow menu, popovers, the future command palette. Elevated by --shadow-popover, never by a border alone.",
+        "consumers": ["src/components/ui/RibbonToolbar.tsx (DropdownMenu.Content)"]
+      },
+      "--surface-sunken": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 3 },
+        "description": "A recessed well: the chart plot area, a scroll trough, a code block. ONE STEP OF SEPARATION FROM THE PANE, IN WHICHEVER DIRECTION THE THEME SEPARATES — lighter-to-darker in light, darker-to-lighter in dark. That is not what 'sunken' means literally, and the honest name would be 'inset'; it is called sunken because that is what the plan calls it. All twelve chart series are validated against this token and no other.",
+        "consumers": []
+      },
+      "--surface-hover": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 4 },
+        "description": "Pointer-over fill on a row or a control.",
+        "consumers": ["src/components/error/FaultBoundary.tsx (RETRY_BUTTON hover)"]
+      },
+      "--surface-selected": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 5 },
+        "description": "The fill under a selected row. A HINT ONLY. Selection is carried by --border-selected and a semibold weight, because no fill reaches 3:1 against the pane without reading as a different control entirely. Do not make this the sole indicator of selection.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (ShellNavButton)", "src/components/shared/VirtualizedList.tsx (row)"]
+      },
+      "--surface-subtle": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 6 },
+        "description": "A filled chip against the pane: the navigation badge count, a tag, a keyboard-shortcut pill. Distinct from --surface-sunken, which is a well the content sits inside; this is a solid the content sits on.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (ShellNavButton badge)"]
+      }
+    },
+
+    "text": {
+      "--text-primary": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 12 },
+        "description": "Body and label text.",
+        "consumers": ["src/components/layout/ShellLayout.tsx", "src/components/layout/PaneWrapper.tsx", "src/components/ui/RibbonToolbar.tsx", "src/components/error/FaultBoundary.tsx"]
+      },
+      "--text-secondary": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 11 },
+        "description": "De-emphasised but still primary-weight reading text.",
+        "consumers": ["src/components/error/FaultBoundary.tsx (row variant)"]
+      },
+      "--text-muted": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 10 },
+        "description": "Section headings, empty-pane sentences, metadata. The single most-used colour in the shell (23 sites) and the one an accessibility audit already caught once in dark mode. Validated at 4.5:1 against SIX surfaces, not one.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (EmptyPane, section headings, drawer)"]
+      },
+      "--text-on-accent": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 1 },
+        "description": "Text on --accent-solid. Step 1 rather than a literal white, so it inverts with polarity: white on a dark accent in the light theme, dark on a light accent in the dark theme.",
+        "consumers": []
+      },
+      "--text-disabled": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 8 },
+        "description": "What today's `aria-disabled:opacity-40` should become. Opacity on the whole control also fades its border and its icon, and it composites against whatever is behind it, so the resulting contrast is unknowable at authoring time. WCAG 1.4.3 exempts inactive components, which is why this token is exempt in the manifest — recorded, not assumed.",
+        "consumers": []
+      },
+      "--text-link": {
+        "type": "color",
+        "source": { "ramp": "accent", "step": 10 },
+        "description": "Inline hyperlink text.",
+        "consumers": []
+      },
+      "--text-danger": { "type": "color", "source": { "ramp": "danger", "step": 11 }, "description": "Error prose.", "consumers": [] },
+      "--text-warning": { "type": "color", "source": { "ramp": "warning", "step": 11 }, "description": "Caution prose.", "consumers": [] },
+      "--text-success": { "type": "color", "source": { "ramp": "success", "step": 11 }, "description": "Confirmation prose.", "consumers": [] }
+    },
+
+    "borders": {
+      "--border-subtle": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 7 },
+        "role": "decorative",
+        "description": "DECORATIVE ONLY. In-pane separation between two blocks of the same surface — a list divider, a form section rule. It does not clear 3:1 in the light or dark theme and it is not required to: it separates content that is already separated by position, and it is never the only way to perceive anything. If a boundary must be perceived to be operated, it is --border-default or --control-divider, not this. The high-contrast theme overrides its curve step and it clears 3:1 there.",
+        "consumers": []
+      },
+      "--border-hover": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 8 },
+        "role": "decorative",
+        "description": "The border a control grows on pointer-over. Exempt from 1.4.11 — hover is not a state that must be perceivable to IDENTIFY a component — but set at a visible weight deliberately, because today's `hover:border-neutral-200` is 1.26:1 against the pane, which means the hover affordance does not currently exist at all. That is a usability defect independent of any criterion.",
+        "consumers": ["src/components/layout/ShellLayout.tsx", "src/components/ui/RibbonToolbar.tsx (ACTION_CHROME)"]
+      },
+      "--border-default": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 9 },
+        "description": "THE 1px HAIRLINE ON EVERY PANE, THE RIBBON'S BOTTOM EDGE AND THE OVERFLOW MENU. Held to 3:1 against --surface-app, --surface-pane, --surface-raised, --surface-overlay and --surface-sunken. This is the live WCAG 1.4.11 fix and it is a DELIBERATE VISUAL REGRESSION: today's border-neutral-200 is 1.26:1 and this is around five times heavier. See design/README.md.",
+        "consumers": ["src/components/layout/PaneWrapper.tsx (PANE_CHROME, SLOT_EDGE)", "src/components/ui/RibbonToolbar.tsx"]
+      },
+      "--border-selected": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 10 },
+        "description": "The 2px inset leading rule that actually carries the selected state. Held to 3:1 against BOTH --surface-pane and --surface-selected, because it is drawn across the boundary of the two.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (ShellNavButton inset shadow)", "src/components/shared/VirtualizedList.tsx (row inset shadow)"]
+      },
+      "--border-strong": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 11 },
+        "description": "A boundary that must read as heavier than the shell's own chrome: the contained-fault surface, a destructive-confirm edge.",
+        "consumers": ["src/components/error/FaultBoundary.tsx (SURFACE, RETRY_BUTTON)"]
+      },
+      "--border-focus": {
+        "type": "color",
+        "source": { "ramp": "accent", "step": 10 },
+        "description": "A BORDER that changes colour on focus, distinct from --focus-ring, which is an outline drawn outside the box. Both exist because the overflow menu item indicates focus with its border and the list indicates it with a ring.",
+        "consumers": ["src/components/ui/RibbonToolbar.tsx (OverflowMenuItem focus)"]
+      }
+    },
+
+    "controls": {
+      "$groupNote": "An eighth group the plan's seven did not have. The pane divider is a FILLED 4px bar, not a border: it has hover and drag states, it is the one element in the shell whose 1.4.11 obligation is unambiguously about a control, and folding it into --border-strong would have made one token answer to two different measurements.",
+      "--control-divider": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 10 },
+        "description": "The resize handle at rest. Held to 3:1 against the surfaces on both sides of it — the panes AND the app background behind the group.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (ShellResizeHandle)"]
+      },
+      "--control-divider-hover": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 11 },
+        "description": "Hover, focus-visible and drag. Moves AWAY from the page background in each polarity, which is why it is a step rather than a lightening.",
+        "consumers": ["src/components/layout/ShellLayout.tsx (ShellResizeHandle)"]
+      }
+    },
+
+    "focus": {
+      "--focus-ring": {
+        "type": "color",
+        "source": { "ramp": "accent", "step": 10 },
+        "description": "The outer ring. Held to 3:1 against every surface it can be drawn over and against --focus-ring-offset.",
+        "consumers": ["src/components/shared/VirtualizedList.tsx (focus-visible:ring-1)"]
+      },
+      "--focus-ring-offset": {
+        "type": "color",
+        "source": { "ramp": "gray", "step": 1 },
+        "description": "The INNER ring, in an opaque surface colour. Two-tone on purpose: a single-colour ring drawn over a chart canvas or an image can land on a same-coloured pixel and vanish. Opaque, not a transparency — compositing is exactly what makes the result unmeasurable.",
+        "consumers": []
+      },
+      "--focus-ring-width": { "type": "dimension", "source": { "component": "focus-ring-width" }, "description": "2px.", "consumers": [] },
+      "--focus-ring-offset-width": { "type": "dimension", "source": { "component": "focus-ring-offset-width" }, "description": "1px.", "consumers": [] }
+    },
+
+    "accent": {
+      "--accent-subtle": { "type": "color", "source": { "ramp": "accent", "step": 3 }, "description": "A tinted background: a selected tab strip, an informational callout.", "consumers": [] },
+      "--accent-border": { "type": "color", "source": { "ramp": "accent", "step": 9 }, "description": "The boundary of an accented block.", "consumers": [] },
+      "--accent-solid": { "type": "color", "source": { "ramp": "accent", "step": 10 }, "description": "A filled primary control. Carries --text-on-accent.", "consumers": [] },
+      "--accent-solid-hover": { "type": "color", "source": { "ramp": "accent", "step": 11 }, "description": "The same fill under the pointer.", "consumers": [] },
+      "--accent-text": { "type": "color", "source": { "ramp": "accent", "step": 11 }, "description": "Accented text on a plain surface. A step further than --text-link because it is used at small sizes in dense chrome.", "consumers": [] }
+    },
+
+    "status": {
+      "--status-danger": { "type": "color", "source": { "ramp": "danger", "step": 10 }, "description": "A solid danger indicator: an icon, a bar, a dot.", "consumers": [] },
+      "--status-warning": { "type": "color", "source": { "ramp": "warning", "step": 10 }, "consumers": [] },
+      "--status-success": { "type": "color", "source": { "ramp": "success", "step": 10 }, "consumers": [] },
+      "--status-info": { "type": "color", "source": { "ramp": "info", "step": 10 }, "consumers": [] },
+      "--status-danger-subtle": { "type": "color", "source": { "ramp": "danger", "step": 3 }, "description": "The tinted background of a danger block. Carries --text-primary.", "consumers": [] },
+      "--status-warning-subtle": { "type": "color", "source": { "ramp": "warning", "step": 3 }, "consumers": [] },
+      "--status-success-subtle": { "type": "color", "source": { "ramp": "success", "step": 3 }, "consumers": [] },
+      "--status-info-subtle": { "type": "color", "source": { "ramp": "info", "step": 3 }, "consumers": [] }
+    },
+
+    "charts": {
+      "$groupNote": "Nothing in src/ renders a chart today. This group exists because a chart palette invented per-extension is the fastest way to lose both accessibility and visual coherence, and because native-host-pivot.md 3.6 already commits the host to resolving a palette for ECharts through a ThemeBridge. Every one of the twelve series is validated at 3:1 against --surface-sunken AND pairwise for CIEDE2000 separation against all eleven others.",
+      "--chart-1": { "type": "color", "source": { "chart": "series", "index": 1 }, "consumers": [] },
+      "--chart-2": { "type": "color", "source": { "chart": "series", "index": 2 }, "consumers": [] },
+      "--chart-3": { "type": "color", "source": { "chart": "series", "index": 3 }, "consumers": [] },
+      "--chart-4": { "type": "color", "source": { "chart": "series", "index": 4 }, "consumers": [] },
+      "--chart-5": { "type": "color", "source": { "chart": "series", "index": 5 }, "consumers": [] },
+      "--chart-6": { "type": "color", "source": { "chart": "series", "index": 6 }, "consumers": [] },
+      "--chart-7": { "type": "color", "source": { "chart": "series", "index": 7 }, "consumers": [] },
+      "--chart-8": { "type": "color", "source": { "chart": "series", "index": 8 }, "consumers": [] },
+      "--chart-9": { "type": "color", "source": { "chart": "series", "index": 9 }, "consumers": [] },
+      "--chart-10": { "type": "color", "source": { "chart": "series", "index": 10 }, "consumers": [] },
+      "--chart-11": { "type": "color", "source": { "chart": "series", "index": 11 }, "consumers": [] },
+      "--chart-12": { "type": "color", "source": { "chart": "series", "index": 12 }, "consumers": [] },
+      "--chart-grid": { "type": "color", "source": { "ramp": "gray", "step": 7 }, "role": "decorative", "description": "Gridlines. Decorative by construction: a gridline is a reading aid for a value that is also on the axis, and a gridline heavy enough to clear 3:1 competes with the data.", "consumers": [] },
+      "--chart-axis": { "type": "color", "source": { "ramp": "gray", "step": 9 }, "description": "The axis line itself, which IS meaningful graphical information and is held to 3:1.", "consumers": [] },
+      "--chart-label": { "type": "color", "source": { "ramp": "gray", "step": 10 }, "description": "Tick and axis labels. Text, so 4.5:1 against the plot well.", "consumers": [] },
+      "--chart-tooltip-bg": { "type": "color", "source": { "ramp": "gray", "step": 12 }, "description": "An INVERTED chip: step 12 in each polarity, so it is dark in the light theme and light in the dark one.", "consumers": [] },
+      "--chart-tooltip-text": { "type": "color", "source": { "ramp": "gray", "step": 1 }, "description": "Inverts with the chip above it.", "consumers": [] },
+      "--chart-crosshair": { "type": "color", "source": { "ramp": "gray", "step": 11 }, "description": "The pointer-tracking rule. Meaningful, so 3:1.", "consumers": [] },
+      "--chart-sequential-from": { "type": "color", "source": { "chart": "sequential", "end": "from" }, "description": "The low end of a single-hue ramp. Deliberately NOT held to 3:1 — the low end of a sequential scale is supposed to be near the background, and requiring contrast of it would destroy the scale. Recorded as decorative with the reason, rather than exempted quietly.", "role": "decorative", "consumers": [] },
+      "--chart-sequential-to": { "type": "color", "source": { "chart": "sequential", "end": "to" }, "consumers": [] },
+      "--chart-diverging-low": { "type": "color", "source": { "chart": "diverging", "stop": "low" }, "consumers": [] },
+      "--chart-diverging-mid": { "type": "color", "source": { "chart": "diverging", "stop": "mid" }, "description": "The zero point. Achromatic and held to 3:1, because a zero-point mark is meaningful information.", "consumers": [] },
+      "--chart-diverging-high": { "type": "color", "source": { "chart": "diverging", "stop": "high" }, "consumers": [] },
+      "--chart-positive": { "type": "color", "source": { "ramp": "success", "step": 10 }, "description": "Gain. NEVER the only encoding of sign — pair it with a glyph or a sign, because roughly 1 in 12 men cannot separate it from --chart-negative.", "consumers": [] },
+      "--chart-negative": { "type": "color", "source": { "ramp": "danger", "step": 10 }, "description": "Loss. See --chart-positive.", "consumers": [] }
+    }
+  }
+}

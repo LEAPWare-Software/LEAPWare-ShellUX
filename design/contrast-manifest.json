@@ -1,0 +1,1196 @@
+{
+  "$description": "Declared contrast and separation pairs. CONTRAST IS A RELATION, NOT A PROPERTY OF ONE TOKEN, so this file declares pairs rather than annotating colours. Every semantic colour token must appear in at least one row: design/check-contrast.mjs fails a token with no row as UNREVIEWED and a row naming a token that does not exist as STALE, so the file is exact in both directions and cannot rot quietly in either.",
+  "schemaVersion": 1,
+  "$generatedBy": "design/lib/build-manifest.mjs",
+  "$notes": {
+    "decorative": "A row carrying \"role\" records an EXEMPTION rather than assuming one. The minimum on such a row is a legibility floor of our own choosing and is not a WCAG threshold; the criterion field says so in words.",
+    "seriesSeparation": "The twelve chart series are checked pairwise - all 66 pairs, not the 11 adjacent ones - because a legend puts series 1 next to series 7. The floor of 12 CIEDE2000 is a judgement, not a standard.",
+    "whatAPassMeans": "That the declared pairs clear the declared numbers in the three built-in themes. Nothing about a third-party theme, nothing about rendering, and nothing about APCA."
+  },
+  "deltaE2000SeriesFloor": 12,
+  "rows": [
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-app",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-raised",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-overlay",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-sunken",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-hover",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-selected",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--surface-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-app",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-raised",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-overlay",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-sunken",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-hover",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-selected",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-muted",
+      "background": "--surface-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-secondary",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-secondary",
+      "background": "--surface-app",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-secondary",
+      "background": "--surface-selected",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-link",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-link",
+      "background": "--surface-app",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-danger",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-danger",
+      "background": "--status-danger-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-warning",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-warning",
+      "background": "--status-warning-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-success",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-success",
+      "background": "--status-success-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-on-accent",
+      "background": "--accent-solid",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-on-accent",
+      "background": "--accent-solid-hover",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-disabled",
+      "background": "--surface-pane",
+      "minimum": 1.8,
+      "criterion": "Exempt from WCAG 2.2 1.4.3 - inactive user interface component.",
+      "metric": "wcag2-contrast",
+      "role": "inactive",
+      "note": "The 1.8 floor is ours. WCAG exempts a disabled control, but a control nobody can see is a control nobody knows exists; it must still read as present and unavailable."
+    },
+    {
+      "foreground": "--border-default",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "THE live 1.4.11 fix. Today border-neutral-200 on white measures 1.26:1."
+    },
+    {
+      "foreground": "--border-default",
+      "background": "--surface-app",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-default",
+      "background": "--surface-raised",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-default",
+      "background": "--surface-overlay",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-default",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-selected",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "Drawn across the boundary of the pane and the selected fill, so it is measured against both."
+    },
+    {
+      "foreground": "--border-selected",
+      "background": "--surface-selected",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-strong",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "Held above 1.4.11 deliberately. This token exists to read as heavier than --border-default, and a 3:1 floor would permit them to be equal."
+    },
+    {
+      "foreground": "--border-strong",
+      "background": "--surface-raised",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-focus",
+      "background": "--surface-overlay",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-focus",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--border-subtle",
+      "background": "--surface-pane",
+      "minimum": 1.25,
+      "criterion": "Exempt from WCAG 2.2 1.4.11 - decorative, and never the sole means of perceiving anything. The minimum below is a legibility floor of our own, not a criterion.",
+      "metric": "wcag2-contrast",
+      "role": "decorative"
+    },
+    {
+      "foreground": "--border-subtle",
+      "background": "--surface-sunken",
+      "minimum": 1.2,
+      "criterion": "Exempt from WCAG 2.2 1.4.11 - decorative, and never the sole means of perceiving anything. The minimum below is a legibility floor of our own, not a criterion.",
+      "metric": "wcag2-contrast",
+      "role": "decorative"
+    },
+    {
+      "foreground": "--border-hover",
+      "background": "--surface-pane",
+      "minimum": 2,
+      "criterion": "Exempt from WCAG 2.2 1.4.11 - decorative, and never the sole means of perceiving anything. The minimum below is a legibility floor of our own, not a criterion.",
+      "metric": "wcag2-contrast",
+      "role": "decorative",
+      "note": "Hover is not a state 1.4.11 requires to be perceivable. The 2.0 floor is ours, because the current hover border measures 1.26:1 and therefore does not exist."
+    },
+    {
+      "foreground": "--control-divider",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A divider is a control, not a pane border. It has a pane on each side and the app background behind the group."
+    },
+    {
+      "foreground": "--control-divider",
+      "background": "--surface-app",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--control-divider-hover",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--control-divider-hover",
+      "background": "--surface-app",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--focus-ring-offset",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "The two-tone ring: the outer ring against its own opaque inner ring. This pair is what survives a chart canvas painted underneath the focused element."
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-app",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-raised",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-overlay",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-selected",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--focus-ring",
+      "background": "--surface-subtle",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--accent-solid",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--accent-border",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--accent-text",
+      "background": "--surface-pane",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--accent-text",
+      "background": "--accent-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--accent-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-danger",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-danger",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--status-danger-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-warning",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-warning",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--status-warning-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-success",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-success",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--status-success-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-info",
+      "background": "--surface-pane",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--status-info",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--text-primary",
+      "background": "--status-info-subtle",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-7",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-8",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-9",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-10",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-11",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-12",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast",
+      "note": "A data mark is meaningful graphical information, not decoration."
+    },
+    {
+      "foreground": "--chart-axis",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-label",
+      "background": "--surface-sunken",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-crosshair",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-grid",
+      "background": "--surface-sunken",
+      "minimum": 1.2,
+      "criterion": "Exempt from WCAG 2.2 1.4.11 - decorative, and never the sole means of perceiving anything. The minimum below is a legibility floor of our own, not a criterion.",
+      "metric": "wcag2-contrast",
+      "role": "decorative",
+      "note": "A gridline restates a value the axis already carries. One heavy enough to clear 3:1 competes with the data it is there to help read."
+    },
+    {
+      "foreground": "--chart-tooltip-text",
+      "background": "--chart-tooltip-bg",
+      "minimum": 4.5,
+      "criterion": "WCAG 2.2 1.4.3 Contrast (Minimum), Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-tooltip-bg",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-sequential-to",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-sequential-from",
+      "background": "--surface-sunken",
+      "minimum": 1.3,
+      "criterion": "Exempt from WCAG 2.2 1.4.11 - decorative, and never the sole means of perceiving anything. The minimum below is a legibility floor of our own, not a criterion.",
+      "metric": "wcag2-contrast",
+      "role": "decorative",
+      "note": "The low end of a sequential scale is SUPPOSED to sit near the background. Requiring contrast of it would destroy the scale it belongs to."
+    },
+    {
+      "foreground": "--chart-diverging-low",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-diverging-mid",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-diverging-high",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-positive",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-negative",
+      "background": "--surface-sunken",
+      "minimum": 3,
+      "criterion": "WCAG 2.2 1.4.11 Non-text Contrast, Level AA",
+      "metric": "wcag2-contrast"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-2",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-3",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-4",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-5",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-6",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-7",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-1",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-3",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-4",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-5",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-6",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-7",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-2",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-4",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-5",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-6",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-7",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-3",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-5",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-6",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-7",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-4",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-6",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-7",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-5",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--chart-7",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-6",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-7",
+      "background": "--chart-8",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-7",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-7",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-7",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-7",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-8",
+      "background": "--chart-9",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-8",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-8",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-8",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-9",
+      "background": "--chart-10",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-9",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-9",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-10",
+      "background": "--chart-11",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-10",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-11",
+      "background": "--chart-12",
+      "minimum": 12,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000"
+    },
+    {
+      "foreground": "--chart-positive",
+      "background": "--chart-negative",
+      "minimum": 20,
+      "criterion": "LEAPWare categorical separation - no WCAG criterion covers whether two series in one legend can be told apart.",
+      "metric": "deltaE2000",
+      "note": "Sign is the one encoding a user cannot afford to misread, so it carries a higher floor than a categorical pair. It must still never be the ONLY encoding of sign."
+    }
+  ]
+}

@@ -1,0 +1,180 @@
+{
+  "$description": "LEAPWare-ShellUX core design tokens, DTCG format (W3C Design Tokens, 2025.10). This file holds GENERATIVE INPUTS and the component tier. It deliberately holds no resolved colour: every colour in the shell is derived from the curve below plus a theme's three inputs, so adding a theme is three numbers rather than a two-hundred-key colour dump. Steps are ordered by DISTANCE FROM THE PANE BACKGROUND, not by lightness, which is what lets one semantic contract serve both light and dark polarities.",
+  "$extensions": {
+    "com.leapware.shellux": {
+      "schemaVersion": 1,
+      "stepCount": 12,
+      "note": "Primitive ramp values are never emitted to CSS. See design/README.md, 'Why primitives are not in the stylesheet'."
+    }
+  },
+
+  "curve": {
+    "$description": "The lightness and chroma curve, per polarity, over the twelve ramp steps. Step 1 is the pane background; step 12 is the highest-contrast foreground. A theme may override any individual step, and the theme's contrast multiplier is applied AFTER any override.",
+
+    "light": {
+      "$description": "Light polarity: step 1 is the lightest and the ramp descends.",
+      "lightness": {
+        "$type": "number",
+        "1": { "$value": 1.0, "$description": "surface-pane, surface-overlay, focus-ring-offset" },
+        "2": { "$value": 0.974, "$description": "surface-app, surface-raised" },
+        "3": { "$value": 0.956, "$description": "surface-sunken" },
+        "4": { "$value": 0.94, "$description": "surface-hover" },
+        "5": { "$value": 0.923, "$description": "surface-selected" },
+        "6": { "$value": 0.895, "$description": "surface-subtle" },
+        "7": { "$value": 0.84, "$description": "border-subtle, chart-grid — decorative" },
+        "8": { "$value": 0.73, "$description": "border-hover, text-disabled" },
+        "9": { "$value": 0.6, "$description": "border-default — the WCAG 1.4.11 hairline" },
+        "10": { "$value": 0.485, "$description": "text-muted, border-selected, control-divider" },
+        "11": { "$value": 0.385, "$description": "text-secondary, border-strong, control-divider-hover" },
+        "12": { "$value": 0.24, "$description": "text-primary, chart-tooltip-bg" }
+      },
+      "chroma": {
+        "$type": "number",
+        "$description": "Shape only, normalised to a peak of 1. Multiplied by each ramp's own chroma scale.",
+        "1": { "$value": 0.05 },
+        "2": { "$value": 0.1 },
+        "3": { "$value": 0.15 },
+        "4": { "$value": 0.2 },
+        "5": { "$value": 0.26 },
+        "6": { "$value": 0.32 },
+        "7": { "$value": 0.4 },
+        "8": { "$value": 0.55 },
+        "9": { "$value": 0.85 },
+        "10": { "$value": 1.0 },
+        "11": { "$value": 0.88 },
+        "12": { "$value": 0.5 }
+      }
+    },
+
+    "dark": {
+      "$description": "Dark polarity: step 1 is the darkest and the ramp ascends. Step 1 is deliberately not black and step 12 deliberately not white — see design/README.md on APCA.",
+      "lightness": {
+        "$type": "number",
+        "1": { "$value": 0.205, "$description": "surface-pane, surface-overlay, focus-ring-offset" },
+        "2": { "$value": 0.24, "$description": "surface-app, surface-raised" },
+        "3": { "$value": 0.272, "$description": "surface-sunken" },
+        "4": { "$value": 0.3, "$description": "surface-hover" },
+        "5": { "$value": 0.332, "$description": "surface-selected" },
+        "6": { "$value": 0.375, "$description": "surface-subtle" },
+        "7": { "$value": 0.44, "$description": "border-subtle, chart-grid — decorative" },
+        "8": { "$value": 0.53, "$description": "border-hover, text-disabled" },
+        "9": { "$value": 0.6, "$description": "border-default — the WCAG 1.4.11 hairline" },
+        "10": { "$value": 0.775, "$description": "text-muted, border-selected, control-divider" },
+        "11": { "$value": 0.86, "$description": "text-secondary, border-strong, control-divider-hover" },
+        "12": { "$value": 0.945, "$description": "text-primary, chart-tooltip-bg" }
+      },
+      "chroma": {
+        "$type": "number",
+        "1": { "$value": 0.05 },
+        "2": { "$value": 0.1 },
+        "3": { "$value": 0.15 },
+        "4": { "$value": 0.2 },
+        "5": { "$value": 0.26 },
+        "6": { "$value": 0.32 },
+        "7": { "$value": 0.4 },
+        "8": { "$value": 0.55 },
+        "9": { "$value": 0.85 },
+        "10": { "$value": 1.0 },
+        "11": { "$value": 0.82 },
+        "12": { "$value": 0.4 }
+      }
+    }
+  },
+
+  "status": {
+    "$description": "Status ramps share the curve above and differ only in hue and chroma scale. A theme may override these, and none of the three built-ins does.",
+    "danger": {
+      "hue": { "$type": "number", "$value": 27 },
+      "chroma": { "$type": "number", "$value": 0.155 }
+    },
+    "warning": {
+      "hue": { "$type": "number", "$value": 75 },
+      "chroma": { "$type": "number", "$value": 0.145 }
+    },
+    "success": {
+      "hue": { "$type": "number", "$value": 152 },
+      "chroma": { "$type": "number", "$value": 0.135 }
+    },
+    "info": {
+      "hue": { "$type": "number", "$value": 232 },
+      "chroma": { "$type": "number", "$value": 0.135 }
+    }
+  },
+
+  "chart": {
+    "$description": "The categorical series palette is NOT taken from the ramp. Twelve categories separated only by hue at one lightness collapse in CIEDE2000 terms, and worse in the yellow-green arc where sRGB cannot hold chroma. So each series carries its own lightness per polarity, hues are distributed non-uniformly, and the whole set is validated pairwise by design/check-contrast.mjs.",
+    "series": {
+      "$description": "hue in OKLCH degrees; chroma before gamut mapping; lightness per polarity. THE HUES ARE NOT EVENLY SPACED and the lightnesses are not uniform, and both are deliberate. Twelve hues 30 degrees apart at one lightness measure barely 9 CIEDE2000 in the magenta-to-purple arc and collapse further in the yellow-green arc, where the gamut mapper has to pull chroma down and so pulls the hues together. Lightness is the second axis that buys separation, and it also means the palette survives being printed in greyscale. These twenty-four numbers were searched, not chosen: the objective was to maximise the WORST of the 66 pairwise distances subject to every series clearing 3.25:1 on the plot well in all three themes.",
+      "1": { "hue": { "$type": "number", "$value": 252 }, "chroma": { "$type": "number", "$value": 0.15 }, "lightnessLight": { "$type": "number", "$value": 0.422 }, "lightnessDark": { "$type": "number", "$value": 0.64 } },
+      "2": { "hue": { "$type": "number", "$value": 32 }, "chroma": { "$type": "number", "$value": 0.16 }, "lightnessLight": { "$type": "number", "$value": 0.422 }, "lightnessDark": { "$type": "number", "$value": 0.766 } },
+      "3": { "hue": { "$type": "number", "$value": 152 }, "chroma": { "$type": "number", "$value": 0.14 }, "lightnessLight": { "$type": "number", "$value": 0.424 }, "lightnessDark": { "$type": "number", "$value": 0.918 } },
+      "4": { "hue": { "$type": "number", "$value": 300 }, "chroma": { "$type": "number", "$value": 0.16 }, "lightnessLight": { "$type": "number", "$value": 0.421 }, "lightnessDark": { "$type": "number", "$value": 0.64 } },
+      "5": { "hue": { "$type": "number", "$value": 78 }, "chroma": { "$type": "number", "$value": 0.14 }, "lightnessLight": { "$type": "number", "$value": 0.522 }, "lightnessDark": { "$type": "number", "$value": 0.847 } },
+      "6": { "hue": { "$type": "number", "$value": 200 }, "chroma": { "$type": "number", "$value": 0.12 }, "lightnessLight": { "$type": "number", "$value": 0.42 }, "lightnessDark": { "$type": "number", "$value": 0.776 } },
+      "7": { "hue": { "$type": "number", "$value": 348 }, "chroma": { "$type": "number", "$value": 0.14 }, "lightnessLight": { "$type": "number", "$value": 0.617 }, "lightnessDark": { "$type": "number", "$value": 0.64 } },
+      "8": { "hue": { "$type": "number", "$value": 128 }, "chroma": { "$type": "number", "$value": 0.13 }, "lightnessLight": { "$type": "number", "$value": 0.598 }, "lightnessDark": { "$type": "number", "$value": 0.64 } },
+      "9": { "hue": { "$type": "number", "$value": 272 }, "chroma": { "$type": "number", "$value": 0.16 }, "lightnessLight": { "$type": "number", "$value": 0.618 }, "lightnessDark": { "$type": "number", "$value": 0.792 } },
+      "10": { "hue": { "$type": "number", "$value": 52 }, "chroma": { "$type": "number", "$value": 0.13 }, "lightnessLight": { "$type": "number", "$value": 0.618 }, "lightnessDark": { "$type": "number", "$value": 0.64 } },
+      "11": { "hue": { "$type": "number", "$value": 176 }, "chroma": { "$type": "number", "$value": 0.11 }, "lightnessLight": { "$type": "number", "$value": 0.592 }, "lightnessDark": { "$type": "number", "$value": 0.643 } },
+      "12": { "hue": { "$type": "number", "$value": 225 }, "chroma": { "$type": "number", "$value": 0.13 }, "lightnessLight": { "$type": "number", "$value": 0.6 }, "lightnessDark": { "$type": "number", "$value": 0.92 } }
+    },
+    "sequential": {
+      "$description": "A single-hue ramp. Taken from the accent ramp so it inherits the theme's accent, and expressed as ramp STEPS so it reverses correctly under dark polarity. The low end is step 7 rather than something closer to the background: at step 4 it measured 1.05:1 against the plot well, which is a scale whose first two bins nobody can tell from the paper.",
+      "fromStep": { "$type": "number", "$value": 7 },
+      "toStep": { "$type": "number", "$value": 12 }
+    },
+    "diverging": {
+      "$description": "Low and high are the danger and info ramps; the midpoint is achromatic and is held to 3:1 against the plot well, because a zero-point mark is meaningful graphical information under WCAG 1.4.11 and not decoration.",
+      "step": { "$type": "number", "$value": 10 },
+      "midStep": { "$type": "number", "$value": 9 }
+    }
+  },
+
+  "component": {
+    "$description": "The component tier. Host-only: extensions never read these. Colour, radius, shadow, motion and dimension are tokenised; PADDING AND FONT-SIZE ARE DELIBERATELY NOT — see design/README.md and native-host-pivot.md 3.6 on why the density scan must stay able to parse them.",
+
+    "pane-header-h": { "$type": "dimension", "$value": { "value": 28, "unit": "px" }, "$description": "PaneWrapper's header slot. p-1 plus a 20px line box." },
+    "context-bar-h": { "$type": "dimension", "$value": { "value": 32, "unit": "px" } },
+    "row-h-compact": { "$type": "dimension", "$value": { "value": 24, "unit": "px" }, "$description": "The floor, not a preference: WCAG 2.2 2.5.8 target size. Nothing may go below it." },
+    "row-h-default": { "$type": "dimension", "$value": { "value": 28, "unit": "px" } },
+    "row-h-comfortable": { "$type": "dimension", "$value": { "value": 32, "unit": "px" } },
+    "rail-w": { "$type": "dimension", "$value": { "value": 48, "unit": "px" }, "$description": "The collapsed pane-1 icon track. Same number as PANE_PX.navCollapsed." },
+    "drawer-w": { "$type": "dimension", "$value": { "value": 160, "unit": "px" }, "$description": "PaneWrapper's trailing slot. Today's w-40." },
+
+    "radius-sm": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } },
+    "radius-md": { "$type": "dimension", "$value": { "value": 4, "unit": "px" } },
+
+    "focus-ring-width": { "$type": "dimension", "$value": { "value": 2, "unit": "px" } },
+    "focus-ring-offset-width": { "$type": "dimension", "$value": { "value": 1, "unit": "px" } },
+
+    "shadow-overlay": {
+      "$type": "shadow",
+      "$description": "The utility drawer and any full-height overlay.",
+      "$value": [
+        { "color": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.12 }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 1, "unit": "px" }, "blur": { "value": 2, "unit": "px" }, "spread": { "value": 0, "unit": "px" } },
+        { "color": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.16 }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 4, "unit": "px" }, "blur": { "value": 10, "unit": "px" }, "spread": { "value": -2, "unit": "px" } }
+      ]
+    },
+    "shadow-popover": {
+      "$type": "shadow",
+      "$description": "The ribbon overflow menu and the command palette. Shadows ELEVATE; they never separate. See native-host-pivot.md 3.7.",
+      "$value": [
+        { "color": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.1 }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 2, "unit": "px" }, "blur": { "value": 4, "unit": "px" }, "spread": { "value": 0, "unit": "px" } },
+        { "color": { "colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.18 }, "offsetX": { "value": 0, "unit": "px" }, "offsetY": { "value": 8, "unit": "px" }, "blur": { "value": 20, "unit": "px" }, "spread": { "value": -4, "unit": "px" } }
+      ]
+    },
+
+    "motion-micro": { "$type": "duration", "$value": { "value": 120, "unit": "ms" }, "$description": "Hover, focus, press. Anything the user is looking straight at." },
+    "motion-base": { "$type": "duration", "$value": { "value": 180, "unit": "ms" }, "$description": "Drawer, menu, pane content swap." },
+    "motion-ease": { "$type": "cubicBezier", "$value": [0.4, 0, 0.2, 1] },
+
+    "font-ui": {
+      "$type": "fontFamily",
+      "$value": ["Segoe UI Variable Text", "Segoe UI", "system-ui", "-apple-system", "Roboto", "Helvetica Neue", "sans-serif"]
+    },
+    "font-mono": {
+      "$type": "fontFamily",
+      "$value": ["Cascadia Mono", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", "monospace"]
+    }
+  }
+}

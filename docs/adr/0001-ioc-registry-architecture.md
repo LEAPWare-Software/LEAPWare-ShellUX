@@ -2305,6 +2305,12 @@ the two messages fails one of those two cases whichever direction it merges in.
 
 ## Amendment J — Hotkey dispatch, and narrowing the no-listener invariant to keep it
 
+> **Path note, added with Amendment N.** `src/core/ribbonAction.ts` named below was
+> RENAMED to `src/core/command.ts` when the ribbon was deleted; the three functions
+> and their behaviour are unchanged. The path is left as written here because this
+> amendment is a record of a decision as it was made, and Amendment N is where the
+> rename is decided.
+
 **Date:** 2026-07-31 · **Status:** Accepted · **Amends:** Amendment H (which
 recorded declaration and validation and deferred the dispatcher), Amendment H
 Decision 6 (foreground scoping, now the dispatcher's lookup rule) and Amendment G
@@ -2338,9 +2344,8 @@ the precondition for the dispatcher being defensible, and it was done and verifi
 green as its own step. This is Amendment I Decision 3's reasoning ("a rule
 evaluated twice is a rule that can disagree with itself") applied to a guard rather
 than to a validation. *Tests:* the existing ribbon cases still exercise both
-functions through the component — "hides an action whose isVisible predicate throws
-and still renders the rest", "treats a non-boolean isVisible result as not visible",
-"survives an onExecute that throws, leaving the ribbon interactive" — and the
+functions through the component — "the context bar hides a command whose isVisible predicate throws and still renders the rest", "treats a non-boolean isVisible result as not visible",
+"the context bar survives an onExecute that throws, leaving the surface interactive" — and the
 dispatcher exercises the same two through the chord: "does not fire a chord whose
 isVisible predicate throws, and reports it once" and "survives an onExecute that
 throws, leaving the dispatcher live" in `src/core/__tests__/hotkeyDispatch.test.tsx`.
@@ -2430,11 +2435,8 @@ The omission on a disabled action is not an oversight: the dispatcher skips a
 disabled action, so announcing a shortcut on it would be the same lie in the other
 direction as the one the pre-ISSUE-006 ribbon avoided by announcing nothing at all.
 *Tests:* "spells the control key Control, which describeHotkey deliberately does
-not" in `src/core/__tests__/hotkeys.test.ts`; "advertises a chord-bearing action
-with aria-keyshortcuts, in key values rather than display spelling", "omits
-aria-keyshortcuts from a disabled action, because the chord will not fire",
-"advertises a chord on an overflow menu item too" and "never advertises a chord on
-a host action" in `src/components/__tests__/RibbonToolbar.test.tsx`.
+not" in `src/core/__tests__/hotkeys.test.ts`; "advertises a chord-bearing command with aria-keyshortcuts, in key values rather than display spelling", "omits aria-keyshortcuts from a disabled command, because the chord will not fire",
+"advertises a chord on an overflow menu item too" and "never advertises a chord on a host command" in `src/components/command/__tests__/ContextBar.test.tsx`.
 
 ### Decision 7 — narrowing the no-listener scan beat deleting it, and beat pretending
 
@@ -2795,6 +2797,536 @@ omission and cannot document a key that does not exist.
 - **Neutral.** `PANE_IDS` outlived the field it was created for and is now
   justified by a different consumer. Its docblock says so, rather than leaving a
   reader to assume it is dead.
+
+---
+
+## Amendment L — The structured payload channel: Amendment K Decision 2's three objections, answered rather than reversed
+
+**Date:** 2026-08-02 · **Status:** Accepted · **Amends:** nothing. It **extends**
+Amendment K Decision 2, and is written to satisfy Amendment G.
+
+### Context
+
+`docs/plans/native-host-pivot.md` §4.2 requires pane 3 to carry structured data —
+a chart spec, a table, a form, an agent block — from the extension that owns it to
+the surfaces that render it. `ContextKeyValue` cannot carry any of those: it is
+`string | number | boolean | null`, and its docblock says why in three clauses.
+
+**The obvious move is to widen `ContextKeyValue`, and it is the wrong one.** An
+amendment that silently contradicts an older one is the failure Amendment G was
+written to stop, and Decision 2 states plainly that the primitives-only rule "is
+not a limitation waiting to be lifted". So this amendment does not lift it. It
+adds a **different channel**, and answers each of Decision 2's objections in
+turn — because every one of those objections is a statement about *a live
+caller's object reaching a render path*, and none of them is a statement about
+structure.
+
+### The three objections, quoted
+
+`src/core/types.ts`, on `ContextKeyValue`:
+
+> An object would carry getters that re-enter host code during a render-phase
+> predicate, a prototype another extension could reach through, and an identity
+> no `Object.is` bail-out could compare; a primitive carries none of those and
+> costs one `typeof` to validate.
+
+Amendment K Decision 2, on the same rule:
+
+> **The value type is `string | number | boolean | null` and nothing else.** This
+> is what distinguishes a context key from the opaque `extensionState` blob
+> rejected in Decision 1, and it is not a limitation waiting to be lifted. A
+> primitive costs one `typeof` to validate, invokes nothing when it is read,
+> carries no prototype another extension can reach through, and compares with
+> `Object.is` — which is what makes the unchanged-write bail-out possible at all.
+
+### Decision 1 — answering "getters that re-enter host code during a render-phase predicate"
+
+**The payload never enters `RibbonContext`.** It lives in
+`createPayloadChannelStore()`, a second store with its own lifetime, created
+beside `createShellStateStore()` in `ShellHostProvider` and reachable only through
+the three new `IShellAPI` members.
+
+That is a fact about the object graph rather than a convention, in three layers.
+(The word *structural* is deliberately not used for it: Amendment F reserves that
+for the `Map`-backed stores, and layer 2 below is a compile-time property rather
+than a property of a data structure.)
+
+1. `ShellStateStore.getContext()` returns one closure variable, `context`, and the
+   payload store is not it.
+2. `CONTEXT_FIELDS` in `ShellAPI.ts` is `Record<keyof RibbonContext, …>` — the
+   compiler rejects both a missing field and an invented one — so a payload could
+   not become a context field without somebody deciding, in that table, what a
+   legal value for it is and what host-owned form it is stored in.
+3. `isVisible(ctx)` is handed a `RibbonContext` and nothing else. There is no
+   argument through which to reach a payload, and no member on the context that
+   returns one.
+
+The publisher's getters therefore run **exactly once**, inside `copyValue`, at an
+imperative door that is never on a render path. *Tests:*
+`src/core/__tests__/payloadChannel.test.tsx` — "a published payload never enters
+the context, and publishing does not move the snapshot", which asserts that the
+context snapshot keeps its identity across a publish and that its keys are exactly
+the five `RibbonContext` fields; "an isVisible predicate has no argument through
+which to reach a payload"; and "runs the publisher's getters exactly once, at the
+imperative door".
+
+### Decision 2 — answering "a prototype another extension could reach through"
+
+**The host takes a deep copy and retains nothing of the caller's object graph.**
+Every record is a fresh `Object.create(null)`, every array a fresh frozen array,
+and every leaf a primitive that has been type-checked. There is no prototype on
+what is stored, so there is no chain to walk back through, and a `__proto__` key
+arriving in a payload is an ordinary own property of a prototypeless record that
+pollutes nothing.
+
+This is the discipline `normalizeNavigationNode` already applies to a manifest,
+applied to an arbitrary graph: every read happens exactly once into a local, the
+local is what is both checked and stored, and every read is guarded so that a
+publisher's throwing trap becomes a `ShellUXError` naming the path rather than a
+raw `TypeError` escaping a `@throws {ShellUXError}` function.
+
+It is an **integrity control** in this repository's vocabulary — real and
+unconditional for anything arriving through this door — and it is deliberately not
+a claim about what a plug-in can reach by other means. ADR-0001 "No sandbox" and
+Amendment E are unchanged. *Tests:* same file — "takes a null-prototype deep copy,
+so a __proto__ key pollutes nothing", "retains nothing of the publisher: mutating
+the source afterwards changes nothing", "refuses every leaf that is not a
+PayloadLeaf, by type rather than by coercion", "turns a payload that refuses to be
+read into a rejection, not a raw TypeError" and "captures an array length once,
+and refuses a length that is not a count".
+
+### Decision 3 — answering "an identity no `Object.is` bail-out could compare", and the cost of that answer
+
+**Subscribers compare `StructuredPayload.revision`, a host-assigned strictly
+increasing number, and never the object.** The host builds one frozen copy per
+publish and hands that same object back until the channel is republished, which is
+what makes `readPayload` safe as a `useSyncExternalStore` snapshot.
+
+**The cost is stated rather than glossed, because Amendment G is the reason this
+document exists: republishing byte-identical content DOES bump the revision and
+DOES notify.** The host does not deep-compare payloads — a walk over 4096 nodes on
+every publish would cost more than the re-render it saves — so the field-by-field
+bail-out `applyPatch` performs has no analogue here, and a publisher that
+republishes in a loop wakes its subscribers in a loop. That is a real difference
+from a context key, and it is the honest price of the deep copy that answers
+Decision 2: two host-built copies of one payload are never `Object.is`, so
+identity was never going to be the comparison. *Test:* same file — "bumps the
+revision and notifies even when the republished content is identical".
+
+The revision is store-wide rather than per channel. Monotonic per channel follows
+from monotonic overall, and the stronger property is worth having: a pane-3 block
+reading a chart channel and a table channel can tell which arrived last without
+the host inventing a clock. *Test:* "keeps the revision monotonic across channels,
+so two blocks are comparable".
+
+### Decision 4 — the bounds the primitive rule bought for free are now paid for explicitly
+
+A primitive is bounded by `typeof`. A graph is not. `PAYLOAD_LIMITS` therefore
+bounds depth (6), nodes (4096), host-accounted bytes (262144) and channels per
+extension scope (32).
+
+It is **its own record rather than four more keys on `REGISTRY_LIMITS`**, and the
+split is a real one: `REGISTRY_LIMITS` bounds what arrives through the registry's
+door, once, at registration, on a manifest; these bound what arrives through an
+imperative door, repeatedly, at runtime, from an already-registered extension.
+There is no value in one being raisable by an edit aimed at the other.
+
+**A cycle is REJECTED, never truncated.** Truncating always succeeds, which is
+exactly what makes it wrong: the subscriber receives a payload the publisher did
+not write, cannot distinguish it from one that was, and the publisher is never
+told. A repeated *sibling* is not a cycle — `{ a: shared, b: shared }` is a
+directed acyclic graph with a finite copy — so cycle detection is over the current
+path and not over everything the walk has seen. *Test:* "rejects a cycle rather
+than truncating it, and copies a repeated sibling".
+
+Size is accounted by the host during the copy walk rather than by serialising in
+order to measure. `JSON.stringify` would run a `toJSON` the publisher wrote, throw
+outright on a cycle before the cycle check could report it properly, and allocate
+a second copy of the very thing being bounded. What a bound needs is to be
+deterministic, monotonic in the payload and impossible for a publisher to game;
+the accounting in `SIZE_OF` is all three, and it is not claimed to be a JSON
+encoding.
+
+### Decision 5 — no new `ShellUXErrorCode`
+
+The existing ten cover every rejection this door decides on: `INVALID_ID` for a
+channel name, `INVALID_FIELD` for a shape, an unknown kind, a non-`PayloadLeaf`
+leaf, a cycle and a refused read, `PAYLOAD_TOO_LARGE` for every bound, and
+`REVOKED` from the facade. `SHELL_UX_ERROR_CODE_MEMBERS` in `types.ts` is
+compiler-pinned, so widening the union is a change every reader of it would have
+to be told about — for no gain, since no caller could branch on a new code more
+usefully than on those three plus the `field` path the rejection already carries.
+
+### Decision 6 — the disposer is total, and liveness is checked when the subscription is taken
+
+`subscribePayload` throws `REVOKED` like every other member. **The function it
+returns throws nothing, ever, including after revocation.** That asymmetry is
+deliberate: a pane-3 view unmounts *after* its extension is unregistered in the
+ordinary teardown order, and React calls an effect cleanup with nowhere to raise
+to — a throwing disposer would take the tree down during unmount, which is a worse
+failure than the one it would be reporting. Liveness is checked when the
+subscription is *taken*, which is a call the extension makes and can be reported
+to. *Test:* "returns a disposer that is total, so unsubscribing after revocation
+throws nothing".
+
+### Decision 7 — both verification remotes are migrated onto it in the same change
+
+`MailPlugin.tsx` and `DatabasePlugin.tsx` kept **module-scope stores** because the
+host carried only an id between their panes, and a module-scope store is correct
+in exactly one process. Under the process split `docs/plans/native-host-pivot.md`
+§3.2 describes, the module loads twice: the static seeds still resolve, so pane 3
+*looks* right on first paint, and every `commit` in pane 2 becomes invisible to
+pane 3 with nothing to say why. A verification remote that would fail silently
+under the architecture it exists to verify is not verifying it.
+
+Migrating them is therefore part of this amendment rather than follow-up work, and
+it is what makes the channel a *used* mechanism rather than a declared one.
+
+### Consequences
+
+- **Positive.** Pane 3 can carry structured data, and the rationale that refused
+  it in `RibbonContext` is intact and is now cited by the thing that answers it.
+- **Positive.** The two verification remotes stop depending on single-process
+  module scope, so a future process split is a transport change rather than a
+  rewrite of both mocks.
+- **Negative — accepted.** `IShellAPI` grows from nine members to twelve, and
+  every addition is a capability handed to untrusted code. The mitigation is
+  unchanged from Amendment K: each was argued for above, and `dataflow.test.tsx`
+  asserts the LITERAL member list, so a thirteenth cannot arrive quietly.
+- **Negative — accepted.** An identical republish notifies. Decision 3 says so, and
+  so do the interface docblock and the module banner.
+- **Negative — accepted.** The host now holds a second copy of every published
+  payload, bounded by `MAX_BYTES` × `MAX_CHANNELS` per extension scope. That is
+  the price of retaining nothing of the publisher's graph, and the alternative —
+  holding the publisher's object — is what Decision 2 refuses.
+- **Neutral.** `PayloadLeaf` is an alias of `ContextKeyValue` rather than a second
+  spelling of the union, so widening one widens both and forces the review.
+
+---
+
+## Amendment M — `normalizeTheme` and `ThemeBridge`: a theme is untrusted input reaching a stylesheet, and its contrast is not measured
+
+**Date:** 2026-08-02 · **Status:** Accepted · **Amends:** nothing. It **extends**
+Amendment K Decision 5 (the host constants are frozen; `SEMANTIC_TOKEN_NAMES` is
+the newest of them) and is written to satisfy Amendment G.
+
+**Separate from Amendment L on purpose.** L answers a rationale in `types.ts`
+about what may travel between panes; this answers a different question — what may
+reach a stylesheet — and folding the two together would make one amendment that
+neither of the two rationales could be checked against.
+
+### Context
+
+`docs/plans/native-host-pivot.md` §3.6 puts a generative token pipeline behind the
+shell's colours and says two things that turn into code here. First: a canvas
+cannot read a CSS custom property, so anything painting on one has to be handed
+resolved values, and resolving them per chart is one forced style recalculation
+per chart per frame. Second: a third-party theme is untrusted input arriving at a
+stylesheet, so it needs a trust boundary in the shape `normalizeNavigationNode`
+already has.
+
+### Decision 1 — the keys are the host's, and a candidate's key list is never obtained
+
+`normalizeTheme` walks `SEMANTIC_TOKEN_NAME_LIST` — the host's own list, from the
+generated contract — and asks the candidate for each name in turn. It never calls
+`Object.keys` on the candidate and never iterates it.
+
+The consequence is stronger than a filter, and it is why it is written this way:
+a theme naming `--gray-7`, `--accent-9` or `__proto__` is not *rejected*, it is
+**never read**. There is no code path on which a key outside the semantic tier is
+looked at, so the primitive tier is out of a third-party theme's reach.
+
+**That is an INTEGRITY CONTROL, and this paragraph deliberately does not call it
+*structural*.** An earlier draft did, and cited Amendment F's `Map`-store
+comparison while doing so — which is the exact drift Amendment F closed and
+`RegistryContext.tsx` still carries a correction about. *Structural* is reserved
+for a property of the data structure, holding whatever the code does; not
+iterating the candidate's keys is bought by a loop that runs. Real and
+unconditional for anything arriving through this door, and bought by code. The one
+half of this function that IS structural is the container: the record is built on
+`Object.create(null)` and frozen, so there is no prototype to pollute whatever the
+loop does. *Test:*
+`src/core/theme/__tests__/normalizeTheme.test.ts` — "reads only the host's own
+token names, so a primitive-tier key is never looked at", which installs getters
+on four out-of-contract names and asserts that none of them runs.
+
+### Decision 2 — the values match an allowlist, they do not survive a denylist
+
+A denylist over CSS is a losing game. `;`, `}`, `/*`, `url(`, `expression(`, a
+`\3b` escape, a newline, a full-width `；` — the list is open-ended and the
+attacker picks last.
+
+`THEME_VALUE_PATTERN` is closed instead. A value is a hex colour of 3, 4, 6 or 8
+digits, or an `oklch()` with numeric components and an optional alpha, or a
+non-negative `px`/`rem` length — and nothing else is a value. There is no
+alternative in the grammar containing a semicolon, a brace, a quote, a backslash,
+a newline or a parenthesis outside `oklch(`, so "a value cannot carry a CSS
+statement" is a property of the grammar rather than a claim about a filter.
+*Test:* same file — "refuses a value carrying a CSS statement terminator, in every
+spelling tried", which walks seventeen spellings.
+
+**Absent fills, supplied-and-illegal rejects.** A name the theme omits takes the
+base theme's value; a name it supplies with a value outside the grammar is
+`INVALID_FIELD`. That is the asymmetry `normalizeNavigationNode` draws between an
+absent optional field and a present bad one, and it is chosen for the reason
+`assertValidSelectedItemId` refuses to coerce: silently substituting for a value
+the author actually wrote produces a theme that ignores half of what was asked for
+with nothing to look at. *Test:* "refuses a supplied value that is not a string at
+all, rather than filling from the base".
+
+The rejected value is deliberately **not** interpolated into the error message. It
+has just failed the grammar, which is exactly the case in which putting it
+somewhere a console or a log will render it is the wrong move.
+
+### Decision 3 — one `getComputedStyle` per theme change, never one per reader
+
+`ThemeBridge` resolves the whole semantic set with exactly one
+`getComputedStyle(root)` call, freezes the record, and hands that same object to
+every reader until the theme changes. `IShellAPI.getTheme()` and
+`IShellAPI.onThemeChange()` are the extension-facing half, deep-frozen and
+revocable like every other member.
+
+The stable identity is load-bearing rather than tidy: a chart theme is memoised on
+the record, and a `getTheme` that resolved on demand would both reintroduce the
+per-reader recalculation and hand a different identity to every caller. *Test:*
+`src/core/theme/__tests__/themeBridge.test.ts` — "resolves the whole semantic set
+with exactly one getComputedStyle call", which asserts the CALL COUNT across
+twenty reads and one refresh.
+
+**The disposer `onThemeChange` returns is total**, for the reason Amendment L
+Decision 6 gives about `subscribePayload`: a view unmounts after its extension is
+unregistered, and React calls an effect cleanup with nowhere to raise to. Liveness
+is checked when the subscription is taken. *Test:*
+`src/core/__tests__/themeApi.test.ts` — "returns a total theme disposer, so
+unsubscribing after revocation throws nothing".
+
+### Decision 4 — two postures towards an illegal value, and the difference is the caller
+
+`normalizeTheme` **rejects**; `ThemeBridge`'s document resolve **falls back**.
+
+That is not an inconsistency. `normalizeTheme`'s caller is an extension at an
+imperative door, where a rejection can be reported to the party that made the
+mistake. The document resolve's caller is a theme change, where there is nobody to
+report to and a throw would take the shell down over a stylesheet the host itself
+shipped — the same asymmetry `ActivationContext`'s sweep effect draws when it
+guards the one call site a host cannot guard for itself.
+
+The fallback is not a hole. Everything a document can define arrived either from
+the generated stylesheet, which `npm run tokens:check` measures, or through
+`normalizeTheme`, which applies the same grammar with teeth. A value that fails at
+the document is evidence one of those two doors was bypassed, and the safe answer
+to that is to report nothing for that name rather than to take the shell down.
+*Test:* `src/core/theme/__tests__/themeBridge.test.ts` — "falls back to the seed
+rather than throwing, for a document property outside the grammar", which asserts
+both halves against the same value.
+
+### Decision 5 — a third-party theme's CONTRAST IS NOT MEASURED, and this amendment says so instead of implying otherwise
+
+§3.6 says a theme is "**rejected if it fails the contrast manifest**". **That is
+not implemented, and nothing in this change claims it is.**
+
+What exists is `design/check-contrast.mjs`: it measures
+`design/contrast-manifest.json` against the generated stylesheet, in Node, at
+build time, over the three built-in themes. It is `npm run tokens:check`, it is a
+stage of `npm run verify`, and it never sees a third-party theme. Wiring it into
+`normalizeTheme` means the contrast maths crossing into the browser bundle, and
+`design/` is not on the TypeScript project's include path — so it is a real piece
+of work rather than an import.
+
+The honest statement, which is the one written in `normalizeTheme.ts`'s banner and
+in `IShellAPI.getTheme`'s docblock: **a third-party theme is held to the key
+allowlist and the value grammar, and its contrast is measured by nothing.** A
+theme whose surface and text both resolve to near-black is accepted and is
+unreadable.
+
+That gap is recorded here as **accepted and outstanding**, and it is pinned in the
+direction that is TRUE rather than the direction that would be reassuring: *test*
+— "accepts a legal theme whose contrast is terrible, because contrast is not
+measured here", in `src/core/theme/__tests__/normalizeTheme.test.ts`. A test that
+asserts the gap is what stops the gap being closed by prose.
+
+### Decision 6 — `EMPTY_THEME` has complete keys and no values, because the host does not invent a colour
+
+`getTheme()` is declared to return a value for every name in the contract. A
+document that defines none of them — jsdom, or a pane whose stylesheet has not
+been injected yet — would otherwise make that declaration a runtime lie.
+`EMPTY_THEME` answers only that: the KEYS are complete and every VALUE is the
+empty string.
+
+**The first draft filled it with a placeholder colour, and the repository's own
+rule caught it.** `src/__tests__/noRawColor.test.ts` reports a CSS colour literal
+in any module outside its one-entry allowlist, and the module that has that entry
+— `RootBoundary` — earns it twice over: it is the last thing between a throw and a
+blank window, and its contrast is measured from those very literals. A placeholder
+here would earn neither. It would be an untokenised colour in `src/`, invisible to
+`design/contrast-manifest.json` and to `npm run tokens:check` — the second,
+unreviewed design system that rule exists to stop, arriving in the module whose
+whole subject is the token contract.
+
+So the empty string is the honest answer and it means exactly one thing: the
+document defines nothing for that name. It is deliberately **not** legal by the
+value grammar, so it can never be something a third-party theme supplied — only
+something the host reports when it has nothing to report, and a reader that paints
+has to decide what to do about it rather than be handed a colour nobody chose.
+
+"Missing keys fill from the built-in theme" is delivered through
+`normalizeTheme(candidate, base)`'s **base parameter**, which `ThemeBridge` passes
+the currently resolved theme — the built-in one, live from the stylesheet that
+`npm run tokens:check` measures. This constant is only what a document defining
+nothing at all yields. *Test:* same file — "covers every name in the contract and
+invents a value for none of them".
+
+### Consequences
+
+- **Positive.** A canvas can be handed resolved token values without one forced
+  style recalculation per chart, which is the prerequisite for §3.3's tier 1 and
+  tier 2.
+- **Positive.** A third-party theme cannot reach the primitive tier and cannot
+  carry a CSS statement into a stylesheet. Both are integrity controls bought by
+  the code in `normalizeTheme`; neither is claimed as *structural*, which
+  Amendment F reserves for the `Map`-backed stores. See Decision 1.
+- **Negative — accepted and OUTSTANDING.** A third-party theme's contrast is not
+  measured by anything. Decision 5.
+- **Negative — accepted.** `IShellAPI` grows from twelve members to fourteen.
+  `dataflow.test.tsx` asserts the literal member list, so a fifteenth cannot
+  arrive quietly.
+- **Neutral.** `ThemeBridge.refresh` and `ThemeBridge.applyTheme` have no
+  production caller yet: the shell has no theme picker, §3.6 describes one, and
+  the mechanism landed before the control. That is stated in the members' own
+  docblocks rather than left for a reader to infer from a call-graph search.
+
+---
+
+## Amendment N — The ribbon is deleted, and one command registry stands where it stood
+
+**Date:** 2026-08-02 · **Status:** Accepted · **Amends:** Amendment H Decision 1,
+Amendment J, and the render-boundary paragraph of `types.ts`
+
+### Context
+
+`docs/plans/native-host-pivot.md` §3.4 deletes the ribbon and replaces it with one
+command registry projected onto four surfaces: a 32px context bar, a Cmd-K
+palette, a selection-triggered floating toolbar inside pane 3, and a docked
+omnibox composer. §11 item 1 refuses a ribbon in any costume — "not classic, not
+simplified, not our own take" — and item 5 refuses "multiple competing,
+non-unified command surfaces. One registry or inherit the mess."
+
+That is a product decision with two contract consequences and one security
+consequence, and this amendment records all three.
+
+### Decision 1 — `RibbonAction` is GENERALISED, not replaced
+
+`Command` is `RibbonAction` with four optional fields added — `when`, `category`,
+`surfaces`, `priority` — and nothing removed. `isVisible`, `onExecute`, the
+structured `Hotkey` and the 60-key `HOTKEY_KEYS` allowlist are unchanged, and
+`export type RibbonAction = Command` stays as a deprecated alias so that mocks,
+fixtures and tests migrate a file at a time rather than in one diff.
+
+`LEAPExtensionBlueprint` gains `commands` beside `ribbonActions`, and **a manifest
+declaring both is rejected with `INVALID_FIELD`** whether or not the two agree.
+That is the same argument `src/core/command.ts` makes one level down: two sources
+for one collection drift, the drift is silent, and "they must agree" is a rule
+nothing enforces. The stored record carries both names referencing **one frozen
+array**, so no reader has to know which name the manifest used.
+
+`category` is validated against a closed set **with no fallback**, and the
+asymmetry with `icon` is the decision. An unknown icon key resolves to a host
+glyph because a wrong picture still leaves the command labelled and reachable. An
+unknown category has no fallback that is not a lie about where the command lives:
+every candidate — an invented "Other", the first bucket, no bucket — is a
+statement the author never made and the user cannot correct.
+
+### Decision 2 — Amendment H Decision 1's word *same*, applied to four routes
+
+Amendment H licensed a keyboard chord as "a second way to fire this action's
+`onExecute`, gated by the same `isVisible` and the same `isDisabled`". Amendment J
+extracted those guards into one module so the button and the chord could not
+drift. **There are now six routes, not two** — four surfaces, the chord
+dispatcher, and the shared row all of them render — and the answer is the same
+answer, once more: `isVisible` and `execute` in `src/core/command.ts` (renamed
+from `ribbonAction.ts`, unchanged in behaviour) are the only route to a plug-in
+predicate or handler, and `CommandRegistry` is the only caller of them.
+
+`when` is **ANDed** with `isVisible`, never ORed, and that direction is
+load-bearing: ANDing means adding a `when` to an existing command can only narrow
+where it appears, so the migration cannot reveal a command a predicate was hiding.
+
+### Decision 3 — Palette containment is structural, not a filter
+
+The palette lists the FOREGROUND extension's commands, the host's own commands,
+and a host-owned "switch extension" verb. Nothing else.
+
+Listing a background extension's commands would be a **wider route to a plug-in
+handler than the ribbon ever was**: its `onExecute` would receive a
+`RibbonContext` whose `contextKeys` belong to a different extension and whose
+`selectedItemIds` are rows in a list it does not own, at a moment the user
+believes they are operating on what is on screen. `DUPLICATE_HOTKEY` is scoped per
+blueprint for exactly this reason — Decision 6 of Amendment H — and a palette that
+reached across extensions would make that scoping arbitrary rather than principled.
+
+**It is enforced by the absence of a parameter, not by a filter.**
+`createCommandRegistry` takes ONE extension; the module imports no registry and
+performs no lookup. A filter is removed in one line; a missing parameter is not.
+Recents are the one place a stale cross-extension id could survive, so they are
+resolved against the CURRENT offered set on every read, and their keys are
+namespaced so a key from elsewhere cannot resolve at all.
+
+### Decision 4 — Host chrome is not plug-in-declarable
+
+Cmd-K is in `HOST_CHORDS` in `src/core/hotkeyDispatch.ts`, consulted **before**
+`activation.getActive()` is called. An extension declaring Ctrl+K is not rejected —
+rejecting it would make load order semantically load-bearing, which Decision 6 of
+Amendment H refuses — it simply never receives the keystroke while the host wants
+it. `HostCommand` carries no `hotkey` field, so there is no single table in which a
+host chord and a plug-in chord could be compared and one preferred: two tables, one
+order, no priority column.
+
+The palette's glyph is a module constant and is deliberately absent from
+`SHELL_ICONS`, for the reason `OVERFLOW_ICON` always was: that map is the
+vocabulary offered to extensions.
+
+### Decision 5 — The editable-target suppression applies to one table, not both
+
+`isSuppressed` used to fold five checks into one function. Four of them —
+`defaultPrevented`, `repeat`, `isComposing`, `keyCode === 229` — are about the
+EVENT and apply to both tables. The fifth, an editable target, exists because a
+plug-in chord would fire on top of what the user is typing; a host chord carrying
+Ctrl or Meta produces no character, and the omnibox composer is the surface a user
+is most likely to want the palette from. So the editable check is consulted for the
+extension walk only.
+
+**This is not the second suppression Amendment I Decision 3 refuses.** That refusal
+is about one rule evaluated twice, in two places, able to disagree with itself.
+This is one rule, written once, applied to one of two tables, with the other
+table's treatment stated rather than left to inference.
+
+### Consequences
+
+- **Positive.** One filter, four projections. A command hidden on one surface is
+  hidden on every surface, and the property is a structure rather than four
+  correct `filter` calls.
+- **Positive.** The palette is browsable on an empty query, which is what makes the
+  deletion defensible: the ribbon's real job was discovery, and a search-only
+  replacement would have regressed on the one thing it was good at.
+- **Positive.** One render boundary, not four. The four surfaces contain no render
+  of a plug-in string at all; `commandListItem.tsx` is the only place `label` and
+  `icon` meet the DOM, and the module-source scan is asserted five times over.
+- **Negative — accepted.** The palette's rows are Tab-navigable buttons, not a
+  `listbox` with arrow keys. Implementing the model means a key handler in `src/`
+  and an entry in `KEY_EVENT_ALLOWLIST`, and Amendment G's lesson from the old
+  `role="menu"` is that a role whose interaction model is not implemented is worse
+  than no role. Recorded as a known deviation, not as an absence.
+- **Negative — accepted.** Each of the palette's four projections runs the filter,
+  so a throwing predicate is reported once per projection rather than once per
+  render. Memoising would put a cache between a predicate and the context it is
+  contracted to be a pure function of.
+- **Negative — accepted.** `when` is optional in this phase. Requiring it now would
+  empty the context bar for every extension written against the old contract,
+  including both verification remotes. The succession is written into
+  `Command.when` rather than left to be rediscovered.
+- **Neutral.** `PersistedShellState` gains a fourth slot for recents, read
+  tolerantly so a record written before it existed still restores.
+  `SCHEMA_VERSION` does not move.
 
 ---
 

@@ -9,6 +9,7 @@ import type { ExtensionRegistry } from '../RegistryContext';
 import { useShellStore } from '../ShellAPI';
 import type { ShellStateStore } from '../ShellAPI';
 import { useHotkeyDispatch } from '../hotkeyDispatch';
+import type { HostChordId } from '../hotkeyDispatch';
 import type { RibbonContext } from '../types';
 import { makeAction, makeBlueprint } from './fixtures';
 
@@ -60,14 +61,20 @@ interface Harness {
   readonly registry: ExtensionRegistry;
   readonly activation: ActivationController;
   readonly store: ShellStateStore;
+  /** Every host chord the dispatcher routed, in order. */
+  readonly hostChords: readonly HostChordId[];
 }
 
 /** The host, with dispatch switched on exactly as `ShellLayout` switches it on. */
 function mountHost(): { result: { current: Harness }; unmount: () => void } {
+  const hostChords: HostChordId[] = [];
   const { result, unmount } = renderHook(
     (): Harness => {
-      useHotkeyDispatch();
+      useHotkeyDispatch((id) => {
+        hostChords.push(id);
+      });
       return {
+        hostChords,
         registry: useRegistry(),
         activation: useActivation(),
         store: useShellStore(),
@@ -238,6 +245,140 @@ describe('useHotkeyDispatch — what fires', () => {
   });
 });
 
+/**
+ * ============================================================================
+ * HOST CHRONE BEFORE PLUG-IN CHORDS. NOT A PRIORITY COLUMN — A DIFFERENT TABLE.
+ * ============================================================================
+ * `HOST_CHORDS` is consulted before `activation.getActive()` is even called, so
+ * an extension declaring Ctrl+K is not REJECTED — it simply never receives the
+ * keystroke while the host wants it. That is what makes "host chrome is not
+ * plug-in-declarable" a structure rather than a rule written down somewhere, and
+ * it is the same reason `HostCommand` carries no `hotkey` field.
+ * ============================================================================
+ */
+describe('useHotkeyDispatch — the host own chords', () => {
+  it('opens the command palette on the host own chord', () => {
+    const host = mountHost();
+    const event = press({ key: 'k', ctrlKey: true });
+    expect(host.result.current.hostChords).toEqual(['open-command-palette']);
+    expect(event.defaultPrevented).toBe(true);
+    host.unmount();
+  });
+
+  it('accepts Meta as well as Ctrl, because Cmd-K and Ctrl-K are one command', () => {
+    const host = mountHost();
+    press({ key: 'k', metaKey: true });
+    // Upper case too: the comparison lowercases `event.key`, which a Shift-less
+    // Caps Lock still produces.
+    press({ key: 'K', ctrlKey: true });
+    expect(host.result.current.hostChords).toEqual([
+      'open-command-palette',
+      'open-command-palette',
+    ]);
+    host.unmount();
+  });
+
+  it('fires on no bare key and on no chord carrying alt or shift', () => {
+    const host = mountHost();
+    press({ key: 'k' });
+    press({ key: 'k', ctrlKey: true, altKey: true });
+    press({ key: 'k', ctrlKey: true, shiftKey: true });
+    press({ key: 'j', ctrlKey: true });
+    expect(host.result.current.hostChords).toEqual([]);
+    host.unmount();
+  });
+
+  it('reaches the host chord before the extension chord table, so an extension declaring Ctrl+K never sees it', () => {
+    const onExecute = vi.fn();
+    const host = mountHost();
+    activate(
+      host.result,
+      makeBlueprint({
+        ribbonActions: [
+          makeAction({ id: 'act-k', hotkey: { key: 'k', ctrl: true }, onExecute }),
+        ],
+      }),
+    );
+
+    const event = press({ key: 'k', ctrlKey: true });
+
+    // The declaration was ACCEPTED — nothing rejects it, and rejecting it would
+    // make load order semantically load-bearing. It is simply unreachable while
+    // the host claims the chord.
+    expect(onExecute).not.toHaveBeenCalled();
+    expect(host.result.current.hostChords).toEqual(['open-command-palette']);
+    expect(event.defaultPrevented).toBe(true);
+    host.unmount();
+  });
+
+  it('fires the host chord while the user is typing, which a plug-in chord may not do', () => {
+    const onExecute = vi.fn();
+    const host = mountHost();
+    activate(host.result, blueprintWith({ onExecute }));
+
+    const input = document.createElement('input');
+    document.body.append(input);
+
+    // A PLUG-IN chord is suppressed on an editable target, because it would fire
+    // on top of what the user is typing.
+    press(chordPress(), input);
+    expect(onExecute).not.toHaveBeenCalled();
+
+    // A HOST chord is not. It carries Ctrl or Meta, so it produces no character,
+    // and the omnibox composer is the surface a user is most likely to want the
+    // palette from. One rule, applied to one of the two tables, stated rather than
+    // left to inference.
+    press({ key: 'k', ctrlKey: true }, input);
+    expect(host.result.current.hostChords).toEqual(['open-command-palette']);
+    host.unmount();
+  });
+
+  it('is suppressed by every event-level rule a plug-in chord is suppressed by', () => {
+    const host = mountHost();
+    // Auto-repeat, an IME composition in flight, and a key something below already
+    // handled. None of these is about WHERE the keystroke landed, so all three
+    // apply to both tables.
+    press({ key: 'k', ctrlKey: true, repeat: true });
+    press({ key: 'k', ctrlKey: true, isComposing: true });
+    press({ key: 'k', ctrlKey: true, keyCode: 229 });
+    const prevented = new KeyboardEvent('keydown', {
+      bubbles: true,
+      cancelable: true,
+      key: 'k',
+      ctrlKey: true,
+    });
+    prevented.preventDefault();
+    act(() => {
+      window.dispatchEvent(prevented);
+    });
+    expect(host.result.current.hostChords).toEqual([]);
+    host.unmount();
+  });
+
+  it('routes to whichever callback the caller holds now, not the one it mounted with', () => {
+    // The callback is read through a ref rather than listed as an effect
+    // dependency, so an inline arrow — which every caller will pass — does not
+    // detach and reattach the shell one listener on every render. What has to
+    // survive that is that the CURRENT callback is the one called.
+    const first: string[] = [];
+    const second: string[] = [];
+    const { rerender, unmount } = renderHook(
+      ({ sink }: { readonly sink: string[] }): void => {
+        useHotkeyDispatch((id) => {
+          sink.push(id);
+        });
+      },
+      { initialProps: { sink: first }, wrapper: Providers },
+    );
+    press({ key: 'k', ctrlKey: true });
+    rerender({ sink: second });
+    press({ key: 'k', ctrlKey: true });
+    expect(first).toEqual(['open-command-palette']);
+    expect(second).toEqual(['open-command-palette']);
+    unmount();
+  });
+});
+
 describe('useHotkeyDispatch — what does not fire', () => {
   it('fires nothing when no extension is in the foreground', () => {
     const onExecute = vi.fn();
@@ -353,7 +494,14 @@ describe('useHotkeyDispatch — what does not fire', () => {
     );
 
     // Right key, wrong modifiers — `matchesHotkey` is exact in both directions.
-    const event = press({ key: 'k', ctrlKey: true });
+    //
+    // `altKey` is set as well as `ctrlKey`, and that is not padding: bare Ctrl+K
+    // is the HOST's own chord and would be claimed before the extension table is
+    // consulted at all, so this case would stop measuring what it names. Alt is
+    // deliberately outside `HOST_CHORDS`, which is asserted directly in "reaches
+    // the host chord before the extension chord table, so an extension declaring
+    // Ctrl+K never sees it".
+    const event = press({ key: 'k', ctrlKey: true, altKey: true });
 
     expect(withChord).not.toHaveBeenCalled();
     expect(withoutChord).not.toHaveBeenCalled();
@@ -574,7 +722,7 @@ describe('useHotkeyDispatch — one listener, and it is removed', () => {
 
     const { unmount } = renderHook(
       (): void => {
-        useHotkeyDispatch();
+        useHotkeyDispatch(() => undefined);
       },
       {
         wrapper: ({ children }: { readonly children: ReactNode }) => (

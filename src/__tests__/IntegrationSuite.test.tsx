@@ -17,7 +17,7 @@ import type { HydrationEngine, ShellStorage } from '../core/services/HydrationEn
 import type {
   ExtensionViewProps,
   IShellAPI,
-  LEAPExtensionBlueprint,
+  LEAPExtensionBlueprintInput,
   RibbonContext,
   ShellUXError,
 } from '../core/types';
@@ -141,8 +141,8 @@ vi.setConfig({ testTimeout: 40_000, hookTimeout: 40_000 });
 /* -------------------------------------------------------------------------- */
 
 interface Remotes {
-  readonly mail: LEAPExtensionBlueprint;
-  readonly database: LEAPExtensionBlueprint;
+  readonly mail: LEAPExtensionBlueprintInput;
+  readonly database: LEAPExtensionBlueprintInput;
 }
 
 /**
@@ -426,9 +426,9 @@ function captureConsole(): ConsoleCapture {
  * not publish, and uses only exports a plug-in can import.
  */
 function withProbe(
-  blueprint: LEAPExtensionBlueprint,
+  blueprint: LEAPExtensionBlueprintInput,
   Probe: ComponentType,
-): LEAPExtensionBlueprint {
+): LEAPExtensionBlueprintInput {
   const RealPane2 = blueprint.views.pane2;
   function ProbedPane2(props: ExtensionViewProps): ReactElement {
     return (
@@ -496,7 +496,7 @@ function BenchDetail({ context }: ExtensionViewProps): ReactElement {
   return <p data-testid="bench-detail">{context.selectedItemId ?? 'nothing selected'}</p>;
 }
 
-const benchPlugin: LEAPExtensionBlueprint = Object.freeze({
+const benchPlugin: LEAPExtensionBlueprintInput = Object.freeze({
   id: 'bench',
   name: 'Bench',
   version: '1.0.0',
@@ -541,7 +541,7 @@ function QuietPane(_props: ExtensionViewProps): null {
   return null;
 }
 
-function faultBlueprint(id: string, name: string, pane2: ComponentType<ExtensionViewProps>): LEAPExtensionBlueprint {
+function faultBlueprint(id: string, name: string, pane2: ComponentType<ExtensionViewProps>): LEAPExtensionBlueprintInput {
   return Object.freeze({
     id,
     name,
@@ -554,7 +554,7 @@ function faultBlueprint(id: string, name: string, pane2: ComponentType<Extension
         icon: 'save',
         isVisible: (): boolean => true,
         onExecute: (): void => {
-          throw new Error('a plug-in ribbon action threw');
+          throw new Error('a plug-in command threw');
         },
       },
     ],
@@ -578,7 +578,7 @@ const rejectionFaultPlugin = faultBlueprint(
  * because both shipped remotes were written to be *different* from one another,
  * and neither reuses the other's ids.
  */
-const rivalPlugin: LEAPExtensionBlueprint = Object.freeze({
+const rivalPlugin: LEAPExtensionBlueprintInput = Object.freeze({
   id: 'rival-mail',
   name: 'Rival Mail',
   version: '1.0.0',
@@ -681,7 +681,7 @@ describe('the two verification remotes, through the public registry contract', (
     expect(screen.queryByRole('button', { name: 'Impostor Database' })).toBeNull();
   });
 
-  it('lets two extensions declare the same ribbon action id, because action ids are per-extension', async () => {
+  it('lets two extensions declare the same command id, because command ids are per-extension', async () => {
     const remotes = await loadRemotes();
     injected.engine = createHydrationEngine({ storage: null });
     render(
@@ -766,25 +766,40 @@ describe('extension switching, with two operational modules', () => {
     expect(host.context?.selectedItemId).toBe('rec-fasteners-003');
   });
 
-  it('clears the selected item on a foreground handover, and the incoming ribbon shows it', async () => {
+  it('clears the selected item on a foreground handover, and the incoming context bar shows it', async () => {
     const remotes = await loadRemotes();
     injected.engine = createHydrationEngine({ storage: null });
     render(<Harness blueprints={[remotes.mail, remotes.database]} engine={injected.engine} />);
 
     click('Mail');
     fireEvent.click(document.querySelector('[data-message-id="msg-1001"]') as Element);
-    // Mail's selection-gated actions are visible, which is the user-visible proof
-    // that `selectedItemId` holds one of Mail's ids.
-    expect(screen.getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+    // Mail's selection-gated commands are visible, which is the user-visible
+    // proof that `selectedItemId` holds one of Mail's ids.
+    //
+    // Scoped to the context bar BY NAME, because a selection-gated command now
+    // appears on two surfaces: the bar and the selection-triggered floating
+    // toolbar. An unscoped `getByRole` finds both and fails on the ambiguity,
+    // which would be the right failure for the wrong reason — so each surface is
+    // asserted where it lives, and the floating toolbar's presence is asserted
+    // rather than left as an accident.
+    const bar = (): HTMLElement => screen.getByRole('toolbar', { name: 'Shell commands' });
+    expect(within(bar()).getByRole('button', { name: 'Reply' })).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('toolbar', { name: 'Selection commands' })).getByRole('button', {
+        name: 'Reply',
+      }),
+    ).toBeInTheDocument();
 
     click('Inventory Database');
     // The database module's own predicates never see a mail id, because the host
     // cleared the field rather than because the module defended itself.
     expect(host.context?.selectedItemId).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
+    expect(within(bar()).queryByRole('button', { name: 'Reply' })).toBeNull();
+    // And the floating toolbar is gone entirely, because nothing is selected.
+    expect(screen.queryByRole('toolbar', { name: 'Selection commands' })).toBeNull();
   });
 
-  it('clears the active navigation node on a foreground handover, and the incoming ribbon shows it', async () => {
+  it('clears the active navigation node on a foreground handover, and the incoming context bar shows it', async () => {
     const remotes = await loadRemotes();
     injected.engine = createHydrationEngine({ storage: null });
     render(<Harness blueprints={[remotes.mail, remotes.database]} engine={injected.engine} />);
@@ -822,14 +837,14 @@ describe('extension switching, with two operational modules', () => {
     expect(screen.getByText('assemblies — 80 records')).toBeInTheDocument();
   });
 
-  it('changes the visible ribbon action set from in-module state, through a host field', async () => {
+  it('changes the visible command set from in-module state, through a host field', async () => {
     const remotes = await loadRemotes();
     injected.engine = createHydrationEngine({ storage: null });
     const { container } = render(
       <Harness blueprints={[remotes.mail]} engine={injected.engine} />,
     );
     const contextual = (): string =>
-      container.querySelector('[data-ribbon-side="extension"]')?.textContent ?? '';
+      container.querySelector('[data-command-side="extension"]')?.textContent ?? '';
 
     click('Mail');
     expect(contextual()).toContain('Compose');
@@ -970,23 +985,75 @@ describe('navigation badges, written at runtime by an operational module', () =>
     expect(screen.getByRole('button', { name: 'Sensors badge 41' })).toBeInTheDocument();
   });
 
+  /**
+   * WHY THE NUMBERS BELOW ARE EXACT, AND WHY THAT IS THE ONLY HONEST SHAPE.
+   *
+   * The badge is `lowStockCount`, and the only thing that moves it here is the
+   * module's own 200ms interval: no click, no keystroke, no host call happens
+   * between the two reads. So a shape-only assertion — "it is still some number"
+   * — is true whether the interval fires or not, and an earlier version of this
+   * case asserted exactly that and survived having the interval body emptied.
+   *
+   * `tickStock` is deterministic ON PURPOSE and says so in its own docblock: the
+   * records that move are chosen by a rotating cursor and their deltas come from
+   * the seeded `nextRandom`, never from `Math.random`. Combined with
+   * `loadRemotes()`'s `vi.resetModules()`, which hands this case a pristine
+   * catalogue, the whole trajectory is fixed and can be named rather than
+   * described.
+   *
+   * **The direction is NOT a law, and is not asserted as one.** The measured
+   * Components trajectory over the first forty ticks is 35 → 34 (tick 3) → 33
+   * (tick 13) → back to 34 (tick 17), where it stays: a random walk with a
+   * reflecting floor at zero stock, not a drift. What is guaranteed is that the
+   * timer moves the count and that it moves it to a specific place, so the
+   * assertions name the specific place and the direction of that one step.
+   */
   it('drives the badges from the module timer, without the user doing anything', async () => {
     const remotes = await loadRemotes();
     injected.engine = createHydrationEngine({ storage: null });
     render(<Harness blueprints={[remotes.database]} engine={injected.engine} />);
     click('Inventory Database');
 
-    const badgeOf = (label: string): string => {
+    /** The number inside a top-level badge, read off the rendered button. */
+    const badgeOf = (label: string): number => {
       const button = screen.getByRole('button', { name: new RegExp(`^${label} badge `) });
-      return button.textContent ?? '';
+      const digits = /badge (\d+)$/.exec(button.textContent ?? '');
+      if (digits === null) {
+        throw new Error(`${label} rendered no badge: ${String(button.textContent)}`);
+      }
+      return Number(digits[0].slice('badge '.length));
     };
+
+    // Read BEFORE the clock moves. `publishBadges` already ran once from the
+    // pane-2 mount effect, so these are the opening low-stock counts.
     const opening = badgeOf('Components');
-    // Twelve ticks of the 200ms stock ticker, all inside `act`.
+    const openingAssemblies = badgeOf('Assemblies');
+    const openingConsumables = badgeOf('Consumables');
+    expect(opening).toBe(35);
+    expect(openingAssemblies).toBe(19);
+    expect(openingConsumables).toBe(21);
+
+    // Twelve ticks of the 200ms stock ticker, all inside `act`. Nothing else is
+    // touched between here and the next read.
     advance(12 * 200);
-    // The module republished only what moved, so the assertion is that the badge
-    // is still a rendered, well-formed number after a timer nobody touched.
-    expect(badgeOf('Components')).toMatch(/^Componentsbadge \d+$/);
-    expect(opening).toMatch(/^Componentsbadge \d+$/);
+
+    // THE ASSERTION THIS CASE IS NAMED FOR: the count moved, and it moved to
+    // where the interval puts it. One component record climbed back above its
+    // reorder level, so the low-stock count fell by exactly one.
+    const afterTwelve = badgeOf('Components');
+    expect(afterTwelve).toBe(34);
+    expect(afterTwelve).toBeLessThan(opening);
+
+    // Twenty-eight more ticks, and a SECOND category moves — so the case does not
+    // rest on one record crossing one threshold.
+    advance(28 * 200);
+    const afterForty = badgeOf('Assemblies');
+    expect(afterForty).toBe(17);
+    expect(afterForty).toBeLessThan(openingAssemblies);
+
+    // And the third is untouched across all forty ticks, which is the other half
+    // of `publishBadges`: it republishes only what moved.
+    expect(badgeOf('Consumables')).toBe(openingConsumables);
   });
 });
 
@@ -1328,7 +1395,7 @@ describe('the layout seams, with plug-in content really mounted in the panes', (
     expect(panelSizes(container).reduce((total, size) => total + size, 0)).toBeCloseTo(100, 1);
   });
 
-  it('keeps the ribbon interactive beside a pane that has failed, and recovers the pane', async () => {
+  it('keeps the context bar interactive beside a pane that has failed, and recovers the pane', async () => {
     const remotes = await loadRemotes();
     captureConsole();
     injected.engine = createHydrationEngine({ storage: null });
@@ -1336,14 +1403,14 @@ describe('the layout seams, with plug-in content really mounted in the panes', (
     click('Inventory Database');
     expect(screen.getByText('all categories — 280 records')).toBeInTheDocument();
 
-    // Armed through the ribbon, exactly as a user would. With no pane-1 node
+    // Armed through the context bar, exactly as a user would. With no pane-1 node
     // selected this action is inline rather than in the overflow menu.
     click('Arm record fault');
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('The list view could not be displayed.');
     expect(within(alert).getByText('inventory-db')).toBeInTheDocument();
 
-    // The ribbon beside the failed pane is still a working control surface, and
+    // The context bar beside the failed pane is still a working control surface, and
     // pane 3 is still rendering.
     expect(screen.getByRole('button', { name: 'Clear record fault' })).toBeInTheDocument();
     expect(screen.getByText('No record selected. Choose one in the list.')).toBeInTheDocument();
@@ -1368,7 +1435,7 @@ describe('the layout seams, with plug-in content really mounted in the panes', (
     expect(screen.getByText('inbox — 8 messages')).toBeInTheDocument();
   });
 
-  it('contains a throwing ribbon action inside the ribbon own guard, without taking the shell down', async () => {
+  it('contains a throwing command inside the shared command guard, without taking the shell down', async () => {
     const capture = captureConsole();
     injected.engine = createHydrationEngine({ storage: null });
     render(<Harness blueprints={[timerFaultPlugin]} engine={injected.engine} />);
@@ -1381,7 +1448,7 @@ describe('the layout seams, with plug-in content really mounted in the panes', (
     expect(capture.errors.length).toBeGreaterThan(0);
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
     expect(screen.getByTestId('timer-fault-pane')).toBeInTheDocument();
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
   });
 });
 
@@ -1597,7 +1664,7 @@ describe('the composition wiring App.tsx performs', () => {
     // `Harness` is `App`'s composition with somewhere to register: the registry
     // provider outermost, the host provider inside it, the shell inside that.
     render(<Harness blueprints={[remotes.mail, remotes.database]} engine={injected.engine} />);
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Navigation' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'List' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Detail' })).toBeInTheDocument();
@@ -1698,7 +1765,7 @@ describe('untrusted content at the two verification-remote render sites', () => 
   it('renders a markup-shaped extension string as a text node in the mounted shell', async () => {
     injected.engine = createHydrationEngine({ storage: null });
     const hostile = '<img src=x onerror="alert(1)"><script>alert(2)</script>';
-    const markupPlugin: LEAPExtensionBlueprint = Object.freeze({
+    const markupPlugin: LEAPExtensionBlueprintInput = Object.freeze({
       id: 'markup-ext',
       name: hostile,
       version: '1.0.0',
@@ -1724,7 +1791,7 @@ describe('untrusted content at the two verification-remote render sites', () => 
     expect(container.querySelector('script')).toBeNull();
     expect(document.querySelectorAll('img')).toHaveLength(0);
     expect(document.querySelectorAll('script')).toHaveLength(0);
-    // It is on screen, as a text node, in the sidebar and in the ribbon alike.
+    // It is on screen, as a text node, in the sidebar and in the context bar alike.
     expect(screen.getAllByText(hostile).length).toBeGreaterThan(0);
     for (const node of screen.getAllByText(hostile)) {
       expect(node.childElementCount).toBe(0);
@@ -1978,7 +2045,7 @@ describe('known limits of the assembled shell, pinned', () => {
     advance(5);
 
     // The shell is still up, and both panes are empty because nothing is active.
-    expect(screen.getByRole('toolbar', { name: 'Shell ribbon' })).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: 'Shell commands' })).toBeInTheDocument();
     expect(screen.getByText('Select an extension to fill this pane.')).toBeInTheDocument();
     expect(
       screen.getByText('No extension is active, so there is nothing to detail.'),

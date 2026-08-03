@@ -144,7 +144,7 @@ describe('cross-pane reactivity', () => {
     expect(screen.getByTestId('observer')).toHaveTextContent('msg-42');
   });
 
-  it('gives every subscriber the same snapshot, so panes cannot tear', () => {
+  it('gives every subscriber in one renderer the same snapshot, so panes in it cannot tear', () => {
     const seen: Array<Readonly<RibbonContext>> = [];
 
     function Recorder(): ReactElement {
@@ -595,15 +595,25 @@ describe('activation and revocation', () => {
     // contract-hardening wave (ADR-0001 Amendment K) widen `IShellAPI` from
     // three members to seven with this test still passing on a number nobody
     // read; spelling the names out is what forced the widening to be a change
-    // somebody had to make on purpose, here, in a test named for `revoke`.
+    // somebody had to make on purpose, here, in a test named for `revoke`. It
+    // did the same job again when the pane-1 metric pair took it from seven to
+    // nine, again when the structured payload channel took it to twelve, and
+    // again when the theme bridge took it to fourteen.
     expect(Object.keys(surface).sort()).toEqual([
       'getBadgeCount',
       'getContext',
+      'getNavMetric',
+      'getTheme',
+      'onThemeChange',
+      'publishPayload',
+      'readPayload',
       'setActiveNavNode',
       'setBadgeCount',
       'setContextKey',
+      'setNavMetric',
       'setSelectedItem',
       'setSelectedItems',
+      'subscribePayload',
     ]);
     for (const key of Reflect.ownKeys(surface)) {
       expect(String(key)).not.toContain('revoke');

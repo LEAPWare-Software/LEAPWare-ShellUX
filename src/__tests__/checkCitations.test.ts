@@ -35,6 +35,17 @@ import { afterAll, describe, expect, it } from 'vitest';
  * Both were found by a manual sweep before this file existed, which is the
  * argument for this file existing.
  *
+ * A third case was added later, and it is the one this file previously got
+ * wrong. An `it.each` title whose placeholder is its LAST token has no literal
+ * text to the right of the hole, so the anchor that fences a mid-title
+ * placeholder does nothing and the pattern collapses into a prefix match over
+ * the entire suite. The fixture that was meant to hold that line had a long
+ * literal tail, which is exactly the shape that cannot exhibit the defect — the
+ * case passed, and would have gone on passing against the broken compiler. The
+ * lesson generalises past this file: a test aimed at a degenerate position has
+ * to be written IN that position, or it tests the comfortable case and reports
+ * the answer for the uncomfortable one.
+ *
  * What is NOT asserted here: that the checker finds every kind of stale
  * citation. It cannot tell that a security sentence carries no citation at all —
  * the harder half of Amendment G, tracked as issue #5 — and the fixtures below
@@ -67,6 +78,11 @@ const SUITE = [
   "  it('resolves a plain title', () => {});",
   '  it(\'never stores "__proto__" as a live key\', () => {});',
   "  it.each(['alt', 'ctrl'])('reads hotkey.%s exactly once, so no later read can differ', () => {});",
+  // A template whose placeholder is the FINAL token. The line above cannot stand
+  // in for this one: its eight literal trailing words fence the placeholder on
+  // both sides, so it passes against a compiler that is wrong in the only
+  // position where the wrongness has consequences. See the pair of cases below.
+  "  it.each(['input', 'textarea'])('rejects focus inside %s', () => {});",
   "  it('validateBlueprint — text fields', () => {});",
   "  it('validateBlueprint — navigation tree', () => {});",
   '});',
@@ -212,10 +228,51 @@ describe('check-citations — it.each templates', () => {
     // that shares the template's prefix and abandons its tail is a different
     // title, and treating the placeholder as a wildcard over the whole string
     // would make this pass — which would make the whole rule decorative.
+    //
+    // Note what this case does NOT establish. Its placeholder sits in the middle
+    // of the template, so the literal words after it anchor the match whatever
+    // the placeholder compiles to. It passed against a compiler that turned a
+    // placeholder into `.+?`, and a placeholder in final position compiled that
+    // way is a prefix match over the entire suite. The two cases below are the
+    // ones that hold that position; this one covers the interior only.
     const result = withProse('*Tests:* `suite.test.ts` — "reads hotkey.alt exactly once, so something else entirely".\n');
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('unresolved-test-title');
+  });
+
+  /**
+   * The defect a template with a trailing placeholder exposes, and the only
+   * position in which it is exposed.
+   *
+   * `rejects focus inside %s` has nothing to the right of its placeholder but
+   * the end-of-string anchor, so compiling the placeholder to `.+?` yields
+   * `^rejects focus inside .+?$` — a pattern that resolves ANY citation opening
+   * with those three words, including one naming a test that was renamed away.
+   * Against the real suite this repository ships, patterns of that shape matched
+   * 118 concrete titles they do not name, and shadowed 16 titles cited in prose:
+   * each of those sixteen could have been renamed with its citation left
+   * pointing at nothing and this checker still reporting a clean run. A gate
+   * that stays green through the rename it exists to catch is worse than none,
+   * which is why this case is asserted from both directions.
+   */
+  it('does not let a placeholder in final position match an arbitrary tail', () => {
+    const result = withProse('*Tests:* `suite.test.ts` — "rejects focus inside a contenteditable region".\n');
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('unresolved-test-title');
+    expect(result.stderr).toContain('"rejects focus inside a contenteditable region"');
+  });
+
+  it('still resolves the interpolated form of a title whose placeholder is final', () => {
+    // The other direction. Narrowing the placeholder must not cost the feature
+    // the pattern exists for: `textarea` is a row of the table, so this citation
+    // names a test that really runs and must resolve.
+    const result = withProse('*Tests:* `suite.test.ts` — "rejects focus inside textarea".\n');
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.citations).toBe(1);
   });
 });
 

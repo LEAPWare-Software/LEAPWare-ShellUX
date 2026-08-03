@@ -8,6 +8,10 @@ import {
   useShellContext,
 } from './ShellAPI';
 import type { ShellStateStore } from './ShellAPI';
+import { createPayloadChannelStore } from './payload/PayloadChannel';
+import type { PayloadChannelStore } from './payload/PayloadChannel';
+import { createThemeBridge } from './theme/ThemeBridge';
+import type { ThemeBridgeStore } from './theme/ThemeBridge';
 import { ShellUXError } from './types';
 import type { IShellAPI, LEAPExtensionBlueprint } from './types';
 
@@ -291,6 +295,25 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
   storeRef.current ??= createShellStateStore();
   const store: ShellStateStore = storeRef.current;
 
+  // The structured payload channels, and they are a SECOND STORE rather than a
+  // slice of the first. That separation is the answer to the first of ADR-0001
+  // Amendment K Decision 2's three objections — a payload never enters
+  // `RibbonContext`, so a render-phase predicate has no argument through which to
+  // reach one and a publisher's getters never run on a render path. See ADR-0001
+  // Amendment L and the banner in `payload/PayloadChannel.ts`. Guarded exactly
+  // like the store above, and for the same reason.
+  const payloadsRef = useRef<PayloadChannelStore | null>(null);
+  payloadsRef.current ??= createPayloadChannelStore();
+  const payloads: PayloadChannelStore = payloadsRef.current;
+
+  // The theme bridge, resolved ONCE for this document rather than once per
+  // reader — see `src/core/theme/ThemeBridge.ts`. Guarded exactly like the two
+  // stores above, and for the same reason: an unguarded `useRef(create())` would
+  // run one `getComputedStyle` per render and discard all but the first.
+  const themesRef = useRef<ThemeBridgeStore | null>(null);
+  themesRef.current ??= createThemeBridge(document.documentElement);
+  const themes: ThemeBridgeStore = themesRef.current;
+
   // A Map, deliberately, for the same reason the registry uses one: the keys are
   // extension ids that originate in plugin manifests. Guarded exactly like the
   // store above and for the same reason: `useRef(new Map())` evaluates its
@@ -488,6 +511,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         // render the OLD version's view components after a successful upgrade.
         entry.revoke();
         live.delete(requested);
+        payloads.clearScope(requested);
         entry = undefined;
       }
       if (entry === undefined) {
@@ -500,8 +524,18 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         // resolves synchronously off a `Map`, so asking it on every call costs a
         // lookup and closes the window outright. `blueprint` is captured as the
         // mint-time token; see `isLive`.
-        const revocable = createRevocableShellAPI(store, requested, () =>
-          isLive(requested, blueprint),
+        const revocable = createRevocableShellAPI(
+          store,
+          requested,
+          () => isLive(requested, blueprint),
+          // The provider's ONE payload store, so a channel written by this
+          // extension's pane 2 is the channel its pane 3 reads. A per-facade
+          // store would be the module-scope defect the mocks were migrated off,
+          // rebuilt one layer down.
+          payloads,
+          // ...and the provider's ONE theme bridge, so every extension reads the
+          // same resolved record and the document is measured once.
+          themes,
         );
         // `Object.freeze`, NOT `deepFreeze`.
         //
@@ -542,7 +576,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
       publishForeground(entry.active);
       return { ok: true, active: entry.active };
     },
-    [isLive, live, publishForeground, registry, store],
+    [isLive, live, payloads, publishForeground, registry, store, themes],
   );
 
   const blur = useCallback((): void => {
@@ -582,10 +616,15 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
       }
       entry.revoke();
       live.delete(requested);
+      // The bookkeeping half of a teardown: a released extension's channels go
+      // with its handle. Leaving them would mean a scope that outlives the
+      // extension it belongs to, and a re-registration under the same id
+      // inheriting the previous vendor's published data.
+      payloads.clearScope(requested);
       reconcileForeground();
       return true;
     },
-    [live, reconcileForeground],
+    [live, payloads, reconcileForeground],
   );
 
   const getActive = useCallback((): ActiveExtension | null => {
@@ -682,6 +721,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
       }
       entry.revoke();
       live.delete(id);
+      payloads.clearScope(id);
     }
     // **Guarded, and this is the one call site a host cannot guard for itself.**
     // `reconcileForeground` publishes through the store, the store notifies
@@ -724,7 +764,7 @@ export function ShellHostProvider({ children }: ShellHostProviderProps): ReactEl
         // Reporting is best-effort. Staying mounted is not.
       }
     }
-  }, [isLive, live, reconcileForeground, revision]);
+  }, [isLive, live, payloads, reconcileForeground, revision]);
 
   const controller = useMemo<ActivationController>(
     () => ({ activate, blur, release, getActive }),

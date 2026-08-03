@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { ShellLayout } from '../components/layout/ShellLayout';
 import { ShellHostProvider } from '../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext';
-import type { LEAPExtensionBlueprint } from '../core/types';
+import type { LEAPExtensionBlueprintInput } from '../core/types';
 import { DatabasePlugin } from '../mocks/DatabasePlugin';
 import { MailPlugin } from '../mocks/MailPlugin';
 
@@ -31,13 +31,26 @@ import { MailPlugin } from '../mocks/MailPlugin';
  * exactly what it rendered before this file existed. There is no flag to set and
  * no way for a mock to reach a user.
  *
+ * **The dev server also serves this at `/`, and that changes neither half of the
+ * paragraph above.** `vite.config.ts` installs a middleware that rewrites the one
+ * path `/` to `dev.html`, so `npm run dev` opens a shell with something in it
+ * rather than an empty frame. It is registered under `configureServer`, a hook
+ * `vite build` never calls, so the production input set is untouched by
+ * construction rather than by convention — and it reads no environment variable
+ * either, which is the same ADR-0002 argument applied to which document a bare
+ * `/` resolves to. `/index.html` is deliberately not rewritten, so the
+ * empty-registry shell stays reachable by name.
+ * *Tests:* `e2e/dev-routing.spec.ts` — "serves the fixture shell at the bare root,
+ * with both remotes registered" and "leaves /index.html on the production shell,
+ * whose registry is empty".
+ *
  * This file registers plug-ins. It asserts nothing and claims nothing: it is a
  * test fixture, not a second host surface.
  * ============================================================================
  */
 
 /** The two verification remotes, in the order pane 1 lists them. */
-const FIXTURE_EXTENSIONS: readonly LEAPExtensionBlueprint[] = Object.freeze([
+const FIXTURE_EXTENSIONS: readonly LEAPExtensionBlueprintInput[] = Object.freeze([
   MailPlugin,
   DatabasePlugin,
 ]);

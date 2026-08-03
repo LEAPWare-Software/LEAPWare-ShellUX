@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MAX_RECENT_COMMANDS, MAX_RECENT_KEY_LENGTH } from '../../commands/CommandRegistry';
 import {
   DEFAULT_DEBOUNCE_MS,
   DEFAULT_SHELL_STATE,
@@ -173,6 +174,10 @@ describe('createHydrationEngine — restoring a well-formed record', () => {
       paneSizes: { pane1: 20, pane2: 30, pane3: 50 },
       isPane1Collapsed: true,
       activeExtensionId: 'mail-ext',
+      // The fourth slot. This fixture predates it and carries no
+      // `recentCommandIds`, which is exactly the tolerant-read case: an absent
+      // list restores as empty rather than discarding the whole record.
+      recentCommandIds: [],
     });
     expect(engine.getExtensionState('mail-ext')).toEqual({ selection: 'msg-1' });
     expect(engine.listExtensionIds()).toEqual(['mail-ext']);
@@ -398,16 +403,159 @@ describe('createHydrationEngine — hostile payloads', () => {
   });
 });
 
+/**
+ * ============================================================================
+ * THE FOURTH SLOT. HOST-MINTED KEYS, READ TOLERANTLY, WRITTEN UNCONDITIONALLY.
+ * ============================================================================
+ * `recentCommandIds` holds host-minted, namespaced command keys — `host:<id>` and
+ * `ext:<extension>:<id>`. They are compared for equality and held in a `Map`,
+ * never used as an object key, so they are held to a length bound and a count
+ * bound rather than to `EXTENSION_ID_PATTERN`, which would refuse the two
+ * namespace separators the keys are built from.
+ *
+ * The read is TOLERANT of the field being absent, and that is a decision rather
+ * than an oversight: a record written by a build from before this slot existed is
+ * a shell that had no recents, which is exactly what an empty list says. Treating
+ * it as `MISSING_FIELD` would discard a whole valid layout to recover a list whose
+ * correct value is empty, and would have moved `SCHEMA_VERSION` for nothing.
+ * ============================================================================
+ */
+describe('createHydrationEngine — the recents slot', () => {
+  it('restores a record written before recents existed, with an empty recents list', () => {
+    // The shared `payload()` fixture predates the slot and carries no
+    // `recentCommandIds` at all.
+    const engine = createHydrationEngine({ storage: makeStorage(payload()).storage });
+    expect(engine.getLastLoad()).toBe('restored');
+    expect(engine.getState().recentCommandIds).toEqual([]);
+  });
+
+  it('treats an explicit null the same as an absent list', () => {
+    const engine = createHydrationEngine({
+      storage: makeStorage(payload({ recentCommandIds: null })).storage,
+    });
+    expect(engine.getLastLoad()).toBe('restored');
+    expect(engine.getState().recentCommandIds).toEqual([]);
+  });
+
+  it('restores a well-formed recents list, frozen and host-owned', () => {
+    const engine = createHydrationEngine({
+      storage: makeStorage(payload({ recentCommandIds: ['host:one', 'ext:mail:reply'] })).storage,
+    });
+    expect(engine.getState().recentCommandIds).toEqual(['host:one', 'ext:mail:reply']);
+    expect(Object.isFrozen(engine.getState().recentCommandIds)).toBe(true);
+  });
+
+  it('discards a record whose recents list is the wrong shape', () => {
+    for (const bad of [
+      'host:one',
+      { 0: 'host:one' },
+      [1],
+      [null],
+      // A repeat is a corrupt payload: a recents list naming the same command
+      // twice was never written by this engine.
+      ['host:one', 'host:one'],
+    ]) {
+      const engine = createHydrationEngine({
+        storage: makeStorage(payload({ recentCommandIds: bad })).storage,
+      });
+      expect(engine.getLastLoad(), `${JSON.stringify(bad)} must be discarded`).toBe('malformed');
+    }
+  });
+
+  it('discards a record whose recents list is longer or wider than the host bound', () => {
+    const tooMany = Array.from({ length: MAX_RECENT_COMMANDS + 1 }, (_unused, index) =>
+      `host:c${String(index)}`,
+    );
+    expect(
+      createHydrationEngine({
+        storage: makeStorage(payload({ recentCommandIds: tooMany })).storage,
+      }).getLastLoad(),
+    ).toBe('malformed');
+
+    const tooLong = [`host:${'x'.repeat(MAX_RECENT_KEY_LENGTH)}`];
+    expect(
+      createHydrationEngine({
+        storage: makeStorage(payload({ recentCommandIds: tooLong })).storage,
+      }).getLastLoad(),
+    ).toBe('malformed');
+  });
+
+  it('writes and reads back a recents list, and round-trips it through storage', () => {
+    const recorder = makeStorage();
+    const engine = createHydrationEngine({ storage: recorder.storage });
+    engine.setSlot('recentCommandIds', ['ext:mail:reply', 'host:one']);
+    engine.flush();
+    const reloaded = createHydrationEngine({ storage: recorder.storage });
+    expect(reloaded.getState().recentCommandIds).toEqual(['ext:mail:reply', 'host:one']);
+  });
+
+  it('rejects an illegal recents list at the write door, exactly as it does at the read door', () => {
+    const engine = memoryEngine();
+    expectRejection(
+      () => {
+        engine.setSlot('recentCommandIds', 'host:one' as unknown as string[]);
+      },
+      'INVALID_FIELD',
+    );
+    expectRejection(
+      () => {
+        engine.setSlot('recentCommandIds', [7 as unknown as string]);
+      },
+      'INVALID_FIELD',
+    );
+    expectRejection(
+      () => {
+        engine.setSlot('recentCommandIds', ['host:one', 'host:one']);
+      },
+      'INVALID_FIELD',
+    );
+    expectRejection(
+      () => {
+        engine.setSlot('recentCommandIds', [`host:${'x'.repeat(MAX_RECENT_KEY_LENGTH)}`]);
+      },
+      'PAYLOAD_TOO_LARGE',
+    );
+    expectRejection(
+      () => {
+        engine.setSlot(
+          'recentCommandIds',
+          Array.from({ length: MAX_RECENT_COMMANDS + 1 }, (_unused, index) => `host:c${String(index)}`),
+        );
+      },
+      'PAYLOAD_TOO_LARGE',
+    );
+    // Nothing was written by any of them.
+    expect(engine.getState().recentCommandIds).toEqual([]);
+  });
+
+  it('normalises an undefined recents list to the empty one at the write door', () => {
+    const engine = memoryEngine();
+    engine.setSlot('recentCommandIds', ['host:one']);
+    engine.setSlot('recentCommandIds', undefined as unknown as string[]);
+    expect(engine.getState().recentCommandIds).toEqual([]);
+  });
+
+  it('stores a host-owned copy, so mutating the argument afterwards changes nothing', () => {
+    const engine = memoryEngine();
+    const keys = ['host:one'];
+    engine.setSlot('recentCommandIds', keys);
+    keys.push('host:two');
+    expect(engine.getState().recentCommandIds).toEqual(['host:one']);
+  });
+});
+
 describe('setSlot — the write door is a trust boundary too', () => {
   it('writes and reads back every slot', () => {
     const engine = memoryEngine();
     engine.setSlot('paneSizes', { pane1: 25, pane2: 35, pane3: 40 });
     engine.setSlot('isPane1Collapsed', true);
     engine.setSlot('activeExtensionId', 'crm-ext');
+    engine.setSlot('recentCommandIds', ['host:one', 'ext:mail:reply']);
     expect(engine.getState()).toEqual({
       paneSizes: { pane1: 25, pane2: 35, pane3: 40 },
       isPane1Collapsed: true,
       activeExtensionId: 'crm-ext',
+      recentCommandIds: ['host:one', 'ext:mail:reply'],
     });
   });
 
@@ -1036,6 +1184,7 @@ describe('two tabs over one storage entry', () => {
       paneSizes: DEFAULT_SHELL_STATE.paneSizes,
       isPane1Collapsed: false,
       activeExtensionId: 'crm-ext',
+      recentCommandIds: [],
     });
     // Tab A's scope went with tab A's record. That is a lost write, which is what
     // last-write-wins means; what it is NOT is tab A's pane sizes sitting beside

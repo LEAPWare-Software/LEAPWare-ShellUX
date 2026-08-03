@@ -90,7 +90,7 @@ function mountHost(): { current: Harness } {
 /* -------------------------------------------------------------------------- */
 
 describe('a listener intercepts another holder’s write', () => {
-  it('sees the new value synchronously, before the writer returns', () => {
+  it('sees the new value synchronously, before the writer returns, within one renderer', () => {
     const store = createShellStateStore();
     // The victim writes through its own deep-frozen facade — the object whose
     // methods provably cannot be swapped. That is exactly the point: the freeze

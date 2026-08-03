@@ -11,7 +11,15 @@ import type { Locator, Page } from '@playwright/test';
  * produce and therefore what no helper under `src/` can be reused for.
  */
 
-/** The fixture document. See `src/dev/main.dev.tsx` for why it is not `/`. */
+/**
+ * The fixture document, by name.
+ *
+ * The dev server now serves this same fixture at `/` too — see `vite.config.ts`
+ * and `e2e/dev-routing.spec.ts`. This lane keeps navigating to the explicit path
+ * on purpose: a helper that went through `/` would make every spec in this
+ * directory depend on the routing middleware, so a broken rewrite would present
+ * as thirty unrelated failures instead of the three cases written to catch it.
+ */
 export const FIXTURE_PATH = '/dev.html';
 
 /** The one entry `HydrationEngine` writes, and its debounce window. */
@@ -60,7 +68,7 @@ export async function activateExtension(page: Page, name: string): Promise<void>
 /**
  * Select the first message in the Mail list and return its id.
  *
- * Selecting is what makes Mail's four selection-gated ribbon actions visible,
+ * Selecting is what makes Mail's four selection-gated commands visible,
  * which is what pushes the fifth past `INLINE_ACTION_LIMIT` and creates the
  * overflow menu. Without it there is no overflow trigger in the DOM at all.
  */
@@ -81,7 +89,7 @@ export async function selectFirstMailMessage(page: Page): Promise<string> {
  * and whether a pointer aimed at its centre would actually reach it.
  *
  * **This is the assertion the jsdom suite could not make, and the reason this
- * lane exists.** The ribbon's overflow menu was once clipped to zero visible
+ * lane exists.** The context bar's overflow menu was once clipped to zero visible
  * pixels by two `overflow-hidden` ancestors: it was in the DOM, it had
  * `getBoundingClientRect` values in a real browser, and six jsdom tests asserted
  * it worked — because jsdom reports every rect as 0x0 and applies no clipping,
@@ -102,7 +110,7 @@ export async function clipReportOf(locator: Locator): Promise<ClipReport> {
     let bottom = rect.bottom;
 
     // Every ancestor that establishes a clip narrows the visible box. `contain:
-    // paint` clips too, and it is on the ribbon deliberately, so it is asked
+    // paint` clips too, and it is on the context bar deliberately, so it is asked
     // about by name rather than inferred from `overflow`.
     for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
       const style = window.getComputedStyle(parent);

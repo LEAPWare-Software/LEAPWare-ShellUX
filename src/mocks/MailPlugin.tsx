@@ -1,12 +1,19 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
+import { RowMetric } from '../components/ui/RowMetric';
+import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
-  LEAPExtensionBlueprint,
+  IShellAPI,
+  LEAPExtensionBlueprintInput,
+  NavigationMetric,
   NavigationNode,
   RibbonAction,
   RibbonContext,
+  StructuredPayload,
 } from '../core/types';
+import { useChannelPayload } from '../core/payload/PayloadChannel';
+import { LEDGER_CONTEXT_KEY } from '../core/ledger/ledgerIndex';
 
 /**
  * ============================================================================
@@ -35,7 +42,8 @@ import type {
  * receives. Everything else is this module's own state.
  *
  * ---------------------------------------------------------------------------
- * WHY PANE 2 AND PANE 3 SHARE A MODULE-SCOPED STORE AND NOT A REACT CONTEXT
+ * WHY PANE 2 AND PANE 3 SHARE A HOST CHANNEL, AND NOT A REACT CONTEXT — NOR,
+ * SINCE ADR-0001 AMENDMENT L, A MODULE-SCOPED STORE
  * ---------------------------------------------------------------------------
  * `ShellLayout` mounts `views.pane2` and `views.pane3` in two *unrelated*
  * subtrees, each inside its own `ExtensionHostBoundary`. Neither is an ancestor
@@ -43,25 +51,36 @@ import type {
  * context declared here would be read by whichever view happened to be inside
  * it and by nothing else.
  *
- * The shape that does work across two unrelated subtrees is an external store —
- * module-scoped state, a `subscribe`/`getSnapshot` pair, and
- * `useSyncExternalStore` in each view. That is what `mailStore` below is. Both
- * views read the same snapshot object, so neither can tear against the other,
- * and a mutation from either one re-renders both.
+ * **This module used to answer that with a module-scoped external store — a
+ * `let`, a listener `Set`, and `useSyncExternalStore` in each view — and that
+ * answer is correct in exactly one process.** `docs/plans/native-host-pivot.md`
+ * §3.2 puts each pane in its own renderer, and under that split this module
+ * loads TWICE. The seeds are static, so they resolve identically in both copies
+ * and pane 3 looks right on first paint; every `commit` made in pane 2 then
+ * lands in a `let` pane 3 cannot see, and nothing anywhere says so. A
+ * verification remote that would fail silently under the architecture it exists
+ * to verify is not verifying it.
  *
- * **The store is module state, so it outlives a mount.** That is the honest
- * behaviour of a real plug-in — a vendor's cache does not evaporate because the
- * host unmounted a pane — and it is what makes "switching extensions must not
+ * So the state travels on `IShellAPI.publishPayload` / `readPayload` /
+ * `subscribePayload` — the structured payload channel ADR-0001 Amendment L adds
+ * and whose Decision 7 records this migration. The host owns the copy, assigns
+ * the revision and notifies both panes, so a transport change is the only thing
+ * a process split costs this file. `useChannelPayload` is the host's own
+ * `useSyncExternalStore` binding over it.
+ *
+ * **The state still outlives a mount**, because it lives in the host's payload
+ * store for as long as this extension is registered — which is the honest
+ * behaviour of a real plug-in, and is what makes "switching extensions must not
  * bleed layout state" testable at all: this module remembers its own selection
- * across a switch and republishes it on remount (see `MailMessageList`). A test
- * that needs a *fresh* store must re-import this module (`vi.resetModules()`
- * followed by a dynamic `import`), because that is the only way to reset module
- * state that is not also a back door written into shipping code.
+ * across a switch and republishes it on remount (see `MailMessageList`). It is
+ * dropped when the extension is released or unregistered, which module state
+ * never was.
  *
  * ---------------------------------------------------------------------------
  * WHY NO RIBBON PREDICATE READS MODULE STATE
  * ---------------------------------------------------------------------------
- * `RibbonToolbar` evaluates `isVisible` while it renders, and it re-renders when
+ * `CommandRegistry` evaluates `isVisible` while a surface renders, and every
+ * surface re-renders when
  * the HOST context changes — it is not subscribed to this module. A predicate
  * that closed over `mailStore` would therefore be evaluated against whatever the
  * module state happened to be at the last host-driven render, which is a ribbon
@@ -257,7 +276,7 @@ const FOLDER_IDS: ReadonlySet<string> = new Set([
 ]);
 
 /* -------------------------------------------------------------------------- */
-/* The module-scoped external store                                            */
+/* The state, and the host channel it travels on                               */
 /* -------------------------------------------------------------------------- */
 
 /** One entry in the cross-pane activity stream. */
@@ -280,6 +299,17 @@ interface MailState {
   readonly pendingId: string | null;
   /** Newest last. Bounded by `MAX_EVENTS`. */
   readonly events: readonly MailEvent[];
+  /**
+   * The next event sequence number, and the number of drafts composed so far.
+   *
+   * **They live on the state rather than beside it**, which they did not have to
+   * while the state was a module-scope `let` and two module-scope counters could
+   * sit next to it. Once the state crosses a channel, a counter left in module
+   * scope is the very defect the migration removes — it would reset in the second
+   * process and start reissuing sequence numbers the first one had already used.
+   */
+  readonly eventSequence: number;
+  readonly composedCount: number;
 }
 
 /**
@@ -298,52 +328,127 @@ const INITIAL_STATE: MailState = {
   bodies: new Map<string, string>(),
   pendingId: null,
   events: [],
+  eventSequence: 0,
+  composedCount: 0,
 };
 
-let state: MailState = INITIAL_STATE;
-let eventSequence = 0;
-let composedCount = 0;
-const listeners = new Set<() => void>();
+/**
+ * The channel this module's whole cross-pane state travels on.
+ *
+ * A registry-valid identifier, because `publishPayload` holds a channel name to
+ * exactly the rule the registry holds a node id to.
+ */
+const STATE_CHANNEL = 'mail-state';
 
 /**
- * The `useSyncExternalStore` snapshot.
+ * The state as it crosses the channel: leaves only, no `Set` and no `Map`.
  *
- * Its IDENTITY is stable until something really changes, which is the whole
- * contract: a `getSnapshot` that allocated on every call would re-render both
- * panes forever.
+ * `PayloadLeaf` is `ContextKeyValue` — ADR-0001 Amendment L Decision 2 preserves
+ * that at the leaves — so the two membership sets travel as arrays and the body
+ * cache travels as a record. Rebuilding them on read is what `decode` is for.
  */
-function getSnapshot(): MailState {
-  return state;
+interface MailWire {
+  readonly selectedId: string | null;
+  readonly readIds: readonly string[];
+  readonly deletedIds: readonly string[];
+  readonly composed: readonly MailMessage[];
+  readonly bodies: Readonly<Record<string, string>>;
+  readonly pendingId: string | null;
+  readonly events: readonly MailEvent[];
+  readonly eventSequence: number;
+  readonly composedCount: number;
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return (): void => {
-    listeners.delete(listener);
+function encode(next: MailState): MailWire {
+  return {
+    selectedId: next.selectedId,
+    readIds: [...next.readIds],
+    deletedIds: [...next.deletedIds],
+    composed: next.composed,
+    bodies: Object.fromEntries(next.bodies),
+    pendingId: next.pendingId,
+    events: next.events,
+    eventSequence: next.eventSequence,
+    composedCount: next.composedCount,
   };
 }
 
 /**
- * Commit a new state object and tell both panes.
+ * Rebuild this module's working shape from the host's frozen copy.
  *
- * The pass runs over a snapshot of the listener set and re-checks membership, so
- * a view that unsubscribes during the pass — React does exactly that while
- * unmounting one pane in response to a change — is not called after its
- * unsubscribe returned.
+ * A channel that has never been published on reads `null`, which is the seed
+ * state — so the very first render of either pane has the same state the module
+ * used to start with, and no ordering between the two panes' mounts matters.
  */
-function commit(next: MailState): void {
-  state = next;
-  for (const listener of Array.from(listeners)) {
-    if (listeners.has(listener)) {
-      listener();
-    }
+function decode(payload: StructuredPayload | null): MailState {
+  if (payload === null) {
+    return INITIAL_STATE;
   }
+  const wire = payload.data as unknown as MailWire;
+  return {
+    selectedId: wire.selectedId,
+    readIds: new Set(wire.readIds),
+    deletedIds: new Set(wire.deletedIds),
+    composed: wire.composed,
+    bodies: new Map(Object.entries(wire.bodies)),
+    pendingId: wire.pendingId,
+    events: wire.events,
+    eventSequence: wire.eventSequence,
+    composedCount: wire.composedCount,
+  };
+}
+
+/**
+ * Read this module's state back out of the host.
+ *
+ * **This takes a `shell` and used to take nothing**, and that is the whole of
+ * the migration recorded in ADR-0001 Amendment L Decision 7. The state used to be
+ * a module-scope `let`, which is correct in exactly one process: under the
+ * process split `docs/plans/native-host-pivot.md` §3.2 describes, this module
+ * would load twice, the static seeds would still resolve — so pane 3 would look
+ * right on first paint — and every commit made in pane 2 would be invisible to
+ * pane 3, with nothing to say why.
+ */
+function getSnapshot(shell: IShellAPI): MailState {
+  return decode(shell.readPayload(STATE_CHANNEL));
+}
+
+/**
+ * Commit a new state and tell both panes, through the host.
+ *
+ * The host takes a deep copy, assigns a revision and notifies every subscriber
+ * of this channel synchronously — including the listener-set discipline this
+ * function used to implement for itself. What is stored is host-owned, so
+ * mutating anything handed in here afterwards changes nothing.
+ */
+function commit(shell: IShellAPI, next: MailState): void {
+  guarded('publishing the mail state', () => {
+    shell.publishPayload(STATE_CHANNEL, 'table', encode(next));
+  });
 }
 
 function withEvent(next: MailState, label: string): MailState {
-  eventSequence += 1;
+  const eventSequence = next.eventSequence + 1;
   const events = [...next.events, { seq: eventSequence, label }];
-  return { ...next, events: events.slice(Math.max(0, events.length - MAX_EVENTS)) };
+  return {
+    ...next,
+    eventSequence,
+    events: events.slice(Math.max(0, events.length - MAX_EVENTS)),
+  };
+}
+
+/**
+ * Subscribe a view to this module's channel.
+ *
+ * `useChannelPayload` is the host's own `useSyncExternalStore` binding, and the
+ * snapshot it hands React is the frozen `StructuredPayload` whose identity is
+ * stable until the channel is republished. The decode is memoised on that
+ * identity, so it runs once per publish rather than once per render — which is
+ * the property the old module-scope `getSnapshot` had by returning a `let`.
+ */
+function useMailState(shell: IShellAPI): MailState {
+  const payload = useChannelPayload(shell, STATE_CHANNEL);
+  return useMemo(() => decode(payload), [payload]);
 }
 
 /** Every message currently in `folderId`, seeded and composed alike. */
@@ -357,6 +462,129 @@ function findMessage(snapshot: MailState, messageId: string): MailMessage | unde
   return [...SEED_MESSAGES, ...snapshot.composed].find((message) => message.id === messageId);
 }
 
+/* -------------------------------------------------------------------------- */
+/* The pane-2 row metric — tier 0, and a remote's use of a host primitive        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How many readings a thread's activity sparkline holds.
+ *
+ * Eight, not thirty. `MAX_METRIC_POINTS` is 32 and the host would accept that
+ * many, but the glyph is 28 `viewBox` units wide, so a 32-point series draws
+ * points less than one unit apart and the shape stops being readable before the
+ * host's bound is anywhere near reached. §3.3 puts the tier-0 range at 7–30
+ * points and this sits at the bottom of it deliberately: a pane-2 row is a
+ * SHAPE, and pane 3 is where a series is a number you can read off an axis.
+ */
+const ACTIVITY_POINTS = 8;
+
+/**
+ * A deterministic pseudo-random stream from one string.
+ *
+ * A vendor's mock has no telemetry to draw, and this file is verification code
+ * that must produce the same picture on every run — a `Math.random()` series
+ * would make every screenshot and every browser-lane assertion a coin flip. So
+ * the shape is a function of the message id: the same thread always draws the
+ * same sparkline, and two threads draw different ones.
+ *
+ * The multiplier and increment are a small, well-known LCG. Nothing here is
+ * cryptographic and nothing pretends to be.
+ */
+function seededStream(seed: string): () => number {
+  let state = 0;
+  for (const character of seed) {
+    state = (state * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return (): number => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+/**
+ * The thread-activity metric for one message, and the delta beside it.
+ *
+ * The series is what `MetricGlyph` draws and the delta is the last step of that
+ * same series, so the two channels cannot disagree — a rising arrow beside a
+ * falling line would be a lie the row tells about itself, and deriving one from
+ * the other makes it unrepresentable rather than merely unlikely.
+ *
+ * `description` is REQUIRED by `NavigationMetric` and is the non-colour,
+ * non-shape channel WCAG 1.4.1 asks for. It says what the shape means in words.
+ */
+function activityMetric(message: MailMessage): {
+  metric: NavigationMetric;
+  value: string;
+  delta: number;
+} {
+  const next = seededStream(message.id);
+  const series = Array.from({ length: ACTIVITY_POINTS }, () => Math.round(next() * 100) / 100);
+  const last = series[ACTIVITY_POINTS - 1] as number;
+  const previous = series[ACTIVITY_POINTS - 2] as number;
+  return {
+    value: String(Math.round(last * 100)),
+    metric: {
+      kind: 'sparkline',
+      value: last,
+      series,
+      description: `thread activity over ${String(ACTIVITY_POINTS)} days`,
+    },
+    delta: Math.round((last - previous) * 100),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* The pane-3 ledger blocks — tier 1, and the channel's second consumer         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The two channels this remote publishes blocks on.
+ *
+ * Registry-valid identifiers, because `publishPayload` holds a channel name to
+ * `EXTENSION_ID_PATTERN` — and because they are also the ADDRESSES pane 3's
+ * ledger index names, so `parseLedgerIndex` has to accept them too. One rule,
+ * two readers.
+ */
+const ACTIVITY_BLOCK = 'mail-activity';
+const NOTE_BLOCK = 'mail-note';
+
+/**
+ * The folder's activity, as a chart spec — and note what is NOT in it.
+ *
+ * **No colour anywhere.** `ChartSpecInput` has no `color` member to write, and
+ * `normalizeChartSpec` would reject one at runtime if this module found another
+ * way to put it there. What the host assigns instead is a `colorIndex`, a `dash`
+ * AND a `marker` per series, so these two lines are distinguishable to a reader
+ * who cannot see colour at all. A vendor cannot opt out of that, which is the
+ * point of it being the host's rotation.
+ */
+function activityChart(messages: readonly MailMessage[], readIds: ReadonlySet<string>): unknown {
+  const totals = new Array<number>(ACTIVITY_POINTS).fill(0);
+  const unread = new Array<number>(ACTIVITY_POINTS).fill(0);
+  for (const message of messages) {
+    const series = activityMetric(message).metric.series ?? [];
+    series.forEach((point, index) => {
+      totals[index] = Math.round(((totals[index] as number) + point) * 100) / 100;
+      if (!readIds.has(message.id)) {
+        unread[index] = Math.round(((unread[index] as number) + point) * 100) / 100;
+      }
+    });
+  }
+  return {
+    kind: 'line',
+    title: 'Thread activity',
+    xLabel: 'day',
+    yLabel: 'activity',
+    categories: Array.from({ length: ACTIVITY_POINTS }, (_unused, index) =>
+      `Day ${String(index + 1)}`,
+    ),
+    series: [
+      { name: 'all threads', values: totals },
+      { name: 'unread', values: unread },
+    ],
+  };
+}
+
 /** The badge this extension wants on `inbox` right now. */
 function unreadInboxCount(snapshot: MailState): number {
   return messagesIn(snapshot, 'inbox').filter((message) => !snapshot.readIds.has(message.id))
@@ -368,24 +596,33 @@ function draftCount(snapshot: MailState): number {
   return messagesIn(snapshot, 'drafts').length;
 }
 
-function selectMessage(messageId: string | null): void {
+// Every mutator below reads the CURRENT state through the shell and publishes
+// the next one back. There is no module variable between them, so pane 2 and
+// pane 3 are reading and writing the same host-owned record however many times
+// this module has been loaded.
+
+function selectMessage(shell: IShellAPI, messageId: string | null): void {
+  const state = getSnapshot(shell);
   const label = messageId === null ? 'selection cleared' : `selected ${messageId}`;
-  commit(withEvent({ ...state, selectedId: messageId }, label));
+  commit(shell, withEvent({ ...state, selectedId: messageId }, label));
 }
 
-function markRead(messageId: string): void {
+function markRead(shell: IShellAPI, messageId: string): void {
+  const state = getSnapshot(shell);
   if (state.readIds.has(messageId)) {
     return;
   }
   const readIds = new Set(state.readIds);
   readIds.add(messageId);
-  commit(withEvent({ ...state, readIds }, `marked ${messageId} read`));
+  commit(shell, withEvent({ ...state, readIds }, `marked ${messageId} read`));
 }
 
-function deleteMessage(messageId: string): void {
+function deleteMessage(shell: IShellAPI, messageId: string): void {
+  const state = getSnapshot(shell);
   const deletedIds = new Set(state.deletedIds);
   deletedIds.add(messageId);
   commit(
+    shell,
     withEvent(
       { ...state, deletedIds, selectedId: state.selectedId === messageId ? null : state.selectedId },
       `deleted ${messageId}`,
@@ -394,8 +631,9 @@ function deleteMessage(messageId: string): void {
 }
 
 /** Append a draft and return it, so the caller can select what it created. */
-function composeDraft(): MailMessage {
-  composedCount += 1;
+function composeDraft(shell: IShellAPI): MailMessage {
+  const state = getSnapshot(shell);
+  const composedCount = state.composedCount + 1;
   const draft: MailMessage = {
     id: `${MESSAGE_ID_PREFIX}9${String(100 + composedCount)}`,
     folderId: 'drafts',
@@ -404,33 +642,37 @@ function composeDraft(): MailMessage {
     receivedAt: 'Now',
   };
   commit(
+    shell,
     withEvent(
-      { ...state, composed: [...state.composed, draft], selectedId: draft.id },
+      { ...state, composedCount, composed: [...state.composed, draft], selectedId: draft.id },
       `composed ${draft.id}`,
     ),
   );
   return draft;
 }
 
-function noteActivity(label: string): void {
-  commit(withEvent(state, label));
+function noteActivity(shell: IShellAPI, label: string): void {
+  commit(shell, withEvent(getSnapshot(shell), label));
 }
 
-function beginBodyFetch(messageId: string): void {
-  commit({ ...state, pendingId: messageId });
+function beginBodyFetch(shell: IShellAPI, messageId: string): void {
+  commit(shell, { ...getSnapshot(shell), pendingId: messageId });
 }
 
-function endBodyFetch(messageId: string): void {
+function endBodyFetch(shell: IShellAPI, messageId: string): void {
+  const state = getSnapshot(shell);
   if (state.pendingId !== messageId) {
     return;
   }
-  commit({ ...state, pendingId: null });
+  commit(shell, { ...state, pendingId: null });
 }
 
-function recordBody(messageId: string, body: string): void {
+function recordBody(shell: IShellAPI, messageId: string, body: string): void {
+  const state = getSnapshot(shell);
   const bodies = new Map(state.bodies);
   bodies.set(messageId, body);
   commit(
+    shell,
     withEvent(
       { ...state, bodies, pendingId: state.pendingId === messageId ? null : state.pendingId },
       `body arrived for ${messageId}`,
@@ -531,7 +773,7 @@ async function fetchBody(message: MailMessage, signal: AbortSignal): Promise<Bod
  *    runs synchronously inside the write and is documented as not necessarily
  *    being a `ShellUXError`.
  *
- * `RibbonAction.onExecute` does NOT need this — `RibbonToolbar` already wraps it
+ * `Command.onExecute` does NOT need this — `execute` in `src/core/command.ts` already wraps it
  * — so it is used only where the host has no guard of its own: the views, which
  * have no fault boundary above them until ISSUE-004 lands one.
  */
@@ -578,7 +820,7 @@ function folderFor(activeNavNodeId: string | null): string {
  * re-evaluates the ribbon predicates.
  */
 function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useMailState(shell);
   const folderId = folderFor(context.activeNavNodeId);
   const messages = messagesIn(snapshot, folderId);
 
@@ -595,20 +837,43 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
   // comes from the store rather than from `snapshot`, so the effect depends on the
   // shell handle alone and does not re-run on every selection.
   useEffect(() => {
-    const remembered = getSnapshot().selectedId;
+    const remembered = getSnapshot(shell).selectedId;
     guarded('restoring the remembered selection', () => {
       shell.setSelectedItem(remembered);
     });
   }, [shell]);
 
+  // The pane-3 ledger: two blocks and the index that orders them.
+  //
+  // The CONTENT goes on the payload channel, because a chart spec is structured
+  // and a context key is a primitive. The INDEX goes on a context key, because
+  // a list of addresses is exactly the cheap primitive fact a context key is
+  // for — see `src/core/ledger/ledgerIndex.ts`. Both are published from pane 2,
+  // which is where this module knows what folder is on screen.
+  useEffect(() => {
+    guarded('publishing the ledger blocks', () => {
+      const snapshot = getSnapshot(shell);
+      const listed = messagesIn(snapshot, folderId);
+      shell.publishPayload(ACTIVITY_BLOCK, 'chart', activityChart(listed, snapshot.readIds));
+      shell.publishPayload(NOTE_BLOCK, 'text', {
+        text:
+          `${folderId} holds ${String(listed.length)} messages. The chart above is drawn by the ` +
+          'host from this extension’s published spec; this extension chose no colours and ' +
+          'could not have.',
+      });
+      shell.setContextKey(LEDGER_CONTEXT_KEY, `${ACTIVITY_BLOCK},${NOTE_BLOCK}`);
+    });
+  }, [shell, folderId, snapshot]);
+
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-1 p-1">
-      <p className="px-1 text-[11px] uppercase tracking-wide text-neutral-500">
+      <p className={`px-1 text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>
         {folderId} — {String(messages.length)} messages
       </p>
       <ul className="flex min-w-0 flex-col gap-px" data-mail-list={folderId}>
         {messages.map((message) => {
           const isUnread = !snapshot.readIds.has(message.id);
+          const activity = activityMetric(message);
           return (
             <li key={message.id} className="min-w-0">
               <button
@@ -616,30 +881,47 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                 data-message-id={message.id}
                 aria-current={context.selectedItemId === message.id ? 'true' : undefined}
                 className={
-                  'flex w-full min-w-0 flex-col items-start gap-px rounded-sm border p-1 ' +
-                  'border-transparent text-left text-[12px] leading-4 ' +
-                  'aria-[current]:border-neutral-200 aria-[current]:bg-neutral-100 ' +
-                  'hover:border-neutral-200 dark:aria-[current]:border-neutral-800 ' +
-                  'dark:aria-[current]:bg-neutral-900 dark:hover:border-neutral-800'
+                  'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm border p-1 ' +
+                  'text-left text-[12px] leading-4 ' +
+                  `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
+                  `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
                 }
                 onClick={() => {
                   // Module state first, host second. Both are synchronous, so
                   // the order is observable and is the order a cross-pane
                   // ordering test should expect: this module knows about the
                   // selection before the host tells pane 3 about it.
-                  selectMessage(message.id);
+                  selectMessage(shell, message.id);
                   guarded(`selecting ${message.id}`, () => {
                     shell.setSelectedItem(message.id);
                   });
                 }}
               >
-                <span className={isUnread ? 'truncate font-semibold' : 'truncate'}>
-                  {message.subject}
+                <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
+                  <span className={isUnread ? 'truncate font-semibold' : 'truncate'}>
+                    {message.subject}
+                  </span>
+                  <span className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
+                    {message.from} — {message.receivedAt}
+                    {isUnread ? ' — unread' : ''}
+                  </span>
                 </span>
-                <span className="truncate text-[11px] text-neutral-500">
-                  {message.from} — {message.receivedAt}
-                  {isUnread ? ' — unread' : ''}
-                </span>
+                {/*
+                  TIER 0, AND THE HOST'S OWN PRIMITIVE RATHER THAN A SECOND ONE.
+
+                  A vendor drawing its own sparkline here is exactly the
+                  duplication §3.3 exists to prevent, and it would also be the
+                  vendor deciding a colour — which `MetricGlyph` refuses by
+                  drawing in `currentColor` and taking no colour field at all.
+                  Reaching for a chart library instead would put a chart
+                  INSTANCE in every row of a list that virtualizes, which is
+                  the failure mode the whole tier is a response to.
+                */}
+                <RowMetric
+                  metric={activity.metric}
+                  value={activity.value}
+                  delta={activity.delta}
+                />
               </button>
             </li>
           );
@@ -659,7 +941,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
  * read state, the event log).
  */
 function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
-  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const snapshot = useMailState(shell);
   const messageId = ownSelection(context);
   const message = messageId === null ? undefined : findMessage(snapshot, messageId);
   const body = messageId === null ? undefined : snapshot.bodies.get(messageId);
@@ -673,7 +955,7 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
     if (messageId === null) {
       return;
     }
-    const current = getSnapshot();
+    const current = getSnapshot(shell);
     if (current.bodies.has(messageId)) {
       return;
     }
@@ -682,22 +964,22 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
       return;
     }
     const controller = new AbortController();
-    beginBodyFetch(messageId);
+    beginBodyFetch(shell, messageId);
     void fetchBody(target, controller.signal).then((outcome) => {
       if (outcome.status === 'ok') {
-        recordBody(messageId, outcome.body);
+        recordBody(shell, messageId, outcome.body);
       }
     });
     return (): void => {
       controller.abort();
-      endBodyFetch(messageId);
+      endBodyFetch(shell, messageId);
     };
-  }, [messageId]);
+  }, [messageId, shell]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col gap-2 p-1">
       {message === undefined ? (
-        <p className="text-[12px] leading-5 text-neutral-500">
+        <p className={`text-[12px] leading-5 ${TOKEN_CLASS.mutedText}`}>
           {messageId === null
             ? 'No message selected. Choose one in the list.'
             : 'That message is no longer in this mailbox.'}
@@ -705,7 +987,7 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
       ) : (
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="truncate text-[12px] font-semibold">{message.subject}</h3>
-          <p className="truncate text-[11px] text-neutral-500">
+          <p className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
             {message.from} — {message.receivedAt}
           </p>
           <p className="text-[12px] leading-5">
@@ -716,15 +998,15 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
             data-mail-action="mark-read"
             disabled={snapshot.readIds.has(message.id)}
             className={
-              'w-fit rounded-sm border border-neutral-200 p-1 text-[12px] leading-none ' +
-              'disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-800'
+              `w-fit rounded-sm border ${TOKEN_CLASS.chipBorder} p-1 text-[12px] leading-none ` +
+              'disabled:cursor-not-allowed disabled:opacity-40'
             }
             onClick={() => {
-              markRead(message.id);
+              markRead(shell, message.id);
               // The badge is recomputed from the state AFTER the mutation, not
               // from the snapshot this render closed over.
               guarded('updating the inbox badge', () => {
-                shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot()));
+                shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot(shell)));
               });
             }}
           >
@@ -732,11 +1014,13 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-col gap-px border-t border-neutral-200 pt-1 dark:border-neutral-800">
-        <h4 className="text-[11px] uppercase tracking-wide text-neutral-500">Activity</h4>
+      <div
+        className={`flex min-w-0 flex-col gap-px border-t ${TOKEN_CLASS.sectionEdge} pt-1`}
+      >
+        <h4 className={`text-[11px] uppercase tracking-wide ${TOKEN_CLASS.mutedText}`}>Activity</h4>
         <ol className="flex flex-col gap-px" data-mail-activity="">
           {snapshot.events.slice(-6).map((event) => (
-            <li key={event.seq} className="truncate text-[11px] text-neutral-500">
+            <li key={event.seq} className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
               {String(event.seq)}. {event.label}
             </li>
           ))}
@@ -796,12 +1080,12 @@ function MailMessageBody({ shell, context }: ExtensionViewProps): ReactElement {
  *
  * The chord-bearing buttons also carry `aria-keyshortcuts` in UI Events key-value
  * spelling — `Control+Shift+N` and `Control+Delete`, not the `Ctrl+…` display
- * spelling the tooltip uses — and the attribute is omitted from a disabled action
+ * spelling the tooltip uses — and the attribute is omitted from a disabled command
  * because the chord is suppressed there too. *Tests:* "advertises a chord-bearing
- * action with aria-keyshortcuts, in key values rather than display spelling",
+ * command with aria-keyshortcuts, in key values rather than display spelling",
  * "advertises a chord on an overflow menu item too" and "omits aria-keyshortcuts
- * from a disabled action, because the chord will not fire" in
- * `src/components/__tests__/RibbonToolbar.test.tsx`.
+ * from a disabled command, because the chord will not fire" in
+ * `src/components/command/__tests__/ContextBar.test.tsx`.
  *
  * **The dispatcher's suppression list is a guardrail, not a boundary**, in the
  * same register as ADR-0001's "No sandbox". It skips auto-repeat, an event
@@ -827,9 +1111,9 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     hotkey: { key: 'n', ctrl: true, shift: true },
     isVisible: (): boolean => true,
     onExecute: (_ctx, shell): void => {
-      const draft = composeDraft();
+      const draft = composeDraft(shell);
       shell.setSelectedItem(draft.id);
-      shell.setBadgeCount('drafts', draftCount(getSnapshot()));
+      shell.setBadgeCount('drafts', draftCount(getSnapshot(shell)));
     },
   },
   {
@@ -837,10 +1121,10 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     label: 'Reply',
     icon: 'edit',
     isVisible: (ctx): boolean => ownSelection(ctx) !== null,
-    onExecute: (ctx): void => {
+    onExecute: (ctx, shell): void => {
       const selected = ownSelection(ctx);
       if (selected !== null) {
-        noteActivity(`replied to ${selected}`);
+        noteActivity(shell, `replied to ${selected}`);
       }
     },
   },
@@ -849,10 +1133,10 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
     label: 'Forward',
     icon: 'open',
     isVisible: (ctx): boolean => ownSelection(ctx) !== null,
-    onExecute: (ctx): void => {
+    onExecute: (ctx, shell): void => {
       const selected = ownSelection(ctx);
       if (selected !== null) {
-        noteActivity(`forwarded ${selected}`);
+        noteActivity(shell, `forwarded ${selected}`);
       }
     },
   },
@@ -866,8 +1150,8 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
       if (selected === null) {
         return;
       }
-      markRead(selected);
-      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot()));
+      markRead(shell, selected);
+      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot(shell)));
     },
   },
   {
@@ -881,13 +1165,13 @@ const RIBBON_ACTIONS: readonly RibbonAction[] = [
       if (selected === null) {
         return;
       }
-      deleteMessage(selected);
+      deleteMessage(shell, selected);
       // Clearing the selection is what hides Reply, Forward, Mark as read and
       // Delete again: the action set changes because a HOST field changed, not
       // because a predicate read this module's state.
       shell.setSelectedItem(null);
-      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot()));
-      shell.setBadgeCount('drafts', draftCount(getSnapshot()));
+      shell.setBadgeCount('inbox', unreadInboxCount(getSnapshot(shell)));
+      shell.setBadgeCount('drafts', draftCount(getSnapshot(shell)));
     },
   },
 ];
@@ -944,7 +1228,7 @@ const NAVIGATION_TREE: readonly NavigationNode[] = [
  * `eslint.config.js` is not a plug-in's to edit, so the export is shaped to the
  * rule rather than the rule to the export.
  */
-export const MailPlugin: LEAPExtensionBlueprint = Object.freeze({
+export const MailPlugin: LEAPExtensionBlueprintInput = Object.freeze({
   id: 'mail',
   name: 'Mail',
   version: '1.0.0',

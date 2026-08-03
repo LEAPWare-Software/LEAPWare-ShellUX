@@ -86,7 +86,7 @@ module) is a contract violation that will break without warning.
                  revocable)                             │          ← BUILT
                                                         │
    host renders your Pane 1 entry, Pane 2 view,  ◄──────┤          ← BUILT
-   Pane 3 view, and your ribbon actions                 │
+   Pane 3 view, and your commands                 │
    the shell restores its layout and your foreground  ◄──┤          ← BUILT
    position across reloads                              │
    ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄
@@ -97,7 +97,7 @@ module) is a contract violation that will break without warning.
 Everything above the dashed line exists today: registration, activation, a real
 per-extension `IShellAPI` that reaches you, and — since ISSUE-002 — a host that
 actually renders your navigation entries, mounts both your pane views, and
-evaluates and invokes your ribbon actions.
+evaluates and invokes your commands.
 
 Since ISSUE-004, the fault boundaries and the row virtualizer are there too: a
 view of yours that throws during render degrades to a contained surface inside its
@@ -135,7 +135,8 @@ the four modifier flags on `Hotkey`.
 | `name` | `string` | Human-readable extension name. Non-blank, at most 256 characters. **Untrusted display text** — see the security section. |
 | `version` | `string` | Your version string, e.g. `"1.0.0"`. Non-blank, at most 32 characters. Completely opaque to the host: it is not parsed, compared or range-checked. |
 | `navigationTree` | `readonly NavigationNode[]` | Your Pane 1 contribution. May be empty. At most 512 nodes in total across the whole tree, nested at most 8 deep (roots are depth 1). |
-| `ribbonActions` | `readonly RibbonAction[]` | Your contextual ribbon commands. May be empty. At most 128. |
+| `commands` | `readonly Command[]` | Your commands. May be empty. At most 128. **Declare this OR `ribbonActions`, never both** — see "One collection, two names" below. |
+| `ribbonActions` | `readonly Command[]` | **Deprecated spelling of `commands`.** Identical in every respect; kept so existing manifests keep working. |
 | `views` | `{ pane2: ExtensionView; pane3: ExtensionView }` | Your two pane components. Both are required; there is no blueprint-level Pane 1 view, because Pane 1 is the host's navigation chrome rendering *your* `navigationTree`. |
 
 There is **no `icon` field on the blueprint.** Earlier drafts of this guide
@@ -188,6 +189,7 @@ stale by omission, and it cannot document a key that does not exist.
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
 | `icon?` | `string` | Optional. **Untrusted icon key.** Non-blank, at most 256 characters. An explicit `undefined` is treated as absent. Resolved through the same host-owned table `RibbonAction.icon` uses — a **lookup key only**, never interpolated into a URL or into markup. It is drawn in the collapsed 48px pane-1 track, which otherwise shows a monogram taken from the first letter of your `label`; a node that declares no icon keeps that monogram, and a key the host does not publish gets the host's fallback glyph rather than the monogram. The published key list is in "The icon vocabulary" below. *Tests:* `src/components/__tests__/ShellLayoutIcons.test.tsx` — "renders a declared node icon in the collapsed track instead of the monogram", "falls back to the host glyph for an icon key the host does not publish", "keeps the monogram for a node that declares no icon" and "does not resolve a prototype-shaped node icon key to anything inherited". |
 | `badgeCount?` | `number` | Optional. Non-negative safe integer. An explicit `undefined` is treated as absent. **This is the value the node is BORN with, and it is frozen at registration.** To change a badge at runtime call `IShellAPI.setBadgeCount(nodeId, count)`; pane 1 reads the store first and falls back to this field only when the store holds nothing for that node, so a runtime write of `0` really does clear a badge this field declared as `3`. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the blueprint badge for a node the store has never been written for" and "overrides a blueprint badge with the store value, including down to zero". |
+| `metric?` | `NavigationMetric` | Optional. A small quantitative glyph beside the row. `{ kind, value, series?, description }`. **`kind`** is `'bar' \| 'sparkline' \| 'dot'` and has **no fallback** — an unknown shape is `INVALID_FIELD`, unlike an unknown `icon` key, because a wrong shape has no honest rendering. **`value`** is a fraction: it is **clamped** to `[0, 1]` and a non-finite one is **refused**. **`series?`** is optional, each point clamped the same way, at most `REGISTRY_LIMITS.MAX_METRIC_POINTS` (32) of them. **`description` is REQUIRED** — it is the non-colour, non-shape channel WCAG 2.2 §1.4.1 asks for, and it renders as `sr-only` text beside the glyph. **There is no colour field and there will not be one**: a plug-in colour is invisible to the contrast manifest, so a metric draws in `currentColor`. Like `badgeCount`, `value` here is the value the node is BORN with; call `IShellAPI.setNavMetric(nodeId, value)` to move it at runtime. The override reaches `value` and **nothing else**, so a runtime write to a node that declared no `metric` draws nothing — the host will not invent a `kind` or a `description` for you. *Tests:* `src/core/__tests__/navMetric.test.tsx` — "clamps an out-of-range metric value at both doors and refuses a non-finite one", "refuses a metric kind the host does not publish" and "bounds the series at MAX_METRIC_POINTS"; `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "renders a declared navigation metric as a host-drawn glyph with its description" and "overrides a blueprint metric value with the store value, including down to zero". |
 | `children?` | `readonly NavigationNode[]` | Optional. An explicit `undefined` is treated as absent. Counts against the 512-node and 8-level limits. |
 
 ### `RibbonAction`
@@ -196,15 +198,15 @@ stale by omission, and it cannot document a key that does not exist.
 |---|---|---|
 | `id` | `string` | Same allowlist and reserved words as the extension id. Must be unique within your own `ribbonActions`. |
 | `label` | `string` | **Untrusted display text.** Non-blank, at most 256 characters. |
-| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the ribbon resolves it through `SHELL_ICONS`, a host-owned `Map` of inline SVGs shared with the pane-1 navigation track, and an unrecognised key renders a host fallback glyph. **The key list is published** — see "The icon vocabulary" below; before GitHub issue #18 it was not, so a vendor who guessed wrong got a silent fallback and no way to find the real keys. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "resolves a known icon key through the host table", "resolves an unknown icon key through the host fallback rather than through the key", "does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
+| `icon` | `string` | **Untrusted icon key.** Non-blank, at most 256 characters. Required. The registry stores it verbatim; the shared command row resolves it through `SHELL_ICONS`, a host-owned `Map` of inline SVGs shared with the pane-1 navigation track, and an unrecognised key renders a host fallback glyph. **The key list is published** — see "The icon vocabulary" below; before GitHub issue #18 it was not, so a vendor who guessed wrong got a silent fallback and no way to find the real keys. Your string is a **lookup key only** — it is never interpolated into a URL or into markup, so an icon key is not a route to anything. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "resolves a known icon key through the host table on every surface", "the context bar resolves an unknown icon key through the host fallback rather than through the key", "the context bar does not resolve a prototype-shaped icon key to anything inherited", and "the module source names no URL-bearing attribute a plug-in value could reach". See "Security: plugin-supplied strings are untrusted" below. |
 | `isDisabled?` | `boolean` | Optional. When present it must be a boolean. Renders the action greyed out but still visible. |
 | `hotkey?` | `Hotkey` | Optional keyboard chord for this action. Validated at registration — allowlisted key, boolean modifiers, the two bare-chord rules (WCAG 2.1.4 for a single-character key; activation for `enter`), unique within your own `ribbonActions`. **Dispatched since ISSUE-006**, but only while your extension is in the foreground and only for an action that is visible and not disabled. See the `Hotkey` section below for all four conditions. |
-| `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** The ribbon evaluates it on every render and shows the action only when it returns the boolean `true`; a throwing predicate is treated as "not visible". See "How `ribbonActions` visibility predicates work" below for the tests. |
-| `onExecute` | `(ctx: RibbonContext, shell: IShellAPI) => void` | Required. Invoked when the user activates the action, with **your own shell handle** as the second argument — that is what lets an action actually change shell state. The host ribbon calls it inside a guard, so a handler that throws is reported and does not unmount the shell. *Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "hands onExecute the context and the extension shell", "survives an onExecute that throws, leaving the ribbon interactive". |
+| `isVisible` | `(ctx: RibbonContext) => boolean` | Required. Visibility predicate. **It gets the context and nothing else — deliberately no `IShellAPI`; see the predicates section.** The registry evaluates it on every render and shows the action only when it returns the boolean `true`; a throwing predicate is treated as "not visible". See "How `ribbonActions` visibility predicates work" below for the tests. |
+| `onExecute` | `(ctx: RibbonContext, shell: IShellAPI) => void` | Required. Invoked when the user activates the action, with **your own shell handle** as the second argument — that is what lets an action actually change shell state. The command registry calls it inside a guard, so a handler that throws is reported and does not unmount the shell. *Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "hands onExecute the context and the extension shell", "the context bar survives an onExecute that throws, leaving the surface interactive". |
 
 > **Contract change — `onExecute` gained a second parameter.** It used to be
 > `(ctx: RibbonContext) => void`, which handed the handler four nullable strings
-> and no capability, so a ribbon action provably could not change anything. It is
+> and no capability, so a command provably could not change anything. It is
 > now `(ctx, shell)`. This is **source-compatible**: a handler that ignores the
 > second argument still satisfies the type, so nothing you have written breaks.
 > To act on the shell, name the parameter:
@@ -221,7 +223,96 @@ stale by omission, and it cannot document a key that does not exist.
 > and it is revocable — see "What a released `IShellAPI` does" below. Use the one
 > you are handed; do not stash it beyond the life of the call.
 
-### `Hotkey` — a keyboard chord on a ribbon action
+### One collection, two names — and the four surfaces it feeds
+
+**The ribbon is gone.** Where there was one ribbon there are now four command
+surfaces, and your commands are projected onto all four through one registry:
+
+| Surface | What it is |
+|---|---|
+| **Context bar** | A 32px strip above the panes. Host commands left, your contextual commands right, at most four inline with the rest in a portalled overflow menu. This is what stands where the ribbon stood. |
+| **Command palette** | Cmd-K / Ctrl-K. **Browsable on an empty query** — recents, commands suggested by the current selection, then everything else grouped by `category`. It lists the FOREGROUND extension's commands, the host's own, and a "switch extension" verb, and nothing else. |
+| **Floating toolbar** | Appears inside pane 3 while something is selected, and disappears when nothing is. It supplements the context bar; it never replaces it. |
+| **Omnibox composer** | Docked at the bottom of pane 3. Typing `>` or `/` turns it into a command surface; the detected intent is shown in words before you press Enter. |
+
+**`RibbonAction` is now an alias of `Command`.** The type did not change under
+you: `id`, `label`, `icon`, `isDisabled`, `hotkey`, `isVisible` and `onExecute`
+mean exactly what they meant, and every rule in the table above still holds. Four
+optional fields are added, and nothing is removed.
+
+**Declare `commands` OR `ribbonActions`, never both.** A blueprint carrying both
+is rejected with `INVALID_FIELD` on `commands`, whether or not the two agree. Two
+sources for one collection drift, and which one the host used would be invisible
+from your manifest. Rejections name the field you actually wrote — `commands[3].id`
+if you wrote `commands`, `ribbonActions[3].id` if you wrote the old name.
+*Tests:* `src/core/__tests__/commandContract.test.ts` — "accepts commands on its
+own, and publishes it as ribbonActions too", "rejects a blueprint that declares
+BOTH, rather than merging or preferring one" and "names the field the caller
+actually wrote in every rejection path".
+
+#### `when?: string` — a declarative sibling of `isVisible`
+
+An expression over `RibbonContext`, in the language documented in
+`src/core/commands/when.ts`. It is parsed **once, at registration**, so a
+malformed expression is a rejection naming `commands[n].when` rather than a
+command that silently never appears.
+
+**`when` and `isVisible` are ANDed, and both are consulted.** A command is offered
+only when `isVisible(ctx) === true` *and* — if you declared one — the expression is
+also true. That means adding a `when` to an existing command can only ever NARROW
+where it appears; it can never reveal something a predicate was hiding.
+
+```ts
+{
+  id: 'reply',
+  label: 'Reply',
+  icon: 'edit',
+  category: 'edit',
+  when: "selectedItemId startsWith 'msg-'",
+  isVisible: () => true,
+  onExecute: (ctx, shell) => { /* … */ },
+}
+```
+
+Why bother, when `isVisible` already works? Because `isVisible` is a **closure**,
+and a closure cannot cross a process boundary. Three of the four surfaces above
+are host chrome, and when the panes become separate processes they will be
+evaluating visibility for commands whose code lives elsewhere. An expression over
+primitives travels; a function does not. `when` is optional today and will become
+**required for a command that appears in host chrome** when that split lands;
+`isVisible` narrows to a pane-local fast path for the floating toolbar. Write
+`when` now if you can.
+*Tests:* `src/core/commands/__tests__/CommandRegistry.test.ts` — "ANDs `when` with
+`isVisible`, so a when can only ever narrow" and "evaluates `when` against the live
+context, so a context key turns a command on".
+
+#### `category?: CommandCategory` — the palette bucket
+
+One of exactly `file`, `edit`, `view`, `navigate`, `select`, `insert`, `tools`,
+`help`. **There is no fallback.** An unknown category is `INVALID_FIELD` on
+`commands[n].category`, and that is deliberately unlike `icon`, where an unknown
+key gets a host glyph: a wrong picture still leaves your command labelled and
+reachable, and a guessed bucket is a statement about *where your command lives*
+that you never made and the user cannot correct. Omitting `category` is fine — the
+palette groups those under "Uncategorised", which is honest.
+*Test:* `src/core/__tests__/commandContract.test.ts` — "rejects an unknown
+category with NO FALLBACK, and says why".
+
+#### `surfaces?: readonly CommandSurface[]` — where you want it
+
+Members of `context-bar`, `palette`, `floating-toolbar`, `omnibox`. Omitting the
+field means every surface. **It only ever narrows**: a surface decides what it
+asks for, and this field cannot widen that. An empty array is legal and means "no
+surface at all" — a command reachable only by its chord. A repeated member is
+rejected rather than collapsed.
+
+#### `priority?: number` — ordering within a surface
+
+A safe integer; higher comes first; `undefined` sorts as 0. Ties keep declaration
+order, so a manifest that declares no priorities gets exactly the order it wrote —
+which is what decides your first four commands on the 32px context bar.
+
+### `Hotkey` — a keyboard chord on a command
 
 > ### Declared, validated and — since ISSUE-006 — dispatched.
 >
@@ -302,7 +393,7 @@ blueprint-level `hotkeys` collection, and that is deliberate: a hotkey is a seco
 way to fire *that action's* `onExecute`, gated by the same `isVisible` and the
 same `isDisabled`, and it inherits the 128-action bound and the duplicate walk
 that already visit every action. The accepted cost is that you cannot declare a
-shortcut that is not also a ribbon action. Amendment H, Decision 1.
+shortcut that is not also a command. Amendment H, Decision 1.
 
 | Field | Rules |
 |---|---|
@@ -326,7 +417,7 @@ as oversights:
   Focus Order.
 - **`space`** — Space activates the focused control. Claiming it globally means
   the focused button stops responding to the key that presses it.
-- **`escape`** — Escape is the shell's dismissal key. It closes the ribbon's
+- **`escape`** — Escape is the shell's dismissal key. It closes the context bar's
   overflow menu, cancels a drag, leaves fullscreen and dismisses a Radix dialog —
   and this project ships `@radix-ui/react-dialog`. An extension owning it globally
   would break dismissal for the whole shell at once. It was removed outright
@@ -453,10 +544,7 @@ UI Events `KeyboardEvent.key` values, where the control key is `Control`, and
 `Ctrl` is not one — which is why these are two functions and not one. The ribbon
 emits the attribute only on a chord-bearing action that is **not disabled**,
 because the dispatcher skips a disabled action and advertising it would be a lie.
-*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "advertises a
-chord-bearing action with aria-keyshortcuts, in key values rather than display
-spelling" and "omits aria-keyshortcuts from a disabled action, because the chord
-will not fire". `matchesHotkey` takes only the five fields of a keyboard
+*Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "advertises a chord-bearing command with aria-keyshortcuts, in key values rather than display spelling" and "omits aria-keyshortcuts from a disabled command, because the chord will not fire". `matchesHotkey` takes only the five fields of a keyboard
 event it reads (`key`, `ctrlKey`, `altKey`, `shiftKey`, `metaKey`), so a plain
 record is enough and it holds no reference to anything live. It matches
 **exactly**: a modifier your chord does not declare must also not be held, so
@@ -555,7 +643,7 @@ is field-specific, the dotted `field` path that caused it — for example
 | `INVALID_ID` | An id failed the allowlist pattern. |
 | `RESERVED_ID` | An id was `__proto__`, `constructor` or `prototype`. |
 | `DUPLICATE_ID` | The id is already registered by a different blueprint, or an id repeats inside your own tree or action list. |
-| `DUPLICATE_HOTKEY` | Two of **your own** ribbon actions declared the same chord. Scoped to your blueprint on purpose — two *different* extensions claiming one chord is not a conflict, because only the foreground extension's chords are live. See the `Hotkey` section above and ADR-0001 Amendment H. |
+| `DUPLICATE_HOTKEY` | Two of **your own** commands declared the same chord. Scoped to your blueprint on purpose — two *different* extensions claiming one chord is not a conflict, because only the foreground extension's chords are live. See the `Hotkey` section above and ADR-0001 Amendment H. |
 | `PAYLOAD_TOO_LARGE` | A string or a collection exceeded its declared bound. |
 | `REVOKED` | The `IShellAPI` you called has been revoked — your extension was released, unregistered, or **re-registered under the same id with a different blueprint** — so the call reached nothing and changed nothing. Never produced by `register`. **Provider teardown is not on that list**, and an earlier version of this row said it was; ADR-0001 Amendment F removed teardown revocation, and a write through a handle retained past its provider's unmount now succeeds against an orphaned store nothing can read. Do not park a handle that long. Pinned by "does not revoke, and the write it lets through cannot reach a live shell" in `src/core/__tests__/capability.test.tsx`. |
 | `REENTRANT_NOTIFY` | A shell-store listener wrote back to the store and the notification cascade hit its depth limit. A listener is a signal to *re-read* the context, never a place to write to it. Never produced by `register`. |
@@ -792,12 +880,15 @@ foreground revokes nothing" and "revokes when the extension is unregistered" in
 
 ### The member list
 
-As landed in `src/core/types.ts`, `IShellAPI` has exactly seven members. It is
+As landed in `src/core/types.ts`, `IShellAPI` has exactly fourteen members. It is
 deliberately small — every addition is a new capability handed to untrusted
-code — and it **grew from three to seven** in the contract-hardening wave
-recorded as ADR-0001 Amendment K. If you are reading an older copy of this guide
-that says "exactly three", the four new members are `setSelectedItems`,
-`setActiveNavNode`, `getBadgeCount` and `setContextKey`.
+code — and it has grown three times: **from three to seven** in the
+contract-hardening wave recorded as ADR-0001 Amendment K, whose four new members
+are `setSelectedItems`, `setActiveNavNode`, `getBadgeCount` and `setContextKey`;
+**from seven to nine** with the pane-1 metric pair `setNavMetric` and
+`getNavMetric`; and **from nine to fourteen** with the structured payload channel
+(`publishPayload`, `readPayload`, `subscribePayload` — ADR-0001 Amendment L) and
+the theme bridge (`getTheme`, `onThemeChange` — Amendment M).
 
 ```ts
 interface IShellAPI {
@@ -807,6 +898,13 @@ interface IShellAPI {
   setBadgeCount(nodeId: string, count: number): void;
   getBadgeCount(nodeId: string): number | undefined;
   setContextKey(key: string, value: string | number | boolean | null): void;
+  setNavMetric(nodeId: string, value: number): void;
+  getNavMetric(nodeId: string): number | undefined;
+  publishPayload(channel: string, kind: BlockKind, data: unknown): void;
+  readPayload(channel: string): StructuredPayload | null;
+  subscribePayload(channel: string, listener: (p: StructuredPayload) => void): () => void;
+  getTheme(): ResolvedTheme;
+  onThemeChange(listener: (theme: ResolvedTheme) => void): () => void;
   getContext(): Readonly<RibbonContext>;
 }
 ```
@@ -819,14 +917,21 @@ interface IShellAPI {
 | `setActiveNavNode(nodeId)` | Sets — or clears, with `null` — the selected pane-1 navigation node, which surfaces as `RibbonContext.activeNavNodeId`. **This one throws.** Before issue #15 your extension could not navigate at all: the field was writable only by the host's own pane-1 click handler. Unlike `setSelectedItem`'s `id`, `nodeId` **is** a host lookup key and is held to the same allowlist and reserved words the registry applied to your node ids — `INVALID_ID` otherwise. It is **not** checked against your own tree, deliberately: name a node you do not own and you get a field none of your own rendering will match, which is the same posture `setSelectedItem` takes. *Tests:* `src/core/__tests__/shellApi.test.ts` — "setActiveNavNode validates its argument". |
 | `getBadgeCount(nodeId)` | Reads back the badge count for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure `setBadgeCount` is scoped by, so it reads back exactly what this handle can write and offers no parameter through which to name another extension's scope. Before issue #12 you could write a badge and had no way to read one, so a module wanting to increment its own count had to keep a shadow copy. *Test:* `src/core/__tests__/dataflow.test.tsx` — "reads back only its own scope, and offers no parameter to name another". |
 | `setContextKey(key, value)` | Publishes one named primitive fact about your extension, which surfaces as `RibbonContext.contextKeys[key]` for your own predicates to branch on. **This one throws.** See "Context keys" below — it is a mechanism rather than a field, and it is worth reading before you reach for it. |
+| `setNavMetric(nodeId, value)` | Sets the live value of the metric glyph beside one of your navigation nodes, **in your own scope**, exactly as `setBadgeCount` is scoped. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid, `INVALID_FIELD` for a value that is not a finite number. `value` is **clamped** to `[0, 1]` and a non-finite one is **refused**: `1.4` is a scaling mistake with an obviously right answer, and `NaN` has none. It exists because a `NavigationMetric` declared in your blueprint is frozen at registration and could otherwise never move — the same defect issue #12 filed against badges. It overrides the declared `value` and **nothing else**, so a write to a node that declared no `metric` at all is stored, readable, and drawn by nobody: the host will not invent a `kind` or a `description` for you. *Tests:* `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "lets a setNavMetric write through a live IShellAPI change the glyph the sidebar draws" and "draws nothing for a runtime metric on a node that declared none". |
+| `getNavMetric(nodeId)` | Reads back the clamped metric value for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure the write half is, for the reason `getBadgeCount` gives: a scoped write with an unscoped read is not a scope. *Test:* `src/core/__tests__/navMetric.test.tsx` — "reads back only its own scope through getNavMetric". |
+| `publishPayload(channel, kind, data)` | Publishes one block of **structured** data on one of your channels, for your other pane to read. **This one throws.** This is the answer to "a context key can only hold a primitive" and it does not reverse that rule — see ADR-0001 Amendment L. The host takes a **deep copy** into null-prototype records and frozen arrays, so nothing of your object graph is retained and mutating what you passed afterwards changes nothing; your getters run exactly once, here. Leaves are `string | number | boolean | null`. Bounds: depth 6, 4096 nodes, 262144 host-accounted bytes, 32 channels per extension. **A cycle is rejected, never truncated.** `INVALID_ID` for a channel name that is not registry-valid, `INVALID_FIELD` for a bad `kind`, a non-primitive leaf, a cycle or a value that refuses to be read, `PAYLOAD_TOO_LARGE` for any bound. A rejected publish leaves the channel exactly as it was. |
+| `readPayload(channel)` | Reads the current payload on one of your channels, or `null`. **This one throws** — `INVALID_ID` for a bad channel. The returned object is the host's frozen copy and its **identity is stable** until the channel is republished, which is what makes it safe as a `useSyncExternalStore` snapshot. Compare `revision`, never the object: an identical republish DOES bump the revision and DOES notify, because the host does not deep-compare payloads. |
+| `subscribePayload(channel, listener)` | Subscribes to one of your channels; returns the unsubscribe function. **This one throws** — `INVALID_ID` for a bad channel, `INVALID_FIELD` for a listener that is not a function. **The disposer it returns is total and throws nothing, ever, including after your extension is revoked**, so it is safe in a React effect cleanup. Your listener runs synchronously inside the publisher's `publishPayload` frame; it can observe, re-enter and throw there. |
+| `getTheme()` | Returns the resolved semantic token set — every name the host publishes, with a value for each, deep-frozen. **This one throws** `REVOKED` and nothing else. One `getComputedStyle` per **theme change**, never per reader: a canvas cannot read a CSS custom property, so a chart has to be handed resolved values, and resolving per chart is one forced style recalculation per chart per frame. The record's identity is stable until the theme changes, so memoise on it. An empty string for a name means the document defines nothing for it. |
+| `onThemeChange(listener)` | Subscribes to theme changes; returns the unsubscribe function. **This one throws** — `INVALID_FIELD` for a listener that is not a function. It is **not** called on subscribe; call `getTheme()` for the current value. The disposer is total, for the same reason `subscribePayload`'s is. |
 | `getContext()` | Returns a frozen snapshot of the current `RibbonContext`. A snapshot, not a live view: hold the result only for the duration of the work you are doing, and call again rather than caching it across renders. |
 
 Every member but `getContext` rejects a bad argument; `getContext` takes no
-argument to reject. **None of the seven is total, and `getContext` is not an
-exception:** all seven throw `REVOKED` once your extension is released or unregistered
-(pinned in `dataflow.test.tsx`, which walks the whole member list rather than a
-representative one), and the five writers can additionally deliver whatever a
-store listener throws — see "Where that stops" near the end of this guide. Note the
+argument to reject. **None of the fourteen is total, and `getContext` is not an
+exception:** all fourteen throw `REVOKED` once your extension is released or
+unregistered (pinned in `dataflow.test.tsx`, which walks the whole member list
+rather than a representative one), and the writers can additionally deliver
+whatever a store listener throws — see "Where that stops" near the end of this guide. Note the
 asymmetry with `register`, which never throws: `IShellAPI` is called by *you*, so a bad
 argument is your bug and is reported as an exception, whereas `register` is called by the
 *host* on your data, where an exception would take the shell down.
@@ -984,7 +1089,7 @@ write, the orphaned store, and `release` and `unregister` each still ending a ha
 ### There is no `revoke` on your `IShellAPI`, and the controller is not handed to you
 
 There is no `revoke` member on your `IShellAPI`. `Object.keys(shell)` is exactly
-the seven members above, `revoke` lives on a wrapper object the host keeps, and it
+the fourteen members above, `revoke` lives on a wrapper object the host keeps, and it
 closes over a variable no other scope can reach. That part is unconditional.
 
 **What this section used to claim beyond that was false, twice over.** It first
@@ -1095,7 +1200,10 @@ below.
 > **can** throw an arbitrary exception into your writing statement — including one that
 > is not a `ShellUXError`, and including one that starves a subscribed pane so it keeps
 > rendering a stale snapshot. Reproduced in `src/core/__tests__/subscribe.test.tsx`,
-> the whole file. Freezing the store does not touch any of it, and neither will
+> the whole file. **"In this page" is load-bearing and becomes narrower under the
+> native host:** with a pane per process an extension shares a page with fewer
+> holders, and a listener in another pane runs a message later rather than inside
+> your frame — see `src/core/ipc/ReplicaStore.ts`. Freezing the store does not touch any of it, and neither will
 > anything else in-page: a store that notifies nobody is a store no pane can render
 > off.
 >
@@ -1249,7 +1357,8 @@ it is the visual contract.
 |---|---|
 | Padding | `p-1` to `p-3`. Nothing looser. |
 | Base type | 11px – 13px. |
-| Borders | 1px, `border-neutral-200` (light) / `border-neutral-800` (dark). |
+| Borders | 1px, `border-border-default`. One declaration, in every theme. |
+| Colour | A semantic token, always. Never a palette literal, never a `dark:` variant. |
 | Row height | Compact. Assume many rows visible at once. |
 | Spacing | Tight. Explicitly **not** airy mobile-web spacing. |
 
@@ -1260,6 +1369,27 @@ Concretely, for extension authors:
   information hierarchy, not spacing.
 - **Do not** introduce your own font sizes above the 11px–13px band for body
   content. A heading may be slightly larger; a data row may not.
+- **Do not** write a colour literal of any kind — not `bg-neutral-50`, not
+  `#7e8085`, not `theme(colors.neutral.400)` inside an arbitrary value. Every
+  colour in the shell is a `var(--token)` utility whose value swaps per theme.
+  `src/__tests__/noRawColor.test.ts` fails the build on all of those spellings,
+  and `scripts/check-tokens.mjs` measures the tokens' contrast against
+  `design/contrast-manifest.json` in all three built-in themes.
+- **Do not** write a `dark:` variant. There is nothing left for one to say: the
+  token's *value* changes on `[data-theme]`, so `dark:border-neutral-800` beside
+  `border-border-default` overrides something that already changed. `darkMode`
+  stays configured for the genuinely appearance-conditional cases, and the
+  allowlist that would permit one is empty.
+- **Do not** apply an opacity modifier to a token colour. `bg-surface-pane/50`
+  compiles to **no rule at all** — the tokens are complete `oklch()` functions
+  rather than the bare channels Tailwind's modifier needs, so the class lands in
+  the DOM and no declaration is emitted. The same scan rejects it, because
+  nothing else in the toolchain would notice.
+- **Do** read the token names from `src/core/theme/tokens.generated.ts`, which is
+  the public contract, and the painted roles from
+  `src/core/theme/tokenClasses.ts`. The generated file also carries the two
+  reference tables worth knowing: `SEMANTIC_TOKEN_NAME_LIST` is every name an
+  extension may use, and `BUILT_IN_THEME_IDS` is every theme they resolve in.
 - **Do** use the same neutral border tokens as the host. A different border
   colour reads as a rendering bug to users, not as branding.
 - **Do** support both light and dark. Both tokens above are part of the contract;
@@ -1278,9 +1408,9 @@ extension that ignores this makes the whole application feel inconsistent.
 
 > ### Implemented in ISSUE-002 — this section describes running code
 >
-> **The host evaluates `isVisible` on every ribbon render.** The call site is
-> `RibbonToolbar` in `src/components/ui/RibbonToolbar.tsx`, and the behaviour
-> below is asserted by `src/components/__tests__/RibbonToolbar.test.tsx` rather
+> **The host evaluates `isVisible` on every command-surface render.** The call site is
+> `ContextBar` in `src/components/command/ContextBar.tsx`, and the behaviour
+> below is asserted by `src/components/command/__tests__/ContextBar.test.tsx` rather
 > than promised. Where a sentence here states a containment property, it names
 > the test that holds it, per ADR-0001 Amendment G.
 >
@@ -1293,11 +1423,11 @@ extension that ignores this makes the whole application feel inconsistent.
 >
 > **Do not read more into the guard than is there.** It is not a guard around
 > your *component's* render; see "Fault containment" below. And it now runs on two
-> routes rather than one — the ribbon button and the keyboard chord both call the
+> routes rather than one — a command surface and the keyboard chord both call the
 > same `isVisible` through the same guard, which is deliberate: a chord must never
 > reach an action the button would have hidden.
 
-The ribbon is split: **global host actions on the left, your contextual actions
+The context bar is split: **global host actions on the left, your contextual actions
 on the right.** Contextual means the set changes with context — and *you* define
 what context means, because the host cannot.
 
@@ -1312,12 +1442,11 @@ The predicate is the interesting one. On each render the host evaluates your
 predicate against the current `RibbonContext` and shows the action only if it
 returns `true`. That is the mechanism by which "Reply" appears when a message is
 selected and disappears when nothing is, without the host knowing what a message
-or a reply is. *Test:* "renders only the actions whose predicate returns true for
-this context", which also asserts your predicate is handed the very context
+or a reply is. *Test:* "hides a command whose predicate returns false, on every projection", which also asserts your predicate is handed the very context
 object the host holds.
 
 ```
-  ISSUE-002 — the ribbon render loop, as implemented
+  ISSUE-002 — the command projection, as implemented
   ──────────────────────────────────────────────────
   host renders ribbon
         │
@@ -1342,12 +1471,10 @@ visible".
 
 **Only visible actions compete for the four inline slots.** The predicate filter
 runs before the overflow split, so an action you hid does not silently occupy a
-slot on the bar and push a visible one into the menu. *Test:* "counts only
-visible actions toward the inline limit".
+slot on the bar and push a visible one into the menu. *Test:* "counts only visible commands toward the inline limit".
 
 **With no extension in the foreground the contextual side is simply empty**, and
-the ribbon and the panes are still valid. *Test:* "renders no contextual action
-when there is no active extension".
+the ribbon and the panes are still valid. *Test:* "renders no contextual command when there is no active extension".
 
 **Your action behaves the same whether it lands on the bar or in the overflow
 menu**, and you cannot tell which from inside `isVisible` or `onExecute` — the
@@ -1357,16 +1484,15 @@ that the menu is a real menu rather than a styled `div`: it is built on
 items with the arrow keys, closes on Escape and on an outside pointer-down, and
 returns focus to the trigger afterwards — including after your action runs, so a
 keyboard user is never dropped onto `document.body`. It is portalled out of the
-ribbon, which is what stops the ribbon's own clipping from hiding it. It is
+ribbon, which is what stops the context bar's own clipping from hiding it. It is
 deliberately **not modal**: the rest of the shell stays reachable to assistive
 technology while the menu is open.
-*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — the whole of
-"RibbonToolbar — the overflow menu keyboard model", specifically "moves focus into
+*Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — the whole of
+"ContextBar — the overflow menu keyboard model", specifically "moves focus into
 the menu when it opens", "walks the items with the arrow keys, which is what the
 role promises", "closes on Escape and puts focus back on the trigger", "returns
 focus to the trigger after an item is activated, not to document.body", "closes when
-the pointer goes down outside it", "renders the menu outside the ribbon, which is
-what un-clips it", and "does not modally hide the rest of the shell while the menu is
+the pointer goes down outside it", "renders the menu outside the context bar, which is what un-clips it", and "does not modally hide the rest of the shell while the menu is
 open".
 
 **An action you make unavailable stays in the tab order rather than vanishing from
@@ -1375,9 +1501,7 @@ attribute, so a screen-reader user can still reach it and hear that it exists an
 currently unavailable — a disabled native button is skipped by keyboard navigation
 entirely, which silently hides the action rather than explaining it. It does not
 execute while unavailable.
-*Tests:* `src/components/__tests__/RibbonToolbar.test.tsx` — "marks an unavailable
-action aria-disabled rather than removing it from the tab order", "still runs an
-action that is not disabled", and "leaves a disabled menu item focusable, announced,
+*Tests:* `src/components/command/__tests__/ContextBar.test.tsx` — "marks an unavailable command aria-disabled rather than removing it from the tab order, on every surface", "leaves a host command that is not disabled announced as available", and "leaves a disabled menu item focusable, announced,
 and inert".
 
 ### Rules for writing predicates
@@ -1434,9 +1558,7 @@ the handle to do it with.
   the remaining actions — yours and the host's — still render. The report path is
   itself guarded, so a page that has replaced `console.error` with a throwing
   function cannot turn the containment back into an escape. *Tests:*
-  `src/components/__tests__/RibbonToolbar.test.tsx` — "hides an action whose
-  isVisible predicate throws and still renders the rest" and "survives a
-  console.error that itself throws while reporting a bad predicate".
+  `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar hides a command whose isVisible predicate throws and still renders the rest" and "the context bar survives a console.error that itself throws while reporting a bad predicate".
 
   **Containment is not permission.** This exists so one buggy predicate cannot
   blank the ribbon, not so that throwing becomes a supported way to hide an
@@ -1457,9 +1579,7 @@ the handle to do it with.
 - **Labels are rendered as text nodes.** See below — this matters for security,
   and it also means markup in a label is shown literally, not rendered. A very
   long label is truncated with an ellipsis rather than widening the row. *Tests:*
-  `src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped
-  plug-in label as a text node, not as markup", "truncates a very long label
-  instead of widening the ribbon".
+  `src/components/command/__tests__/ContextBar.test.tsx` — "the context bar renders a markup-shaped plug-in label as a text node, not as markup", "truncates a very long label instead of widening the surface, on every surface".
 - **Test your predicates directly anyway.** The host now exercises them, but your
   own unit tests are still the only place their *logic* is checked — the host's
   tests assert containment and filtering, not that your rule is the rule you
@@ -1541,6 +1661,53 @@ Consequences for your Pane 2 view:
 > catches nothing; it severs host context, which is a different job. The fault
 > boundary sits OUTSIDE it.
 
+### Two tiers, and why one was not enough
+
+Containment is arranged in **two tiers**, and the second one exists because the
+first cannot reach the failure that hurts most.
+
+| Tier | Component | Wrapped around | Fallback | Recovery |
+| --- | --- | --- | --- | --- |
+| Pane | `FaultBoundary` | every pane, every extension subtree, the ribbon | a contained surface inside the failing pane; the rest of the shell stays interactive | **Retry**, bounded at three consecutive failures, plus a reset when the active extension changes |
+| Root | `RootBoundary` | the whole application, outermost in `App` | a full-window host surface; nothing below it is running | **Reload**, and no in-place retry at all |
+
+A boundary never catches itself or a parent. `ShellLayout` composes its
+`FaultBoundary` instances *inside* itself, so until `RootBoundary` landed there
+was a band of code no boundary covered: `ExtensionRegistryProvider`'s own render,
+`ShellHostProvider`'s own render, and `ShellLayout`'s own render above its inner
+boundaries. A throw anywhere in that band unmounted the entire React root and
+left an empty `<div id="root">` — a white page in a browser, and a blank native
+window with no address bar and no reachable devtools under Electron.
+`src/components/error/RootBoundary.tsx` is what stands there instead, wired as
+the outermost element of `App`. *Tests:*
+`src/components/__tests__/RootBoundary.test.tsx` — "contains a provider that
+throws in its own render, and announces the failure"; `src/__tests__/App.test.tsx`
+— "composes RootBoundary as the outermost element, above both providers".
+
+The root fallback is styled with **inline styles rather than class names**, which
+is the only surface in the repository that is. It is the one surface that must
+stay legible when the reason nothing works is that nothing loaded, so it owns
+both sides of the contrast pair — an opaque background and its own text colour —
+instead of depending on a stylesheet that may have 404'd or a theme that may not
+have been applied yet. Pinned by "owns both sides of the contrast pair inline, so
+it is legible with no stylesheet" in the same file.
+
+**The root verb is Reload, not Retry, and that is a decision rather than an
+omission.** A pane can plausibly recover from a transient render failure while the
+shell around it keeps its registry, its host store and its layout. A root failure
+cannot: what threw is a provider's own render, so there is nothing below to
+preserve and a remount in place would rebuild the registry and the host store
+empty — a reload that lies about itself by keeping the module graph. So the root
+retry bound is **zero**: no timer, no interval, no automatic re-arm, no bounded
+in-place retry. Pinned by "never retries the failed subtree on its own — the bound
+is zero" and "offers exactly one control, and it says Reload rather than Retry",
+same file. The reload goes through `window.location.reload()`, which works in a
+browser tab and in an Electron renderer alike; **no Electron API is called,
+because none is wired up in this repository yet**, and a fallback that reached for
+a preload bridge that does not exist would throw a `TypeError` in the one place a
+throw has nowhere to go. Pinned by "invents no Electron API, because none is wired
+up yet".
+
 A view of yours that throws during render now degrades to a contained error
 surface inside its own pane. The pane keeps its border, its accessible name and
 its header; the body becomes host-authored text naming the surface, your
@@ -1549,8 +1716,7 @@ extension id as a text node, a guarded message read off whatever you threw, and 
 text — nothing retries automatically, because a component that throws
 deterministically plus an automatic retry is an unbounded render loop. Switching
 extension clears the surface, so yesterday's failure does not sit over today's
-view. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a
-throwing pane-2 view to pane 2, leaving the ribbon and pane 3 interactive",
+view. *Tests:* `src/components/__tests__/ShellLayout.test.tsx` — "contains a throwing pane-2 view to pane 2, leaving the context bar and pane 3 interactive",
 "contains a throwing pane-3 view to pane 3, leaving pane 2 interactive" and
 "clears a pane error surface when the active extension changes";
 `src/components/__tests__/FaultBoundary.test.tsx` — "stops offering a retry after
@@ -1572,8 +1738,9 @@ in render, in lifecycle methods and in constructors. They do **not** catch:
 - errors thrown during **server-side rendering**,
 - anything thrown by the fallback surface itself, or by a component ABOVE the
   boundary. A boundary never catches itself, which is why the host composes
-  several of them rather than one at the root, and why the fallback renders no
-  plug-in component and no plug-in markup at all.
+  several `FaultBoundary` instances at pane granularity **and** one
+  `RootBoundary` above everything, and why neither fallback renders any plug-in
+  component or plug-in markup at all.
 
 Those are yours to handle. Wrap your own async work and your own handlers. An
 unhandled rejection in your extension will surface as a global error, not as a
@@ -1581,6 +1748,32 @@ tidy contained pane. The same list is in the docblock at the top of
 `src/components/error/FaultBoundary.tsx`, and the two are kept in step by
 "documents in both the source and DEVELOPER.md what a boundary cannot catch" in
 `src/components/__tests__/FaultBoundary.test.tsx`.
+
+**`RootBoundary` does not widen that list. It only widens what "below it" means.**
+It is an ordinary React error boundary, so it catches render, lifecycle and
+constructor errors and nothing else. Every entry above applies to it unchanged —
+an **event handler** that throws, a **setTimeout** callback, an unhandled
+**promise rejection**, a **server-side** render — and two more apply only to it,
+because there is no third tier:
+
+- **Anything thrown in `App`'s own render body, or in module scope.** The
+  boundary is composed *inside* the tree `App` returns, so `App`'s own body is
+  above it; and a throw in module scope happens while `src/main.tsx` is still
+  evaluating its imports, before any React code runs at all. Neither is reachable
+  by any boundary, **including one wrapped around `createRoot(...).render(...)`**,
+  which is why `src/main.tsx` composes no second boundary — it would catch exactly
+  the same set and imply a coverage it does not have. `App`'s body is a bare
+  `return` with no hooks and no expressions today, so there is nothing in it that
+  can throw; keep it that way.
+- **Anything thrown by the root fallback itself.** There is no boundary above it.
+  That is why the root fallback is built from host elements, host text and inline
+  style objects only, with no `dangerouslySetInnerHTML`, no URL-bearing attribute
+  and no render prop. Pinned by "the outermost fallback reaches no markup sink of
+  any kind" and "the outermost fallback names no URL-bearing attribute at all" in
+  `src/components/__tests__/RootBoundary.test.tsx`.
+
+The root list is kept in step with its own source docblock by "documents in both
+the source and DEVELOPER.md what the root boundary cannot catch", same file.
 
 **Two entries on that list are no longer only a list.** The `setTimeout` case and
 the unhandled-rejection case are now reproduced through the assembled shell by an
@@ -1599,9 +1792,8 @@ error-boundary semantics and the FaultBoundary banner records it)" in
 
 The **event-handler** entry is the one that cuts the other way, and it is worth
 knowing which side of the line you are on: a throw from your `onExecute` IS
-contained, by the ribbon's own guard rather than by a boundary — reported, and the
-shell stays interactive. Pinned by "contains a throwing ribbon action inside the
-ribbon own guard, without taking the shell down" in the same file. A throw from a
+contained, by the context bar's own guard rather than by a boundary — reported, and the
+shell stays interactive. Pinned by "contains a throwing command inside the shared command guard, without taking the shell down" in the same file. A throw from a
 click handler you wrote inside your own pane is not covered by that guard and is
 yours.
 
@@ -1658,9 +1850,8 @@ text the moment a correct renderer is put in front of it.
 
 **Where the host now holds this rule under test, and where it does not.** ISSUE-002
 gave the host its first render sites for plug-in strings. **One of them is tested:**
-the ribbon renders `RibbonAction.label` as a text node. *Tests:*
-`src/components/__tests__/RibbonToolbar.test.tsx` — "renders a markup-shaped plug-in
-label as a text node, not as markup" and "the module source contains no
+the context bar renders `RibbonAction.label` as a text node. *Tests:*
+`src/components/command/__tests__/ContextBar.test.tsx` — "the context bar renders a markup-shaped plug-in label as a text node, not as markup" and "the module source contains no
 HTML-injection sink at all", the second of which parses the component with the
 TypeScript compiler, so it still holds if a second render path is added later.
 
@@ -1994,8 +2185,8 @@ PointerEvent".
 | `src/core/ShellAPI.ts` | `createShellAPI`, `createRevocableShellAPI`, `createShellStateStore`, `useShellContext`, `useShellStore`, `ShellStoreContext`, `deepFreeze`. Landed. |
 | `src/core/ActivationContext.tsx` | `ShellHostProvider`, `ExtensionHostBoundary`, `useActivation` (host-only *by guardrail* — read the second banner in that file), `useExtensionActivation`, the two-state activation model and revocation. Landed. |
 | `src/core/hotkeys.ts` | `hotkeyToken`, `describeHotkey`, `ariaKeyShortcuts`, `matchesHotkey`. Four pure functions over a chord — no DOM, no listener, no dispatcher. Landed. |
-| `src/core/hotkeyDispatch.ts` | `useHotkeyDispatch`. The shell's one `keydown` listener, called once by `ShellLayout`: foreground-scoped, bubble phase, gated by the same `isVisible`/`isDisabled` as the ribbon button. Landed. |
-| `src/core/ribbonAction.ts` | `isVisible`, `execute`, `report`. The two guards every route to a plug-in action goes through, in one copy so the button and the chord cannot drift apart. Landed. |
+| `src/core/hotkeyDispatch.ts` | `useHotkeyDispatch`. The shell's one `keydown` listener, called once by `ShellLayout`: foreground-scoped, bubble phase, gated by the same `isVisible`/`isDisabled` as the command button. Landed. |
+| `src/core/command.ts` | `isVisible`, `execute`, `report`. The two guards every route to a plug-in command goes through, in one copy so four surfaces and the chord dispatcher cannot drift apart. Landed. |
 
 `useShellStore` and `ShellStoreContext` are in that list deliberately, and their
 omission from an earlier version of it was a documentation defect rather than a
@@ -2039,7 +2230,14 @@ this page can:
   re-renders it.
 
 All four are reproduced in `src/core/__tests__/subscribe.test.tsx`. None of them is
-closable in-page: a store that notifies nobody is a store no pane can render off. **If
+closable in-page: a store that notifies nobody is a store no pane can render off.
+**All four are also scoped to one page, and that scope shrinks under the native
+host.** When a pane is a process, your store is a replica: a write is validated,
+applied and notified locally — so a listener in YOUR renderer still does all four —
+and then posted, so a listener in another renderer sees it a message later and
+cannot throw into your statement at all. What you must not conclude from that is
+that the four become impossible; they become pane-local. See
+`src/core/ipc/ReplicaStore.ts`. **If
 your extension's behaviour must be tamper-evident against another extension in the same
 page, this architecture does not give you that** — and if you must guard one of your own
 writes, wrap the call yourself, which is what the host does at the one call site it

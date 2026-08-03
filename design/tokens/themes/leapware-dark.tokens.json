@@ -1,0 +1,29 @@
+{
+  "$description": "LEAPWare Dark. Same three inputs, dark polarity. The step-1 pane is a dark grey rather than black and step 12 is an off-white rather than white; both are APCA-driven judgements that WCAG 2.x would have let us get away with ignoring. See design/README.md.",
+  "$extensions": {
+    "com.leapware.shellux.theme": {
+      "id": "leapware-dark",
+      "name": "LEAPWare Dark",
+      "polarity": "dark",
+      "builtIn": true,
+      "schemaVersion": 1
+    }
+  },
+
+  "base": {
+    "$description": "Slightly more chroma than the light theme: at low lightness a completely neutral grey reads as flat, and the tint is what stops the pane stack looking like four shades of the same nothing.",
+    "hue": { "$type": "number", "$value": 264 },
+    "chroma": { "$type": "number", "$value": 0.012 }
+  },
+
+  "accent": {
+    "$description": "Hue held identical to the light theme so that a user switching themes does not experience it as a different product.",
+    "hue": { "$type": "number", "$value": 252 },
+    "chroma": { "$type": "number", "$value": 0.145 }
+  },
+
+  "contrast": {
+    "$type": "number",
+    "$value": 1.0
+  }
+}
