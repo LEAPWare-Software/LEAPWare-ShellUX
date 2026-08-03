@@ -35,7 +35,28 @@ The rules:
 re-derivation are folded in below and throughout §3, §6, §7, §8 and §12.** Re-derive
 every SHA and every count again before trusting it — see §0.
 
-### IN FLIGHT: `pre-65-prep`, six commits, unmerged
+### NOTHING IS IN FLIGHT. `pre-65-prep` MERGED as `9929410` (PR #104)
+
+**Read `docs/DECISIONS.md` first, not this file.** The decision register is new and it
+is where the open questions now live — one row each, who calls it, what it blocks,
+what it costs to decide, plus a line-of-sight table to v1. This file remains the
+crash-recovery record; the register is the thing to act on. There is also a
+`scrum-master` agent at `.claude/agents/scrum-master.md` — invoke it with "where are
+we" and it re-derives from `git` and `gh` rather than reading state off a document.
+
+**Tracker state, re-derived 2026-08-03 after the merge: 54 open issues, milestone 54
+open / 17 closed, and ONE open PR — #71.** Six labels now carry the §7 taxonomy on the
+tracker itself, so it no longer lives only in this file.
+
+**A GitHub detail that cost three manual closes and is worth knowing:** `closing #83`
+in a commit subject **does not close anything**. GitHub's keywords are
+`close`/`closes`/`closed`, `fix`/`fixes`/`fixed`, `resolve`/`resolves`/`resolved` —
+**`closing` is not one of them**, though `Closing #27` in a body did work. #83, #81 and
+#90 were closed by hand, each after checking the fix on `main` rather than trusting the
+commit message. This is the mirror of §11's trap: that one is about closing something
+by accident, this one is about believing you did when you did not.
+
+### What landed on 2026-08-03
 
 **The one decision this branch is FOR.** The project's real open question is not
 technical: the shell is built, nobody has shipped it, and the only two extensions in
@@ -54,6 +75,17 @@ because which of them actually bite is the experiment's output.**
 | `e8c8137` | `DatabasePlugin` supplies the icons it declares — the C A C rail was still live | **#81** |
 | `0afd218` | three passages describing shipped code as unbuilt | **#90** |
 | `9cb2226` | a copyable example extension, registered and driven by a test | **#52**, partial |
+| `59a06c3` | the icon case asserts the tree, not a 280-row mount | — |
+| `832888b` | `docs/DECISIONS.md`, the `scrum-master` agent, and the stale ISSUE-00N statuses | **#27** |
+| `5b0e5c5` | the register records what the tracker sweep decided | — |
+
+**The tracker sweep that followed, same day.** #94 closed — stale on arrival, all three
+Dependabot PRs it named were already closed. #58 commented and left closed. Six labels
+created and applied. The eleven issues that were off the milestone are on it. #36
+(`@types/node`) merged green; **#96 closed** because it is red on all three Verify legs
+and the reason is a doctrine question, now **#105**; **#97 closed** because `npm ci`
+fails before any test runs — it is a React 19 **migration**, now **#106**, deferred
+until after #65 so the substrate does not move underneath the experiment.
 
 **Left open ON PURPOSE, and re-opening them early destroys the signal:** #17
 (lifecycle hooks), #16 (immutable nav tree), #80 (no way to clear a badge), #91
