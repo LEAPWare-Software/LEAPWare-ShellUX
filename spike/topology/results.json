@@ -1,0 +1,1588 @@
+{
+  "measuredAt": "2026-08-03T12:34:08.622Z",
+  "runs": [
+    {
+      "label": "views",
+      "mode": "views",
+      "switches": [],
+      "arms": {
+        "accessibilityTrees": [
+          {
+            "webContentsId": 1,
+            "webContentsType": "window",
+            "osProcessId": 3132,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "5B6B369FEE16F79BB6FFDF28A0B39B19",
+                "document": "pane-a.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 29,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, Pane A"
+              ],
+              "headings": [
+                "Pane A heading, the list pane"
+              ],
+              "landmarkRegions": [
+                "Pane A heading, the list pane"
+              ]
+            },
+            "perFrame": [
+              {
+                "frameId": "5B6B369FEE16F79BB6FFDF28A0B39B19",
+                "document": "pane-a.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane A"
+                ],
+                "headings": [
+                  "Pane A heading, the list pane"
+                ],
+                "landmarkRegions": [
+                  "Pane A heading, the list pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": true,
+            "wholeWebContentsHasPaneBHeading": false
+          },
+          {
+            "webContentsId": 2,
+            "webContentsType": "window",
+            "osProcessId": 25204,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "B820B121C798DC41E54BCF1537C4EE25",
+                "document": "pane-b.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 29,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, Pane B"
+              ],
+              "headings": [
+                "Pane B heading, the detail pane"
+              ],
+              "landmarkRegions": [
+                "Pane B heading, the detail pane"
+              ]
+            },
+            "perFrame": [
+              {
+                "frameId": "B820B121C798DC41E54BCF1537C4EE25",
+                "document": "pane-b.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane B"
+                ],
+                "headings": [
+                  "Pane B heading, the detail pane"
+                ],
+                "landmarkRegions": [
+                  "Pane B heading, the detail pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": false,
+            "wholeWebContentsHasPaneBHeading": true
+          }
+        ],
+        "crossDocumentReferences": [
+          {
+            "element": "pane-a-cross",
+            "dom": {
+              "controlsIdref": "pane-b-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-a.html",
+              "labelledbyIdref": "pane-b-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane A cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane A cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane A cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          },
+          {
+            "element": "pane-b-cross",
+            "dom": {
+              "controlsIdref": "pane-a-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-b.html",
+              "labelledbyIdref": "pane-a-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane B cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane B cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane B cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          }
+        ],
+        "tabTraversal": {
+          "atStartup": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 0,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "focusedElement": "pane-a-last",
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-last",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "afterTab": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-nav-link",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "hostMediation": {
+            "neededToEnterPaneA": true,
+            "afterHostMediation": {
+              "windowIsFocused": true,
+              "documentsReportingHasFocus": 2,
+              "documentsWithANonBodyActiveElement": 1,
+              "views": [
+                {
+                  "webContentsId": 1,
+                  "webContentsIsFocused": false,
+                  "frames": [
+                    {
+                      "activeElement": "pane-a-nav-link",
+                      "document": "pane-a.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                },
+                {
+                  "webContentsId": 2,
+                  "webContentsIsFocused": true,
+                  "frames": [
+                    {
+                      "activeElement": "body",
+                      "document": "pane-b.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "activeElementAcrossClick": {
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-text",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "clickedAt": {
+            "webContentsId": 2,
+            "x": 89,
+            "y": 127
+          },
+          "after": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 2,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-text",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "pane-b-first",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "paneATextValueBefore": "typed before the click",
+          "paneATextValueAfter": "typed before the click",
+          "documentsClaimingAnActiveElementAfterTheClick": 2
+        },
+        "addChildViewFocusSteal": {
+          "skipped": "runs only in --mode=views-deferred"
+        }
+      },
+      "playwrightWindowCount": 2,
+      "environment": {
+        "mode": "views",
+        "electron": "43.2.0",
+        "chrome": "150.0.7871.129",
+        "node": "24.18.0",
+        "platform": "win32",
+        "osRelease": "10.0.26200",
+        "accessibilitySupportEnabled": false,
+        "switches": [
+          "--mode=views"
+        ],
+        "viewCount": 2
+      }
+    },
+    {
+      "label": "views-armD",
+      "mode": "views",
+      "switches": [
+        "--enable-features=AccessibilityTreeForViews"
+      ],
+      "arms": {
+        "accessibilityTrees": [
+          {
+            "webContentsId": 1,
+            "webContentsType": "window",
+            "osProcessId": 10632,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "BA89DD97C95C06A8D027729D9B34066E",
+                "document": "pane-a.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 29,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, Pane A"
+              ],
+              "headings": [
+                "Pane A heading, the list pane"
+              ],
+              "landmarkRegions": [
+                "Pane A heading, the list pane"
+              ]
+            },
+            "perFrame": [
+              {
+                "frameId": "BA89DD97C95C06A8D027729D9B34066E",
+                "document": "pane-a.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane A"
+                ],
+                "headings": [
+                  "Pane A heading, the list pane"
+                ],
+                "landmarkRegions": [
+                  "Pane A heading, the list pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": true,
+            "wholeWebContentsHasPaneBHeading": false
+          },
+          {
+            "webContentsId": 2,
+            "webContentsType": "window",
+            "osProcessId": 18064,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "9E6DE733682AEC5FD1FB5CA6F2DFBB12",
+                "document": "pane-b.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 29,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, Pane B"
+              ],
+              "headings": [
+                "Pane B heading, the detail pane"
+              ],
+              "landmarkRegions": [
+                "Pane B heading, the detail pane"
+              ]
+            },
+            "perFrame": [
+              {
+                "frameId": "9E6DE733682AEC5FD1FB5CA6F2DFBB12",
+                "document": "pane-b.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane B"
+                ],
+                "headings": [
+                  "Pane B heading, the detail pane"
+                ],
+                "landmarkRegions": [
+                  "Pane B heading, the detail pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": false,
+            "wholeWebContentsHasPaneBHeading": true
+          }
+        ],
+        "crossDocumentReferences": [
+          {
+            "element": "pane-a-cross",
+            "dom": {
+              "controlsIdref": "pane-b-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-a.html",
+              "labelledbyIdref": "pane-b-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane A cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane A cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane A cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          },
+          {
+            "element": "pane-b-cross",
+            "dom": {
+              "controlsIdref": "pane-a-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-b.html",
+              "labelledbyIdref": "pane-a-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane B cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane B cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane B cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          }
+        ],
+        "tabTraversal": {
+          "atStartup": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 0,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "focusedElement": "pane-a-last",
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-last",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "afterTab": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-nav-link",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "hostMediation": {
+            "neededToEnterPaneA": false,
+            "afterHostMediation": {
+              "windowIsFocused": true,
+              "documentsReportingHasFocus": 2,
+              "documentsWithANonBodyActiveElement": 1,
+              "views": [
+                {
+                  "webContentsId": 1,
+                  "webContentsIsFocused": false,
+                  "frames": [
+                    {
+                      "activeElement": "pane-a-nav-link",
+                      "document": "pane-a.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                },
+                {
+                  "webContentsId": 2,
+                  "webContentsIsFocused": true,
+                  "frames": [
+                    {
+                      "activeElement": "body",
+                      "document": "pane-b.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "activeElementAcrossClick": {
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-text",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "clickedAt": {
+            "webContentsId": 2,
+            "x": 89,
+            "y": 127
+          },
+          "after": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 2,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-text",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              },
+              {
+                "webContentsId": 2,
+                "webContentsIsFocused": false,
+                "frames": [
+                  {
+                    "activeElement": "pane-b-first",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "paneATextValueBefore": "typed before the click",
+          "paneATextValueAfter": "typed before the click",
+          "documentsClaimingAnActiveElementAfterTheClick": 2
+        },
+        "addChildViewFocusSteal": {
+          "skipped": "runs only in --mode=views-deferred"
+        }
+      },
+      "playwrightWindowCount": 2,
+      "environment": {
+        "mode": "views",
+        "electron": "43.2.0",
+        "chrome": "150.0.7871.129",
+        "node": "24.18.0",
+        "platform": "win32",
+        "osRelease": "10.0.26200",
+        "accessibilitySupportEnabled": false,
+        "switches": [
+          "--enable-features=AccessibilityTreeForViews",
+          "--mode=views"
+        ],
+        "viewCount": 2
+      }
+    },
+    {
+      "label": "iframes",
+      "mode": "iframes",
+      "switches": [],
+      "arms": {
+        "accessibilityTrees": [
+          {
+            "webContentsId": 1,
+            "webContentsType": "window",
+            "osProcessId": 47948,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "987C9FD961A97309DEBFC51D5184E8C8",
+                "document": "iframes.html"
+              },
+              {
+                "id": "C840502F5ACD44767343DAD3F469A772",
+                "document": "pane-a.html"
+              },
+              {
+                "id": "191999C6F19EB968DD5968AA528BBE68",
+                "document": "pane-b.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 5,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, one document, sibling iframes"
+              ],
+              "headings": [],
+              "landmarkRegions": []
+            },
+            "perFrame": [
+              {
+                "frameId": "987C9FD961A97309DEBFC51D5184E8C8",
+                "document": "iframes.html",
+                "nodeCount": 5,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, one document, sibling iframes"
+                ],
+                "headings": [],
+                "landmarkRegions": []
+              },
+              {
+                "frameId": "C840502F5ACD44767343DAD3F469A772",
+                "document": "pane-a.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane A"
+                ],
+                "headings": [
+                  "Pane A heading, the list pane"
+                ],
+                "landmarkRegions": [
+                  "Pane A heading, the list pane"
+                ]
+              },
+              {
+                "frameId": "191999C6F19EB968DD5968AA528BBE68",
+                "document": "pane-b.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane B"
+                ],
+                "headings": [
+                  "Pane B heading, the detail pane"
+                ],
+                "landmarkRegions": [
+                  "Pane B heading, the detail pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": false,
+            "wholeWebContentsHasPaneBHeading": false
+          }
+        ],
+        "crossDocumentReferences": [
+          {
+            "element": "pane-a-cross",
+            "dom": {
+              "controlsIdref": "pane-b-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-a.html",
+              "labelledbyIdref": "pane-b-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane A cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane A cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane A cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          },
+          {
+            "element": "pane-b-cross",
+            "dom": {
+              "controlsIdref": "pane-a-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-b.html",
+              "labelledbyIdref": "pane-a-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane B cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane B cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane B cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          }
+        ],
+        "tabTraversal": {
+          "atStartup": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 0,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "iframes.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "body",
+                    "document": "pane-a.html",
+                    "documentHasFocus": false
+                  },
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": false
+                  }
+                ]
+              }
+            ]
+          },
+          "focusedElement": "pane-a-last",
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 2,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "frame-a",
+                    "document": "iframes.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "pane-a-last",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": false
+                  }
+                ]
+              }
+            ]
+          },
+          "afterTab": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 2,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "frame-b",
+                    "document": "iframes.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "body",
+                    "document": "pane-a.html",
+                    "documentHasFocus": false
+                  },
+                  {
+                    "activeElement": "pane-b-nav-link",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "hostMediation": {
+            "neededToEnterPaneA": false,
+            "afterHostMediation": null
+          }
+        },
+        "activeElementAcrossClick": {
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 2,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "frame-a",
+                    "document": "iframes.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "pane-a-text",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "body",
+                    "document": "pane-b.html",
+                    "documentHasFocus": false
+                  }
+                ]
+              }
+            ]
+          },
+          "clickedAt": {
+            "webContentsId": 1,
+            "x": 729,
+            "y": 127
+          },
+          "after": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 2,
+            "documentsWithANonBodyActiveElement": 2,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "frame-b",
+                    "document": "iframes.html",
+                    "documentHasFocus": true
+                  },
+                  {
+                    "activeElement": "body",
+                    "document": "pane-a.html",
+                    "documentHasFocus": false
+                  },
+                  {
+                    "activeElement": "pane-b-first",
+                    "document": "pane-b.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "paneATextValueBefore": "typed before the click",
+          "paneATextValueAfter": "typed before the click",
+          "documentsClaimingAnActiveElementAfterTheClick": 2
+        },
+        "addChildViewFocusSteal": {
+          "skipped": "runs only in --mode=views-deferred"
+        }
+      },
+      "playwrightWindowCount": 1,
+      "environment": {
+        "mode": "iframes",
+        "electron": "43.2.0",
+        "chrome": "150.0.7871.129",
+        "node": "24.18.0",
+        "platform": "win32",
+        "osRelease": "10.0.26200",
+        "accessibilitySupportEnabled": false,
+        "switches": [
+          "--mode=iframes"
+        ],
+        "viewCount": 1
+      }
+    },
+    {
+      "label": "divs",
+      "mode": "divs",
+      "switches": [],
+      "arms": {
+        "accessibilityTrees": [
+          {
+            "webContentsId": 1,
+            "webContentsType": "window",
+            "osProcessId": 428,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "198AA2038251213FD1A4899528E9717E",
+                "document": "divs.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 54,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, one document, sibling divs"
+              ],
+              "headings": [
+                "Pane A heading, the list pane",
+                "Pane B heading, the detail pane"
+              ],
+              "landmarkRegions": [
+                "Pane A heading, the list pane",
+                "Pane B heading, the detail pane"
+              ]
+            },
+            "perFrame": [
+              {
+                "frameId": "198AA2038251213FD1A4899528E9717E",
+                "document": "divs.html",
+                "nodeCount": 54,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, one document, sibling divs"
+                ],
+                "headings": [
+                  "Pane A heading, the list pane",
+                  "Pane B heading, the detail pane"
+                ],
+                "landmarkRegions": [
+                  "Pane A heading, the list pane",
+                  "Pane B heading, the detail pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": true,
+            "wholeWebContentsHasPaneBHeading": true
+          }
+        ],
+        "crossDocumentReferences": [
+          {
+            "element": "pane-a-cross",
+            "dom": {
+              "controlsIdref": "pane-b-region",
+              "controlsResolvesInThisDocument": true,
+              "document": "divs.html",
+              "labelledbyIdref": "pane-b-heading",
+              "labelledbyResolvesInThisDocument": true,
+              "ownTextContent": "Pane A cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane B heading, the detail pane",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane B heading, the detail pane"
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": true,
+                  "invalid": false,
+                  "value": "Pane A cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 1,
+              "controlsRelatedNodes": 1
+            }
+          },
+          {
+            "element": "pane-b-cross",
+            "dom": {
+              "controlsIdref": "pane-a-region",
+              "controlsResolvesInThisDocument": true,
+              "document": "divs.html",
+              "labelledbyIdref": "pane-a-heading",
+              "labelledbyResolvesInThisDocument": true,
+              "ownTextContent": "Pane B cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane A heading, the list pane",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane A heading, the list pane"
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": true,
+                  "invalid": false,
+                  "value": "Pane B cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 1,
+              "controlsRelatedNodes": 1
+            }
+          }
+        ],
+        "tabTraversal": {
+          "atStartup": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 0,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "divs.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "focusedElement": "pane-a-last",
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-last",
+                    "document": "divs.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "afterTab": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-b-nav-link",
+                    "document": "divs.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "hostMediation": {
+            "neededToEnterPaneA": false,
+            "afterHostMediation": null
+          }
+        },
+        "activeElementAcrossClick": {
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-text",
+                    "document": "divs.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "clickedAt": {
+            "webContentsId": 1,
+            "x": 729,
+            "y": 127
+          },
+          "after": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-b-first",
+                    "document": "divs.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "paneATextValueBefore": "typed before the click",
+          "paneATextValueAfter": "typed before the click",
+          "documentsClaimingAnActiveElementAfterTheClick": 1
+        },
+        "addChildViewFocusSteal": {
+          "skipped": "runs only in --mode=views-deferred"
+        }
+      },
+      "playwrightWindowCount": 1,
+      "environment": {
+        "mode": "divs",
+        "electron": "43.2.0",
+        "chrome": "150.0.7871.129",
+        "node": "24.18.0",
+        "platform": "win32",
+        "osRelease": "10.0.26200",
+        "accessibilitySupportEnabled": false,
+        "switches": [
+          "--mode=divs"
+        ],
+        "viewCount": 1
+      }
+    },
+    {
+      "label": "views-deferred",
+      "mode": "views-deferred",
+      "switches": [],
+      "arms": {
+        "accessibilityTrees": [
+          {
+            "webContentsId": 1,
+            "webContentsType": "window",
+            "osProcessId": 57544,
+            "cdp": "webContents.debugger",
+            "cdpError": null,
+            "frames": [
+              {
+                "id": "7536BB5EEBF1958B463D6C0FB5E74928",
+                "document": "pane-a.html"
+              }
+            ],
+            "wholeWebContents": {
+              "nodeCount": 29,
+              "rootWebAreaCount": 1,
+              "rootWebAreaNames": [
+                "Topology spike, Pane A"
+              ],
+              "headings": [
+                "Pane A heading, the list pane"
+              ],
+              "landmarkRegions": [
+                "Pane A heading, the list pane"
+              ]
+            },
+            "perFrame": [
+              {
+                "frameId": "7536BB5EEBF1958B463D6C0FB5E74928",
+                "document": "pane-a.html",
+                "nodeCount": 29,
+                "rootWebAreaCount": 1,
+                "rootWebAreaNames": [
+                  "Topology spike, Pane A"
+                ],
+                "headings": [
+                  "Pane A heading, the list pane"
+                ],
+                "landmarkRegions": [
+                  "Pane A heading, the list pane"
+                ]
+              }
+            ],
+            "wholeWebContentsHasPaneAHeading": true,
+            "wholeWebContentsHasPaneBHeading": false
+          }
+        ],
+        "crossDocumentReferences": [
+          {
+            "element": "pane-a-cross",
+            "dom": {
+              "controlsIdref": "pane-b-region",
+              "controlsResolvesInThisDocument": false,
+              "document": "pane-a.html",
+              "labelledbyIdref": "pane-b-heading",
+              "labelledbyResolvesInThisDocument": false,
+              "ownTextContent": "Pane A cross reference control"
+            },
+            "computed": {
+              "accessibleName": "Pane A cross reference control",
+              "accessibleNameFrom": [
+                {
+                  "type": "relatedElement",
+                  "attribute": "aria-labelledby",
+                  "superseded": false,
+                  "invalid": true,
+                  "value": null
+                },
+                {
+                  "type": "contents",
+                  "attribute": null,
+                  "superseded": false,
+                  "invalid": false,
+                  "value": "Pane A cross reference control"
+                }
+              ],
+              "labelledbyRelatedNodes": 0,
+              "controlsRelatedNodes": 0
+            }
+          }
+        ],
+        "tabTraversal": {
+          "atStartup": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 0,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "body",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "focusedElement": "pane-a-last",
+          "before": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-last",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "afterTab": {
+            "windowIsFocused": true,
+            "documentsReportingHasFocus": 1,
+            "documentsWithANonBodyActiveElement": 1,
+            "views": [
+              {
+                "webContentsId": 1,
+                "webContentsIsFocused": true,
+                "frames": [
+                  {
+                    "activeElement": "pane-a-nav-link",
+                    "document": "pane-a.html",
+                    "documentHasFocus": true
+                  }
+                ]
+              }
+            ]
+          },
+          "hostMediation": {
+            "neededToEnterPaneA": false,
+            "afterHostMediation": null
+          }
+        },
+        "activeElementAcrossClick": {
+          "skipped": "pane B does not exist until the addChildViewFocusSteal arm creates it"
+        },
+        "addChildViewFocusSteal": {
+          "issue": "electron/electron#42339",
+          "before": {
+            "report": {
+              "windowIsFocused": true,
+              "documentsReportingHasFocus": 1,
+              "documentsWithANonBodyActiveElement": 1,
+              "views": [
+                {
+                  "webContentsId": 1,
+                  "webContentsIsFocused": true,
+                  "frames": [
+                    {
+                      "activeElement": "pane-a-text",
+                      "document": "pane-a.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "paneATextValue": "before"
+          },
+          "immediatelyAfterAddChildView": {
+            "paneAWebContentsIsFocused": true,
+            "newViewWebContentsIsFocused": false
+          },
+          "afterLoad": {
+            "report": {
+              "windowIsFocused": true,
+              "documentsReportingHasFocus": 2,
+              "documentsWithANonBodyActiveElement": 1,
+              "views": [
+                {
+                  "webContentsId": 1,
+                  "webContentsIsFocused": false,
+                  "frames": [
+                    {
+                      "activeElement": "pane-a-text",
+                      "document": "pane-a.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                },
+                {
+                  "webContentsId": 2,
+                  "webContentsIsFocused": true,
+                  "frames": [
+                    {
+                      "activeElement": "body",
+                      "document": "pane-b.html",
+                      "documentHasFocus": true
+                    }
+                  ]
+                }
+              ]
+            },
+            "paneATextValue": "before"
+          },
+          "paneALostWebContentsFocus": true
+        }
+      },
+      "playwrightWindowCount": 1,
+      "environment": {
+        "mode": "views-deferred",
+        "electron": "43.2.0",
+        "chrome": "150.0.7871.129",
+        "node": "24.18.0",
+        "platform": "win32",
+        "osRelease": "10.0.26200",
+        "accessibilitySupportEnabled": false,
+        "switches": [
+          "--mode=views-deferred"
+        ],
+        "viewCount": 1
+      }
+    }
+  ],
+  "startupFocus": [
+    {
+      "windowIsFocused": true,
+      "focusedWebContentsIds": [
+        2
+      ],
+      "documentsReportingHasFocus": 2
+    },
+    {
+      "windowIsFocused": true,
+      "focusedWebContentsIds": [
+        2
+      ],
+      "documentsReportingHasFocus": 2
+    },
+    {
+      "windowIsFocused": true,
+      "focusedWebContentsIds": [
+        1
+      ],
+      "documentsReportingHasFocus": 2
+    },
+    {
+      "windowIsFocused": true,
+      "focusedWebContentsIds": [
+        2
+      ],
+      "documentsReportingHasFocus": 2
+    },
+    {
+      "windowIsFocused": true,
+      "focusedWebContentsIds": [
+        2
+      ],
+      "documentsReportingHasFocus": 2
+    }
+  ]
+}

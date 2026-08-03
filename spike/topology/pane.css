@@ -1,0 +1,59 @@
+/* Enough styling to tell the two panes apart on screen. Nothing here is measured. */
+html {
+  font-family: system-ui, sans-serif;
+  font-size: 15px;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: #111111;
+}
+
+body.split {
+  display: flex;
+}
+
+main {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+}
+
+.pane,
+main > div {
+  flex: 1 1 50%;
+  border: 2px solid #444444;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+iframe.pane {
+  border: 2px solid #444444;
+}
+
+header,
+nav,
+section {
+  padding: 0.5rem 1rem;
+}
+
+h1 {
+  font-size: 1.15rem;
+}
+
+section {
+  border-top: 1px dashed #999999;
+}
+
+button,
+input {
+  font: inherit;
+  margin: 0.25rem 0;
+  padding: 0.3rem 0.5rem;
+}
+
+:focus-visible {
+  outline: 3px solid #0057d8;
+  outline-offset: 2px;
+}
