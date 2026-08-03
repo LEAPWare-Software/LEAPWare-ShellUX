@@ -32,7 +32,7 @@ question from a settled one. That is a reporting defect, not a process one.
 | D-05 | **Windows signing identity**: Azure Artifact Signing, or a cloud-HSM OV/EV certificate | **CTO** | Any release. Unsigned means a SmartScreen dialog on every download, and it is what makes an update feed unsafe | Money + a vendor choice. See §"Signing" below |
 | D-06 | **Is macOS in v1?** | **CPO** | Packaging is configured and has never been executed. Dropping it removes the Apple Developer programme from the v1 budget | A judgement |
 | D-07 | **Branch protection**: pay for a plan, or accept no enforcement (#74) | **CTO** | Nothing enforces review. No merged PR has ever carried one. In its absence the only gate is a person choosing to refuse a merge | Money |
-| D-08 | **eslint-plugin-react-refresh 0.5.3** (#96) | **CTO** | Nothing. Recorded because it is a doctrine question wearing a chore's clothes: 11 new warnings, all on `Object.freeze(...)` exports, and 0.4.26 lints the same files clean. **Recommendation: close #96, pin 0.4.26, file the doctrine question separately.** A rule should not change because a linter did | 1 minute |
+| D-08 | **The lint rule underneath the react-refresh bump** (#105) | **CTO** | Nothing today, but it has now been deferred twice and will return a third time. 0.5.3 emits 11 warnings, all on `Object.freeze(...)` exports; 0.4.26 lints the same files clean. The tree did not change, the rule did. Three options are stated in #105 | 1 minute, once |
 
 ---
 
@@ -49,6 +49,9 @@ question from a settled one. That is a reporting defect, not a process one.
 | D-15 | **Windows 11 primary, macOS second, no Linux** | Owner | 2026-08-02 | See D-06, which asks whether macOS is in the *first* release |
 | D-16 | **The ribbon is deleted** | Owner | 2026-08-02 | One command registry, four surfaces: 32px context bar, Cmd-K palette, floating toolbar, docked omnibox. Shipped in Phase 4 |
 | D-17 | **Two-process pane topology**, for now | Owner | 2026-08-03 | Chosen because it is safe under either outcome of the spike D-04 decides. Three-process remains an additive change if arm B comes back clean |
+| D-18 | **The dependency queue is emptied, one bump at a time and each with a reason** | Owner | 2026-08-03 | #36 (`@types/node`) green on every leg — **merged**. #96 closed: red on all three Verify legs, and the reason is the doctrine question now filed as #105, not the bump. #97 closed: `npm ci` fails before any test runs because it moves `@types/react` to 19 and leaves `@types/react-dom` at 18 — a **migration**, not a bump, now #106. Dependabot ungroups majors deliberately, so it cannot offer the set that would resolve and will keep re-proposing it |
+| D-19 | **React 19 waits until after #65** (#106) | Owner | 2026-08-03 | React 18 has no known defect in this tree, and the migration touches the Radix command surface and `react-resizable-panels` — the exact surfaces #65's author will exercise. Changing the substrate underneath an experiment about contract sufficiency confounds the result |
+| D-20 | **The tracker carries the taxonomy, not just this file** | Owner | 2026-08-03 | Six labels created — `blocker`, `correctness`, `contract`, `testing`, `decision`, `docs` — and applied. The grouping in `HANDOFF.md` §7 existed **nowhere but that file**, so it died with it. The eleven issues that were off the milestone are on it: it now reads 57 open / 12 closed rather than 47 / 11 |
 
 ---
 
