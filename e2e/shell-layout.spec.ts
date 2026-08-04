@@ -406,6 +406,20 @@ test.describe('the pane footer is docked, not floating', () => {
     const footerBottom =
       (footerBox as { y: number; height: number }).y + (footerBox as { height: number }).height;
     expect(Math.abs(paneBottom - footerBottom)).toBeLessThanOrEqual(2);
+
+    // AND IT SPANS THE SLOT. The composer stopped drawing its own `border-t
+    // p-1` when it moved into the footer, because the slot draws them — but the
+    // slot is a ROW with `items-center`, and the form is `flex-none`, so its
+    // width now comes from `w-full` alone. Nothing else in either lane measures
+    // that: a composer rendering at its intrinsic input width would sit at the
+    // right bottom edge and pass every other assertion here.
+    const form = footer.locator('[data-shell-region="omnibox"]');
+    const formBox = await form.boundingBox();
+    expect(formBox).not.toBeNull();
+    const footerWidth = (footerBox as { width: number }).width;
+    const formWidth = (formBox as { width: number }).width;
+    // The slot's `p-1` is 4px each side, so the form fills it less 8px.
+    expect(Math.abs(footerWidth - 8 - formWidth)).toBeLessThanOrEqual(1);
   });
 });
 

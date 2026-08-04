@@ -292,7 +292,9 @@ from so a reader can check it.
   `src/components/command/`: `ContextBar.tsx` (32px, replacing the ribbon at about
   a third of the vertical cost), `CommandPalette.tsx` (Cmd-K, **browsable on an
   empty query**), `FloatingToolbar.tsx` (selection-triggered, pane 3 only) and
-  `OmniboxComposer.tsx` (docked, with the detected intent labelled before submit).
+  `OmniboxComposer.tsx` (**not** docked when this was written, though this entry
+  said it was — see the #110 entry at the top of this section, which is the
+  change that made the word true).
   `commandListItem.tsx` is the one row all four render, and the one place a plug-in
   string reaches the DOM. See ADR-0001 Amendment N.
 - **`Command`, generalising `RibbonAction`.** Four optional fields — `when`,

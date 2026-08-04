@@ -92,6 +92,15 @@ export const OMNIBOX_MATCH_LIMIT = 5;
 /**
  * The docked composer.
  *
+ * **"Docked" describes where the CALLER puts it, and became true with GitHub
+ * issue #110.** This form draws no border and no padding of its own: it belongs
+ * in `PaneWrapper`'s `footer` slot, and that slot draws both. Rendered anywhere
+ * else — as `paneSurfaces.test.tsx` does, standalone — it has no separating
+ * edge, which is correct for a component whose container owns its chrome and
+ * worth knowing before moving it. *Test:* `e2e/shell-layout.spec.ts` — "rests
+ * the omnibox against the bottom edge of pane 3, not against the end of the
+ * content", which measures both the docking and that the form spans the slot.
+ *
  * `matches` is recomputed on every render from the registry, so a command whose
  * predicate goes false while the box is open stops being offered on the next
  * render rather than staying listed until the user retypes.
