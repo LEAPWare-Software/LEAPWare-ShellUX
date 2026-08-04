@@ -35,7 +35,36 @@ The rules:
 re-derivation are folded in below and throughout §3, §6, §7, §8 and §12.** Re-derive
 every SHA and every count again before trusting it — see §0.
 
-### NOTHING IS IN FLIGHT. `pre-65-prep` MERGED as `9929410` (PR #104)
+### IN FLIGHT: `design/redesign-groundwork`, unmerged, no PR opened yet
+
+**This section was "NOTHING IS IN FLIGHT" and was stale.** The branch below carries
+commits the register does not mention, and this file said so nowhere — recorded
+rather than quietly overwritten, because §0 exists for exactly this.
+
+| Commit | What | Issue |
+|---|---|---|
+| `6a35ab1` | `docs/design/SHAPE-BRIEF.md`, and a measurement that removed a wave | — |
+| `ce1d97a` | wave 1 — chrome becomes its own plane, the accent becomes petrol | — |
+| `6ba6053` | six open decisions closed under an explicit delegation | — |
+| *uncommitted* | pane 3's composer docks; the collapsed pane split sums to 100 | **#110**, **#114** |
+
+**Five UI defects were filed off the running application, #110 through #114.** Two
+are closed by the work in the tree: #110 (composer never docked, ~450px of dead
+pane) and #114 (panes opened summing to 83 and warned on every load). **#111, #112
+and #113 are untouched** — all three are chart-title and chart-contrast work in
+different files, and they are a separate change.
+
+Both fixes carry browser-lane guards and **both were mutation-probed**: the class
+reverted, the named case watched go red. That probe is what caught a false claim
+before it merged — `e2e/shell-layout.spec.ts`'s docked-footer case stays GREEN with
+`flex flex-col` reverted, so citing the file as the guard for that class would have
+been an overclaim. A second case was added for the half that had no assertion.
+
+**Not done on this branch:** no PR opened, `verify` output not yet pasted into a PR
+body, and nothing here has been looked at by a person in the packaged app since the
+change — the guards are Playwright's, not a human's.
+
+### `pre-65-prep` MERGED as `9929410` (PR #104)
 
 **Read `docs/DECISIONS.md` first, not this file.** The decision register is new and it
 is where the open questions now live — one row each, who calls it, what it blocks,

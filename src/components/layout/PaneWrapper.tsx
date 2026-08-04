@@ -29,12 +29,20 @@ import type { PaneId } from '../../core/types';
  * than the viewport, which is exactly the horizontal page scrollbar ISSUE-002
  * forbids. With it, the pane clips and its body scrolls.
  *
- * THE SLOT CONTRACT. `header`, the body (`children`) and `trailing` are three
- * independent slots. A pane declares a header without declaring a drawer, or a
- * drawer without a header, and the scroll container stays attached to the body
- * either way. That is what lets pane 3 own "its own header region, its own
- * scroll container, and a utility drawer slot on its trailing edge" without the
- * pane having to rebuild the box each time.
+ * THE SLOT CONTRACT. `header`, the body (`children`), `trailing` and `footer`
+ * are four independent slots. A pane declares a header without declaring a
+ * drawer, or a drawer without a header, and the scroll container stays attached
+ * to the body either way. That is what lets pane 3 own "its own header region,
+ * its own scroll container, and a utility drawer slot on its trailing edge"
+ * without the pane having to rebuild the box each time.
+ *
+ * `footer` is the newest of the four and was three, not four, until GitHub
+ * issue #110. It is the mirror of `header`: fixed, outside the scroll
+ * container, below rather than above. It exists because pane 3's composer had
+ * been the last CHILD of the scroll container, which meant it moved every time
+ * the content it sat under changed length. A slot that owns chrome owns it for
+ * its occupant too — this one draws the top border and the padding, so the
+ * component handed to it must not draw them again.
  *
  * It is deliberately presentational: no context, no store, no registry. It
  * renders what it is handed. Pane composition — which extension owns pane 2,
@@ -90,6 +98,16 @@ export interface PaneWrapperProps {
   readonly header?: ReactNode;
   /** Optional utility slot on the pane's trailing edge, beside the body. */
   readonly trailing?: ReactNode;
+  /**
+   * Optional fixed footer region, BELOW the scroll container rather than inside
+   * it. Symmetric with `header`, and it exists because the omnibox composer had
+   * nowhere to dock: it scrolled with the ledger and came to rest wherever the
+   * content happened to stop. GitHub issue #110.
+   *
+   * A caller that wants the thing to scroll with the content should keep
+   * passing it as `children`. This slot is for a surface that must stay put.
+   */
+  readonly footer?: ReactNode;
   /** Extra classes for the pane box. Layout only — do not re-declare chrome. */
   readonly className?: string;
   /** The pane body. This — and only this — is the scroll container. */
@@ -101,6 +119,7 @@ export function PaneWrapper({
   label,
   header,
   trailing,
+  footer,
   className,
   children,
 }: PaneWrapperProps): ReactElement {
@@ -119,7 +138,28 @@ export function PaneWrapper({
         </div>
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-row">
-        <div data-pane-slot="body" className="min-h-0 min-w-0 flex-1 overflow-auto p-1">
+        {/*
+          `flex flex-col` is load-bearing and is HALF of GitHub issue #110 — the
+          `footer` slot below is the other half, and neither substitutes for the
+          other. The row above is `flex-row`, so a child of the body using
+          `flex-1` to fill VERTICALLY had no column flex parent to fill against
+          and sized to its content instead. jsdom cannot see this: it does not
+          lay out, and `getBoundingClientRect` returns 0x0, so 1,739 green tests
+          said nothing about it.
+
+          The guard is ONE named case, not the file: *Test:*
+          `e2e/shell-layout.spec.ts` — "gives pane 3 a detail stack that reaches
+          the bottom of the scroll container rather than stopping at its
+          content". That precision was bought by a mutation probe. Reverting
+          this class left the docked-footer case in the same file green, because
+          the footer docks off the section's column and never asked anything of
+          the body's. Citing the file would have claimed a guard this class does
+          not have.
+        */}
+        <div
+          data-pane-slot="body"
+          className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-1"
+        >
           {children}
         </div>
         {trailing === undefined ? null : (
@@ -131,6 +171,14 @@ export function PaneWrapper({
           </div>
         )}
       </div>
+      {footer === undefined ? null : (
+        <div
+          data-pane-slot="footer"
+          className={`flex min-w-0 flex-none items-center gap-1 border-t p-1 ${SLOT_EDGE}`}
+        >
+          {footer}
+        </div>
+      )}
     </section>
   );
 }

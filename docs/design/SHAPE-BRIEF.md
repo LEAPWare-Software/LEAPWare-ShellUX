@@ -284,7 +284,8 @@ nothing, which is the vacuous green this repository has already paid for twice.
 | Three surface planes are distinguishable | `e2e/theme.spec.ts`, painted pixels, all three themes | A contrast ratio cannot tell you a plane reads as deliberate |
 | The chart heading is a DOM node and clears 4.5:1 | `e2e/chart.spec.ts` | A string ECharts drew into a canvas is invisible to every gate this repository owns |
 | The chart heading does not intersect the y-axis label | `e2e/chart.spec.ts` | Geometric. jsdom returns 0×0. |
-| The composer is docked to the pane's bottom edge | `e2e/shell-layout.spec.ts` | Geometric |
+| The composer is docked to the pane's bottom edge | `e2e/shell-layout.spec.ts` — "rests the omnibox against the bottom edge of pane 3, not against the end of the content" | Geometric |
+| A child of the pane body using `flex-1` fills the pane rather than sizing to its content | `e2e/shell-layout.spec.ts` — "gives pane 3 a detail stack that reaches the bottom of the scroll container rather than stopping at its content" | Geometric — and a **separate row because the mutation probe below found it is a separate claim.** Reverting `flex flex-col` on the body leaves the docked-composer case above green: the footer docks off the section's column and never asks anything of the body's. One row would have been one guard doing the work of two. |
 | Panes sum to 100 with no console warning | `e2e/pane-dividers.spec.ts` | The percentage path needs a measured width; jsdom measures 0 |
 | A pointer at rest over a row changes its background | browser lane | jsdom does not hit-test |
 | A primary control paints accent with legible text on it | `e2e/theme.spec.ts` | Painted pixels |

@@ -603,10 +603,21 @@ describe('ShellLayout — pane 1 collapse', () => {
    *
    * So what this case pins is the half that needs no pointer, and it is the half
    * the edge case is really about: **unmounting the handle mid-gesture leaves no
-   * half-applied layout**, because the library re-normalises the panels that
-   * remain. That is asserted as the exact resulting pair — 36 and 40 of the old
-   * group become 47.4 and 52.6 of the new one — rather than as a sum to 100,
-   * which is true of almost every layout including a wrong one.
+   * half-applied layout**, because the panels that remain are handed a legal
+   * pair. That is asserted as the exact resulting pair rather than as a sum to
+   * 100, which is true of almost every layout including a wrong one.
+   *
+   * **THE EXPECTED PAIR CHANGED WITH GITHUB ISSUE #114, AND THE OLD PAIR WAS
+   * THE DEFECT.** This used to expect 47.4 and 52.6, and described them as 36
+   * and 40 "re-normalised" by the library. They were: pane 1's 24 was still
+   * being subtracted from pane 3's remainder after pane 1 had left the group,
+   * so the survivors asked for 36 and 40, summed to 76, and
+   * `react-resizable-panels` scaled them back up to 100 — which is how a pane 2
+   * asked to open at 360px of a measured 1000px group opened at 474px instead.
+   * The pair is now 36 and 64: pane 2 gets exactly the share `PANE_PX` asks
+   * for, and pane 3 gets the whole of what is left, because nothing outside the
+   * group is being charged to it. Nothing re-normalises, because there is
+   * nothing left to re-normalise.
    */
   it('survives a collapse toggled while a divider drag is in flight', async () => {
     // Real geometry, so the library's own arithmetic runs against a measurable
@@ -636,14 +647,15 @@ describe('ShellLayout — pane 1 collapse', () => {
     fireEvent.pointerUp(document, { pointerId: 1, clientX: 40, clientY: 10 });
 
     // The layout is intact: a 48px track, pane 1's panel and its divider gone
-    // from the group, and the two survivors holding exactly their re-normalised
-    // share — not whatever an abandoned gesture last computed.
+    // from the group, and the two survivors holding exactly the share the
+    // pixel intent asks for — not whatever an abandoned gesture last computed,
+    // and not a pair the library had to scale back up to 100.
     expect(
       (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).style.width,
     ).toBe('48px');
     expect(container.querySelector('[data-panel-id="pane1"]')).toBeNull();
     expect(screen.getAllByRole('separator')).toHaveLength(1);
-    expect(panelSizes(container)).toEqual([47.4, 52.6]);
+    expect(panelSizes(container)).toEqual([36, 64]);
   });
 });
 
@@ -1516,5 +1528,52 @@ describe('ShellLayout — fault containment', () => {
     // on the second attempt.
     expect(within(list).getByRole('alert')).toHaveTextContent('pane 2 exploded');
     expect(screen.getByTestId('probe-pane3')).toBeInTheDocument();
+  });
+});
+
+/**
+ * GitHub issue #114, and it is the narrowest of the five UI defects.
+ *
+ * `react-resizable-panels` requires the panels in ONE group to sum to 100. The
+ * three shell panes are siblings in `shell-panes` when the chrome surface is
+ * expanded, and that case always summed correctly. When navigation COLLAPSES,
+ * pane 1 becomes a fixed 48px `div` rendered outside the group, so the group
+ * holds pane 2 and pane 3 alone — and the pane-1 share was still being
+ * subtracted from pane 3's remainder.
+ *
+ * **TWO DIFFERENT TOTALS APPEAR IN THIS REPOSITORY AND BOTH ARE RIGHT.** The
+ * issue title says 83: that is the measured 1440px case, 25 and
+ * 58.33333333333334, which is what the reported warning named. This suite runs
+ * at the unmeasurable-width fallback, where `PANE_FALLBACK_PERCENT` gives 26
+ * and 56, summing to 82. The number depends on the group width; the defect does
+ * not. Both were observed — the 82 by reverting this fix and reading the
+ * warning this case captures.
+ *
+ * **This is observable in jsdom, and that is worth stating because most of this
+ * redesign's defects are not.** `measureGroup` reads
+ * `getBoundingClientRect().width`, which jsdom reports as 0 — not `null` — so
+ * the group still renders, `percentOf` falls through to
+ * `PANE_FALLBACK_PERCENT`, and the library still does the arithmetic and still
+ * warns. No geometry is required to see it. The browser lane still owns the
+ * question of what the panes actually MEASURE; this owns the question of
+ * whether the numbers handed to the library are legal.
+ */
+describe('default pane sizes are shares of the group that actually holds the panes', () => {
+  it('hands the two content panes sizes summing to 100 once navigation collapses, and the library reports no invalid total', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const user = userEvent.setup();
+
+    render(<Harness blueprints={[selectingBlueprint()]} />);
+    await user.click(screen.getByRole('button', { name: 'Sample Extension' }));
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+
+    const complaints = [...warn.mock.calls, ...error.mock.calls]
+      .map((args) => args.map((arg) => String(arg)).join(' '))
+      .filter((text) => text.includes('Invalid layout total size'));
+
+    warn.mockRestore();
+    error.mockRestore();
+    expect(complaints).toEqual([]);
   });
 });

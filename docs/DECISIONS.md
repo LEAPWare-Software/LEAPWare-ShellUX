@@ -93,9 +93,18 @@ files so they do not serialise (rule 6):
 
 | Wave | Streams | Closes | Gate |
 |---|---|---|---|
-| 2 | **A** `echartsRenderer.ts` + `chart/*` + `e2e/chart.spec.ts` · **B** `ShellLayout.tsx` sizing only + `e2e/pane-dividers.spec.ts` · **C** `PaneWrapper.tsx` + `e2e/shell-layout.spec.ts` | #111, #112, #113, #114, #110 | `verify` ten stages + browser lane, per D-30 |
+| 2 | **A** `echartsRenderer.ts` + `chart/*` + `e2e/chart.spec.ts` · **B+C, MERGED — see below** | A: #111, #112, #113 · B+C: **#110, #114 DONE in tree, unmerged** | `verify` ten stages + browser lane, per D-30 |
 | 3 | The system: rows, nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` | none — this is the redesign proper | same |
 | 4 | Direction B's instrument layer: per-row series with threshold bands, the list minimap, the overview state | none | same |
+
+**Streams B and C did not stay disjoint, and were run as one stream rather than
+two.** The split assumed #110 was confined to `PaneWrapper.tsx`. It is not: giving
+the pane a `footer` slot only fixes anything once a caller uses it, and the caller
+is pane 3 in `ShellLayout.tsx` — the file stream B owns. Two streams writing that
+file concurrently is what rule 6 forbids, so they were serialised into one change
+covering both issues rather than run in parallel against a false disjointness. **The
+disjointness claim for stream A is untouched and still holds**; A remains parallel
+to whatever comes next.
 
 **Steps 5, 7 and 8 are roughly one session together** once step 4 is known.
 **Steps 2b and 3 are independent of each other** and could run in parallel if a

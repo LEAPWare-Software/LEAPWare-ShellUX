@@ -78,7 +78,7 @@ describe('PaneWrapper', () => {
     expect(paneBox('Detail')).toHaveClass('min-w-0');
   });
 
-  it('omits both optional slots when neither is declared', () => {
+  it('omits all three optional slots when none is declared', () => {
     const { container } = render(
       <PaneWrapper paneId="pane2" label="List">
         body
@@ -86,6 +86,49 @@ describe('PaneWrapper', () => {
     );
     expect(container.querySelector('[data-pane-slot="header"]')).toBeNull();
     expect(container.querySelector('[data-pane-slot="drawer"]')).toBeNull();
+    expect(container.querySelector('[data-pane-slot="footer"]')).toBeNull();
+  });
+
+  it('renders a footer outside the scroll container, after the body in document order', () => {
+    const { container } = render(
+      <PaneWrapper paneId="pane3" label="Detail" footer={<span>Composer</span>}>
+        body
+      </PaneWrapper>,
+    );
+    const slot = container.querySelector('[data-pane-slot="footer"]');
+    expect(slot).not.toBeNull();
+    expect(screen.getByText('Composer')).toBeInTheDocument();
+
+    // The footer must NOT be a descendant of the body, or it scrolls with the
+    // ledger, which is the defect it exists to fix (GitHub issue #110).
+    const body = container.querySelector('[data-pane-slot="body"]');
+    expect(body).not.toBeNull();
+    expect(body?.contains(slot ?? null)).toBe(false);
+
+    // And it comes after the body, not before it.
+    expect(
+      (body as Element).compareDocumentPosition(slot as Element) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeGreaterThan(0);
+  });
+
+  it('declares the body a column flex container, which is a CLASS assertion and not a layout one', () => {
+    // jsdom does not lay out. This asserts the class is present, which is the
+    // most this suite can honestly claim: it cannot observe that a child with
+    // `flex-1` now fills the pane, because nothing here has height. The
+    // behavioural guard is one named case in the browser lane, and it is not
+    // the docked-footer case beside it — reverting this class leaves that one
+    // green. *Test:* `e2e/shell-layout.spec.ts` — "gives pane 3 a detail stack
+    // that reaches the bottom of the scroll container rather than stopping at
+    // its content".
+    const { container } = render(
+      <PaneWrapper paneId="pane3" label="Detail">
+        body
+      </PaneWrapper>,
+    );
+    const body = container.querySelector('[data-pane-slot="body"]');
+    expect(body).toHaveClass('flex');
+    expect(body).toHaveClass('flex-col');
   });
 
   it('renders a header without a drawer', () => {
