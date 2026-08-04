@@ -35,34 +35,54 @@ The rules:
 re-derivation are folded in below and throughout §3, §6, §7, §8 and §12.** Re-derive
 every SHA and every count again before trusting it — see §0.
 
-### IN FLIGHT: `design/redesign-groundwork`, unmerged, no PR opened yet
+### IN FLIGHT: PR #115, `design/redesign-groundwork` → `main`, OPEN and unreviewed
 
-**This section was "NOTHING IS IN FLIGHT" and was stale.** The branch below carries
-commits the register does not mention, and this file said so nowhere — recorded
-rather than quietly overwritten, because §0 exists for exactly this.
+**This section said "NOTHING IS IN FLIGHT" and was stale for a whole branch.**
+Recorded rather than quietly overwritten, because §0 exists for exactly this.
+Re-derived 2026-08-04.
 
-| Commit | What | Issue |
+**Nine commits, 21 files, +2069 / −320 against `main`.** Three layers, and they
+are worth separating when reading:
+
+| Commits | What | Issue |
 |---|---|---|
-| `6a35ab1` | `docs/design/SHAPE-BRIEF.md`, and a measurement that removed a wave | — |
-| `ce1d97a` | wave 1 — chrome becomes its own plane, the accent becomes petrol | — |
-| `6ba6053` | six open decisions closed under an explicit delegation | — |
-| *uncommitted* | pane 3's composer docks; the collapsed pane split sums to 100 | **#110**, **#114** |
+| `73ee90e` … `6ba6053` (six) | Documents only — the UI audit, `PRODUCT.md`, the shape brief, the withdrawn WCAG 2.2 AA target, a compressed `CLAUDE.md`, six decisions closed in the register | — |
+| `ce1d97a` | Wave 1 of the redesign — chrome becomes its own plane, the accent becomes petrol | — |
+| `af6fdd9`, `c919e6d` | Pane 3's composer docks; the collapsed pane split sums to 100 | **#110**, **#114** |
 
-**Five UI defects were filed off the running application, #110 through #114.** Two
-are closed by the work in the tree: #110 (composer never docked, ~450px of dead
-pane) and #114 (panes opened summing to 83 and warned on every load). **#111, #112
-and #113 are untouched** — all three are chart-title and chart-contrast work in
-different files, and they are a separate change.
+**Five UI defects were filed off the running application, #110 through #114.** The
+PR closes two: #110 (composer never docked, ~450px of dead pane) and #114 (panes
+opened summing to 83 and warned on every load). **#111, #112 and #113 are
+untouched** — all three are chart-title and chart-contrast work in
+`echartsRenderer.ts` and `chart/*`, a disjoint file set, and they are the next
+change.
 
-Both fixes carry browser-lane guards and **both were mutation-probed**: the class
-reverted, the named case watched go red. That probe is what caught a false claim
-before it merged — `e2e/shell-layout.spec.ts`'s docked-footer case stays GREEN with
-`flex flex-col` reverted, so citing the file as the guard for that class would have
-been an overclaim. A second case was added for the half that had no assertion.
+**Both fixes were mutation-probed, and one probe changed the work.** Reverting
+`flex flex-col` on the pane body left the docked-footer browser case GREEN — the
+footer docks off the section's own column and never asked anything of the body's —
+so citing that file as the class's guard was an overclaim, caught before merge. A
+second case now guards the half that had nothing. A third finding came from review
+rather than a gate: the composer's WIDTH was unmeasured by both lanes after it
+stopped drawing its own chrome, and is now asserted.
 
-**Not done on this branch:** no PR opened, `verify` output not yet pasted into a PR
-body, and nothing here has been looked at by a person in the packaged app since the
-change — the guards are Playwright's, not a human's.
+**Gates at the branch tip:** `npm run verify` exit 0, all ten stages, 1742 tests,
+100% on all four metrics, pasted in PR #115's body. `npm run test:browser` 54 of
+54. **Read the exit code carefully if you re-run it** — piping `verify` into
+`tail` reports `tail`'s status, which cost this session two false "exit 0"
+readings before it was caught.
+
+**Not done, and it is the whole of what is left before merge:**
+
+- **Nobody has reviewed PR #115.** Rule 1 wants adversarial review before merge and
+  this has had none. #74 records that branch protection is impossible on this
+  repository, so nothing mechanical will stop a merge without one.
+- **No person has seen either fix in the packaged Electron app.** The guards are
+  Playwright's, in Chromium, from the dev server — which is #61's point, unchanged.
+- **Wave 1's colour decisions have no reviewer either.** `tokens:check` and
+  `e2e/theme.spec.ts` gate the ratios; neither is a judgement about whether it
+  looks right.
+- **The PR is not split.** The six documentation commits and wave 1 could have been
+  their own PR and were not. `af6fdd9..c919e6d` is the fix-only range.
 
 ### `pre-65-prep` MERGED as `9929410` (PR #104)
 
