@@ -206,6 +206,44 @@ If `test:coverage` fail with ENOENT under `coverage/.tmp`, delete gitignored
 operational advice from previous session, not measurement — did not occur in `verify`
 run behind this file, so if you hit it, note invocation, per rule 9.
 
+**NOW MEASURED, 2026-08-04.** It reproduced on `npm run verify` at `af6fdd9`'s tree.
+`rm -rf coverage` and one re-run cleared it. Advice was right; it is no longer only
+advice.
+
+### `audit:prod` fail at random, and its error message blame your lockfile falsely
+
+Stage ten of `verify` is `npm audit --omit=dev --audit-level=high`, and it query
+npmjs.org, so it is only stage that need network. **Measured 2026-08-04, 13
+invocations in ~15 minutes: 9 pass, 4 fail.** Two distinct failures, alternating:
+
+```
+npm warn audit 400 Bad Request - POST
+  https://registry.npmjs.org/-/npm/v1/security/audits/quick
+{ statusCode: 400, error: 'Bad Request',
+  message: 'Invalid package tree, run  npm install  to rebuild your package-lock.json' }
+```
+
+```
+npm warn audit request to https://registry.npmjs.org/-/npm/v1/security/audits/quick
+  failed, reason: read ECONNRESET
+```
+
+**The 400's message name local cause it did not have.** `npm ls --omit=dev --depth=0`
+exit 0 on same tree, in same minute, listing all 11 production deps resolved;
+`package.json` and `package-lock.json` untouched since `7fc8fbc`. **Do NOT run
+`npm install` on strength of that sentence** — it will rewrite lockfile to fix
+nothing. Endpoint also print `This endpoint is being retired`, which is likelier
+cause than anything in this repo.
+
+Re-run. It pass. **What this does NOT license:** treating any `verify` failure as
+flake. This one is one stage, network-only, two known messages, and measured. A
+failure anywhere in first nine stages is your change until proven otherwise.
+
+Not filed as issue: a flaky third-party endpoint is not defect in this repository,
+and there is nothing here to fix. If it become permanent, `audit:prod` is only gate
+that need network and `HANDOFF.md` §6.2 already carry what it does and does not
+audit.
+
 ---
 
 ## Vocabulary you must use precisely

@@ -41,9 +41,12 @@ every SHA and every count again before trusting it — see §0.
 Recorded rather than quietly overwritten, because §0 exists for exactly this.
 Re-derived 2026-08-04.
 
-**Ten commits, 21 files, +2089 / −320 against `main`** — nine of substance plus
-the one that wrote this section, which counts itself and adds prose only. Three
-layers, worth separating when reading:
+**Nine commits of substance, 21 files, +2089 / −320 against `main`.** The total
+commit count is deliberately not given: it moves every time this section is
+corrected, and two corrections were already spent chasing it — one said nine when
+it was the tenth, the next said ten and twenty-two when it was the eleventh and
+twenty-one. `git rev-list --count main..HEAD` answers it in a second and cannot go
+stale, which is what §0 asks for. Three layers, worth separating when reading:
 
 | Commits | What | Issue |
 |---|---|---|
