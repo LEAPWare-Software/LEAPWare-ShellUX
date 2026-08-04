@@ -41,8 +41,9 @@ every SHA and every count again before trusting it — see §0.
 Recorded rather than quietly overwritten, because §0 exists for exactly this.
 Re-derived 2026-08-04.
 
-**Nine commits, 21 files, +2069 / −320 against `main`.** Three layers, and they
-are worth separating when reading:
+**Ten commits, 21 files, +2089 / −320 against `main`** — nine of substance plus
+the one that wrote this section, which counts itself and adds prose only. Three
+layers, worth separating when reading:
 
 | Commits | What | Issue |
 |---|---|---|
