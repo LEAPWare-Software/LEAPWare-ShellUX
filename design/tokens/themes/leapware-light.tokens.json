@@ -17,9 +17,9 @@
   },
 
   "accent": {
-    "$description": "Focus ring, links, selected-solid fills.",
-    "hue": { "$type": "number", "$value": 252 },
-    "chroma": { "$type": "number", "$value": 0.155 }
+    "$description": "Focus ring, links, selected-solid fills. CHANGED 2026-08-04 from hue 252 / chroma 0.155. The blue read as generic product chrome; petrol is the identity chosen for an operator instrument. Chroma drops because teal cannot hold 0.155 at these lightnesses inside sRGB, and a value the gamut mapper has to pull back is a value the contrast checker did not measure.",
+    "hue": { "$type": "number", "$value": 185 },
+    "chroma": { "$type": "number", "$value": 0.09 }
   },
 
   "contrast": {

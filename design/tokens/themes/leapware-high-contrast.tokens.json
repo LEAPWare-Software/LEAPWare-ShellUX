@@ -17,9 +17,9 @@
   },
 
   "accent": {
-    "$description": "Kept chromatic and kept at the same hue. The accent is how focus is located, and desaturating it would make the focus ring harder to find, not easier.",
-    "hue": { "$type": "number", "$value": 252 },
-    "chroma": { "$type": "number", "$value": 0.16 }
+    "$description": "Kept chromatic and kept at the same hue as the other two themes. The accent is how focus is located, and desaturating it would make the focus ring harder to find, not easier. CHANGED 2026-08-04 from hue 252 / chroma 0.16 to petrol. The chroma stays 0.005 above the other themes for the same reason it always did.",
+    "hue": { "$type": "number", "$value": 185 },
+    "chroma": { "$type": "number", "$value": 0.095 }
   },
 
   "contrast": {
