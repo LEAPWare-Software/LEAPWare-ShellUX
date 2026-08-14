@@ -921,7 +921,23 @@ without someone deciding what a legal value for it is:
 
 `PANE_IDS` is new in `types.ts`: `PaneId` is a type union and vanishes at runtime,
 so it is pinned to a `Record<PaneId, true>` exhaustiveness record in the same idiom
-as `SHELL_UX_ERROR_CODES`. (`PANE_IDS` outlived the field it was built for: since
+as the error codes. **That idiom has since been corrected where the error codes
+use it, and `PANE_IDS` has not caught up.** The exemplar is no longer the exported
+`SHELL_UX_ERROR_CODES` set but the module-private table behind it,
+`SHELL_UX_ERROR_CODE_MEMBERS` — declared `Readonly<Record<ShellUXErrorCode, true>>`,
+built with `__proto__: null`, and read by `isShellUXErrorCode` rather than by
+anything a plug-in can import. And the compile-time half of the idiom turns out to
+be half: `Record<X, true>` rejects a member of the union that is MISSING, but it
+does not reject a stray key, because the literal is an argument to `Object.freeze`
+and passing through that generic loses the literal freshness excess-property
+checking needs. A stray key is the direction that widens trust, so the error-code
+table gained a runtime gate for it — "holds exactly the codes the union declares,
+and nothing else" in `src/core/__tests__/errorCodeTrust.test.ts`, checked against a
+hand-written list rather than against the same export. `PANE_IDS` has no
+equivalent, and its docblock still claims the compiler rejects an invented member;
+that is filed in `.github/ISSUES_MANIFEST.md`.
+
+(`PANE_IDS` outlived the field it was built for: since
 Amendment K it is what `HydrationEngine`'s pane-size record is checked against, and
 the reason it was kept rather than deleted with `assertValidPaneId` is written on it
 in `types.ts`.) The validators reuse `describeUntrusted` and never read
@@ -2695,6 +2711,32 @@ against, and all five were runtime-mutable. `REGISTRY_LIMITS` was `as const`,
 which is a **compile-time** assertion binding nobody who is not being compiled.
 All five are now `Object.freeze`d.
 
+**The count in the paragraph above is the count this decision was written with,
+and it is no longer the coverage.** Ten exports are gated: those five, plus
+`PANE_IDS` and `SHELL_UX_ERROR_CODES` in `src/core/types.ts`, plus
+`HYDRATION_LIMITS`, `DEFAULT_SHELL_STATE` and `EMPTY_SCOPED_STATE` in
+`src/core/services/HydrationEngine.ts`. Two of the additions are rules against
+which untrusted input is measured in exactly the sense of the original five:
+`HYDRATION_LIMITS` bounds every persisted payload and shipped `as const` — this
+decision's own defect, reintroduced in a module this decision did not name — and
+`SHELL_UX_ERROR_CODES` was what the host consulted to decide whether to trust a
+`code` handed back out of plug-in code.
+
+**Enumerating constants was the mistake, so the enumeration is gone.** The gate
+originally carried a hand-written list of names, and a list nobody remembers to
+extend cannot see the thing that was not added to it — which is precisely how the
+two additions above got in. It now walks the export namespace of each covered
+module and requires every object-valued export to be frozen, so a constant added
+to a covered module is gated without anyone acting. An exemption must be written
+into `FREEZE_EXEMPTIONS` with a reason a reviewer can refuse; there are none.
+**The module list is still hand-maintained**, and at module granularity that is a
+much smaller surface than a per-constant list — but it is not zero, and a module
+outside it is ungated. See the `SHELL_ICONS` follow-up in
+`.github/ISSUES_MANIFEST.md` for a live instance. *Test:* the walk is held from
+going vacuous by "walks the gated modules and finds the constants it is meant to
+guard" in `src/core/__tests__/hostConstants.test.ts`, which names a floor of ten
+and fails if the enumeration collects nothing.
+
 **The claim is stated narrowly on purpose, because the obvious wider version is
 false.** Freezing buys, unconditionally, that no own property can be added,
 replaced or deleted: `REGISTRY_LIMITS` becomes genuinely immutable, and for the
@@ -2712,7 +2754,43 @@ halves are asserted rather than one, by "freezes the host constants against
 replacement" and "does not claim more than a frozen Set delivers" in
 `src/core/__tests__/hostConstants.test.ts`, the second of which demonstrates the
 mutability on a throwaway `Set` so that no real allowlist is left widened behind
-it.
+it. The freeze is also one level deep, and one gated constant already goes
+deeper: `DEFAULT_SHELL_STATE` nests a `paneSizes` object, frozen where it is
+declared rather than by the gate. Deep freezing remains owned by each declaration
+site.
+
+**One consequence of that narrowness was load-bearing, and it is recorded here
+because it is the case where this decision was not enough.**
+`SHELL_UX_ERROR_CODES` was not merely a list: `toShellUXError` in
+`RegistryContext.tsx` interrogated it to decide whether a `code` arriving on a
+`ShellUXError` that had passed through plug-in code was one of the host's own, and
+a `true` answer copied that string into the error the host handed its callers.
+Freezing that set closed own-property shadowing of its lookup method and left its
+membership editable, so a plug-in could widen the collection the host was
+consulting and choose the code `register` reported — including `REVOKED`. **No
+strengthening of the freeze closes that**, because the mutability is in `Set`'s
+internal slots and not in its properties.
+
+So the decision was moved out of the exported collection rather than the
+collection hardened. `isShellUXErrorCode` in `src/core/types.ts` is now the trust
+decision: it reads a module-private, frozen, **null-prototype** table no importer
+can name, and compares with `=== true` rather than testing truthiness. It consults
+no `Set`, so widening one is inert; it calls no method, so assigning to
+`Set.prototype`'s lookup forges nothing; and its table inherits nothing, so
+`Object.prototype` pollution answers for no key. `SHELL_UX_ERROR_CODES` stays
+exported only because the alternative, deleting it, would have meant editing prose
+across this ADR and `HANDOFF.md` in the same change — not because callers may use
+it: a source scan fails on the identifier in any non-test module under `src/`, so
+no production module may even name it, let alone interrogate it, which makes
+keeping it a gate rather than an intention. **The threat-model limit, stated rather than
+implied:** every claim in this paragraph is about plug-in code running *after* the
+host module graph has evaluated. Code that runs before `types.ts` evaluates can
+replace `Object.freeze` itself, and nothing in the module can defend against that.
+*Tests:* `src/core/__tests__/errorCodeTrust.test.ts` — "isShellUXErrorCode — the
+trust decision plugin code cannot reach" and "is not interrogated by any module
+outside the tests"; end to end through `register`,
+`src/core/__tests__/registryNormalization.test.tsx` — "refuses an attacker-chosen
+code smuggled into the exported code set".
 
 ### Decision 6 — `focusedPane` is deleted, not populated
 

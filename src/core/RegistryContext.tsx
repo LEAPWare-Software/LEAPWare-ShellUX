@@ -6,9 +6,8 @@ import type {
   LEAPExtensionBlueprint,
   NavigationNode,
   RibbonAction,
-  ShellUXErrorCode,
 } from './types';
-import { SHELL_UX_ERROR_CODES, ShellUXError } from './types';
+import { isShellUXErrorCode, ShellUXError } from './types';
 import { hotkeyToken } from './hotkeys';
 
 /**
@@ -1039,6 +1038,16 @@ export function validateBlueprint(candidate: unknown): LEAPExtensionBlueprint {
  * against this module's own enum, `message` and `field` for being primitive
  * strings — and copied into a FRESH, host-constructed error. Anything that
  * fails a check downgrades the whole error to the generic rejection.
+ *
+ * The `code` check is `isShellUXErrorCode`, and which object it consults is the
+ * whole of its worth. It reads a module-private, null-prototype table inside
+ * `types.ts` that no importer can reach, so widening the exported code set,
+ * assigning to `Set.prototype.has` and polluting `Object.prototype` all leave
+ * this decision exactly where it was — pinned by "isShellUXErrorCode — the trust
+ * decision plugin code cannot reach" in
+ * `src/core/__tests__/errorCodeTrust.test.ts`, and end to end through `register`
+ * by "refuses an attacker-chosen code smuggled into the exported code set" in
+ * `src/core/__tests__/registryNormalization.test.tsx`.
  */
 function toShellUXError(error: unknown): ShellUXError {
   const preamble = 'Blueprint rejected while being inspected';
@@ -1047,16 +1056,8 @@ function toShellUXError(error: unknown): ShellUXError {
       const code: unknown = error.code;
       const message: unknown = error.message;
       const field: unknown = error.field;
-      if (
-        typeof code === 'string' &&
-        SHELL_UX_ERROR_CODES.has(code) &&
-        typeof message === 'string'
-      ) {
-        return new ShellUXError(
-          code as ShellUXErrorCode,
-          message,
-          typeof field === 'string' ? field : null,
-        );
+      if (isShellUXErrorCode(code) && typeof message === 'string') {
+        return new ShellUXError(code, message, typeof field === 'string' ? field : null);
       }
       return new ShellUXError(
         'INVALID_PAYLOAD',

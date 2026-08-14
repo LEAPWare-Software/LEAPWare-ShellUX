@@ -207,8 +207,16 @@ export const DEFAULT_DEBOUNCE_MS = 120;
  * Hard bounds on everything that arrives from outside. A hand-edited payload
  * cannot make the host walk forever, and this engine cannot become the reason
  * the origin's storage quota is exhausted.
+ *
+ * `Object.freeze`, not `as const`. `as const` is a compile-time assertion and
+ * binds nobody who is not being compiled — it left `REGISTRY_LIMITS` writable
+ * until GitHub issue #10, and this table repeated the mistake. Every bound here
+ * measures an untrusted persisted payload, so a caller able to write
+ * `HYDRATION_LIMITS.MAX_RAW_LENGTH = 1e9` removes the bound. The freeze means no
+ * own property can be added, replaced or deleted; enforced for every exported
+ * constant of this module by `src/core/__tests__/hostConstants.test.ts`.
  */
-export const HYDRATION_LIMITS = {
+export const HYDRATION_LIMITS = Object.freeze({
   /** Max characters of the stored record. A longer entry is discarded unparsed. */
   MAX_RAW_LENGTH: 65536,
   /** Max length of any single persisted string. */
@@ -246,7 +254,7 @@ export const HYDRATION_LIMITS = {
    * something caps it.
    */
   MAX_NOTIFY_DEPTH: 16,
-} as const;
+});
 
 /**
  * The layout a shell that has never been used starts from.

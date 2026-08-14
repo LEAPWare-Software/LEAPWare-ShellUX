@@ -1,8 +1,9 @@
 # HANDOFF — LEAPWare ShellUX
 
-Last updated 2026-08-01, after the second wave of audits. Read this before touching
-anything. Correct anything you find stale, but do not delete a finding without checking
-it.
+Last updated **2026-08-14**, after the constant-freeze and error-code-trust landing on
+branch `ci-runs-full-verify`. The audit content below still dates from 2026-08-01 except
+where a section says otherwise. Read this before touching anything. Correct anything you
+find stale, but do not delete a finding without checking it.
 
 ---
 
@@ -26,14 +27,133 @@ The rules:
   **re-derive them** — `git fetch --all --prune`, `gh issue list`, `gh pr list`, the
   milestone endpoint — rather than trusting them. **The numbers in this document are a
   starting point, not a source of truth.**
+- **Line numbers rot faster than counts, and this file has already been burned by one.**
+  Added 2026-08-13. §6.2 cited `SHELL_UX_ERROR_CODES` at `types.ts:770`; adding a
+  docblock above it in the same session moved it to **`:848`**, and `HYDRATION_LIMITS`
+  moved from `HydrationEngine.ts:211` to **`:219`** the same way. Both numbers in this
+  file were wrong within one session of being written, without anybody touching the
+  constant itself. **Re-derive every location in this document by searching for the
+  symbol, never by jumping to the line.** A line number here is an orientation aid and
+  is not evidence — which is exactly the standard §0 already applies to counts, extended
+  to the thing that decays faster.
 
 ---
 
 ## 1. Currently in flight
 
-Verified directly against the repository and the worktrees at the time of writing.
+Rewritten **2026-08-13**. The section below this one is the 2026-08-01 state and has not
+been re-verified since; treat every SHA, count and issue number in this file as stale
+until you re-derive it (§0).
 
-### Quality-first working agreement — PR **#71**, `quality-first-agreement` — **OPEN, CI green**
+### The constant-freeze and error-code-trust landing — branch `ci-runs-full-verify` — **IN THE WORKING TREE, UNCOMMITTED**
+
+**State reached: written, and green on `check:portability`, `check:citations`, `lint`,
+`typecheck` and the targeted vitest runs. Not committed, not pushed, no PR, and `npm run
+verify` not run to a clean exit over this tree.** The whole change is uncommitted
+working-tree modification on `ci-runs-full-verify`. A resuming session's first act should
+be `git status --porcelain`, not `git log`.
+
+**Two waves of code landed, and the second is the one a reader will get wrong.**
+
+*Wave 1 — the freeze trio, which is §6.2 and §8 rows 6 and 7 below, now done:*
+
+- `src/core/types.ts` — `SHELL_UX_ERROR_CODES` is `Object.freeze(new Set(...))`.
+- `src/core/services/HydrationEngine.ts` — `HYDRATION_LIMITS` is `Object.freeze({...})`
+  and the `as const` is gone. **The literal types are preserved.** Measured 2026-08-13,
+  non-vacuously: `const n: 65536 = HYDRATION_LIMITS.MAX_RAW_LENGTH` compiles, and the
+  same line against `99999` errors `TS2322: Type '65536' is not assignable to type
+  '99999'` — so the property's type is the literal, not `number`. `Object.freeze` has an
+  overload returning `Readonly<T>` that keeps literal types for an all-primitive object.
+  What was given up is *deep* readonly, which for a flat table of numbers is nothing.
+  **Do not write that the types were widened; they were not.**
+- `src/core/__tests__/hostConstants.test.ts` — the hand-maintained list of six names is
+  replaced by a walk over the export namespaces of `RegistryContext.tsx`, `types.ts` and
+  `HydrationEngine.ts`. **Ten** constants are gated, and `FREEZE_EXEMPTIONS` is empty.
+  The module list is still hand-maintained, at module granularity.
+- `vite.config.ts` — `base: './'`, `build.sourcemap: true`, `build.target: 'es2022'`.
+- `src/App.tsx` — the provider tree is wrapped in
+  `<FaultBoundary boundaryLabel="The shell" extensionId={null}>` as the outermost
+  element, with a new test file `src/__tests__/AppRootBoundary.test.tsx`.
+- `src/dev/DevShell.tsx` — the same wrap, for the same reason, because
+  `dev.html` → `src/dev/main.dev.tsx` → `DevShell` is a **second entry point** that
+  `App.tsx`'s boundary cannot reach. **No test imports `DevShell`**, so this wrap is
+  unproven by the suite; see the closed entry in §6.
+- `src/__tests__/IntegrationSuite.test.tsx` — docblocks only. The `Harness`
+  docblock now says it composes the provider ORDER and not the root boundary, so
+  nothing asserted through it is read as evidence about that boundary.
+
+*Wave 2 — the trust-check hardening. Read this before editing any prose about error
+codes:*
+
+- `src/core/types.ts` — the module-private table `SHELL_UX_ERROR_CODE_MEMBERS` carries
+  `__proto__: null`, and a new export `isShellUXErrorCode(code: unknown)` reads it with
+  `=== true`.
+- `src/core/RegistryContext.tsx` — `toShellUXError` calls `isShellUXErrorCode`. It no
+  longer interrogates the exported set at all.
+- New test file `src/core/__tests__/errorCodeTrust.test.ts`.
+- `src/core/__tests__/registryNormalization.test.tsx` — a new end-to-end test,
+  "refuses an attacker-chosen code smuggled into the exported code set", which
+  `add`s the code onto the exported set, asserts the widening really took, drives
+  `register`, and repairs the set in a `finally`. Plus four assertions swapped off
+  `SHELL_UX_ERROR_CODES.has` onto `isShellUXErrorCode`.
+
+**The exact guarantee, worded the way it must stay worded.** *Unconditional, an
+integrity control:* the `code` on a `ShellUXError` returned by `register` is always one
+of the host's own, against any caller however hostile. The decision is
+`isShellUXErrorCode`, reading a module-private, frozen, null-prototype table no importer
+can reach — immune to widening the exported code set, to poisoning the `Set` prototype's
+lookup method, and to `Object.prototype` pollution. **About `SHELL_UX_ERROR_CODES` say
+exactly this and no more:** it is an enumerable list, it is **not** the trust decision,
+and nothing production-side interrogates it. Its lookup method **cannot be replaced**;
+its **membership can still be changed** by any importer. Never write "immutable" or
+"cannot be changed" about it. **For every other frozen `Set` — `HOTKEY_KEYS`,
+`RESERVED_IDS`, `PANE_IDS` — the old rule still binds: "cannot be replaced" ONLY.** The
+stronger claim is licensed for the predicate, never for a set. **The threat-model limit,
+which must be stated wherever the guarantee is:** this defends against plug-in code
+running *after* the host module graph evaluates. An attacker executing before `types.ts`
+evaluates can replace `Object.freeze` itself, and nothing in the module can defend
+against that.
+
+Two things never to write about any of it: that `Object.freeze` protects a `Set`'s
+**contents**, and that an ES module import **copies** a value. Imports are live bindings.
+
+**Documentation landed with it, on 2026-08-13**, which is the rest of what this section
+covers: `SECURITY.md`, `README.md`'s host-constants bullet, ADR-0001 Decision 5 and its
+`Record<X, true>` exemplar paragraph, the source docblocks listed above, and five
+follow-ups filed in
+`.github/ISSUES_MANIFEST.md`.
+
+**What remains, in order:**
+
+1. `npm run verify` has **not** been run to a clean exit over this tree by the
+   documentation work. Targeted checks were run and are green; the full gate is
+   outstanding and is the gate that matters.
+2. Nothing is committed, and this is **two commits with `README.md` split by hunk, not
+   by path**: `README.md` carries both changes — the **unrelated** "CI runs the full
+   verify" work under "Scripts" and "Continuous integration", and this landing's rewrite
+   under "Security posture" — so staging by path cannot separate them. First commit, the
+   unrelated change: those `README.md` hunks with `package.json` and
+   `.github/workflows/ci.yml`. Second commit: this landing's `README.md` hunks and every
+   other changed file. `git add -A` would sweep both into one.
+3. No PR, no issue numbers assigned to the five follow-ups; they exist only as manifest
+   entries.
+4. `SHELL_ICONS` (follow-up 1) is the one with a reproduced attack behind it and is the
+   first thing to pick up.
+
+#### Decisions taken, and what was rejected
+
+The rejected half is the load-bearing half: it is what stops a decision being
+re-litigated by the next session that has the same first idea.
+
+| Decision | Rejected, and why |
+|---|---|
+| **Harden the trust check in code.** `toShellUXError` now calls `isShellUXErrorCode`. | **Amending `SECURITY.md` down to a narrower claim.** That was available and cheaper — the file said the control was unconditional, the code did not deliver it, and weakening the prose would have made the pair true. The owner chose to make the **code** match the claim rather than the claim match the code. Do not re-open this by proposing the prose edit again. |
+| **File the `SHELL_ICONS` finding; do not fix it.** | Two rejections, not one. **Fixing it in this landing** — rejected as a components change riding on a core change, in a diff nobody could review as one thing. **Freezing the `Map` while leaving the gate's module list alone** — rejected as the worse half: it closes this instance and leaves the gate structurally blind to the next, which is exactly how `HYDRATION_LIMITS` shipped. The fix is freeze **and** gate **and** a test at the render site. |
+| **`base: './'` in `vite.config.ts`.** | **A hardcoded host.** Not a style preference: `npm run check:portability` fails the build on a hardcoded network host in a tracked non-Markdown file, and `vite.config.ts` is one. The relative base is the only option that passes the gate this repository already enforces. |
+| **Root `FaultBoundary` in `src/App.tsx`, outermost.** | **Putting it in `src/main.tsx`.** `main.tsx` needs a real `#root` element and is rendered by no test in the suite, so a boundary there would be **untestable** — a top-level error boundary nobody can prove catches anything is the defect it is meant to fix, in a new place. In `App.tsx` it is exercised by `src/__tests__/AppRootBoundary.test.tsx`. |
+| **Keep `SHELL_UX_ERROR_CODES` exported.** | **Deleting it.** Removal would have required editing ADR-0001 and `HANDOFF.md` prose that the code agent could not own end to end in the same change, and a half-removed export cited by stale prose is worse than a kept one. Kept safe by a mechanical scan gate instead of by intention: nothing production-side may interrogate it, enforced as a source scan over every non-test module under `src/`. **The scan is on the IDENTIFIER, not on `.has`** — a `.has`-only scan was reviewed and rejected on 2026-08-13, because aliasing to a local, a computed member access, spreading into an array and `Array.from` all walk past it and every one of them is exactly as forgeable, `add` still working on a frozen `Set`. There is **no allowlist and exactly one exemption**: the declaration's own line in `src/core/types.ts`, matched on its exact text so nothing can be interrogated through it, and asserted to be the only forgiven site by "is exempted at its own declaration line and at no other site". **Consequence for writers:** prose *inside `src/`* that needs to discuss this export must refer to it without naming it, or the gate fails. |
+
+### Quality-first working agreement — PR **#71**, `quality-first-agreement` — **OPEN, CI green as of 2026-08-01**
 
 - Commit `c82bfe1`. All three `Verify` legs pass. **Ready to merge.**
 - Creates **`docs/adr/0003-quality-over-velocity.md`** and repo-root **`CLAUDE.md`**;
@@ -203,15 +323,37 @@ integrity. Each finding is tagged **[reproduced]** where confirmed by execution 
 
 ### 6.2 Security
 
-- `SHELL_UX_ERROR_CODES` (`types.ts:770`) is **not frozen**. Shadowing `.has` lets a
-  plug-in choose the error code `register()` returns, including masquerading as
-  `REVOKED`. This falsifies a claim `SECURITY.md` labels an *unconditional* integrity
-  control. **[reproduced]**
-- `HYDRATION_LIMITS` (`HydrationEngine.ts:211`) is `as const`, not frozen — the exact
-  defect issue #10 closed for `REGISTRY_LIMITS`, reintroduced. **[reproduced]**
-- **Fix both together**, and replace the hand-maintained freeze list in
-  `hostConstants.test.ts` with a test that walks the module's own exports. A
-  hand-maintained list is how the second one got in.
+**All of §6.2's freeze findings are CLOSED as of 2026-08-13, in the working tree on
+`ci-runs-full-verify` (§1) — closed in code, not merged.** The originals are struck
+through rather than deleted, because the history is the reason the fix is shaped the way
+it is.
+
+- **~~`SHELL_UX_ERROR_CODES` (`types.ts:770`) is not frozen.~~ CLOSED, and the freeze was
+  not the half that mattered.** The original finding — shadowing its lookup method lets a
+  plug-in choose the error code `register()` returns, including masquerading as `REVOKED`,
+  falsifying a claim `SECURITY.md` labels an *unconditional* integrity control — was
+  **[reproduced]** and was real. The set is now frozen, and **freezing it was necessary
+  and was not sufficient**: freezing closes own-property shadowing of the lookup method
+  and leaves `add` working, because a `Set` keeps its membership in internal slots rather
+  than in properties. A plug-in could still have widened the very collection the host was
+  consulting. **No amount of freezing that set closes that**, so the decision was moved
+  out of it: `isShellUXErrorCode` in `types.ts` reads a module-private, frozen,
+  null-prototype table no importer can name. See §1 for the wording that must be used
+  about it, which is narrower than "the set is now safe" and is not the same claim.
+  The constant is now at **`types.ts:848`** — see §0 on line numbers.
+- **~~`HYDRATION_LIMITS` (`HydrationEngine.ts:211`) is `as const`, not frozen.~~ CLOSED.**
+  **[reproduced]**, and it was the exact defect issue #10 closed for `REGISTRY_LIMITS`,
+  reintroduced. Now `Object.freeze`, at **`HydrationEngine.ts:219`**. The literal types
+  survive the change; only *deep* readonly was given up, which for a flat table of
+  numbers costs nothing.
+- **~~Replace the hand-maintained freeze list.~~ CLOSED, and the diagnosis was right.**
+  `hostConstants.test.ts` now walks the export namespace of each covered module instead
+  of naming constants, so **ten** exports are gated with an empty exemption map, and a
+  constant added to a covered module is gated without anyone acting. **What is left, and
+  is a real hole rather than a rounding error:** the list of *modules* is still
+  hand-maintained — three of them — so a new module exporting an allowlist is ungated
+  until somebody adds it. `SHELL_ICONS` is a live instance of exactly that and is filed
+  in `.github/ISSUES_MANIFEST.md`.
 - **CI never audits the dev tree.** `audit:prod` is `npm audit --omit=dev`, and both
   audit workflows run only that script. Two critical CVEs in `vitest` (CVSS 9.8,
   arbitrary file read/execute) are therefore **structurally invisible** to CI.
@@ -238,13 +380,39 @@ integrity. Each finding is tagged **[reproduced]** where confirmed by execution 
 - **No runtime plug-in delivery exists at all.** Nothing on `window`, no manifest fetch,
   no dynamic import. The model is compile-time only — deploying today means deploying an
   empty frame. **[reproduced]**
-- **No top-level error boundary.** Any throw above `ShellLayout` is a white screen.
-  **[reproduced]**
-- `dist/index.html` uses absolute asset paths with no `base` configured — 404s on any
-  subpath deployment. **[reproduced]**
-- No observability, no sourcemaps, no deploy story. **[reasoned]**
-- **No declared browser target.** The bundle ships `Object.hasOwn`, which breaks Safari
-  14–15.3 silently. **[reasoned]**
+- **~~No top-level error boundary.~~ CLOSED 2026-08-13, uncommitted (§1) — for BOTH entry
+  points, which is the scope this entry originally got wrong.** There are two:
+  `index.html` → `src/main.tsx` → `src/App.tsx`, and `dev.html` → `src/dev/main.dev.tsx`
+  → `src/dev/DevShell.tsx`. Each now wraps its own provider tree in
+  `<FaultBoundary boundaryLabel="The shell" extensionId={null}>` as its outermost
+  element, because a React boundary catches only its own subtree and `App.tsx`'s covers
+  nothing in the dev tree. **The evidence is not symmetric, and do not read it as though
+  it were:** `src/__tests__/AppRootBoundary.test.tsx` covers the `App.tsx` boundary; **no
+  test covers the `DevShell.tsx` one** — nothing in the vitest suite imports `DevShell`,
+  and `src/dev/**` is outside the coverage gate's include list. Wiring it was still right:
+  `dev.html` is the only surface a human can run today, Playwright drives it, and §8 item
+  3 proposes routing it to `/`, which would make it production. **Note the follow-up it
+  exposed**, filed in `.github/ISSUES_MANIFEST.md`:
+  `FaultBoundary`'s exhausted-retry copy says "Switch extension" unconditionally, which is
+  wrong wherever `extensionId` is null. That is **pre-existing, not caused by the root
+  boundary** — `ShellLayout` already passed `null` whenever no extension is active, which
+  is the shell's default state.
+- **~~`dist/index.html` uses absolute asset paths with no `base`.~~ CLOSED 2026-08-13,
+  uncommitted.** `vite.config.ts` sets `base: './'`. A hardcoded host was rejected —
+  `check:portability` fails the build on one in a tracked non-Markdown file.
+- **Sourcemaps: half closed.** `vite.config.ts` sets `build.sourcemap: true`, and the JS
+  map is complete — 75 `sources` and 75 `sourcesContent` entries, first-party `src/`
+  modules included. **No CSS map is emitted**: no `.css.map` file and no
+  `sourceMappingURL` in the built CSS. **Observed, not diagnosed** — filed as an open
+  question in `.github/ISSUES_MANIFEST.md`, not as a defect. No observability and no
+  deploy story remain open. **[reasoned]**
+- **Browser target: declared in the build, still undeclared as a policy.**
+  `vite.config.ts` now sets `build.target: 'es2022'`. That does **not** close the
+  `Object.hasOwn` finding, and the distinction is the point: `Object.hasOwn` is a runtime
+  **library** API, not syntax, so a `target` neither downlevels nor polyfills it. Floor
+  implied — Safari 15.4+, Chrome 93+, Firefox 92+ — and nothing in the repository declares
+  a supported range. Filed in `.github/ISSUES_MANIFEST.md`. **[reasoned, not measured on
+  any real browser; the browser lane is Chromium only and cannot see it]**
 
 ### 6.4 Correctness
 
@@ -338,22 +506,36 @@ risk **cannot exhibit it**, because its fixture has a long literal tail.
 ### 6.9 Corrections to earlier findings — do not act on the originals
 
 - **The `shellApi.test.ts` order-dependence claim does not reproduce.** Reported by an
-  early audit; since tested independently three times, including twice here under
-  `--sequence.shuffle` with different seeds. **109/109 passed every time.**
+  early audit; since tested independently, most recently on **2026-08-13 at six explicit
+  seeds** (`--sequence.shuffle --sequence.seed=1..6`, that file alone).
+  **109/109 passed every time.**
   **Downgraded to: reported, not reproduced — do not act without a failing seed.**
   Issue #64 already records that the reported order-dependence does not reproduce; keep
   it that way. **[reproduced — the non-reproduction, that is]**
 
-  **The narrow conclusion, which is the one to keep:** the manifest's claim **has lost
-  its evidence without anything replacing it**. It is not disproven. `--sequence.shuffle`
-  reorders *files*, not cases, so one file order at one seed is all anyone has ever
-  measured.
+  **CORRECTED 2026-08-13. This entry used to say `--sequence.shuffle` reorders *files*,
+  not cases, and concluded from that premise that only one case order had ever been
+  measured. The premise is false and the conclusion built on it is withdrawn.** Measured:
+  one file run at seed 11 and at seed 22 under `--reporter=verbose` emitted its cases in
+  two different orders — `hostConstants.test.ts` led with "does not claim more than a
+  frozen Set delivers" at one seed and with an `EMPTY_SCOPED_STATE` case at the other.
+  The flag shuffles **cases within a file as well as files**, so each seed is a genuinely
+  different case order and six seeds are six of them.
 
-  **This is the best worked example the project produced today — read it before trusting
+  **The narrow conclusion that survives, which is the one to keep:** the manifest's claim
+  **has lost its evidence without anything replacing it**. It is still not *disproven* —
+  no finite number of seeds proves order-independence, and the failing order the original
+  audit reported may simply not be among the ones drawn. What is gone is the separate,
+  weaker excuse that nobody had ever varied case order. Six seeds have now, and the file
+  was green under all six. Do not act without a failing seed, and do not re-derive the
+  files-only premise: it was checked and it is wrong.
+
+  **This is the best worked example the project has produced — read it before trusting
   any single run.** The claim passed through three states: (1) repeated as fact from the
   manifest; (2) apparently *confirmed* — a junctioned `node_modules` produced 104 failures
   that looked exactly like the predicted order-dependence; (3) contradicted by a clean run
-  (31 files, 1,079 tests, green under shuffle). **Stopping at state two would have written
+  (31 files, 1,079 tests, green under shuffle — and again on 2026-08-13 at 33 files and
+  1,094 tests; **both counts are perishable, re-derive them**). **Stopping at state two would have written
   a false claim into the file every future session reads, backed by evidence that was an
   artifact of the author's own setup.** Corroboration that arrives from a broken
   environment is not corroboration.
@@ -397,8 +579,8 @@ Cheap and high-value first; and the decisions gate everything downstream.
 | 3 | **Route the working demo to `/`** — file an issue first | Roughly a one-line change to what `npm run dev` serves. Until then nobody can run the product, nothing can be validated by a human, and #39 — the sole tracked Blocker — cannot even be started. **PR #70 landed the component but not the routing.** |
 | 4 | **Merge PR #71** (`quality-first-agreement`) | Already green. It is what §9 should point at instead of restating, and everything after this benefits from having the doctrine written down. |
 | 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | The only findings that destroy user data. Both reproduced. Both small. **The browser lane can now see them.** |
-| 6 | **The two `Object.freeze` lines** (`types.ts:770`, `HydrationEngine.ts:211`) | Two lines each. One makes a live `SECURITY.md` claim false. Add the exports-walking test in the same change so it cannot regress a third time. |
-| 7 | **Root error boundary** | One component. Turns every unhandled throw from a white screen into something diagnosable — which every later step benefits from. |
+| 6 | ~~**The two `Object.freeze` lines**~~ | **DONE 2026-08-13, uncommitted (§1).** It turned out to be more than two lines each: freezing the error-code set was necessary and not sufficient, and the trust decision moved into `isShellUXErrorCode`. The exports-walking test landed with it. |
+| 7 | ~~**Root error boundary**~~ | **DONE 2026-08-13, uncommitted (§1).** In `src/App.tsx`, not `main.tsx` — see the rejected alternatives in §1. |
 | 8 | Fix the two vacuous tests and the `patternFor` hole | §6.5 and §6.6. Do it before the hole is load-bearing. |
 | 9 | Triage the three red Dependabot PRs | #34, #35, #38 are red. #35 and #38 cross a major. |
 | 10 | Everything else, by milestone priority | — |
@@ -461,6 +643,20 @@ One session owns delivery. Concretely, that role:
 | **Memory exhaustion on this 8GB machine** | `test:coverage` was OOM-killed twice under concurrent load. **Limit concurrency.** |
 | **The machine is in a degraded state as of this writing.** ~620 MB free across ~572 processes, with orphaned `vitest` and `vite-node` processes from earlier agents still resident. `verify` died twice on resource exhaustion — exit 127 `fork: Resource temporarily unavailable`, and `-1073740791`. Playwright workers died with `spawn UNKNOWN`. | **Recommend a restart before the next session.** And the standing rule: structural-looking failures should be suspected as environmental **first**. |
 | **A partial `npm install` produces *fake* failures.** A truncated `ajv` file and a missing `lib.es2022.d.ts` surfaced as bogus lint crashes and **13 phantom TypeScript errors**. A junctioned `node_modules` separately produced **104 failures** that mimicked a real predicted defect. | A new maintainer would reasonably file those as defects — and one audit nearly wrote the junction artifact into this file as a confirmed finding (§6.9). **Suspect the environment before the code when failures look structural.** Reinstall, then re-run, before believing them. |
+| **A NAMED agent has no `Edit`, `Write` or `Bash`. A NAMELESS subagent has the full toolset.** Added 2026-08-13. Naming a dispatched agent — making it addressable as a teammate — is what strips the write tools, not any other setting. | **Two entire sessions of zero-write dispatches**, each looking like the worker had silently refused the task. See the correction immediately below this table: the previous session diagnosed this WRONGLY and the wrong diagnosis is what cost the second session. |
+| **`check:citations` resolves titles ACROSS LINE BREAKS.** Added 2026-08-13. A cited title wrapped over two lines in Markdown is one citation to the checker and two unrelated lines to `grep`. | A line-bounded `grep` **under-reports** — it silently misses every wrapped citation, so a sweep reads as complete when it is not. **Two citation sites were missed this way on 2026-08-13.** Search with a multiline-aware tool, or normalise whitespace first; do not trust a `grep -c` of citation sites. |
+| **`check:citations` shells out to `git ls-files` internally.** Added 2026-08-13. | Git activity appearing in a log during a documentation check is **not** evidence that an agent is staging something. One near-intervention on that basis. Read what the git invocation actually was before concluding a worker broke its remit. |
+| **Coverage does not see what you probably think it sees.** Added 2026-08-13. `src/core/**/__tests__/**` is excluded, and `src/App.tsx` and `src/main.tsx` sit outside **every** coverage `include` glob. | A change to `App.tsx` — the root `FaultBoundary`, for one — moves the coverage number **not at all**, in either direction. Green coverage after touching those files is not evidence the change is exercised; name the test instead. |
+
+**CORRECTION, recorded explicitly because the wrong version cost a session.** A previous
+session diagnosed the missing write tools as *"Remote Control strips tools from every
+agent"*. **That is false**, and it is the more expensive kind of false: it says the
+capability is unavailable, so the next session stops looking for the working
+configuration. The tools are not stripped from every agent. **A nameless subagent gets
+the full toolset; giving the agent a name is what removes `Edit`, `Write` and `Bash`.**
+The wrong diagnosis does not appear in this file — it was recorded in the previous
+session's own notes — so there is nothing here to strike through, and it is written out
+in full here so that a resuming session that meets it elsewhere knows it is superseded.
 
 ---
 
@@ -480,6 +676,17 @@ There is now a **second, separate lane**: `npm run test:browser` runs 24 Playwri
 against a real Chromium, on its own `browser.yml` workflow. It is **deliberately not part
 of `verify`** — see §1a. Run it when touching layout, the ribbon, dividers, hotkeys or
 focus, because it is the only thing here that can see what jsdom cannot.
+
+> **STALE AS OF 2026-08-13 — the table below describes `3ebf86d`, and the working tree
+> no longer matches it.** A **separate, unrelated** change is in flight in the same tree
+> (see §1b on one tree, several changes): `package.json` now defines
+> `verify:ci` as the first eight stages and `verify` as `verify:ci && audit:prod`, and
+> `.github/workflows/ci.yml` runs the single step `npm run verify:ci` on all three
+> operating systems. If that lands, `check:citations`, `test:integration` and
+> `test:scripts` stop being unguarded and issue #58 is closable. **That change was not
+> verified by the documentation work that wrote this note** — it was read, not run — and
+> the table below is left standing rather than edited so that nobody inherits a
+> second-hand claim as a measurement. Re-derive from `package.json` and `ci.yml`.
 
 **CI does not run all of `verify`.** Inspected at `3ebf86d`:
 

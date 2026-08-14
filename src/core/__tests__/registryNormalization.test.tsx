@@ -8,7 +8,7 @@ import {
   useRegistryRevision,
 } from '../RegistryContext';
 import type { ExtensionRegistry, RegistrationResult } from '../RegistryContext';
-import { SHELL_UX_ERROR_CODES, ShellUXError } from '../types';
+import { SHELL_UX_ERROR_CODES, ShellUXError, isShellUXErrorCode } from '../types';
 import type { LEAPExtensionBlueprint, RibbonContext } from '../types';
 import {
   Pane2View,
@@ -435,7 +435,7 @@ describe('register — the stored record is host-owned', () => {
     );
     expect(error.code).toBe('DUPLICATE_HOTKEY');
     expect(error.field).toBe('ribbonActions[1].hotkey');
-    expect(SHELL_UX_ERROR_CODES.has(error.code)).toBe(true);
+    expect(isShellUXErrorCode(error.code)).toBe(true);
     expect(probe.current.registry.getExtension('sample-ext')).toBeUndefined();
   });
 });
@@ -460,7 +460,7 @@ describe('register — a weaponised ShellUXError cannot be relocated into the ho
     // `readonly` in the type. If this ever stops holding the tests below are
     // testing nothing, so it is asserted rather than assumed.
     expect((harvested as { code: string }).code).toBe('ATTACKER_CHOSEN');
-    expect(SHELL_UX_ERROR_CODES.has('ATTACKER_CHOSEN')).toBe(false);
+    expect(isShellUXErrorCode('ATTACKER_CHOSEN')).toBe(false);
   });
 
   it('rejects an attacker-chosen code and defuses a detonating message getter', () => {
@@ -492,7 +492,7 @@ describe('register — a weaponised ShellUXError cannot be relocated into the ho
     expect(typeof error.message).toBe('string');
     expect(messageReads).toBe(readsBefore);
     // The code is one of the host's own.
-    expect(SHELL_UX_ERROR_CODES.has(error.code)).toBe(true);
+    expect(isShellUXErrorCode(error.code)).toBe(true);
     expect(error.code).toBe('INVALID_PAYLOAD');
     expect(error.field).toBeNull();
   });
@@ -512,6 +512,40 @@ describe('register — a weaponised ShellUXError cannot be relocated into the ho
     expect(error.message).toContain('failed inspection');
   });
 
+  it('refuses an attacker-chosen code smuggled into the exported code set', () => {
+    // The end-to-end form of the attack an adversarial review reproduced against
+    // the version of `toShellUXError` that asked the exported set. A frozen
+    // `Set` still takes `add` — its membership is in internal slots, not in
+    // properties — so a plug-in could widen the very collection the host was
+    // consulting and then throw an error carrying the code it had just added.
+    // The three unit-level forms, including the two this harness cannot safely
+    // host, are in `src/core/__tests__/errorCodeTrust.test.ts`.
+    const probe = setup();
+    const weapon = harvestRealError(probe);
+    Object.defineProperty(weapon, 'code', { value: 'ATTACKER_CHOSEN', configurable: true });
+    Object.defineProperty(weapon, 'message', { value: 'a plain string', configurable: true });
+
+    const forgeable = SHELL_UX_ERROR_CODES as Set<string>;
+    let smuggled = false;
+    let error!: ShellUXError;
+    try {
+      forgeable.add('ATTACKER_CHOSEN');
+      // The premise: the widening really took. Asserted after the repair below,
+      // so a failure here cannot leave the set widened for every later test.
+      smuggled = SHELL_UX_ERROR_CODES.has('ATTACKER_CHOSEN');
+      error = expectFailure(callRegister(probe, makeExplodingPayload(weapon)));
+    } finally {
+      forgeable.delete('ATTACKER_CHOSEN');
+    }
+
+    expect(smuggled).toBe(true);
+    expect(SHELL_UX_ERROR_CODES.has('ATTACKER_CHOSEN')).toBe(false);
+    // The host's answer never depended on that set.
+    expect(Object.is(error, weapon)).toBe(false);
+    expect(error.code).toBe('INVALID_PAYLOAD');
+    expect(error.message).toContain('failed inspection');
+  });
+
   it('refuses a non-string code', () => {
     const probe = setup();
     const weapon = harvestRealError(probe);
@@ -522,7 +556,7 @@ describe('register — a weaponised ShellUXError cannot be relocated into the ho
     // Object.is rather than .not.toBe: a failing `.toBe` runs a deep-equality
     // pass to build its diff, and that pass would read the weapon's message.
     expect(Object.is(error, weapon)).toBe(false);
-    expect(SHELL_UX_ERROR_CODES.has(error.code)).toBe(true);
+    expect(isShellUXErrorCode(error.code)).toBe(true);
     expect(error.code).toBe('INVALID_PAYLOAD');
   });
 

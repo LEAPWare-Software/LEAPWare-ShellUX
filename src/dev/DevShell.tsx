@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ReactElement } from 'react';
+import { FaultBoundary } from '../components/error/FaultBoundary';
 import { ShellLayout } from '../components/layout/ShellLayout';
 import { ShellHostProvider } from '../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext';
@@ -75,14 +76,52 @@ function Registrar(): null {
  * The provider order is load-bearing and is the same as `src/App.tsx`'s.
  * `ShellHostProvider` resolves blueprints through the registry, so it must sit
  * inside `ExtensionRegistryProvider`; inverting the two throws at mount.
+ *
+ * ---------------------------------------------------------------------------
+ * THE ROOT FAULT BOUNDARY, AND WHY THIS FILE NEEDS ITS OWN
+ * ---------------------------------------------------------------------------
+ * A React boundary catches its own subtree and nothing else, and this tree is not
+ * inside `src/App.tsx`'s. There are two entry points into the shell —
+ * `index.html` → `src/main.tsx` → `App`, and `dev.html` → `src/dev/main.dev.tsx`
+ * → here — and the root boundary added to `App.tsx` covers only the first. Until
+ * this line, a throw from either provider's render, from `Registrar`, or from
+ * `ShellLayout`'s own render body was still a white screen HERE, which is the
+ * defect `App.tsx`'s boundary was added to close.
+ *
+ * That matters more than "it is only the dev fixture" suggests. `dev.html` is not
+ * in Vite's production input so nothing here ships, but it is the only surface a
+ * human can actually run today, it is what the Playwright lane drives, and
+ * `HANDOFF.md` carries routing this demo to `/` as a live recommendation — the
+ * day that lands, this file is the production entry point.
+ *
+ * The props match `App.tsx`'s for the same reasons written out there: default
+ * `'pane'` variant, because `'row'` renders no `role="alert"` and no control;
+ * `extensionId` `null`, because this surface sits above the registry and no
+ * registry-validated id exists at this point in the tree; and no `resetKey` at
+ * all, since nothing above the boundary changes.
+ *
+ * **NOT COVERED BY THE VITEST SUITE, and that is stated rather than implied.** No
+ * test imports `DevShell` — `src/__tests__/AppRootBoundary.test.tsx` exercises the
+ * equivalent boundary in `App.tsx`, not this one, and `src/dev/**` is outside the
+ * coverage gate's include list. What is proven about this boundary is that
+ * `FaultBoundary` itself behaves as documented, in
+ * `src/components/__tests__/FaultBoundary.test.tsx`, and that the identical
+ * composition one file over catches a throw from `ShellLayout`'s render body and
+ * a throw from inside `ShellHostProvider` — the two cases
+ * `src/__tests__/AppRootBoundary.test.tsx` asserts, and the whole of what it
+ * asserts. Nothing there or here makes `ExtensionRegistryProvider` throw during
+ * render, so that position is asserted nowhere. The wiring here is unproven by
+ * any automated gate.
  */
 export function DevShell(): ReactElement {
   return (
-    <ExtensionRegistryProvider>
-      <ShellHostProvider>
-        <Registrar />
-        <ShellLayout />
-      </ShellHostProvider>
-    </ExtensionRegistryProvider>
+    <FaultBoundary boundaryLabel="The shell" extensionId={null}>
+      <ExtensionRegistryProvider>
+        <ShellHostProvider>
+          <Registrar />
+          <ShellLayout />
+        </ShellHostProvider>
+      </ExtensionRegistryProvider>
+    </FaultBoundary>
   );
 }

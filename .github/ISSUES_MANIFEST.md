@@ -1580,3 +1580,148 @@ These apply to every issue above and are not restated per ticket.
 - **Performance.** Targets are stated in `README.md` and are explicitly
   unmeasured. No ticket may be closed on a performance claim that has not been
   benchmarked.
+
+---
+
+## Follow-up defects — the 2026-08-13 constant-freeze and error-code-trust landing
+
+Filed on **2026-08-13**, on branch `ci-runs-full-verify`, alongside the landing
+that froze `SHELL_UX_ERROR_CODES` and `HYDRATION_LIMITS`, replaced the
+hand-maintained freeze list with a walk over module exports, moved the error-code
+trust decision into `isShellUXErrorCode`, and added the root `FaultBoundary`.
+
+These are **cross-cutting** — they do not belong under one ISSUE-00N heading — so
+they are recorded here rather than under any of them. They follow the same
+convention as "Follow-up defects" under ISSUE-001: each was reproduced, observed
+or reasoned from the language spec, each says which, and the status marker is `OPEN` /
+`CLOSED` rather than the `LANDED` legend at the top of this file, which describes
+work items and not defects. **None of them blocked the landing**, and the owner's
+decision to file rather than fix is recorded on each one that had such a decision.
+
+**Line numbers below rot.** They were true when written; re-derive by searching
+for the named symbol, not by jumping to the line.
+
+- **`SHELL_ICONS` is an unfrozen allowlist resolving an untrusted key.** OPEN.
+  Severity **High**. **Reproduced.** `src/components/ui/shellIcons.tsx:79` declares
+  `export const SHELL_ICONS: ReadonlyMap<string, ReactElement> = new Map(...)`
+  with no `Object.freeze` anywhere on it. `ReadonlyMap` is a compile-time type and
+  binds nobody who is not being compiled, exactly as `as const` did not bind
+  `REGISTRY_LIMITS` before issue #10.
+
+  **Its key is documented as untrusted in three places** —
+  `src/core/types.ts:232` ("UNTRUSTED icon key … resolve through the host-owned
+  lookup table"), `src/components/layout/ShellLayout.tsx:366` and
+  `src/components/ui/RibbonToolbar.tsx:259` — and it is **read into host chrome**
+  at `ShellLayout.tsx:464` and at `RibbonToolbar.tsx:329` and `:370`, all three of
+  the form `SHELL_ICONS.get(icon) ?? FALLBACK_ICON`.
+
+  **The reproduction:** assigning an own `get` onto the map shadows the prototype
+  method every one of those three call sites invokes, and returns an
+  attacker-chosen `ReactElement` that the host then renders inside its own
+  navigation rail and ribbon — not inside an extension's pane, and not behind any
+  `ExtensionHostBoundary`. The same shadow attempted against a frozen `Map` throws
+  `TypeError`, which is the whole of what freezing the other ten constants buys
+  and what this one does not have.
+
+  **Why the generic gate does not see it.** `src/core/__tests__/hostConstants.test.ts`
+  walks module export namespaces, but its `GATED_MODULES` list names three modules
+  — `RegistryContext`, `types` and `services/HydrationEngine`. `shellIcons` is not
+  among them, so the walk never reaches this export. That is the residual hole the
+  gate's own docblock describes: the per-constant list became a per-module list,
+  which is much smaller, but it is not zero. **No test anywhere asserts that
+  `SHELL_ICONS` is frozen.**
+
+  **Owner decision: filed, not fixed in this landing.** Two alternatives were
+  considered and rejected. Fixing it here was rejected because it is a components
+  change riding on a core change and belongs in its own reviewable diff. Freezing
+  the `Map` while leaving `GATED_MODULES` alone was rejected as the worse of the
+  two halves: it would close this instance and leave the gate structurally unable
+  to see the next one, which is precisely the failure mode that let
+  `HYDRATION_LIMITS` ship. The fix is both — freeze it **and** add its module to
+  the gate — plus a test at the render site.
+
+- **`PANE_IDS` carries a vacuous exhaustiveness claim.** OPEN. Severity
+  **Medium**. **Reproduced against the compiler.** `src/core/types.ts:75` documents
+  `PANE_ID_MEMBERS: Readonly<Record<PaneId, true>>` as making "the compiler reject
+  both a missing member and an invented one". **The second half is false.** The
+  object literal is an argument to `Object.freeze`, and passing a literal through
+  a generic loses the literal freshness that excess-property checking requires, so
+  the compiler never sees a fresh literal to check.
+
+  **The measurement, which is two lines and takes a minute to repeat:**
+  `const M: Readonly<Record<Code, true>> = Object.freeze({ A: true, B: true, INVENTED: true })`
+  compiles clean; the same literal assigned **without** `Object.freeze` around it
+  errors `TS2353` on the stray key. The missing-member half is genuinely enforced
+  either way, and is not in question.
+
+  **Why it matters and is not merely untidy:** a missing member is the direction
+  that narrows trust and fails loudly at the first use. **A stray key is the
+  direction that widens it**, and it is the direction the docblock claims to be
+  protected against. The error-code table hit exactly this and gained a runtime
+  gate for it in this landing — "holds exactly the codes the union declares, and
+  nothing else" in `src/core/__tests__/errorCodeTrust.test.ts`, checked against a
+  hand-written list rather than against the same export, so the assertion cannot
+  agree with itself. **`PANE_IDS` did not get one.** The fix is that runtime gate
+  plus a truthful docblock; the identical wording is also in ADR-0001 and is
+  corrected there.
+
+- **`Object.hasOwn` sets a browser floor that `build.target` does not enforce.**
+  OPEN. Severity **Medium**. **Reasoned from the language spec, not measured in a
+  browser.**
+  `src/core/ShellAPI.ts:1183` calls `Object.hasOwn(candidate, key)`. That is a
+  **runtime library API, not syntax**, and this is the distinction the finding
+  turns on: `build.target: 'es2022'` in `vite.config.ts` tells esbuild which
+  syntax to downlevel, and it neither downlevels nor polyfills a missing built-in
+  method. On an engine without it the call is a `TypeError` at the first
+  `patchContext`, not a build-time or load-time failure.
+
+  Floor implied: **Safari 15.4+, Chrome 93+, Firefox 92+**. Nothing in the
+  repository declares a supported browser range, so there is no document this
+  contradicts and none it satisfies — which is the actual gap. Fix is a decision
+  first (declare the range) and then either a `browserslist` entry that makes the
+  floor checkable, or a two-line own-property helper. **Not measured on any real
+  browser**, and the browser lane runs Chromium only, so it cannot see this.
+
+- **`FaultBoundary`'s post-failure copy is wrong wherever `extensionId` is null.**
+  OPEN. Severity **High**. **Reproduced by reading the render path.**
+  `src/components/error/FaultBoundary.tsx:342-343` renders, unconditionally once
+  `failures` reaches `MAX_CONSECUTIVE_FAILURES`: *"Retried 3 times without
+  success. Switch extension, or reload the shell."* There is no branch on
+  `extensionId`.
+
+  **This is pre-existing and was NOT caused by the root boundary added in this
+  landing**, and that matters for how it is prioritised. `App.tsx:78` passes
+  `extensionId={null}`, so the new root boundary reaches the copy with no
+  extension to switch to — but `ShellLayout.tsx` already did: `activeId` is
+  computed at `ShellLayout.tsx:774` as `active === null ? null : active.id` and
+  passed as `extensionId` to the navigation, ribbon and pane boundaries at
+  `:985`, `:998`, `:1061` and `:1111`. **No extension being active is the shell's
+  default state on a cold start**, so the wrong copy was already reachable in the
+  most ordinary situation there is.
+
+  **Verified-safe minimal fix:** make the second sentence conditional on
+  `extensionId === null`, leaving the non-null branch byte-identical. The only
+  verbatim citation of that string is an assertion at
+  `src/components/__tests__/FaultBoundary.test.tsx:339`, inside "stops offering a
+  retry after three consecutive failures", whose harness defaults to a **non-null**
+  extension id — so that test keeps passing unchanged. **A new test is required
+  for the null branch**, not optional: the repository holds a 100%
+  statements/branches gate, and adding a branch without covering it fails
+  `test:coverage`.
+
+- **No CSS sourcemap is emitted, despite `build.sourcemap: true`.** OPEN.
+  Severity **Low**. Filed as an **open question rather than a defect**: it was
+  **observed, not diagnosed**, and nobody has established whether it is a Vite/Tailwind
+  configuration matter, expected behaviour for this pipeline, or a real gap.
+
+  **What was observed**, in `dist/` as built by this landing: `dist/assets/`
+  contains `index-*.js` and `index-*.js.map` but **no `.css.map`**, and
+  `dist/assets/index-*.css` contains **no `sourceMappingURL` comment** — measured,
+  zero occurrences. So the CSS half of the bundle is unmapped in a build that
+  asked for sourcemaps.
+
+  **The JS half is complete and correct**, which is worth recording so the finding
+  is not over-read into "sourcemaps do not work": the JS map carries **75
+  `sources` and 75 `sourcesContent` entries**, first-party `src/` modules
+  included, so a production stack trace does resolve to real TypeScript. Whoever
+  picks this up should establish the cause before writing it up as a defect.

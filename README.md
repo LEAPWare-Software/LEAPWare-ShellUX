@@ -872,7 +872,7 @@ ADR-0001 **Amendment G**.
 plainly — see Amendment G. A reader who finds a security sentence in this repository
 with no test named beside it has found a documentation bug; please report it.
 
-### The one limit to read before anything else
+### The two limits to read before anything else
 
 **There is no enforceable boundary between two extensions, and there will not be
 one while extensions are scripts on this page.** Any code on the page reaches
@@ -892,6 +892,28 @@ mandatory.
 What follows is therefore about **the host's own integrity** and about
 **accidental collision between mutually untrusting extensions**. It is not about
 defending one extension from another.
+
+**The second limit is about *when*, not about *who*, and it bounds every
+integrity control below without exception** — which is why it is stated here,
+once, rather than on whichever bullet happens to raise it. The closure-backed
+state store, the deep-frozen `IShellAPI`, the host-owned normalised records, the
+`Map`-backed registry and badge stores, the frozen host constants and the
+error-code trust decision alike — every one of them defends against plug-in code
+that runs *after* the host module graph has evaluated. Code that runs *before* it
+can replace `Object.freeze`, `Map`, `Set` or `Object.defineProperty` themselves,
+and no module can defend against that from inside, because it is holding the very
+builtins its defence is written in. This caveat used to sit on one bullet — the
+error-code decision — where it read by omission as though the rest of the list
+were exempt. None of it is.
+
+This weakens no claim below, and it is why the heading over the controls still
+reads *unconditional*. **Unconditional**, in the table above and everywhere in
+this section, means *against any caller, however hostile, once the host is
+running* — the register the whole section is written in. It has never meant
+*before there is a host to call*. In this trust model, code that evaluates ahead
+of the host is code the deployer chose and compiled from source they have; the
+day that stops being true, the Amendment E trigger named above has already voided
+the entire posture rather than this one caveat.
 
 ### Integrity controls — unconditional
 
@@ -1013,20 +1035,66 @@ defending one extension from another.
   and `PANE_IDS` are the rules every untrusted payload is measured against, they
   are exported from modules a plug-in can import, and until ADR-0001 Amendment K
   every one of them was runtime-mutable — `REGISTRY_LIMITS` was `as const`, which
-  binds nobody who is not being compiled. All six are frozen. No own property can
-  be added, replaced or deleted, so `REGISTRY_LIMITS` is genuinely immutable and
-  the sets' and pattern's `has`/`test` cannot be **shadowed** by an own property,
-  which was the interesting attack: a plug-in owning `HOTKEY_KEYS.has` owned the
-  hotkey allowlist for the whole page.
+  binds nobody who is not being compiled. No own property can be added, replaced
+  or deleted, so `REGISTRY_LIMITS` is genuinely immutable and the sets' and
+  pattern's `has`/`test` cannot be **shadowed** by an own property, which was the
+  interesting attack: a plug-in owning `HOTKEY_KEYS.has` owned the hotkey
+  allowlist for the whole page.
+
+  **Ten exports are covered now, not those six, and the list is no longer kept by
+  hand.** The four that were missing are `SHELL_UX_ERROR_CODES` in
+  `src/core/types.ts` and `HYDRATION_LIMITS`, `DEFAULT_SHELL_STATE` and
+  `EMPTY_SCOPED_STATE` in `src/core/services/HydrationEngine.ts`. Two of them are
+  the same kind of thing as the six above — `SHELL_UX_ERROR_CODES` decided which
+  error codes the host would trust, and `HYDRATION_LIMITS` is the bound on every
+  untrusted persisted payload, shipped `as const`, which is issue #10's exact
+  defect reintroduced. A hand-maintained list of six names is *how* they got in,
+  so it is gone: the gate now walks each covered module's export namespace and
+  requires every object-valued export to be frozen, with exemptions written down
+  and a reason attached rather than expressed as a name quietly missing. There are
+  no exemptions today. **What is still maintained by hand is the list of modules**
+  — three of them — so a new module exporting an allowlist is outside the gate
+  until somebody adds it, which `SHELL_ICONS` currently is; it is filed as an open
+  follow-up in `.github/ISSUES_MANIFEST.md`.
 
   **The obvious wider reading is false and is asserted against.** A frozen `Set`
   is not an immutable one — `Set` state lives in internal slots rather than
   properties, so `add`, `delete` and `clear` still work. The claim is "cannot be
-  replaced", never "cannot be changed".
+  replaced", never "cannot be changed". The freeze is also one level deep:
+  `DEFAULT_SHELL_STATE` nests a `paneSizes` object, frozen where it is declared
+  rather than by the gate.
   *Tests:* `src/core/__tests__/hostConstants.test.ts` — "freezes the host constants
-  against replacement", "refuses to let a caller raise a registry bound" and "does
-  not claim more than a frozen Set delivers", the last of which demonstrates the
-  remaining mutability on a throwaway `Set` rather than on a live allowlist.
+  against replacement", "refuses to let a caller raise a registry bound", "does
+  not claim more than a frozen Set delivers" — which demonstrates the remaining
+  mutability on a throwaway `Set` rather than on a live allowlist — and "walks the
+  gated modules and finds the constants it is meant to guard", the anti-vacuity
+  check that fails if the walk stops finding them.
+
+  **For the error codes, freezing was necessary and it was not sufficient, and
+  the fix is a different mechanism in a different place.** Freezing
+  `SHELL_UX_ERROR_CODES` closed own-property shadowing of its lookup method and
+  left its membership editable, so a plug-in could still widen the very set the
+  host consulted when deciding whether to trust a `code` coming back out of plug-in
+  code — and choose the code `register` reported. No amount of freezing that set
+  closes that. The decision was moved instead: `isShellUXErrorCode` in
+  `src/core/types.ts` reads a module-private, frozen, **null-prototype** table no
+  importer can name, with `=== true` rather than a truthiness test. It consults no
+  `Set`, so widening one changes nothing; it calls no method, so poisoning
+  `Set.prototype` forges nothing; and its table inherits nothing, so
+  `Object.prototype` pollution answers for no key. `SHELL_UX_ERROR_CODES` stays
+  exported for the reason ADR-0001 Decision 5 records, and not because callers may
+  use it: a source scan fails on the identifier in any non-test module under
+  `src/`, so no production module may even name it, let alone interrogate it. The pre-evaluation limit that bounds this
+  bounds every other integrity control in this section identically, so it is
+  stated once under *The two limits to read before anything else* above rather
+  than repeated here.
+  *Tests:* `src/core/__tests__/errorCodeTrust.test.ts` — "isShellUXErrorCode — the
+  trust decision plugin code cannot reach", which runs all three forgeries against
+  the shipped predicate and asserts each one really worked before asserting the
+  predicate ignored it, and "is not interrogated by any module outside the tests",
+  which is the scan; end to end through `register`,
+  `src/core/__tests__/registryNormalization.test.tsx` — "refuses an attacker-chosen
+  code smuggled into the exported code set".
 
 ### Entry-point validation — real at the door, bypassable elsewhere
 

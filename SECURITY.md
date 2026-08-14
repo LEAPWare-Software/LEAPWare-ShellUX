@@ -29,6 +29,25 @@ defences are about the host's own integrity and about **accidental collision
 between mutually untrusting extensions**. They are not, and are nowhere described
 as, a defence of one extension against another.
 
+**One limit applies to every integrity control in this file, and it is stated
+once, here, rather than on whichever bullet happens to mention it.** All of them —
+the closure-backed store, the deep-frozen `IShellAPI`, the host-owned normalised
+copies, the `Map`-backed registry and badge stores, the frozen host constants and
+the error-code trust decision alike — defend against plug-in code that runs
+*after* the host module graph has evaluated. Code that runs *before* it can
+replace `Object.freeze`, `Map`, `Set` or `Object.defineProperty` themselves, and
+no module can defend against that from inside, because it is holding the very
+builtins its defence is written in. Stating the limit on one control would imply
+by omission that the others are exempt, and none of them is.
+
+This does not weaken any control below, and it is why the heading over them still
+reads *unconditional*. **Unconditional** in the table that follows means *against
+any caller, however hostile, once the host is running* — the register the whole
+file is written in. It has never meant *before there is a host to call*. In this
+trust model, code evaluating ahead of the host is code the deployer chose,
+compiled and shipped; the day that stops being true, the paragraph below has
+already voided the whole model rather than this one caveat.
+
 The condition that voids this, recorded in ADR-0001 Amendment E as a binding
 trigger rather than a caveat:
 
@@ -94,10 +113,33 @@ evidence there.
   that throws or resists inspection from its own property getters. Duplicate ids
   are a deterministic reported failure, never a silent overwrite. The failure it
   returns is always an error the host constructed, carrying a code from the host's
-  own enum — never an error object handed back out of plug-in code. **This is
-  `register`'s contract and not the exported `validateBlueprint`'s**, which throws
-  rather than returning a result and out of which a throwing property getter on the
-  payload still propagates untyped. Prefer `register` for input you did not author.
+  own enum — never an error object handed back out of plug-in code.
+
+  **The mechanism is named here because the obvious one is not enough, and this
+  claim was over-stated until it changed.** A `ShellUXError` coming back out of
+  plug-in code may carry any `code` at all, and the host has to decide whether to
+  copy that string into the error it hands its own callers. That decision used to
+  interrogate the exported `SHELL_UX_ERROR_CODES` set, which a plug-in can import
+  — and freezing that set closed only own-property shadowing of its lookup method,
+  leaving `add` working, because a `Set` keeps its membership in internal slots
+  rather than in properties. So a plug-in could widen the collection the host was
+  consulting and choose the code `register` reported, including `REVOKED`. For as
+  long as that was true this bullet claimed more than the code delivered.
+
+  The decision is now `isShellUXErrorCode` in `src/core/types.ts`. It reads a
+  **module-private, frozen, null-prototype** table that no importer can name, and
+  compares the result with `=== true`. Widening any exported collection leaves it
+  where it was; it calls no method, so replacing `Set.prototype`'s lookup forges
+  nothing; and its table inherits nothing, so `Object.prototype` pollution answers
+  for no key. The pre-evaluation limit that bounds this — and bounds every other
+  control in this section identically — is stated once in the trust model above.
+  The named tests for all of it are in the Security posture section of
+  [`README.md`](README.md), under the host-constants bullet, per the policy above.
+
+  **This is `register`'s contract and not the exported `validateBlueprint`'s**,
+  which throws rather than returning a result and out of which a throwing property
+  getter on the payload still propagates untyped. Prefer `register` for input you
+  did not author.
 - **Revocation is immediate and cannot be resurrected.** A handle's liveness is
   re-asked on every call and is keyed on the host-owned record it was minted
   against, not on the id still being registered. `unregister` kills the handle
@@ -107,19 +149,47 @@ evidence there.
 - **The host constants cannot be replaced.** `EXTENSION_ID_PATTERN`,
   `RESERVED_IDS`, `REGISTRY_LIMITS`, `HOTKEY_KEYS` and
   `HOTKEY_MODIFIER_REQUIRED_KEYS` — the rules every untrusted payload is measured
-  against — together with `PANE_IDS` are exported from modules a plug-in can
-  import, and every one of them used to be runtime-mutable: `REGISTRY_LIMITS` was
-  `as const`, which binds nobody who is not being compiled, and assigning
-  `EXTENSION_ID_PATTERN.test` shadowed the method every id check calls. All of
-  them are frozen, so no own property can be added, replaced or deleted on any of
-  them. **The obvious wider reading is false, and the repository asserts against
+  against — are exported from modules a plug-in can import, and every one of them
+  used to be runtime-mutable: `REGISTRY_LIMITS` was `as const`, which binds nobody
+  who is not being compiled, and assigning `EXTENSION_ID_PATTERN.test` shadowed
+  the method every id check calls. **Ten exports are now covered, not those five
+  and not the six this bullet used to list.** The other five are `PANE_IDS` and
+  `SHELL_UX_ERROR_CODES` in `src/core/types.ts`, and `HYDRATION_LIMITS`,
+  `DEFAULT_SHELL_STATE` and `EMPTY_SCOPED_STATE` in
+  `src/core/services/HydrationEngine.ts`; `HYDRATION_LIMITS` is a second set of
+  bounds on untrusted input and shipped `as const` — issue #10's exact defect,
+  reintroduced. All ten are frozen, so no own property can be added, replaced or
+  deleted on any of them.
+
+  **The enumeration is no longer maintained by hand, because a hand-maintained
+  list is how the tenth one got in.** The gate walks the export namespace of each
+  covered module and requires every object-valued export to be frozen, so a
+  constant added to a module already covered is gated by default rather than by
+  someone remembering to add a line. Exemptions must be written down with a reason
+  a reviewer can refuse; there are currently none. **What is still hand-maintained
+  is the list of MODULES** — three of them today — so a *new* module exporting
+  bounds or allowlists is outside the gate until someone adds it. That is a real
+  residual hole and not a theoretical one: `SHELL_ICONS` in
+  `src/components/ui/shellIcons.tsx` is an unfrozen allowlist resolving an
+  untrusted key, in a module the gate does not cover, recorded as an open
+  follow-up in [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md).
+
+  **The obvious wider reading is false, and the repository asserts against
   it rather than leaving it to be discovered.** `Object.freeze` on a `Set` does
   not stop `.add()` — a `Set` keeps its state in internal slots rather than in
   properties, so `HOTKEY_KEYS.add('tab')` still widens the allowlist. What
   freezing closes is own-property shadowing of `has` and `test`, which was the
   interesting attack. The claim is that these cannot be **replaced**, never that
   they cannot be **changed**, and a test demonstrates the mutability that remains
-  — on a throwaway `Set`, so no live allowlist is left widened behind it.
+  — on a throwaway `Set`, so no live allowlist is left widened behind it. The
+  freeze is also one level deep: `DEFAULT_SHELL_STATE` nests a `paneSizes` object
+  that is frozen at its own declaration rather than by the gate.
+
+  **`SHELL_UX_ERROR_CODES` is the case where freezing was necessary and was not
+  sufficient**, which is why the error-code decision moved out of it entirely —
+  see the `register` bullet above. It is not the trust decision, and no
+  production module under `src/` may even name it, let alone interrogate it,
+  which a source scan enforces rather than asks for.
 
 ### Entry-point validation — real at the door, bypassable elsewhere
 

@@ -122,7 +122,7 @@ import { VirtualizedList } from '../components/shared/VirtualizedList';
  * A longer per-case budget than Vitest's 5s default, for THIS FILE only.
  *
  * `vi.setConfig` rather than `vitest.config.ts`, because that file is shared by
- * all 29 suites and none of the others needs this: raising the default there
+ * every suite and none of the others needs this: raising the default there
  * would hide a genuine hang in a unit test somewhere else.
  *
  * The budget is needed because the workload is real. `DatabasePlugin` puts 280
@@ -286,12 +286,20 @@ interface HarnessProps {
 }
 
 /**
- * The two providers and the shell, in the order `src/App.tsx` composes them.
+ * The two providers and the shell, in the order `src/App.tsx` composes them —
+ * that ORDER only, not the whole of what `App.tsx` renders.
  *
  * `ShellHostProvider` INSIDE `ExtensionRegistryProvider`, because it resolves
  * blueprints through the registry and watches the registry's revision. The
  * inversion is asserted to throw in "the composition wiring" group below, which is
  * the only place that claim of `App.tsx`'s docblock is actually exercised.
+ *
+ * **This is the provider order, not the whole of what `App.tsx` renders.**
+ * `App.tsx` wraps that tree in a root `FaultBoundary` — `boundaryLabel="The
+ * shell"`, `extensionId={null}` — and this harness has no equivalent, so nothing
+ * asserted through `Harness` is evidence about the root boundary either way.
+ * That boundary is exercised against `App` itself in
+ * `src/__tests__/AppRootBoundary.test.tsx`.
  */
 function Harness({ blueprints, engine, extras }: HarnessProps): ReactElement {
   return (

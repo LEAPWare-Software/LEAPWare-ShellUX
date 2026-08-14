@@ -71,8 +71,7 @@ import type { ComponentType } from 'react';
 export type PaneId = 'pane1' | 'pane2' | 'pane3';
 
 /**
- * Exhaustiveness pin for `PANE_IDS`, in the same shape as
- * `SHELL_UX_ERROR_CODE_MEMBERS` below: `Record<PaneId, true>` makes the compiler
+ * Exhaustiveness pin for `PANE_IDS`: `Record<PaneId, true>` makes the compiler
  * reject both a missing member and an invented one, so the runtime set cannot
  * drift away from the `PaneId` union.
  */
@@ -739,13 +738,38 @@ export type ShellUXErrorCode =
   | 'REENTRANT_NOTIFY';
 
 /**
- * Exhaustiveness pin for `SHELL_UX_ERROR_CODES`.
+ * The codes the host will trust, and the exhaustiveness pin for the union.
  *
- * `Record<ShellUXErrorCode, true>` makes the compiler reject both a missing
- * member and an invented one, so the runtime set below cannot drift away from
- * the union above.
+ * Module-private, and that is the security property rather than a tidiness
+ * preference: `isShellUXErrorCode` below is the host's trust decision, and no
+ * importer can reach the object it reads. Everything a plug-in CAN reach —
+ * including the enumerable set of these same codes exported at the bottom of this
+ * section — is downstream of this table and decides nothing.
+ *
+ * That export is deliberately not NAMED here. The scan gate in
+ * `src/core/__tests__/errorCodeTrust.test.ts` fails on its identifier anywhere
+ * under `src/` outside a test, prose included, and forgives exactly one line: the
+ * declaration itself. Referring to it without spelling it is the price of a gate
+ * that cannot be walked around by writing the interrogation a different way.
+ *
+ * `Record<ShellUXErrorCode, true>` makes the compiler reject a member of the
+ * union that is missing here. It does NOT reject a stray key: the literal is an
+ * argument to `Object.freeze`, and passing through that generic loses the
+ * literal freshness excess-property checking needs. A stray key is the direction
+ * that would WIDEN trust, so that half is a runtime gate instead — pinned by
+ * "holds exactly the codes the union declares, and nothing else" in
+ * `src/core/__tests__/errorCodeTrust.test.ts`.
+ *
+ * `__proto__: null` is load-bearing, not decoration. It is the object
+ * initializer's prototype-setter form, so this table inherits nothing at all: an
+ * `Object.prototype.EVIL = true` written by a plug-in is invisible to a lookup
+ * on it. That is what lets the predicate below be a bare property read rather
+ * than an `Object.hasOwn` call, which would be a replaceable builtin sitting in
+ * the middle of a trust decision. Pinned by "is unmoved by Object.prototype
+ * pollution naming the forged code", same file.
  */
 const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Object.freeze({
+  __proto__: null,
   INVALID_PAYLOAD: true,
   MISSING_FIELD: true,
   INVALID_FIELD: true,
@@ -759,16 +783,76 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
 });
 
 /**
- * `ShellUXErrorCode` as a runtime membership test.
+ * The same table, typed so an arbitrary string may be looked up in it.
+ *
+ * The same object, not a copy — one source of truth and nothing that can drift.
+ * `Record<ShellUXErrorCode, true>` refuses indexing by a general `string`, and
+ * `noUncheckedIndexedAccess` is what makes the result `true | undefined` for the
+ * comparison below.
+ */
+const SHELL_UX_ERROR_CODE_LOOKUP: Readonly<Record<string, true>> = SHELL_UX_ERROR_CODE_MEMBERS;
+
+/**
+ * `ShellUXErrorCode` as a runtime membership test. **This is the trust
+ * decision.**
  *
  * A type union vanishes at runtime, but the host has to be able to ask "is this
  * `code` one of mine?" of an error it did not construct — see `toShellUXError`
  * in `RegistryContext.tsx`. A `ShellUXError` that crosses back from plugin code
- * may carry any `code` at all; only a value in this set is trusted, and
- * anything else is downgraded to a host-chosen default.
+ * may carry any `code` at all; only a value this predicate accepts is copied
+ * into the host-constructed error, and anything else is downgraded to a
+ * host-chosen default.
+ *
+ * It reads the module-private table above rather than any exported collection,
+ * because plugin code has three routes into a membership test written the
+ * obvious way. Routes 1 and 2 were reproduced against the `Set`-based version of
+ * this decision that this replaced; route 3 is what defeats the obvious
+ * replacement for it, an ordinary plain-object lookup table, and is the reason
+ * the table above is built with `__proto__: null`:
+ *
+ *   1. **Widen the collection.** `add` works on a frozen `Set` — `Set` state
+ *      lives in internal slots, not in properties, so `Object.freeze` does not
+ *      reach it. This predicate reads no `Set`.
+ *   2. **Poison the method.** Assigning to `Set.prototype.has` forges membership
+ *      in every `Set` on the page at once. This predicate calls no method: a
+ *      property read and a `===` comparison invoke nothing a caller can replace.
+ *   3. **Pollute the prototype.** `Object.prototype.EVIL = true` makes
+ *      `table['EVIL']` answer truthily on any ordinary object. The table read
+ *      here has a null prototype and inherits nothing, and the comparison is
+ *      `=== true` rather than a truthiness test.
+ *
+ * The function object is deliberately NOT frozen, and freezing it would buy
+ * nothing. An attacker would need either to replace this binding — an ES module
+ * export binding is read-only to every importer, so they cannot — or to change
+ * what the body reads, which is one module-private frozen null-prototype table
+ * and two syntactic operators. The predicate reads no property of itself.
+ *
+ * Pinned by "isShellUXErrorCode — the trust decision plugin code cannot reach"
+ * in `src/core/__tests__/errorCodeTrust.test.ts`.
  */
-export const SHELL_UX_ERROR_CODES: ReadonlySet<string> = new Set(
-  Object.keys(SHELL_UX_ERROR_CODE_MEMBERS),
+export function isShellUXErrorCode(code: unknown): code is ShellUXErrorCode {
+  return typeof code === 'string' && SHELL_UX_ERROR_CODE_LOOKUP[code] === true;
+}
+
+/**
+ * The host's error codes as an enumerable collection. **It is not the trust
+ * decision and must never be used as one** — `isShellUXErrorCode` above is.
+ *
+ * This set is exported, and a `Set` a plug-in can import is a `Set` a plug-in
+ * can widen. `Object.freeze` means its `has` cannot be REPLACED by an own
+ * property; it does not mean the membership cannot be changed, because `Set`
+ * state lives in internal slots rather than in properties and `add`, `delete`
+ * and `clear` go on working — see "does not claim more than a frozen Set
+ * delivers" in `src/core/__tests__/hostConstants.test.ts`. So interrogating this
+ * set answers a question about a collection any caller can edit, and is worthless
+ * to trust. No production module under `src/` may even name it, let alone
+ * interrogate it, and that is a gate rather than an intention — pinned by "is not
+ * interrogated by any module outside the tests" in
+ * `src/core/__tests__/errorCodeTrust.test.ts`. Why it is kept exported rather
+ * than deleted is recorded in ADR-0001 Decision 5.
+ */
+export const SHELL_UX_ERROR_CODES: ReadonlySet<string> = Object.freeze(
+  new Set(Object.keys(SHELL_UX_ERROR_CODE_MEMBERS)),
 );
 
 /**
