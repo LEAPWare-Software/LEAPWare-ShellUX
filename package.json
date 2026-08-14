@@ -23,7 +23,8 @@
     "check:portability": "node scripts/check-portability.mjs",
     "check:citations": "node scripts/check-citations.mjs",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
-    "verify": "npm run check:portability && npm run check:citations && npm run lint && npm run typecheck && npm run test:coverage && npm run test:integration && npm run test:scripts && npm run build && npm run audit:prod"
+    "verify:ci": "npm run check:portability && npm run check:citations && npm run lint && npm run typecheck && npm run test:coverage && npm run test:integration && npm run test:scripts && npm run build",
+    "verify": "npm run verify:ci && npm run audit:prod"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.4",

@@ -41,6 +41,29 @@ jobs:
     # fail-fast is off on purpose: when a change is platform-specific, the useful
     # information is *which* platforms disagree, and cancelling the others throws
     # exactly that away.
+    #
+    # Every stage runs on every leg, including the three added with the `verify:ci`
+    # step below, and that was costed rather than assumed. Measured against the
+    # 2026-08-01 run of this workflow on `main`, the whole matrix finished in 3m05s
+    # wall clock, bounded by the Windows leg; `test:scripts` is 55 tests in ~7s and
+    # `check:citations` is ~2s, so the only stage with a real price is
+    # `test:integration`, at roughly a minute on the slowest leg. Matrix legs run in
+    # parallel, so that is ~1m of added wall clock, not three.
+    #
+    # `test:scripts` earns all three legs on merit: it is the suite for
+    # check-portability.mjs itself, and its behaviour genuinely branches on platform
+    # - symbolic links versus junctions, and a case-insensitive filesystem on two of
+    # the three legs are precisely what its case-collision and symlinked-path cases
+    # exist to exercise. Running the portability checker's own tests on one platform
+    # would be the same mistake ADR-0002 was written about.
+    #
+    # `test:integration` does not earn all three on merit - it is jsdom, which has
+    # no platform-dependent behaviour worth a second runner - and it is here anyway,
+    # for two reasons. Carving it out would put a per-OS stage list back into this
+    # file, which is the exact duplication that let three gates stop running; and
+    # the shuffle seed defaults to the clock, so three legs sample three independent
+    # orderings per run rather than one. A minute of parallel wall clock is a cheap
+    # price for keeping the stage list unsplittable.
     strategy:
       fail-fast: false
       matrix:
@@ -65,30 +88,43 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Steps are ordered cheapest and most informative first, so a run fails on
-      # the most actionable error available rather than the slowest one.
-
-      # The mechanical half of ADR-0002. First because it is the fastest step in
-      # the job and because a portability violation invalidates every result after
-      # it: there is no point knowing the tests pass on one machine if the tree
-      # cannot be cloned onto another.
-      - name: Check portability
-        run: npm run check:portability
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      # The coverage gate. vitest.config.ts sets 100% statements/branches/
-      # functions/lines over src/core/**; vitest exits non-zero when a threshold
-      # is unmet, which fails this step and therefore the job.
-      - name: Test with coverage
-        run: npm run test:coverage
-
-      - name: Build
-        run: npm run build
+      # ONE step, calling ONE script, on purpose - and this used to be five steps
+      # naming five of `verify`'s nine stages by hand.
+      #
+      # What that cost. `check:citations`, `test:integration` and `test:scripts`
+      # were in `verify` and in no CI leg, so three gates guarded `main` only by an
+      # author remembering to run them locally. `check:citations` is a 900-line gate
+      # that had never once run against `main`; it caught stale documentation in
+      # PR #71 only because somebody ran it by hand. The gap was not a decision
+      # anyone took - it opened because a stage was added to package.json and this
+      # file was not edited to match, which is the failure mode a hand-maintained
+      # duplicate list has by construction. Tracked as issue #58.
+      #
+      # So CI no longer enumerates stages. `verify:ci` is the whole chain and
+      # `verify` is defined as `verify:ci && audit:prod`, which means there is
+      # exactly one ordered list of stages in the repository and CI runs it. A
+      # stage added to `verify:ci` is in CI the moment it is added; a stage that
+      # skipped `verify:ci` would not be in `verify` either, so it could not hide
+      # from CI while still claiming to be part of the gate. Divergence is not
+      # detected here, it is unrepresentable.
+      #
+      # What this gives up, stated rather than glossed: the per-step durations and
+      # the named red step in the Actions UI. A failing stage is still named in the
+      # log - npm echoes `> leapware-shellux@0.1.0 <stage>` before each one - so the
+      # cost is a click, and a click is worth less than a gate that cannot silently
+      # stop running. The stage order inside `verify:ci` is unchanged and still runs
+      # cheapest-and-most-informative first, so a run still fails on the most
+      # actionable error rather than the slowest: the mechanical half of ADR-0002
+      # leads, because a portability violation invalidates every result after it.
+      #
+      # audit:prod is deliberately NOT here. It is the one stage of `verify` that
+      # stays out of the per-push gate, because an advisory can be published with no
+      # commit and a blocking per-push audit turns `main` red with no defect, no
+      # author and no fix in the triggering change. It blocks on its own terms in
+      # audit-dependencies.yml and audit-schedule.yml; the reasoning is in those
+      # files' headers.
+      - name: Verify
+        run: npm run verify:ci
 
       # always(): the coverage report is most useful precisely when the run
       # failed, so upload it even after a failing step.

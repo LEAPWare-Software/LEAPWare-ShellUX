@@ -313,13 +313,14 @@ variable — see `src/dev/DevShell.tsx`.
 | `npm run dev` | Vite dev server with hot module replacement, on port 5173. |
 | `npm run build` | Typechecks, then produces a production bundle in `dist/`. |
 | `npm test` | Runs the Vitest suite once. |
-| `npm run test:coverage` | Runs the suite and enforces the coverage gate in `vitest.config.ts` — 100% statements, branches, functions and lines over `src/core/**`. Exits non-zero if a threshold is unmet. |
-| `npm run test:integration` | Runs `src/__tests__/IntegrationSuite.test.tsx` a **second** time under `--sequence.shuffle`, which is ISSUE-005's requirement that the integration cases pass in a randomised order. The flag lives here rather than in `vitest.config.ts` because that file is shared by all 29 suites and the wider suite is not yet order-independent — under `--sequence.shuffle`, `src/core/__tests__/shellApi.test.ts` fails three of its own cases today. Vitest prints the seed it used, and the seed defaults to the clock. |
+| `npm run test:coverage` | Runs the suite and enforces the coverage gate in `vitest.config.ts` — 100% statements, branches, functions and lines over `src/core/**`, `src/components/**` and `src/hooks/**`, with each area's `__tests__` directory excluded. Exits non-zero if a threshold is unmet. |
+| `npm run test:integration` | Runs `src/__tests__/IntegrationSuite.test.tsx` a **second** time under `--sequence.shuffle`, which is ISSUE-005's requirement that the integration cases pass in a randomised order. The flag lives here rather than in `vitest.config.ts` because order-independence is a stated requirement of this one suite and of no other. It is **not** because the wider suite fails shuffled: a whole-suite shuffled run was green when last measured, on 2026-08-13, and `src/core/__tests__/shellApi.test.ts` — long reported as order-dependent — passed 109/109 at each of six explicit seeds. Turning the flag on globally would make every CI run draw a different order, so a latent order-dependence anywhere in the suite would arrive as an intermittent red on an unrelated change rather than as a finding. Vitest prints the seed it used, and the seed defaults to the clock, so an unpinned shuffled run is not reproducible without reading it back. |
 | `npm run typecheck` | `tsc --noEmit`. Emits nothing; only checks. |
 | `npm run lint` | ESLint at `--max-warnings 0`. There is no warning tier; a warning fails. |
 | `npm run check:portability` | Enforces ADR-0002 — see below. |
 | `npm run audit:prod` | `npm audit` over production dependencies at `--audit-level=high`. Needs network access. |
-| `npm run verify` | **The gate.** Runs all of the above in order: portability, citations, lint, typecheck, coverage, the randomised integration run, the script tests, build, audit. This is exactly what CI applies. |
+| `npm run verify:ci` | The first eight stages of the gate, in order: portability, citations, lint, typecheck, coverage, the randomised integration run, the script tests, build. Everything `verify` does except the audit. This exact script is the one step [`ci.yml`](.github/workflows/ci.yml) runs, on all three operating systems. |
+| `npm run verify` | **The gate.** `verify:ci` followed by `audit:prod` — so all nine stages, in order. CI applies every one of them, but not all in one workflow: `ci.yml` runs `verify:ci`, and the audit blocks separately in [`audit-dependencies.yml`](.github/workflows/audit-dependencies.yml) and [`audit-schedule.yml`](.github/workflows/audit-schedule.yml), for the reason under "Continuous integration" below. |
 | `npm run test:browser:install` | Downloads Chromium for the browser lane. Once per machine, and **not** part of `npm ci` — see "The browser test lane" below. |
 | `npm run test:browser` | Runs the Playwright suite in `e2e/` against a real Chromium. Deliberately **not** part of `verify`. |
 
@@ -347,11 +348,22 @@ a surprise.
 
 ### Continuous integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same steps on
-`ubuntu-latest`, `macos-latest` and `windows-latest`. Three legs rather than one
-because this project is developed on more than one laptop, and because macOS
-support used to be *inferred* from the platform-specific optional dependencies in
-`package-lock.json` rather than observed. It is now observed.
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs a single step —
+`npm run verify:ci` — on `ubuntu-latest`, `macos-latest` and `windows-latest`.
+Three legs rather than one because this project is developed on more than one
+laptop, and because macOS support used to be *inferred* from the platform-specific
+optional dependencies in `package-lock.json` rather than observed. It is now
+observed.
+
+One step rather than a list of steps, because a list is what broke. CI used to name
+five of `verify`'s nine stages by hand, and `check:citations`, `test:integration`
+and `test:scripts` were in `verify` and in no CI leg at all — three gates that
+`main` was never actually protected by. Nobody decided that; a stage was added to
+`package.json` and this workflow was not edited to match. Defining `verify` as
+`verify:ci && audit:prod` leaves exactly one ordered list of stages in the
+repository, and CI runs that list rather than a copy of it, so the two cannot drift
+apart again. The cost is per-stage timing in the Actions UI; a failing stage is
+still named in the log. Tracked as issue #58.
 
 The production-dependency audit is a separate workflow on purpose. An advisory
 database that updates daily and a lockfile that does not means the audit result can
