@@ -1,6 +1,6 @@
 # HANDOFF — LEAPWare ShellUX
 
-Last updated **2026-08-14**, after the constant-freeze and error-code-trust landing on
+Last updated **2026-08-15**, after the constant-freeze and error-code-trust landing on
 branch `ci-runs-full-verify`. The audit content below still dates from 2026-08-01 except
 where a section says otherwise. Read this before touching anything. Correct anything you
 find stale, but do not delete a finding without checking it.
@@ -41,17 +41,25 @@ The rules:
 
 ## 1. Currently in flight
 
-Rewritten **2026-08-13**. The section below this one is the 2026-08-01 state and has not
+Rewritten **2026-08-15**. The section below this one is the 2026-08-01 state and has not
 been re-verified since; treat every SHA, count and issue number in this file as stale
 until you re-derive it (§0).
 
-### The constant-freeze and error-code-trust landing — branch `ci-runs-full-verify` — **IN THE WORKING TREE, UNCOMMITTED**
+### The constant-freeze and error-code-trust landing — branch `ci-runs-full-verify` — **COMMITTED AND PUSHED, NOT MERGED**
 
-**State reached: written, and green on `check:portability`, `check:citations`, `lint`,
-`typecheck` and the targeted vitest runs. Not committed, not pushed, no PR, and `npm run
-verify` not run to a clean exit over this tree.** The whole change is uncommitted
-working-tree modification on `ci-runs-full-verify`. A resuming session's first act should
-be `git status --porcelain`, not `git log`.
+**State reached: written, green on `check:portability`, `check:citations`, `lint`,
+`typecheck` and the targeted vitest runs, and committed. Pushed to `origin`. Not merged,
+no PR open, and `npm run verify` not run to a clean exit in one invocation.** The change
+is two commits on `ci-runs-full-verify`:
+
+- `a51c639` — `ci: run the full verify chain on every leg, not a hand-copied subset`
+- `72c264a` — `feat(core): freeze host constants at runtime, move the error-code trust
+  decision out of reach, add build config and a root fault boundary`
+
+When this was written, `origin/ci-runs-full-verify` was at `72c264a`, the working tree
+was clean, and `main` — local and remote — contained neither commit. **Those SHAs are
+perishable in exactly the sense §0 means**: re-derive them with `git log --oneline`
+rather than trusting them, and confirm the tree with `git status --porcelain`.
 
 **Two waves of code landed, and the second is the one a reader will get wrong.**
 
@@ -125,20 +133,27 @@ follow-ups filed in
 
 **What remains, in order:**
 
-1. `npm run verify` has **not** been run to a clean exit over this tree by the
-   documentation work. Targeted checks were run and are green; the full gate is
-   outstanding and is the gate that matters.
-2. Nothing is committed, and this is **two commits with `README.md` split by hunk, not
-   by path**: `README.md` carries both changes — the **unrelated** "CI runs the full
-   verify" work under "Scripts" and "Continuous integration", and this landing's rewrite
-   under "Security posture" — so staging by path cannot separate them. First commit, the
-   unrelated change: those `README.md` hunks with `package.json` and
-   `.github/workflows/ci.yml`. Second commit: this landing's `README.md` hunks and every
-   other changed file. `git add -A` would sweep both into one.
-3. No PR, no issue numbers assigned to the five follow-ups; they exist only as manifest
+1. `npm run verify` has **not** been run to a clean exit in one invocation. Targeted
+   checks were run and are green, and `verify:ci` — the first eight stages — was run
+   green after the commits, with `audit:prod` run green separately earlier; but all nine
+   stages in a single invocation has never happened, and that is the gate that matters.
+   (Recorded from the landing session; not re-run when this was written.)
+2. Open a PR and merge to `main`. The branch is pushed and complete; nothing about
+   staging remains.
+3. No issue numbers assigned to the five follow-ups; they exist only as manifest
    entries.
 4. `SHELL_ICONS` (follow-up 1) is the one with a reproduced attack behind it and is the
    first thing to pick up.
+
+**Review outcome.** Five adversarial rounds ran over this landing before it was
+committed. Round five was clean — no Blocker, High or Medium. Findings by round
+(Blocker/High/Medium): 3/1/3, 0/1/2, 1/1/2, 1/0/3, 0/0/0. Every finding after round one
+was in prose rather than in code, and **this file produced findings in three separate
+rounds** — a false reproduction tag, a false premise, an instruction that could not be
+executed, a rotted line number and a wrong count. **The standing lesson: the prose in
+this document is its own repeated defect source, because prose is rewritten faster than
+it is counted.** Count before writing a number here, and prefer deleting a claim to
+restating one.
 
 #### Decisions taken, and what was rejected
 
@@ -323,8 +338,8 @@ integrity. Each finding is tagged **[reproduced]** where confirmed by execution 
 
 ### 6.2 Security
 
-**All of §6.2's freeze findings are CLOSED as of 2026-08-13, in the working tree on
-`ci-runs-full-verify` (§1) — closed in code, not merged.** The originals are struck
+**All of §6.2's freeze findings are CLOSED as of 2026-08-13, on branch
+`ci-runs-full-verify` (§1) — committed there, not merged.** The originals are struck
 through rather than deleted, because the history is the reason the fix is shaped the way
 it is.
 
@@ -380,7 +395,7 @@ it is.
 - **No runtime plug-in delivery exists at all.** Nothing on `window`, no manifest fetch,
   no dynamic import. The model is compile-time only — deploying today means deploying an
   empty frame. **[reproduced]**
-- **~~No top-level error boundary.~~ CLOSED 2026-08-13, uncommitted (§1) — for BOTH entry
+- **~~No top-level error boundary.~~ CLOSED 2026-08-13, not merged (§1) — for BOTH entry
   points, which is the scope this entry originally got wrong.** There are two:
   `index.html` → `src/main.tsx` → `src/App.tsx`, and `dev.html` → `src/dev/main.dev.tsx`
   → `src/dev/DevShell.tsx`. Each now wraps its own provider tree in
@@ -398,7 +413,7 @@ it is.
   boundary** — `ShellLayout` already passed `null` whenever no extension is active, which
   is the shell's default state.
 - **~~`dist/index.html` uses absolute asset paths with no `base`.~~ CLOSED 2026-08-13,
-  uncommitted.** `vite.config.ts` sets `base: './'`. A hardcoded host was rejected —
+  not merged.** `vite.config.ts` sets `base: './'`. A hardcoded host was rejected —
   `check:portability` fails the build on one in a tracked non-Markdown file.
 - **Sourcemaps: half closed.** `vite.config.ts` sets `build.sourcemap: true`, and the JS
   map is complete — 75 `sources` and 75 `sourcesContent` entries, first-party `src/`
@@ -579,8 +594,8 @@ Cheap and high-value first; and the decisions gate everything downstream.
 | 3 | **Route the working demo to `/`** — file an issue first | Roughly a one-line change to what `npm run dev` serves. Until then nobody can run the product, nothing can be validated by a human, and #39 — the sole tracked Blocker — cannot even be started. **PR #70 landed the component but not the routing.** |
 | 4 | **Merge PR #71** (`quality-first-agreement`) | Already green. It is what §9 should point at instead of restating, and everything after this benefits from having the doctrine written down. |
 | 5 | **The two layout defects** (`ShellLayout.tsx:731`, `:733-736`) | The only findings that destroy user data. Both reproduced. Both small. **The browser lane can now see them.** |
-| 6 | ~~**The two `Object.freeze` lines**~~ | **DONE 2026-08-13, uncommitted (§1).** It turned out to be more than two lines each: freezing the error-code set was necessary and not sufficient, and the trust decision moved into `isShellUXErrorCode`. The exports-walking test landed with it. |
-| 7 | ~~**Root error boundary**~~ | **DONE 2026-08-13, uncommitted (§1).** In `src/App.tsx`, not `main.tsx` — see the rejected alternatives in §1. |
+| 6 | ~~**The two `Object.freeze` lines**~~ | **DONE 2026-08-13, not merged (§1).** It turned out to be more than two lines each: freezing the error-code set was necessary and not sufficient, and the trust decision moved into `isShellUXErrorCode`. The exports-walking test landed with it. |
+| 7 | ~~**Root error boundary**~~ | **DONE 2026-08-13, not merged (§1).** In `src/App.tsx`, not `main.tsx` — see the rejected alternatives in §1. |
 | 8 | Fix the two vacuous tests and the `patternFor` hole | §6.5 and §6.6. Do it before the hole is load-bearing. |
 | 9 | Triage the three red Dependabot PRs | #34, #35, #38 are red. #35 and #38 cross a major. |
 | 10 | Everything else, by milestone priority | — |
@@ -646,6 +661,7 @@ One session owns delivery. Concretely, that role:
 | **A NAMED agent has no `Edit`, `Write` or `Bash`. A NAMELESS subagent has the full toolset.** Added 2026-08-13. Naming a dispatched agent — making it addressable as a teammate — is what strips the write tools, not any other setting. | **Two entire sessions of zero-write dispatches**, each looking like the worker had silently refused the task. See the correction immediately below this table: the previous session diagnosed this WRONGLY and the wrong diagnosis is what cost the second session. |
 | **`check:citations` resolves titles ACROSS LINE BREAKS.** Added 2026-08-13. A cited title wrapped over two lines in Markdown is one citation to the checker and two unrelated lines to `grep`. | A line-bounded `grep` **under-reports** — it silently misses every wrapped citation, so a sweep reads as complete when it is not. **Two citation sites were missed this way on 2026-08-13.** Search with a multiline-aware tool, or normalise whitespace first; do not trust a `grep -c` of citation sites. |
 | **`check:citations` shells out to `git ls-files` internally.** Added 2026-08-13. | Git activity appearing in a log during a documentation check is **not** evidence that an agent is staging something. One near-intervention on that basis. Read what the git invocation actually was before concluding a worker broke its remit. |
+| **`ci-runs-full-verify`'s upstream is `origin/main`, not `origin/ci-runs-full-verify`.** Added 2026-08-15, and **live**. The branch was pushed with an explicit refspec and `-u` was deliberately not passed, so `branch.ci-runs-full-verify.merge` is `refs/heads/main`. Confirmed with `git rev-parse --abbrev-ref ci-runs-full-verify@{upstream}`. | **A bare `git push` or `git pull` on this branch targets `main`.** The fix is one line — `git branch -u origin/ci-runs-full-verify` — and it **had not been applied when this was written**. Re-check the upstream before running either command bare. |
 | **Coverage does not see what you probably think it sees.** Added 2026-08-13. `src/core/**/__tests__/**` is excluded, and `src/App.tsx` and `src/main.tsx` sit outside **every** coverage `include` glob. | A change to `App.tsx` — the root `FaultBoundary`, for one — moves the coverage number **not at all**, in either direction. Green coverage after touching those files is not evidence the change is exercised; name the test instead. |
 
 **CORRECTION, recorded explicitly because the wrong version cost a session.** A previous
@@ -677,12 +693,12 @@ against a real Chromium, on its own `browser.yml` workflow. It is **deliberately
 of `verify`** — see §1a. Run it when touching layout, the ribbon, dividers, hotkeys or
 focus, because it is the only thing here that can see what jsdom cannot.
 
-> **STALE AS OF 2026-08-13 — the table below describes `3ebf86d`, and the working tree
-> no longer matches it.** A **separate, unrelated** change is in flight in the same tree
-> (see §1b on one tree, several changes): `package.json` now defines
+> **STALE AS OF 2026-08-13 — the table below describes `3ebf86d`, and
+> `ci-runs-full-verify` no longer matches it.** A **separate, unrelated** change landed
+> on that branch as `a51c639` (§1): `package.json` now defines
 > `verify:ci` as the first eight stages and `verify` as `verify:ci && audit:prod`, and
 > `.github/workflows/ci.yml` runs the single step `npm run verify:ci` on all three
-> operating systems. If that lands, `check:citations`, `test:integration` and
+> operating systems. Once that reaches `main`, `check:citations`, `test:integration` and
 > `test:scripts` stop being unguarded and issue #58 is closable. **That change was not
 > verified by the documentation work that wrote this note** — it was read, not run — and
 > the table below is left standing rather than edited so that nobody inherits a
@@ -713,4 +729,4 @@ Two checks gate every commit and are easy to trip:
   non-Markdown file.
 - **`check:citations`** — never quote a test title you have not confirmed exists. It only
   inspects quoted strings that follow a citation marker, and see §6.6 for what it will
-  miss even then. Since PR #70 its corpus includes `e2e/` — 37 test files.
+  miss even then. Since PR #70 its corpus includes `e2e/`.
