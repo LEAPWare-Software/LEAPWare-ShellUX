@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as shellIconsModule from '../../components/ui/shellIcons';
 import * as hydrationModule from '../services/HydrationEngine';
 import * as registryModule from '../RegistryContext';
 import * as typesModule from '../types';
@@ -58,16 +59,18 @@ import {
  *      that would pass every assertion in this file with its inner object fully
  *      writable. Read the claim as "the top level cannot be replaced", and deep
  *      freezing as something still owned by each declaration site.
- *      For the `Set`s and the `RegExp` the freeze means the interrogation
- *      methods cannot be SHADOWED, which was the interesting attack — a plug-in
- *      owning `HOTKEY_KEYS.has` owns the hotkey allowlist for the whole page.
- *   2. **A frozen `Set` is still mutable through its own methods.** `Set` state
- *      lives in internal slots, not properties, so `Object.freeze` leaves `add`,
- *      `delete` and `clear` working. That is asserted here on a throwaway `Set`
- *      rather than on a real constant — mutating `HOTKEY_KEYS` to prove a point
- *      would leave the allowlist widened for every test that ran afterwards —
- *      and it is asserted at all so that nothing downstream can cite this file
- *      for a claim it does not make.
+ *      For the `Set`s, the `Map` and the `RegExp` the freeze means the
+ *      interrogation methods cannot be SHADOWED, which was the interesting
+ *      attack — a plug-in owning `HOTKEY_KEYS.has` owns the hotkey allowlist for
+ *      the whole page, and one owning `SHELL_ICONS.get` owns every glyph the
+ *      host draws in its own navigation rail and ribbon.
+ *   2. **A frozen `Set` or `Map` is still mutable through its own methods.**
+ *      Their state lives in internal slots, not properties, so `Object.freeze`
+ *      leaves `add`/`set`, `delete` and `clear` working. That is asserted here on
+ *      a throwaway `Set` and a throwaway `Map` rather than on a real constant —
+ *      mutating `HOTKEY_KEYS` to prove a point would leave the allowlist widened
+ *      for every test that ran afterwards — and it is asserted at all so that
+ *      nothing downstream can cite this file for a claim it does not make.
  *
  * ADR-0001 Amendment K Decision 5.
  * ============================================================================
@@ -80,11 +83,23 @@ import {
  * rather than of constants: adding a constant to a module already here needs no
  * edit, which is the property the old per-constant list lacked. Adding a new
  * host module that exports bounds or allowlists does need a line here.
+ *
+ * **`components/ui/shellIcons` is the fourth, and it is here because the hand-
+ * maintained half of this list was demonstrated to be a live hole rather than a
+ * theoretical one.** `SHELL_ICONS` shipped as an unfrozen `Map` typed
+ * `ReadonlyMap` — a compile-time type, binding nobody who is not being compiled —
+ * whose key is UNTRUSTED and whose lookup feeds the host's own navigation rail
+ * and ribbon. An own `get` assigned onto it shadowed the prototype method those
+ * call sites invoke. It was filed at Severity High in `.github/ISSUES_MANIFEST.md`
+ * and closed on 2026-08-16 by freezing the map, adding this line, and pinning the
+ * attack at both render sites. The names below are labels for reporting, not
+ * import specifiers; they are spelled the way prose cites the module.
  */
 const GATED_MODULES: readonly (readonly [string, Record<string, unknown>])[] = [
   ['RegistryContext', registryModule],
   ['types', typesModule],
   ['services/HydrationEngine', hydrationModule],
+  ['components/ui/shellIcons', shellIconsModule],
 ];
 
 /**
@@ -148,6 +163,9 @@ describe('the host constants', () => {
       'services/HydrationEngine#HYDRATION_LIMITS',
       'services/HydrationEngine#DEFAULT_SHELL_STATE',
       'services/HydrationEngine#EMPTY_SCOPED_STATE',
+      'components/ui/shellIcons#SHELL_ICONS',
+      'components/ui/shellIcons#FALLBACK_ICON',
+      'components/ui/shellIcons#OVERFLOW_ICON',
     ]) {
       expect(found).toContain(required);
     }
@@ -170,9 +188,12 @@ describe('the host constants', () => {
     (name) => {
       const constant = FREEZABLE_EXPORTS.find(([candidate]) => candidate === name)?.[1];
       const target = constant as unknown as Record<string, unknown>;
-      // `has` for the sets, `test` for the pattern; assigning either as an OWN
-      // property would shadow the prototype method every check calls.
-      for (const member of ['has', 'test']) {
+      // `has` for the sets, `test` for the pattern, `get` for the icon map;
+      // assigning any of them as an OWN property would shadow the prototype
+      // method every check calls. `get` is the one with a reproduced attack
+      // behind it: the host's own chrome calls `SHELL_ICONS.get(icon)` and draws
+      // whatever comes back.
+      for (const member of ['has', 'test', 'get']) {
         expect(() => {
           target[member] = (): boolean => true;
         }).toThrow(TypeError);
@@ -214,6 +235,29 @@ describe('the host constants', () => {
     // allowlists are untouched by any of the above.
     expect(HOTKEY_KEYS.has('tab')).toBe(false);
     expect(RESERVED_IDS.has('__proto__')).toBe(true);
+  });
+
+  it('does not claim more than a frozen Map delivers', () => {
+    // The same honest half for the icon table, and it needs saying separately
+    // because a reader who accepts the `Set` limit above may still read "the
+    // icon table is frozen" as "the icon table is fixed". It is not: `Map` state
+    // lives in internal slots too, so `set`, `delete` and `clear` go on working
+    // on a frozen instance. Demonstrated on a throwaway, so no live vocabulary
+    // is left edited behind this test.
+    const sample = Object.freeze(new Map([['a', 1]]));
+    expect(Object.isFrozen(sample)).toBe(true);
+    expect(() => sample.set('b', 2)).not.toThrow();
+    expect(sample.get('b')).toBe(2);
+    expect(() => sample.delete('a')).not.toThrow();
+    expect(sample.get('a')).toBeUndefined();
+
+    // What the freeze does buy is that `get` cannot be REPLACED, which is the
+    // whole of the claim `SHELL_ICONS` carries. Shown here on the throwaway; the
+    // real map is held to it by the shadow test above, without being touched.
+    expect(() => {
+      (sample as unknown as Record<string, unknown>)['get'] = (): number => 99;
+    }).toThrow(TypeError);
+    expect(sample.get('b')).toBe(2);
   });
 
   it('leaves the pattern usable, so the freeze cost nothing it was protecting', () => {

@@ -41,9 +41,10 @@ The rules:
 
 ## 1. Currently in flight
 
-Rewritten **2026-08-15**. The section below this one is the 2026-08-01 state and has not
-been re-verified since; treat every SHA, count and issue number in this file as stale
-until you re-derive it (§0).
+Rewritten **2026-08-15**, amended **2026-08-16** with "The `SHELL_ICONS` freeze" below —
+the one item in flight that is not yet committed. The section below this one is the
+2026-08-01 state and has not been re-verified since; treat every SHA, count and issue
+number in this file as stale until you re-derive it (§0).
 
 ### The constant-freeze and error-code-trust landing — branch `ci-runs-full-verify` — **COMMITTED AND PUSHED, NOT MERGED**
 
@@ -76,8 +77,11 @@ rather than trusting them, and confirm the tree with `git status --porcelain`.
   **Do not write that the types were widened; they were not.**
 - `src/core/__tests__/hostConstants.test.ts` — the hand-maintained list of six names is
   replaced by a walk over the export namespaces of `RegistryContext.tsx`, `types.ts` and
-  `HydrationEngine.ts`. **Ten** constants are gated, and `FREEZE_EXEMPTIONS` is empty.
-  The module list is still hand-maintained, at module granularity.
+  `HydrationEngine.ts`. **Ten** constants were gated by this landing, and
+  `FREEZE_EXEMPTIONS` is empty. The module list is still hand-maintained, at module
+  granularity. **Superseded on 2026-08-16 by the `SHELL_ICONS` fix below: four modules,
+  thirteen exports, exemption map still empty.** Re-derive the count from the it.each
+  titles rather than trusting either number (§0).
 - `vite.config.ts` — `base: './'`, `build.sourcemap: true`, `build.target: 'es2022'`.
 - `src/App.tsx` — the provider tree is wrapped in
   `<FaultBoundary boundaryLabel="The shell" extensionId={null}>` as the outermost
@@ -142,8 +146,9 @@ follow-ups filed in
    staging remains.
 3. No issue numbers assigned to the five follow-ups; they exist only as manifest
    entries.
-4. `SHELL_ICONS` (follow-up 1) is the one with a reproduced attack behind it and is the
-   first thing to pick up.
+4. ~~`SHELL_ICONS` (follow-up 1) is the one with a reproduced attack behind it and is the
+   first thing to pick up.~~ **DONE 2026-08-16** — picked up and closed; see "The
+   `SHELL_ICONS` freeze" immediately below. The remaining four follow-ups are untouched.
 
 **Review outcome.** Five adversarial rounds ran over this landing before it was
 committed. Round five was clean — no Blocker, High or Medium. Findings by round
@@ -163,10 +168,58 @@ re-litigated by the next session that has the same first idea.
 | Decision | Rejected, and why |
 |---|---|
 | **Harden the trust check in code.** `toShellUXError` now calls `isShellUXErrorCode`. | **Amending `SECURITY.md` down to a narrower claim.** That was available and cheaper — the file said the control was unconditional, the code did not deliver it, and weakening the prose would have made the pair true. The owner chose to make the **code** match the claim rather than the claim match the code. Do not re-open this by proposing the prose edit again. |
-| **File the `SHELL_ICONS` finding; do not fix it.** | Two rejections, not one. **Fixing it in this landing** — rejected as a components change riding on a core change, in a diff nobody could review as one thing. **Freezing the `Map` while leaving the gate's module list alone** — rejected as the worse half: it closes this instance and leaves the gate structurally blind to the next, which is exactly how `HYDRATION_LIMITS` shipped. The fix is freeze **and** gate **and** a test at the render site. |
+| **File the `SHELL_ICONS` finding; do not fix it.** *(Superseded 2026-08-16: the owner asked for it, and it is fixed — freeze, gate and render-site tests, exactly as this row specified. Kept because the second rejection below is still the standing rule for the next such finding.)* | Two rejections, not one. **Fixing it in this landing** — rejected as a components change riding on a core change, in a diff nobody could review as one thing. **Freezing the `Map` while leaving the gate's module list alone** — rejected as the worse half: it closes this instance and leaves the gate structurally blind to the next, which is exactly how `HYDRATION_LIMITS` shipped. The fix is freeze **and** gate **and** a test at the render site. |
 | **`base: './'` in `vite.config.ts`.** | **A hardcoded host.** Not a style preference: `npm run check:portability` fails the build on a hardcoded network host in a tracked non-Markdown file, and `vite.config.ts` is one. The relative base is the only option that passes the gate this repository already enforces. |
 | **Root `FaultBoundary` in `src/App.tsx`, outermost.** | **Putting it in `src/main.tsx`.** `main.tsx` needs a real `#root` element and is rendered by no test in the suite, so a boundary there would be **untestable** — a top-level error boundary nobody can prove catches anything is the defect it is meant to fix, in a new place. In `App.tsx` it is exercised by `src/__tests__/AppRootBoundary.test.tsx`. |
 | **Keep `SHELL_UX_ERROR_CODES` exported.** | **Deleting it.** Removal would have required editing ADR-0001 and `HANDOFF.md` prose that the code agent could not own end to end in the same change, and a half-removed export cited by stale prose is worse than a kept one. Kept safe by a mechanical scan gate instead of by intention: nothing production-side may interrogate it, enforced as a source scan over every non-test module under `src/`. **The scan is on the IDENTIFIER, not on `.has`** — a `.has`-only scan was reviewed and rejected on 2026-08-13, because aliasing to a local, a computed member access, spreading into an array and `Array.from` all walk past it and every one of them is exactly as forgeable, `add` still working on a frozen `Set`. There is **no allowlist and exactly one exemption**: the declaration's own line in `src/core/types.ts`, matched on its exact text so nothing can be interrogated through it, and asserted to be the only forgiven site by "is exempted at its own declaration line and at no other site". **Consequence for writers:** prose *inside `src/`* that needs to discuss this export must refer to it without naming it, or the gate fails. |
+
+### The `SHELL_ICONS` freeze — branch `ci-runs-full-verify` — **WRITTEN AND VERIFIED, UNCOMMITTED**
+
+Added **2026-08-16**. This is the fix for follow-up 1 in `.github/ISSUES_MANIFEST.md`,
+the one with a reproduced attack behind it, and the owner named it the precondition for
+making this repository public. **State reached: written, red-then-green demonstrated,
+`npm run verify:ci` run to a clean exit. Nothing is staged or committed** — the working
+tree carries it and a separate agent owns landing it.
+
+Nine files, and no others: `src/components/ui/shellIcons.tsx`,
+`src/core/__tests__/hostConstants.test.ts`,
+`src/components/__tests__/ShellLayoutIcons.test.tsx`,
+`src/components/__tests__/RibbonToolbar.test.tsx`, `README.md`, `SECURITY.md`,
+`docs/adr/0001-ioc-registry-architecture.md`, `.github/ISSUES_MANIFEST.md` and this file.
+`package.json` and `.github/workflows/ci.yml` were **not** touched, by instruction.
+
+What it does, all three parts in one change as the manifest specified:
+
+- `SHELL_ICONS` is `Object.freeze(new Map(...))`. `FALLBACK_ICON` and `OVERFLOW_ICON` are
+  frozen too, and the reason is worth keeping: **React freezes a `ReactElement` only in
+  its `__DEV__` branch**, so both were already frozen under Vitest and would NOT have
+  been in the production bundle. Without the explicit calls the gate would have passed
+  for a reason the build does not preserve. **No `FREEZE_EXEMPTIONS` entry was needed —
+  that map is still empty**, so the prose in several files saying so is still true.
+- `GATED_MODULES` gains `components/ui/shellIcons`, a fourth module. The walk went from
+  ten exports to thirteen; the anti-vacuity floor names all three. The shadow test's
+  member list gained `get`.
+- Both render sites are pinned: "refuses an own get on the icon table, so the collapsed
+  track still draws host geometry" in
+  `src/components/__tests__/ShellLayoutIcons.test.tsx`, and "refuses an own get on the
+  icon table, so the ribbon still draws host geometry" in
+  `src/components/__tests__/RibbonToolbar.test.tsx`.
+
+**The red was observed, not assumed.** With `Object.freeze` removed from the declaration,
+four assertions failed across three files, and two of them failed on rendered output: the
+collapsed rail drew `[ 'M0 0h16v16H0z' ]` where the `box` glyph belonged and the ribbon
+drew the same where `save` belonged — attacker geometry inside host chrome. Restored, all
+73 tests in those three files pass.
+
+**The wording rule, unchanged and still binding.** `Object.freeze` on a `Map` does not
+stop `.set()`, `.delete()` or `.clear()` — `Map` state is in internal slots. What it buys
+is that `get` **cannot be replaced**. Never write "immutable" or "cannot be changed"
+about `SHELL_ICONS`; the same rule the `Set`s have carried since 2026-08-13. It is
+demonstrated on a throwaway by "does not claim more than a frozen Map delivers".
+
+**What this does not close:** the module list is still hand-maintained — four entries now
+— so a new module exporting an allowlist is still ungated until someone adds a line. That
+is the structural residual, and it no longer has a live instance behind it.
 
 ### Quality-first working agreement — PR **#71**, `quality-first-agreement` — **OPEN, CI green as of 2026-08-01**
 
@@ -363,12 +416,16 @@ it is.
   numbers costs nothing.
 - **~~Replace the hand-maintained freeze list.~~ CLOSED, and the diagnosis was right.**
   `hostConstants.test.ts` now walks the export namespace of each covered module instead
-  of naming constants, so **ten** exports are gated with an empty exemption map, and a
+  of naming constants, so exports are gated with an empty exemption map, and a
   constant added to a covered module is gated without anyone acting. **What is left, and
   is a real hole rather than a rounding error:** the list of *modules* is still
-  hand-maintained — three of them — so a new module exporting an allowlist is ungated
-  until somebody adds it. `SHELL_ICONS` is a live instance of exactly that and is filed
-  in `.github/ISSUES_MANIFEST.md`.
+  hand-maintained — **four** as of 2026-08-16 — so a new module exporting an allowlist is
+  ungated until somebody adds it. `SHELL_ICONS` was the live instance of exactly that;
+  it was **closed on 2026-08-16** by freezing it, adding
+  `components/ui/shellIcons` as the fourth gated module and pinning the shadow attack at
+  both render sites, and the finding is kept with its closure note in
+  `.github/ISSUES_MANIFEST.md`. The hole itself is structural and still open — it simply
+  has no known instance now.
 - **CI never audits the dev tree.** `audit:prod` is `npm audit --omit=dev`, and both
   audit workflows run only that script. Two critical CVEs in `vitest` (CVSS 9.8,
   arbitrary file read/execute) are therefore **structurally invisible** to CI.

@@ -95,6 +95,23 @@ function glyphPathsOf(name: string): string[] {
   );
 }
 
+/**
+ * The `d` attributes the host's own `box` glyph carries, spelled out.
+ *
+ * Read from the literal rather than through `SHELL_ICONS.get('box')` in the
+ * shadowing test below, because a successful shadow poisons the very lookup an
+ * assertion would otherwise use to decide what "correct" is.
+ */
+const BOX_PATHS = ['M8 2 14 5v6l-6 3-6-3V5z', 'M2 5l6 3 6-3', 'M8 8v6'];
+
+/** Geometry no host glyph draws, so seeing it in the rail means the rail was owned. */
+const HOSTILE_PATH = 'M0 0h16v16H0z';
+const HOSTILE_GLYPH = (
+  <svg aria-hidden="true" viewBox="0 0 16 16">
+    <path d={HOSTILE_PATH} />
+  </svg>
+);
+
 /** The `d` attributes a host `ReactElement` glyph carries, read off its props. */
 function pathsOfGlyph(glyph: unknown): readonly string[] {
   const props = (glyph as { props: { children: { props: { d: string } }[] } }).props;
@@ -132,6 +149,51 @@ describe('ShellLayout — navigation icons in the collapsed track', () => {
     // is no prototype chain for it to inherit from. An object literal would have
     // answered with `Object` itself, which React refuses to render.
     expect(glyphPathsOf('Proto Icon')).toEqual(pathsOfGlyph(FALLBACK_ICON));
+  });
+
+  it('refuses an own get on the icon table, so the collapsed track still draws host geometry', async () => {
+    // The attack this test exists for, filed at Severity High in
+    // `.github/ISSUES_MANIFEST.md` and closed on 2026-08-16. `SHELL_ICONS.get` is
+    // a PROTOTYPE method, so an own property of the same name shadows it for
+    // every caller on the page — and one of those callers is this collapsed
+    // track, which is host chrome and sits outside every
+    // `ExtensionHostBoundary`. A shadow that lands draws attacker-chosen geometry
+    // in the shell's own navigation rail.
+    //
+    // `ReadonlyMap<string, ReactElement>` never stopped it: it is a compile-time
+    // type and binds nobody who is not being compiled, exactly as `as const` did
+    // not bind `REGISTRY_LIMITS` before issue #10. `Object.freeze` at the
+    // declaration does, and this is that assertion AT THE RENDER SITE rather than
+    // at the declaration — the declaration is held separately by
+    // `src/core/__tests__/hostConstants.test.ts`.
+    //
+    // What the freeze buys is narrow and must be described narrowly: `get`
+    // cannot be REPLACED. The map is not immutable — `Map` state is in internal
+    // slots, so `set` and `delete` still work on a frozen instance, which is
+    // demonstrated on a throwaway in `hostConstants.test.ts` rather than claimed
+    // away here.
+    const table = SHELL_ICONS as unknown as Record<string, unknown>;
+    let refusal: unknown = null;
+    try {
+      table['get'] = (): ReactElement => HOSTILE_GLYPH;
+    } catch (error) {
+      refusal = error;
+    }
+    try {
+      // Rendered with the attack already attempted, so that if the freeze is ever
+      // removed this fails on what the user would actually see and not only on a
+      // missing exception.
+      await renderCollapsed();
+      expect(glyphPathsOf('Known Icon')).toEqual(BOX_PATHS);
+      expect(glyphPathsOf('Unknown Icon')).not.toContain(HOSTILE_PATH);
+      expect(refusal).toBeInstanceOf(TypeError);
+    } finally {
+      // Hermetic in both directions. Frozen, this deletes nothing and cannot
+      // throw — `delete` on an absent property is a no-op even on a frozen
+      // object. Unfrozen, it stops one red test from poisoning the rest of the
+      // file.
+      delete table['get'];
+    }
   });
 
   it('keeps the monogram for a node that declares no icon', async () => {

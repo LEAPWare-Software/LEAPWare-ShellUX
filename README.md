@@ -1041,34 +1041,49 @@ the entire posture rather than this one caveat.
   interesting attack: a plug-in owning `HOTKEY_KEYS.has` owned the hotkey
   allowlist for the whole page.
 
-  **Ten exports are covered now, not those six, and the list is no longer kept by
-  hand.** The four that were missing are `SHELL_UX_ERROR_CODES` in
-  `src/core/types.ts` and `HYDRATION_LIMITS`, `DEFAULT_SHELL_STATE` and
-  `EMPTY_SCOPED_STATE` in `src/core/services/HydrationEngine.ts`. Two of them are
-  the same kind of thing as the six above — `SHELL_UX_ERROR_CODES` decided which
-  error codes the host would trust, and `HYDRATION_LIMITS` is the bound on every
-  untrusted persisted payload, shipped `as const`, which is issue #10's exact
-  defect reintroduced. A hand-maintained list of six names is *how* they got in,
-  so it is gone: the gate now walks each covered module's export namespace and
-  requires every object-valued export to be frozen, with exemptions written down
-  and a reason attached rather than expressed as a name quietly missing. There are
-  no exemptions today. **What is still maintained by hand is the list of modules**
-  — three of them — so a new module exporting an allowlist is outside the gate
-  until somebody adds it, which `SHELL_ICONS` currently is; it is filed as an open
-  follow-up in `.github/ISSUES_MANIFEST.md`.
+  **Thirteen exports are covered now, not those six, and the list is no longer
+  kept by hand.** The four that were missing when the walk replaced the list are
+  `SHELL_UX_ERROR_CODES` in `src/core/types.ts` and `HYDRATION_LIMITS`,
+  `DEFAULT_SHELL_STATE` and `EMPTY_SCOPED_STATE` in
+  `src/core/services/HydrationEngine.ts`. Two of them are the same kind of thing as
+  the six above — `SHELL_UX_ERROR_CODES` decided which error codes the host would
+  trust, and `HYDRATION_LIMITS` is the bound on every untrusted persisted payload,
+  shipped `as const`, which is issue #10's exact defect reintroduced. A
+  hand-maintained list of six names is *how* they got in, so it is gone: the gate
+  now walks each covered module's export namespace and requires every object-valued
+  export to be frozen, with exemptions written down and a reason attached rather
+  than expressed as a name quietly missing. There are no exemptions today.
 
-  **The obvious wider reading is false and is asserted against.** A frozen `Set`
-  is not an immutable one — `Set` state lives in internal slots rather than
-  properties, so `add`, `delete` and `clear` still work. The claim is "cannot be
-  replaced", never "cannot be changed". The freeze is also one level deep:
-  `DEFAULT_SHELL_STATE` nests a `paneSizes` object, frozen where it is declared
-  rather than by the gate.
+  **The other three arrived on 2026-08-16 with the module that holds them, and
+  that module is the one this bullet used to name as an open hole.**
+  `src/components/ui/shellIcons.tsx` exports `SHELL_ICONS` — the host's icon
+  vocabulary, keyed by an **untrusted** string and read into the shell's own
+  navigation rail and ribbon — plus `FALLBACK_ICON` and `OVERFLOW_ICON`. The map
+  was typed `ReadonlyMap` and never frozen, so an own `get` shadowed the prototype
+  method those call sites invoke and drew attacker-chosen geometry inside host
+  chrome. All three are frozen and the module is now the **fourth** entry in the
+  gate's module list. **What is still maintained by hand is that list of modules**
+  — four of them — so a new module exporting an allowlist is outside the gate until
+  somebody adds it. That residual is unchanged in kind; it no longer has a live
+  instance behind it.
+
+  **The obvious wider reading is false and is asserted against.** A frozen `Set` or
+  `Map` is not an immutable one — their state lives in internal slots rather than
+  in properties, so `add`/`set`, `delete` and `clear` still work. The claim is
+  "cannot be replaced", never "cannot be changed". The freeze is also one level
+  deep: `DEFAULT_SHELL_STATE` nests a `paneSizes` object, frozen where it is
+  declared rather than by the gate.
   *Tests:* `src/core/__tests__/hostConstants.test.ts` — "freezes the host constants
   against replacement", "refuses to let a caller raise a registry bound", "does
-  not claim more than a frozen Set delivers" — which demonstrates the remaining
-  mutability on a throwaway `Set` rather than on a live allowlist — and "walks the
-  gated modules and finds the constants it is meant to guard", the anti-vacuity
-  check that fails if the walk stops finding them.
+  not claim more than a frozen Set delivers" and "does not claim more than a frozen
+  Map delivers" — which demonstrate the remaining mutability on throwaways rather
+  than on a live allowlist — and "walks the gated modules and finds the constants
+  it is meant to guard", the anti-vacuity check that fails if the walk stops
+  finding them. The icon table is pinned at the two places the host draws it:
+  `src/components/__tests__/ShellLayoutIcons.test.tsx` — "refuses an own get on the
+  icon table, so the collapsed track still draws host geometry" — and
+  `src/components/__tests__/RibbonToolbar.test.tsx` — "refuses an own get on the
+  icon table, so the ribbon still draws host geometry".
 
   **For the error codes, freezing was necessary and it was not sufficient, and
   the fix is a different mechanism in a different place.** Freezing

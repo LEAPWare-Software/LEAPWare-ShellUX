@@ -17,6 +17,7 @@ import { makeAction } from '../../core/__tests__/fixtures';
 import type { IShellAPI, RibbonAction, RibbonContext } from '../../core/types';
 import { RibbonToolbar } from '../ui/RibbonToolbar';
 import type { HostRibbonAction } from '../ui/RibbonToolbar';
+import { SHELL_ICONS } from '../ui/shellIcons';
 
 /**
  * ============================================================================
@@ -52,6 +53,14 @@ const CONTEXT: Readonly<RibbonContext> = Object.freeze({
 const FALLBACK_PATH = 'M3.5 3.5h9v9h-9z';
 /** The first d-attribute of the host's "save" glyph. */
 const SAVE_PATH = 'M3 3h7l3 3v7H3z';
+
+/** Geometry no host glyph draws, so seeing it in the ribbon means the ribbon was owned. */
+const HOSTILE_PATH = 'M0 0h16v16H0z';
+const HOSTILE_GLYPH = (
+  <svg aria-hidden="true" viewBox="0 0 16 16">
+    <path d={HOSTILE_PATH} />
+  </svg>
+);
 
 /**
  * A `RibbonAction` built from the shared fixture.
@@ -666,6 +675,51 @@ describe('RibbonToolbar — untrusted strings', () => {
     );
     const path = screen.getByRole('button', { name: 'Act One' }).querySelector('path');
     expect(path).toHaveAttribute('d', FALLBACK_PATH);
+  });
+
+  it('refuses an own get on the icon table, so the ribbon still draws host geometry', () => {
+    // The ribbon half of the `SHELL_ICONS` finding closed on 2026-08-16; the
+    // navigation-rail half is "refuses an own get on the icon table, so the
+    // collapsed track still draws host geometry" in
+    // `src/components/__tests__/ShellLayoutIcons.test.tsx`. Both call sites read
+    // `SHELL_ICONS.get(icon)`, a PROTOTYPE method, and an own property of that
+    // name shadows it for every caller on the page — putting attacker-chosen
+    // geometry inside host chrome, outside any `ExtensionHostBoundary`. The
+    // declaration's `ReadonlyMap` type never bound anyone at runtime;
+    // `Object.freeze` does, and what it buys is precisely that `get` cannot be
+    // REPLACED — not that the table cannot be changed, which would be false.
+    const table = SHELL_ICONS as unknown as Record<string, unknown>;
+    let refusal: unknown = null;
+    try {
+      table['get'] = (): ReactElement => HOSTILE_GLYPH;
+    } catch (error) {
+      refusal = error;
+    }
+    try {
+      render(
+        <RibbonToolbar
+          hostActions={[]}
+          extension={{
+            actions: [action({ id: 'act-one', label: 'Act One', icon: 'save' })],
+            shell: shell(),
+          }}
+          context={CONTEXT}
+        />,
+      );
+      // Asserted against the literal, not against `SHELL_ICONS.get('save')`: a
+      // shadow that landed would have poisoned the lookup this assertion would
+      // otherwise trust to say what "correct" is.
+      const drawn = Array.from(
+        screen.getByRole('button', { name: 'Act One' }).querySelectorAll('path'),
+      ).map((path) => path.getAttribute('d'));
+      expect(drawn[0]).toBe(SAVE_PATH);
+      expect(drawn).not.toContain(HOSTILE_PATH);
+      expect(refusal).toBeInstanceOf(TypeError);
+    } finally {
+      // No-op while the map is frozen — `delete` of an absent property does not
+      // throw — and the pollution guard if it ever is not.
+      delete table['get'];
+    }
   });
 
   it('the module source contains no HTML-injection sink at all', () => {

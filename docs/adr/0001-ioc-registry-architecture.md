@@ -2712,15 +2712,18 @@ which is a **compile-time** assertion binding nobody who is not being compiled.
 All five are now `Object.freeze`d.
 
 **The count in the paragraph above is the count this decision was written with,
-and it is no longer the coverage.** Ten exports are gated: those five, plus
+and it is no longer the coverage.** Thirteen exports are gated: those five, plus
 `PANE_IDS` and `SHELL_UX_ERROR_CODES` in `src/core/types.ts`, plus
 `HYDRATION_LIMITS`, `DEFAULT_SHELL_STATE` and `EMPTY_SCOPED_STATE` in
-`src/core/services/HydrationEngine.ts`. Two of the additions are rules against
-which untrusted input is measured in exactly the sense of the original five:
-`HYDRATION_LIMITS` bounds every persisted payload and shipped `as const` — this
-decision's own defect, reintroduced in a module this decision did not name — and
-`SHELL_UX_ERROR_CODES` was what the host consulted to decide whether to trust a
-`code` handed back out of plug-in code.
+`src/core/services/HydrationEngine.ts`, plus `SHELL_ICONS`, `FALLBACK_ICON` and
+`OVERFLOW_ICON` in `src/components/ui/shellIcons.tsx` from 2026-08-16. Three of
+the additions are rules against which untrusted input is measured in exactly the
+sense of the original five: `HYDRATION_LIMITS` bounds every persisted payload and
+shipped `as const` — this decision's own defect, reintroduced in a module this
+decision did not name — `SHELL_UX_ERROR_CODES` was what the host consulted to
+decide whether to trust a `code` handed back out of plug-in code, and
+`SHELL_ICONS` is the vocabulary an untrusted `icon` key is resolved through before
+the host draws the result in its own navigation rail and ribbon.
 
 **Enumerating constants was the mistake, so the enumeration is gone.** The gate
 originally carried a hand-written list of names, and a list nobody remembers to
@@ -2731,30 +2734,35 @@ to a covered module is gated without anyone acting. An exemption must be written
 into `FREEZE_EXEMPTIONS` with a reason a reviewer can refuse; there are none.
 **The module list is still hand-maintained**, and at module granularity that is a
 much smaller surface than a per-constant list — but it is not zero, and a module
-outside it is ungated. See the `SHELL_ICONS` follow-up in
-`.github/ISSUES_MANIFEST.md` for a live instance. *Test:* the walk is held from
-going vacuous by "walks the gated modules and finds the constants it is meant to
-guard" in `src/core/__tests__/hostConstants.test.ts`, which names a floor of ten
-and fails if the enumeration collects nothing.
+outside it is ungated. It had a live instance and no longer does: `SHELL_ICONS`
+sat outside the gate, unfrozen, resolving an untrusted key into host chrome, and
+adding `components/ui/shellIcons` as the fourth gated module on 2026-08-16 is what
+closed it — see the finding and its closure note in
+`.github/ISSUES_MANIFEST.md`. *Test:* the walk is held from going vacuous by
+"walks the gated modules and finds the constants it is meant to guard" in
+`src/core/__tests__/hostConstants.test.ts`, which names a floor of thirteen and
+fails if the enumeration collects nothing.
 
 **The claim is stated narrowly on purpose, because the obvious wider version is
 false.** Freezing buys, unconditionally, that no own property can be added,
 replaced or deleted: `REGISTRY_LIMITS` becomes genuinely immutable, and for the
-`Set`s and the `RegExp` it means `has` and `test` cannot be **shadowed** by an own
-property — which was the interesting attack, since a plug-in owning
-`HOTKEY_KEYS.has` owned the hotkey allowlist for the whole page.
+`Set`s, the `Map` and the `RegExp` it means `has`, `get` and `test` cannot be
+**shadowed** by an own property — which was the interesting attack, since a
+plug-in owning `HOTKEY_KEYS.has` owned the hotkey allowlist for the whole page,
+and one owning `SHELL_ICONS.get` owned every glyph the host drew in its own
+navigation rail and ribbon.
 
-It does **not** make a `Set` immutable. `Set` state lives in internal slots rather
-than in properties, so `Object.freeze(set)` leaves `add`, `delete` and `clear`
-working, and `HOTKEY_KEYS.add('tab')` still widens the allowlist. Closing that
-would mean shipping a `Set` whose mutators throw — a different object from the one
-`ReadonlySet` describes — and it was not done. This is the same register as "No
-sandbox": hardened against replacement, not against a determined caller. Both
-halves are asserted rather than one, by "freezes the host constants against
-replacement" and "does not claim more than a frozen Set delivers" in
-`src/core/__tests__/hostConstants.test.ts`, the second of which demonstrates the
-mutability on a throwaway `Set` so that no real allowlist is left widened behind
-it. The freeze is also one level deep, and one gated constant already goes
+It does **not** make a `Set` or a `Map` immutable. Their state lives in internal
+slots rather than in properties, so `Object.freeze` leaves `add`/`set`, `delete`
+and `clear` working, and `HOTKEY_KEYS.add('tab')` still widens the allowlist.
+Closing that would mean shipping collections whose mutators throw — different
+objects from the ones `ReadonlySet` and `ReadonlyMap` describe — and it was not
+done. This is the same register as "No sandbox": hardened against replacement, not
+against a determined caller. Both halves are asserted rather than one, by "freezes
+the host constants against replacement", "does not claim more than a frozen Set
+delivers" and "does not claim more than a frozen Map delivers" in
+`src/core/__tests__/hostConstants.test.ts`, the last two of which demonstrate the
+mutability on throwaways so that no real allowlist is left widened behind them. The freeze is also one level deep, and one gated constant already goes
 deeper: `DEFAULT_SHELL_STATE` nests a `paneSizes` object, frozen where it is
 declared rather than by the gate. Deep freezing remains owned by each declaration
 site.
@@ -2837,6 +2845,13 @@ The icon table was module-private in `RibbonToolbar.tsx`. It moved to
 intact** — a `Map` specifically so a prototype-shaped key cannot resolve to
 something inherited — because two surfaces resolve an icon key now and two copies
 of a lookup table drift the way two copies of a validation rule do.
+
+The move carried the `Map` semantics but not a freeze, and that gap was filed and
+then closed on 2026-08-16: an own `get` on the exported table shadowed the lookup
+both surfaces call, so the table, the fallback glyph and the overflow glyph are
+now `Object.freeze`d and their module is the fourth entry in Decision 5's gate.
+The claim is Decision 5's claim exactly — `get` cannot be **replaced**, not that
+the vocabulary cannot be changed.
 
 Three outcomes are kept distinct, deliberately: a known key draws its glyph, an
 **unknown** key draws the host fallback, and **no key at all** keeps the monogram.

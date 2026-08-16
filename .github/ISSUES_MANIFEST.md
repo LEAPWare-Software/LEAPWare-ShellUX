@@ -1601,8 +1601,14 @@ decision to file rather than fix is recorded on each one that had such a decisio
 **Line numbers below rot.** They were true when written; re-derive by searching
 for the named symbol, not by jumping to the line.
 
-- **`SHELL_ICONS` is an unfrozen allowlist resolving an untrusted key.** OPEN.
-  Severity **High**. **Reproduced.** `src/components/ui/shellIcons.tsx:79` declares
+- **~~`SHELL_ICONS` is an unfrozen allowlist resolving an untrusted key.~~
+  CLOSED 2026-08-16.** Severity **High**. **Reproduced when filed, and reproduced
+  again on the way to closing it.** The finding is kept below in full, in the
+  present tense it was written in, because the reproduction is the evidence that
+  the hole was real; everything from **"How it was closed"** down describes the
+  fix.
+
+  `src/components/ui/shellIcons.tsx:79` declares
   `export const SHELL_ICONS: ReadonlyMap<string, ReactElement> = new Map(...)`
   with no `Object.freeze` anywhere on it. `ReadonlyMap` is a compile-time type and
   binds nobody who is not being compiled, exactly as `as const` did not bind
@@ -1639,6 +1645,50 @@ for the named symbol, not by jumping to the line.
   to see the next one, which is precisely the failure mode that let
   `HYDRATION_LIMITS` ship. The fix is both — freeze it **and** add its module to
   the gate — plus a test at the render site.
+
+  **How it was closed, on 2026-08-16, on branch `ci-runs-full-verify`.** All three
+  parts, in one change, exactly as specified above.
+
+  1. **Frozen at the declaration.** `SHELL_ICONS` is `Object.freeze(new Map(...))`.
+     `FALLBACK_ICON` and `OVERFLOW_ICON` are frozen too — they had to be, because
+     the gate demands every object-valued export of a gated module be frozen, and
+     they would otherwise have passed **for a reason that does not survive the
+     build**: React freezes a `ReactElement` only in its `__DEV__` branch, so both
+     arrive frozen under Vitest and unfrozen in the production bundle. **No
+     `FREEZE_EXEMPTIONS` entry was needed; that map is still empty.**
+  2. **The module is in the gate.** `GATED_MODULES` in
+     `src/core/__tests__/hostConstants.test.ts` now names a fourth module,
+     `components/ui/shellIcons`, so the walk reaches all three exports and the next
+     constant added to that file is covered without anyone acting. The enumeration
+     rose from **ten exports to thirteen**, and the anti-vacuity floor names all
+     three new ones. The shadow test's member list gained `get` beside `has` and
+     `test`.
+  3. **Pinned at both render sites.** *Tests:*
+     `src/components/__tests__/ShellLayoutIcons.test.tsx` — "refuses an own get on
+     the icon table, so the collapsed track still draws host geometry";
+     `src/components/__tests__/RibbonToolbar.test.tsx` — "refuses an own get on the
+     icon table, so the ribbon still draws host geometry". Each attempts the
+     shadow, then renders, then asserts the host's own path data and a `TypeError`.
+
+  **Both new tests were observed RED before the freeze and GREEN after**, by
+  removing `Object.freeze` from the declaration and re-running: the nav-rail
+  assertion reported `[ 'M0 0h16v16H0z' ]` where the `box` glyph belonged and the
+  ribbon reported `M0 0h16v16H0z` where `save` belonged — the attacker's geometry
+  drawn in host chrome, which is the finding above happening. Four assertions
+  failed across the three files, including "freezes the host constants against
+  replacement", which had never been able to see this export before.
+
+  **What the freeze buys, and the sentence that must not drift.** `get` cannot be
+  **REPLACED**. It is *not* immutability and no prose about it may say so: `Map`
+  state lives in internal slots, so `set`, `delete` and `clear` still work on a
+  frozen instance, exactly as `add` does on a frozen `Set`. That limit is asserted
+  on a throwaway `Map` by "does not claim more than a frozen Map delivers" in
+  `src/core/__tests__/hostConstants.test.ts`, beside the `Set` case it mirrors.
+
+  **What this did NOT close.** The list of MODULES is still hand-maintained — four
+  now instead of three — so a *new* module exporting an allowlist is still ungated
+  until someone adds a line. That residual is smaller by one live instance and is
+  otherwise unchanged.
 
 - **`PANE_IDS` carries a vacuous exhaustiveness claim.** OPEN. Severity
   **Medium**. **Reproduced against the compiler.** `src/core/types.ts:75` documents
