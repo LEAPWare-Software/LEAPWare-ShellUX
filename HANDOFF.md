@@ -590,7 +590,9 @@ write-only, because `detailDefaultPercent` is always the remainder and never rea
 - **The recommendation that produced that is worth keeping as a rule:** a
   hand-maintained list of things-that-must-be-frozen is how the second one got in.
   Prefer a test that walks the exports.
-- **CI never audits the dev tree.** `audit:prod` is `npm audit --omit=dev`, and both
+- ~~**CI never audits the dev tree.**~~ **CLOSED 2026-09-18:** `npm run audit:all` now
+  runs as its own job in `audit-dependencies.yml` and in the scheduled audit, which
+  files an issue on failure. The finding as filed: `audit:prod` is `npm audit --omit=dev`, and both
   audit workflows run only that script. Two critical CVEs in `vitest` (CVSS 9.8,
   arbitrary file read/execute) are therefore **structurally invisible** to CI.
   **[reproduced — workflow files inspected]**
@@ -1014,10 +1016,8 @@ billing is the price of `README`'s claim being true. **Running it on one leg wou
 cheaper version of the same lie** — that argument is in the workflow comment so the next
 person to look at the bill meets it.
 
-**One narrower gap survives and is NOT #58:** `audit:prod` is `npm audit --omit=dev`, so
-**the dev tree is audited by nothing on any leg.** That is §6.2's finding, it is the
-mechanism that made two CVSS 9.8 criticals in `vitest` structurally invisible, and
-closing #58 does not touch it.
+~~**One narrower gap survives and is NOT #58:** the dev tree is audited by nothing on
+any leg.~~ **CLOSED 2026-09-18** — `audit:all` runs as its own job; see §6.2.
 
 **Two workflows exist that this section never listed.** `desktop.yml` runs
 `npm run verify:desktop` — the packaging leg that produced the NSIS installer in §1 —
