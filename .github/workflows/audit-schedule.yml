@@ -69,12 +69,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE_TITLE: Scheduled dependency audit is failing
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        # A failed lookup must not stop the notification: if `gh issue list`
+        # errors, `existing` stays empty and a new issue is filed. A duplicate
+        # issue is a smaller failure than the silence this step exists to end.
         run: |
           title="$ISSUE_TITLE"
-          existing=$(gh issue list --state open --search "$title in:title" --json number,title             --jq "map(select(.title == env.ISSUE_TITLE)) | .[0].number // empty")
           body="The scheduled audit failed: $RUN_URL"
-          if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
+          existing=$(gh issue list --state open --search "$title in:title" --json number,title --jq "map(select(.title == env.ISSUE_TITLE)) | .[0].number // empty" || true)
+          if [ -n "$existing" ] && gh issue comment "$existing" --body "$body"; then
+            exit 0
           fi
+          gh issue create --title "$title" --body "$body"
