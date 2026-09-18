@@ -170,6 +170,17 @@ describe('applyOne', () => {
     assert.ok(lines.some((line) => line.includes('created')));
   });
 
+  it('escapes the ruleset name inside the jq lookup filter, so a quote cannot break out of it', () => {
+    const gh = fakeGh([
+      { status: 0, stdout: '', stderr: '' },
+      { status: 0, stdout: '{"id":1}', stderr: '' },
+    ]);
+    const quoted = { ...SQUASH_RULESET, data: { ...SQUASH_RULESET.data, name: 'main" or true or "' } };
+    applyOne('OWNER/REPO', quoted, false, gh, () => {});
+    const filter = gh.calls[0].argv[gh.calls[0].argv.indexOf('--jq') + 1];
+    assert.equal(filter, '.[] | select(.name=="main\\" or true or \\"") | .id');
+  });
+
   it('updates via PUT against the existing id when the lookup finds one', () => {
     const gh = fakeGh([
       { status: 0, stdout: '42\n', stderr: '' }, // existingRulesetId lookup: id 42

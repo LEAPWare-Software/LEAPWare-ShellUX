@@ -161,7 +161,9 @@ function existingRulesetId(repo, name, runGh) {
     'api',
     `repos/${repo}/rulesets`,
     '--jq',
-    `.[] | select(.name=="${name}") | .id`,
+    // JSON.stringify yields a valid jq string literal, so a name containing a quote
+    // or a backslash cannot break out of the filter.
+    `.[] | select(.name==${JSON.stringify(name)}) | .id`,
   ]);
   if (result.status !== 0) {
     throw new Error(`gh api repos/${repo}/rulesets failed: ${result.stderr.trim()}`);
