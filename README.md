@@ -720,7 +720,7 @@ claim that the shell has no keyboard behaviour.
 those eight. That is the whole of the claim.** It is not an audit against the full
 WCAG 2.2 AA criteria set, it was not performed by an external auditor, and it does
 **not** move this project to conformance — the paragraph at the top of this section
-still stands, and AA remains a target rather than a delivered state. What changed is
+still stands: there is no stated conformance target, AA included. What changed is
 that eight specific, reproducible defects that had been found are no longer present:
 
 - The overflow menu was **clipped to zero height** by two `overflow-hidden`

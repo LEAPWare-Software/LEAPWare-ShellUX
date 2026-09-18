@@ -55,8 +55,8 @@ stale, which is what §0 asks for. Three layers, worth separating when reading:
 | `af6fdd9`, `c919e6d` | Pane 3's composer docks; the collapsed pane split sums to 100 | **#110**, **#114** |
 
 **Five UI defects were filed off the running application, #110 through #114.** The
-PR closes two: #110 (composer never docked, ~450px of dead pane) and #114 (panes
-opened summing to 83 and warned on every load). **#111, #112 and #113 are
+PR repairs two of them — the docked composer, issue #110 (~450px of dead pane), and the
+pane split, issue #114 (panes opened summing to 83 and warned on every load). **#111, #112 and #113 are
 untouched** — all three are chart-title and chart-contrast work in
 `echartsRenderer.ts` and `chart/*`, a disjoint file set, and they are the next
 change.
@@ -68,6 +68,12 @@ so citing that file as the class's guard was an overclaim, caught before merge. 
 second case now guards the half that had nothing. A third finding came from review
 rather than a gate: the composer's WIDTH was unmeasured by both lanes after it
 stopped drawing its own chrome, and is now asserted.
+
+**A correction to `ce1d97a`'s own evidence block, which cannot be amended once
+pushed:** its message says "4 CIEDE2000 reference pairs green". Measured with
+`node design/check-contrast.mjs --self-test` during the adversarial review of this PR,
+the self-test prints **6** named reference-pair PASS lines (1, 2, 3, 9, 11, 25). The
+script is byte-identical to `e3078db`, so this is a miscount, not drift (rule 9).
 
 **Gates at the branch tip:** `npm run verify` exit 0, all ten stages, 1742 tests,
 100% on all four metrics, pasted in PR #115's body. `npm run test:browser` 54 of
