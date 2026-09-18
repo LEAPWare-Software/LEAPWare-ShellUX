@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PaneViewShell } from './PaneViewShell';
 import { createReplicaStore } from '../core/ipc/ReplicaStore';
+import { installRendererDiagnostics } from '../core/ipc/reportRendererDiagnostics';
 import type { PortLike } from '../core/ipc/PortLike';
 import type { ShellStateStore } from '../core/ShellAPI';
 import '../index.css';
@@ -73,6 +74,10 @@ function attachReplica(): ShellStateStore | undefined {
   });
   return createReplicaStore({ port: seam, origin: EXTENSION_ORIGIN });
 }
+
+// GitHub issue #86. Module scope, for the same `StrictMode` reason
+// `attachReplica` is: this must run once, not once per double-invoked effect.
+installRendererDiagnostics('renderer-extension');
 
 const container = document.getElementById('root');
 

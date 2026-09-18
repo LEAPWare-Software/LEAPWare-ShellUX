@@ -147,6 +147,16 @@ export interface PaneWindowOptions {
    * defect the split was built to avoid rather than like a crash.
    */
   readonly onSurfaceReady?: (surface: PaneSurfaceId) => void;
+  /**
+   * Record that a surface's renderer process is gone, before the branch below
+   * decides whether that is fatal (`chrome`) or recovered (`extension`).
+   *
+   * GitHub issue #86: this event previously reached `warn` — stderr, which
+   * nobody reads on a packaged application — and nothing else. Optional so
+   * every existing test that constructs `PaneWindowOptions` without it keeps
+   * passing; `index.ts` is the only caller that supplies it.
+   */
+  readonly onRenderProcessGone?: (surface: PaneSurfaceId, detail: string) => void;
 }
 
 /** The handle `index.ts` holds on the running window. */
@@ -326,6 +336,7 @@ export function openShellSurfaces(options: PaneWindowOptions): PaneWindow {
 
     contents.on('render-process-gone', (_event, details) => {
       const detail = `reason: ${details.reason}, exit code: ${String(details.exitCode)}`;
+      options.onRenderProcessGone?.(surface.id, detail);
       if (surface.id === 'chrome') {
         reportFailure('The host chrome process stopped', detail);
         if (!window.isDestroyed()) window.destroy();

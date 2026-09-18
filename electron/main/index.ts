@@ -3,6 +3,8 @@ import { initializeUpdater } from './updater.js';
 import { openShellSurfaces, followSystemAppearance } from './paneViews.js';
 import type { PaneWindow } from './paneViews.js';
 import type { PaneSurfaceId } from './surfaces.js';
+import { nodeDiagnosticsFs, writeDiagnosticsEntry } from './diagnosticsLog.js';
+import type { DiagnosticsEntry } from './diagnosticsLog.js';
 import { join, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -334,6 +336,72 @@ function warn(message: string): void {
 }
 
 /**
+ * ============================================================================
+ * THE LOCAL LOG, GITHUB ISSUE #86.
+ * ============================================================================
+ * `stderr` is `warn`'s whole audience, and nobody is attached to a packaged
+ * application's stderr. Every entry below also goes to a size-bounded rotating
+ * file under `app.getPath('logs')`, via `electron/main/diagnosticsLog.ts` — the
+ * one write path both the main process and the renderer's forwarded reports
+ * share. `app.getPath('logs')` is read at call time rather than cached, because
+ * it is only valid once Electron is ready and every one of these listeners can
+ * in principle fire before `whenReady` resolves.
+ *
+ * **No network call is made anywhere in this file.** This is local-file
+ * observability, not telemetry, exactly as issue #86 asks: "the absence of
+ * third-party telemetry is not a defect".
+ * ============================================================================
+ */
+function logDiagnostics(entry: DiagnosticsEntry): void {
+  writeDiagnosticsEntry(nodeDiagnosticsFs, app.getPath('logs'), entry);
+}
+
+/** `process.on('uncaughtException', ...)`. Failure mode: a thrown error with no listener kills the process with nothing recorded anywhere a maintainer will ever read. */
+process.on('uncaughtException', (error: unknown) => {
+  const err = error instanceof Error ? error : new Error(String(error));
+  warn(`uncaught exception: ${err.message}`);
+  logDiagnostics({ source: 'main', kind: 'uncaughtException', message: err.message, stack: err.stack ?? null });
+});
+
+/** `process.on('unhandledRejection', ...)`. Same failure mode, for a promise nobody attached a `.catch` to. */
+process.on('unhandledRejection', (reason: unknown) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  warn(`unhandled rejection: ${err.message}`);
+  logDiagnostics({ source: 'main', kind: 'unhandledRejection', message: err.message, stack: err.stack ?? null });
+});
+
+/**
+ * Renderer → main, one `window.onerror` or `unhandledrejection` report.
+ *
+ * The renderer-side listener is `src/core/ipc/reportRendererDiagnostics.ts`,
+ * installed from both `src/main.tsx` (host chrome) and
+ * `src/paneview/main.paneview.tsx` (the extension surface); each names its own
+ * surface in the `source` field it sends, and this handler trusts nothing else
+ * about the payload beyond checking it is an object — the same posture
+ * `registerStoreRelay` above takes toward a message it does not read for
+ * meaning, because a hostile or merely buggy renderer is exactly what a fault
+ * report is likely to come from.
+ */
+function registerDiagnosticsChannel(): void {
+  ipcMain.on('shellux:diagnostics:report', (_event, payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) {
+      warn('refused a diagnostics report that was not an object.');
+      return;
+    }
+    const record = payload as Record<string, unknown>;
+    const source = record.source === 'renderer-extension' ? 'renderer-extension' : 'renderer-chrome';
+    const kind = typeof record.kind === 'string' ? record.kind : 'unknown';
+    const message = typeof record.message === 'string' ? record.message : String(record.message);
+    const stack = typeof record.stack === 'string' ? record.stack : null;
+    const filename = typeof record.filename === 'string' ? record.filename : null;
+    const lineno = typeof record.lineno === 'number' ? record.lineno : null;
+    const colno = typeof record.colno === 'number' ? record.colno : null;
+    warn(`renderer diagnostics (${source}/${kind}): ${message}`);
+    logDiagnostics({ source, kind, message, stack, filename, lineno, colno });
+  });
+}
+
+/**
  * The absolute path a request under `APP_SCHEME` names, or `null` when it names
  * something outside the renderer root.
  *
@@ -533,6 +601,9 @@ function openShellWindow(): void {
     preload: PRELOAD_SCRIPT,
     warn,
     onSurfaceReady: announceSurfaceReady,
+    onRenderProcessGone: (surface, detail) => {
+      logDiagnostics({ source: 'main', kind: 'render-process-gone', message: `${surface} surface: ${detail}` });
+    },
   });
   followSystemAppearance(opened);
   opened.window.on('closed', () => {
@@ -548,6 +619,7 @@ app
     registerSplitChannel();
     registerStoreRelay();
     registerPaletteRouting();
+    registerDiagnosticsChannel();
     // Before the first window, so that the `web-contents-created` listener it
     // installs sees both views rather than only whatever is created afterwards.
     initializeUpdater();

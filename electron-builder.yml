@@ -88,6 +88,16 @@ files:
   - dist/**
   - dist-electron/**
   - package.json
+  # GitHub issue #86. `vite.config.ts` now sets `build.sourcemap: true`, so
+  # `dist/**` contains a `*.js.map` beside every `*.js`. A sourcemap is a
+  # de-minification key for the exact bundle it ships with; inside the asar it
+  # is a working de-minifier handed to anyone who has the installer, for no
+  # benefit to the running application, which never reads its own map. These
+  # two lines are exclusions layered after the inclusion above — electron-builder
+  # evaluates `files` in order, so a later `!pattern` narrows an earlier match
+  # rather than needing `dist/**` rewritten as a positive list of non-map files.
+  - '!dist/**/*.map'
+  - '!dist-electron/**/*.map'
 
 # ---------------------------------------------------------------------------
 # THE UPDATE FEED. ONE URL, IN ONE FILE, AND NOT A GITHUB TOKEN.

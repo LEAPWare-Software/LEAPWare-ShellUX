@@ -171,12 +171,19 @@ const KEY_EVENT_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.
  * The modules permitted to REGISTER a listener, and the exact spellings each is
  * permitted to contain.
  *
- * **One entry, and it is meant to stay one entry.** The whole value of narrowing
- * rather than deleting is that a second global listener cannot appear without an
- * edit to this object, which is a line in a diff a reviewer has to approve.
+ * **Two entries now, and each is meant to stay exactly what it is.** The whole
+ * value of narrowing rather than deleting is that a global listener cannot
+ * appear without an edit to this object, which is a line in a diff a reviewer
+ * has to approve. `core/ipc/reportRendererDiagnostics.ts` is GitHub issue #86's
+ * `window.onerror`/`unhandledrejection` forwarder — the two runtime failures
+ * `FaultBoundary`/`RootBoundary` document as outside what a React error boundary
+ * can see. It is not a second hotkey dispatcher and reaches no key event; it is
+ * listed here because `error` and `unhandledrejection` are exactly the ambient
+ * listeners this file exists to keep an inventory of.
  */
 const HOTKEY_DISPATCH_ALLOWLIST: Readonly<Record<string, readonly string[]>> = Object.freeze({
   'core/hotkeyDispatch.ts': Object.freeze(['addEventListener', 'removeEventListener']),
+  'core/ipc/reportRendererDiagnostics.ts': Object.freeze(['addEventListener', 'removeEventListener']),
 });
 
 /**
@@ -190,6 +197,8 @@ const HOTKEY_DISPATCH_ALLOWLIST: Readonly<Record<string, readonly string[]>> = O
 const LISTENER_OCCURRENCES: Readonly<Record<string, Readonly<Record<string, number>>>> =
   Object.freeze({
     'core/hotkeyDispatch.ts': Object.freeze({ addEventListener: 1, removeEventListener: 1 }),
+    // Two of each: one pair for `error`, one pair for `unhandledrejection`.
+    'core/ipc/reportRendererDiagnostics.ts': Object.freeze({ addEventListener: 2, removeEventListener: 2 }),
   });
 
 /**
