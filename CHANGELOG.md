@@ -234,6 +234,28 @@ from so a reader can check it.
 
 ### Fixed
 
+- **The production audit had been red for six weeks and nobody saw it.** The
+  scheduled audit failed on every Monday from 2026-08-10 to 2026-09-14 on a high
+  advisory against `js-yaml` 4.0.0–4.3.1 (GHSA-5p4m-2wfm-xmqj, GHSA-2883-xcg3-v3hh),
+  reached through `electron-updater` — the package that will parse the update
+  feed's `latest.yml`, so the advisory sat on exactly the path a public release
+  exercises. The lockfile now resolves `js-yaml` 4.3.2. **What made it possible:**
+  a failed scheduled run notifies no one, and the dev tree was audited by nothing,
+  so the same week-on-week blindness also hid four high advisories in the dev tree
+  (`@xmldom/xmldom`, `brace-expansion`, `fast-uri`, `nanoid`) and three moderate
+  ones in `vitest`. All seven are resolved in-range; `vitest` and
+  `@vitest/coverage-v8` move `^4.1.10` → `^4.1.11`, the one range change. **What
+  closes the mechanism:** `npm run audit:all` audits the whole tree as its own job
+  ("Audit all dependencies") in `audit-dependencies.yml` and in the scheduled audit,
+  and a failing scheduled run now files — or comments on — an issue titled
+  "Scheduled dependency audit is failing". Measured: `npm audit --omit=dev` and
+  `npm audit`, both "found 0 vulnerabilities", run with npm 11.16.0. **Not done:**
+  `audit:all` is not a `verify` stage, and the issue-filing step has not yet been
+  seen to fire, because it only runs on a scheduled failure. **Found on the way:**
+  `npm audit fix` and `npm update` crash under npm 10.9.8 with `Cannot read
+  properties of null (reading 'edgesOut')` against this lockfile; npm 11.16.0 —
+  the version `packageManager` declares — does not.
+
 - **The omnibox was never docked, and the word "docked" was already in this file
   describing it (GitHub issue #110).** `PaneWrapper`'s body was a flex ITEM of a
   `flex-row` and was not itself a column, so a child using `flex-1` to fill

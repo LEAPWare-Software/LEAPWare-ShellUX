@@ -71,3 +71,24 @@ jobs:
       # uses locally, so a laptop and CI give the same answer.
       - name: Audit production dependencies
         run: npm run audit:prod
+
+  # The dev tree, as its own job so it reports as its own check. Nothing audited
+  # it on any leg before 2026-09-18 (HANDOFF section 6.2); on that date it held
+  # four high advisories (@xmldom/xmldom, brace-expansion, fast-uri, nanoid) and
+  # three moderate ones in vitest, none of which any check had ever shown. It is
+  # not in `verify`, whose ten stages are cited across the repository by count;
+  # adding a stage there is a separate change with its own documentation sweep.
+  audit-all:
+    name: Audit all dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Audit all dependencies, dev tree included
+        run: npm run audit:all

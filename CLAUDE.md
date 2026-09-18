@@ -61,10 +61,12 @@ Needs network, for audit advisory-database query.
 > No longer "CI cannot catch this". Now: 12–13 min local failure cheaper than
 > failed matrix leg, and rule 2 want real output in PR body, which only real run make.
 >
-> **One narrower gap survive, NOT #58's:** `audit:prod` is
-> `npm audit --omit=dev`, so **dev tree audited by nothing on any leg**. That
-> mechanism made two CVSS 9.8 criticals in `vitest` structurally invisible to CI.
-> `HANDOFF.md` §6.2 carry it.
+> **Dev-tree gap CLOSED 2026-09-18.** `audit:prod` is still `--omit=dev`, but
+> `npm run audit:all` now run as own job, "Audit all dependencies", in
+> `audit-dependencies.yml`, and in scheduled audit, which also file an issue when
+> it fail. Why it mattered: scheduled audit went red six Mondays running
+> (2026-08-10 → 09-14, `js-yaml` high) and nobody saw it; dev tree held four more
+> highs no check had ever shown. **Still true:** `audit:all` not a `verify` stage.
 
 **Browser lane is fourth CI leg, deliberately NOT in `verify`.**
 
