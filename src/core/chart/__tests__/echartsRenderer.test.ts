@@ -34,7 +34,6 @@ vi.mock('echarts/components', () => ({
   AriaComponent: 'AriaComponent',
   GridComponent: 'GridComponent',
   LegendComponent: 'LegendComponent',
-  TitleComponent: 'TitleComponent',
   TooltipComponent: 'TooltipComponent',
 }));
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: 'CanvasRenderer' }));
@@ -104,8 +103,43 @@ describe('echartsRenderer — the pure translation', () => {
     expect((series[1]?.['itemStyle'] as Record<string, unknown>)['decal']).not.toBeNull();
     expect((option['xAxis'] as Record<string, unknown>)['data']).toEqual(['Jan', 'Feb']);
     expect((option['yAxis'] as Record<string, unknown>)['name']).toBe('requests');
-    expect((option['title'] as Record<string, unknown>)['text']).toBe('Throughput');
     expect((option['legend'] as Record<string, unknown>)['data']).toEqual(['a', 'b', 'c']);
+  });
+
+  it('draws no title into the canvas, because the heading is a DOM node the token pipeline can see', () => {
+    // GitHub #112 and #113: a canvas title overprinted the y-axis name and the
+    // top tick, and painted in a colour no gate could measure. The heading is
+    // `Chart.tsx`'s visible `<figcaption>` now; nothing here may bring one back.
+    const option = toEChartsOption(sampleOption('bar')) as Record<string, unknown>;
+    const theme = toEChartsTheme(buildChartPalette(markedTheme()));
+
+    expect(option).not.toHaveProperty('title');
+    expect(theme).not.toHaveProperty('title');
+    expect(JSON.stringify(option)).not.toContain('Throughput');
+  });
+
+  it('places the y-axis name explicitly, so it never falls back to a default that shares the top tick', () => {
+    const option = toEChartsOption(sampleOption('line')) as Record<string, unknown>;
+    const yAxis = option['yAxis'] as Record<string, unknown>;
+    const grid = option['grid'] as Record<string, number>;
+
+    expect(yAxis['nameLocation']).toBe('end');
+    // Left-aligned from the axis line, so it starts where the tick column ends
+    // and grows into the plot's top margin rather than over the tick labels.
+    expect((yAxis['nameTextStyle'] as Record<string, unknown>)['align']).toBe('left');
+    // The name sits `nameGap` above the plot's top edge; `grid.top` has to hold
+    // it. Arithmetic over the option only — whether the pixels actually clear is
+    // `e2e/chart.spec.ts`, because jsdom paints nothing.
+    expect(grid['top']).toBeGreaterThan(yAxis['nameGap'] as number);
+  });
+
+  it('sets axis text in metadata type, in the chart label ink', () => {
+    const theme = toEChartsTheme(buildChartPalette(markedTheme()));
+    for (const axis of ['categoryAxis', 'valueAxis']) {
+      const entry = theme[axis] as Record<string, Record<string, unknown>>;
+      expect(entry['axisLabel']).toEqual({ color: 'value-of--chart-label', fontSize: 11 });
+      expect(entry['nameTextStyle']).toEqual({ color: 'value-of--chart-label', fontSize: 11 });
+    }
   });
 
   it('maps a line chart onto the line series type', () => {
@@ -130,7 +164,6 @@ describe('echartsRenderer — the four calls it makes', () => {
       'BarChart',
       'ScatterChart',
       'GridComponent',
-      'TitleComponent',
       'TooltipComponent',
       'LegendComponent',
       'AriaComponent',

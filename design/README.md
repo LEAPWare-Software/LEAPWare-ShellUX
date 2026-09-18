@@ -35,7 +35,13 @@ node design/generate.mjs --format=ts                 # the TS module, to stdout
 node design/lib/build-manifest.mjs                   # rewrite the manifest
 ```
 
-`check-contrast.mjs` exits non-zero on any failure and is the gate. Everything
+`check-contrast.mjs` exits non-zero on any failure and is the gate. Since GitHub
+#111 it also fails as **UNPAINTED** any contrast row whose background nothing in
+`src/` paints — the twelve series had been validated on `--surface-sunken` while
+nothing painted it — with unbuilt UI exempted by name in `UNBUILT_BACKGROUNDS`.
+Read "the gate" narrowly: measured 2026-09-18 by grep, no `package.json` script
+and no workflow under `.github/` invokes this file, so it gates a run someone
+chooses to make; `npm run tokens:check` is `scripts/check-tokens.mjs`. Everything
 else prints to stdout and writes nothing; `generate.mjs` accepts an output path
 as a positional argument and **refuses one under `src/`**, because deciding where
 a generated artefact lands is the wiring change's job and not this script's.

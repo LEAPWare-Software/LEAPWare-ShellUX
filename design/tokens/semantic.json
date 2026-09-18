@@ -39,7 +39,7 @@
         "type": "color",
         "source": { "ramp": "gray", "step": 3 },
         "description": "A recessed well: the chart plot area, a scroll trough, a code block. ONE STEP OF SEPARATION FROM THE PANE, IN WHICHEVER DIRECTION THE THEME SEPARATES — lighter-to-darker in light, darker-to-lighter in dark. That is not what 'sunken' means literally, and the honest name would be 'inset'; it is called sunken because that is what the plan calls it. All twelve chart series are validated against this token and no other.",
-        "consumers": []
+        "consumers": ["src/components/chart/Chart.tsx (the chart host: the plot well under the transparent ECharts canvas)"]
       },
       "--surface-hover": {
         "type": "color",
@@ -197,7 +197,7 @@
     },
 
     "charts": {
-      "$groupNote": "Nothing in src/ renders a chart today. This group exists because a chart palette invented per-extension is the fastest way to lose both accessibility and visual coherence, and because native-host-pivot.md 3.6 already commits the host to resolving a palette for ECharts through a ThemeBridge. Every one of the twelve series is validated at 3:1 against --surface-sunken AND pairwise for CIEDE2000 separation against all eleven others.",
+      "$groupNote": "Nothing in src/ renders a chart today. This group exists because a chart palette invented per-extension is the fastest way to lose both accessibility and visual coherence, and because native-host-pivot.md 3.6 already commits the host to resolving a palette for ECharts through a ThemeBridge. Every one of the twelve series is validated at 3:1 against --surface-sunken AND pairwise for CIEDE2000 separation against all eleven others. CORRECTED 2026-09-18 (GitHub #111), kept rather than deleted because it records how the defect was possible: the first sentence stopped being true when src/core/chart/ and src/components/chart/ shipped, and the last was true of the manifest but not of the product - nothing painted --surface-sunken, so the series were drawn on --surface-pane while being measured on the well. The chart host in src/components/chart/Chart.tsx now paints bg-surface-sunken under the transparent canvas, so the measured background is the painted one, and design/check-contrast.mjs fails as UNPAINTED any contrast row whose background nothing in src/ paints.",
       "--chart-1": { "type": "color", "source": { "chart": "series", "index": 1 }, "consumers": [] },
       "--chart-2": { "type": "color", "source": { "chart": "series", "index": 2 }, "consumers": [] },
       "--chart-3": { "type": "color", "source": { "chart": "series", "index": 3 }, "consumers": [] },
