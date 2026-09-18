@@ -18,6 +18,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 # Least privilege, matching ci.yml: this workflow only reads the repository.
 permissions:

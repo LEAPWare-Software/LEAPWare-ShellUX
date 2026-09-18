@@ -165,6 +165,31 @@ from so a reader can check it.
 
 ### Changed
 
+- **The licence is Apache-2.0** (decision D-42), replacing MIT: `LICENSE` carries the
+  Apache 2.0 text, a `NOTICE` is added, and `package.json` and the README say so.
+- **Eight owner rulings recorded** in `docs/DECISIONS.md`, D-42 to D-48: the licence;
+  going public once this scaffolding lands; no BuildCraft pilot (the agent had added
+  one unasked; it is removed from the plan and `docs/sdlc.md`); the six gate-4
+  screens approved; ADR-0001 Amendment P accepted; no plugin signing in 1.0; a fifth
+  plugin-manager state for files that no longer match their manifest. Plan step 0 is
+  complete: every Dependabot pull request opened through 2026-09-18 is merged or
+  declined, each checked `CLOSED` or `MERGED`.
+- **Public-release scaffolding, without going public** (plan step 3; the licence,
+  D-42, and the visibility flip, D-43, stay with the owner). `.github/rulesets/main.json`
+  models `leapware-sessionkeeper`'s ruleset: deletion and force-push blocked, pull
+  request required with zero approvals (one human developer), squash only, no bypass
+  actors, the five CI job names as required checks, and a merge queue, for which
+  `ci.yml` and `browser.yml` gain `merge_group:`. `scripts/apply-rulesets.mjs`
+  creates or updates it by name through `gh api`, with `--dry-run`; 18 tests, no
+  network. `docs/maintainers/repository-settings.md` says what each rule enforces and
+  that applying it is the owner's step (it 403s while the repository is private).
+  Also `CODE_OF_CONDUCT.md` (its enforcement contact was a personal-looking address,
+  never updated when D-03 named `leapware@outlook.com`; it now points at
+  `SECURITY.md`), `.editorconfig`, a `feature.yml` issue template, and `CODEOWNERS`,
+  which named `@LEAPWare-HQ`, an owner that does not match this repository's
+  organisation. **Not done:** the history secret scan could not use gitleaks (no npm
+  distribution exists); a grep of all 105 commits for key, token, PEM, `.env` and
+  host patterns found nothing, which is a narrower check than gitleaks.
 - **D-28's pin now lives where Dependabot reads it.** `.github/dependabot.yml`
   ignores `eslint-plugin-react-refresh` at `>=0.5.0`. The minor-and-patch group had
   been carrying the 0.5 bump into every weekly pull request, which D-28 pins against

@@ -8,7 +8,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 `main` at `e00ea93` (2026-09-18). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
-Decisions, including the four owner calls still open (D-42 to D-45):
+Decisions (none open for v1):
 [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ## What landed on 2026-09-18
@@ -21,18 +21,16 @@ Decisions, including the four owner calls still open (D-42 to D-45):
 
 ## In flight
 
-- **Branch `docs/mission-recast`** (this change): the README recast around the
-  mission, with its long sections moved verbatim into `docs/`; `DESIGN.md` (design
-  gate 3); `docs/sdlc.md`; `docs/plans/v1-production.md`; decisions D-31 to D-45;
-  this file cut to the cap, with the old one archived.
-- **Gate-4 screens**, awaiting owner approval (D-45): the "ShellUX 1.0 Screens"
-  artifact. No redesign component is written until they are approved.
+- **Branches built in parallel, landing one at a time**: `chore/public-release-prep`
+  (this change), `docs/adr-0006-plugin-host`, `fix/chart-title-contrast`,
+  `fix/observability-build-target`. Each lands with its own review and `verify`.
+- **Gate-4 screens** await owner approval (D-45). No redesign component before then.
 
 ## The next step
 
 1. Land `docs/mission-recast`.
-2. Plan step 0: land the D-28 ignore in `dependabot.yml`, then recreate the group (#127).
-3. The owner calls D-42 to D-45. Steps 3, 0b and 4 onward wait on them.
+2. Land in order: ADR-0006, charts, hardening. Step 0 is complete.
+3. After this lands: the owner makes the repository public (D-43); then apply the ruleset.
 
 ## The rules that bite
 

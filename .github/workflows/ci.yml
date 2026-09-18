@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 # Least privilege: CI only reads the repository. No packages, no deployments,
 # no write access to issues or PRs.

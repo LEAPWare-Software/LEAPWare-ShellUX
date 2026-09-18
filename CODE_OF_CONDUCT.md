@@ -59,8 +59,9 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-biz_tech_exec@outlook.com.
+reported to the community leaders responsible for enforcement via the contact
+methods listed in [SECURITY.md](SECURITY.md) or the repository's GitHub
+Issues, once published.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

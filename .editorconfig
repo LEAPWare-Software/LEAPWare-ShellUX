@@ -1,0 +1,23 @@
+# Editor defaults for LEAPWare ShellUX.
+#
+# .gitattributes already normalises line endings to LF for every tracked text
+# file (check:portability's CRLF rule depends on that, not on this file); this
+# file is the editor-side half, so a laptop's editor writes LF and the correct
+# indent style before a save ever reaches git.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+[*.{bat,cmd}]
+end_of_line = crlf

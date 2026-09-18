@@ -60,7 +60,7 @@ D3 is honoured by **who does the work**, not by a gate:
   a second is dispatched.
 - **What this does not deliver:** this repository has one human developer, so D3 is
   met by distinct agents, not distinct people. Whether that satisfies D3 is BuildCraft
-  question D5, and the pilot files it rather than answering it.
+  question D5, left for BuildCraft to answer.
 
 ---
 
@@ -91,7 +91,7 @@ BuildCraft release, installed here, seen to refuse a change that breaks it.
 
 | BuildCraft rule | BuildCraft state | Installed in ShellUX | Enforcing here | The convention it retires |
 |---|---|---|---|---|
-| `lwb_version` | exists, no-op | not yet (plan step 0b) | never: it denies nothing | none |
+| `lwb_version` | exists, no-op | no: nothing is installed before a gate enforces something (D-44) | never: it denies nothing | none |
 | Stage order | `PROPOSED` | no | no | §2's stage map |
 | Role rule D3 | `PROPOSED` | no | no | §3's agent routing |
 | Proof gates | `PROPOSED` | no | no | Pasted `verify` output in PR bodies (rule 2) |
@@ -118,17 +118,3 @@ When the bar is met, work already landed under convention is not re-reviewed mer
 by merge. The release candidate, meaning the whole diff to that point, runs
 BuildCraft's full stage sequence once, enforcing, with review, security and release
 done by actors who authored none of it.
-
----
-
-## 7. The pilot's obligation to BuildCraft
-
-ShellUX is BuildCraft's first consuming project, and BuildCraft cannot finish its
-requirements without one. Every plan step ends with a line in its checklist: **"SDLC
-friction filed, or none found, stated."** Friction goes to BuildCraft's tracker as an
-issue labelled `pilot:shellux`, once the owner confirms that route (decision D-44,
-open). The first three are known already:
-
-1. There is no consumer-side review-record format (§4 fills the gap by convention).
-2. Every BuildCraft check is hard-coded to BuildCraft's own tree (R6).
-3. D3 needs a definition for a project with one human developer (§3).

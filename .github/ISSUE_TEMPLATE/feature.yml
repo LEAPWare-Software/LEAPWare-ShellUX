@@ -1,0 +1,68 @@
+name: Feature request
+description: Something the host contract does not do yet, proposed as new behaviour rather than a gap in the existing one.
+title: 'feature: '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Use this form for something new. If the public contract already claims to do
+        this and does not, use the Bug report form instead. If an extension author hit
+        a wall trying to do something with the contract as it stands today, use the
+        Contract gap form** — that one exists precisely because the gap is usually
+        found by writing against the contract, not by reading a feature list, and it
+        asks for the exact evidence that makes a gap actionable.
+
+        This project has one maintainer and quality takes priority over velocity
+        (`docs/adr/0003-quality-over-velocity.md`), so a feature is judged against
+        what it costs to keep at 100% coverage and zero suppressions, not only
+        against whether it would be useful.
+
+        **Do not use this form for a suspected vulnerability.** Report it privately
+        instead — SECURITY.md at the repository root says how.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do, and why the current contract does not let you
+      description: >-
+        State the goal in the extension author's or user's own terms first, then say
+        what you tried against the current `IShellAPI` / registry contract and where
+        it stopped. If you have not tried, say so — a feature request without an
+        attempt is still welcome, but say which case this is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: >-
+        The shape of the addition — a new member, a new event, a new registration
+        field — described from the extension author's side. You do not need to
+        propose an implementation; a clear description of the desired contract is
+        enough.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you could do instead, today
+      description: >-
+        A workaround using the current contract, if one exists, and what it costs.
+        If there is genuinely no workaround, say that.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you submit
+      options:
+        - label: This is not a suspected vulnerability. (If it is, close this and use SECURITY.md.)
+          required: true
+        - label: I checked DEVELOPER.md and README.md, and this is not something the contract already does.
+          required: true
+        - label: If this is a wall I hit writing an extension against the existing contract, I used the Contract gap form instead of this one.
+          required: true

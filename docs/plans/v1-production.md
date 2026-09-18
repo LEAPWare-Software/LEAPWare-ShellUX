@@ -28,14 +28,14 @@ Deliberately unproven at 1.0 and labelled so: **"best for plugin authors"**. #65
 
 So ShellUX cannot wait for BuildCraft, and BuildCraft cannot be finished without a real project to be finished *for*.
 
-**How the loop is broken: ShellUX is BuildCraft's pilot, run by convention first and mechanically later.**
+**How ShellUX works while BuildCraft is unfinished: by convention first, mechanically later.** (The earlier "pilot" framing, with ShellUX filing requirements into BuildCraft, was withdrawn by the owner: D-44.)
 1. **Adopt the model now, as convention.** Take the one decided part of BuildCraft, its mission. Stage order: design → qa → review → security → delivery → release → operations. Role rule D3: a qa, review or security actor may not have authored an earlier stage of the same deliverable. `docs/sdlc.md` in ShellUX maps each of this plan's steps onto those stages, and maps ShellUX's existing machinery onto them: ADR-0003 rules, `verify`, the browser lane, the review loop, and DECISIONS.md. **Existing ShellUX gates stay where they are**; the SDLC doc names them, it does not replace them.
 2. **Record in the shape BuildCraft will check.** Every review record names the reviewer, the role, the stage, and the **commit SHA reviewed**. That last field is BuildCraft's PR #13 direction ("bind reviews to commits") and D5's open question. The PR #115 review comment already carries the reviewer and verdict; from now on it also carries the SHA. Records go in PR comments until BuildCraft defines a consumer-side record format. **No parallel `reviews/` directory is invented**: BuildCraft's `reviews/` is its own internal store, not a consumer contract.
-3. **The pilot feeds BuildCraft requirements.** Each step of this plan ends by logging SDLC friction ("needed a gate for X", "D3 was ambiguous for Y") as a BuildCraft issue labelled `pilot:shellux`. Those issues are the input to BuildCraft's remaining 12 requirement sections and its owner-directives session. Filing into BuildCraft is outward, so the owner confirms the label and routing once.
-4. **Adoption ratchet.** `docs/sdlc.md` keeps a table with one row per BuildCraft rule: `PROPOSED` → `EXISTS` → **installed in ShellUX** → **enforcing**. When a BuildCraft gate ships, ShellUX installs it (as a Claude Code plugin, `plugins/claude/lwb`) and retires the matching convention in the same change. The no-op `lwb_version` is installed at Step 0b, to prove the install path end to end, and labelled as enforcing nothing.
+3. **No requirements are filed into BuildCraft from here** (D-44). BuildCraft's own development happens in its own repository.
+4. **Adoption ratchet.** `docs/sdlc.md` keeps a table with one row per BuildCraft rule: `PROPOSED` → `EXISTS` → **installed in ShellUX** → **enforcing**. When a BuildCraft gate ships, ShellUX installs it (as a Claude Code plugin, `plugins/claude/lwb`) and retires the matching convention in the same change. Nothing is installed before BuildCraft ships a gate that enforces something (D-44).
 5. **1.0 WAITS FOR BUILDCRAFT (owner call, 2026-09-18).** The ratchet is not enough: v1.0.0 is not tagged until BuildCraft meets the **readiness bar** below, installed in ShellUX and enforcing. Until then ShellUX work continues under convention (points 1–4), and rc pre-releases (Step 9) are allowed, labelled "pre-BuildCraft".
 
-**BuildCraft readiness bar for ShellUX 1.0.** These are the criteria the wait is measured against. They are filed in BuildCraft as `pilot:shellux` issues, and the owner confirms or amends them:
+**BuildCraft readiness bar for ShellUX 1.0.** These are the criteria the wait is measured against. The owner may confirm or amend them:
 
 | # | Criterion | BuildCraft state 2026-09-18 |
 |---|---|---|
@@ -49,12 +49,12 @@ So ShellUX cannot wait for BuildCraft, and BuildCraft cannot be finished without
 
 **Reconciliation when the bar is met.** Work landed under convention is not re-litigated merge by merge. Instead, **the 1.0 release candidate (`v1.0.0-rc.N`, the diff from the first commit to the candidate) runs BuildCraft's full stage sequence once, enforcing**: review, security and release stages by actors who authored none of it. Findings are fixed before the tag. Only then is "built under BuildCraft" claimable, and only for the rules that enforced.
 
-**Critical path consequence, stated rather than hidden.** 1.0's date is now `max(ShellUX Steps 0–9, BuildCraft R1–R7)`. BuildCraft publishes no size estimate, so **no 1.0 date can be given** until BuildCraft's requirements package (12 of 13 sections open) sizes its gates. BuildCraft's own development happens in BuildCraft's repo and sessions, not in this plan. ShellUX's part is to supply requirements (point 3) and adopt each gate as it lands (point 4).
+**Critical path consequence, stated rather than hidden.** 1.0's date is now `max(ShellUX Steps 0–9, BuildCraft R1–R7)`. BuildCraft publishes no size estimate, so **no 1.0 date can be given** until BuildCraft's requirements package (12 of 13 sections open) sizes its gates. BuildCraft's own development happens in BuildCraft's repo and sessions, not in this plan. ShellUX's part is to adopt each gate as it lands (point 4).
 
 **What this does NOT solve (rule 8):**
 - Conventions are self-attested until BuildCraft enforces them. D3 separation is honoured by agent routing (`lw-verifier` never authors), not by a gate.
 - If BuildCraft's later requirements contradict the mapping, `docs/sdlc.md` is the one file that changes.
-- One developer means D3 can be met only by distinct agents, not distinct humans. That is a BuildCraft D5 question, and the pilot files it rather than answering it.
+- One developer means D3 can be met only by distinct agents, not distinct humans. That is BuildCraft's open question D5, left for BuildCraft to answer.
 
 ## Context
 
@@ -78,22 +78,19 @@ Measured today:
 
 ---
 
-## Step 0 — Land what is in flight  (4/6)
+## Step 0 — Land what is in flight  (6/6)
 - [x] Adversarial review of PR #115 (rule 1), by an `lw-verifier` (sonnet) that did not write it. Verdict MERGE AFTER FIXES; record on the PR, 2026-09-18.
 - [x] Fix the findings (`899fa66`, three prose findings). Gates on the fix: `check:portability` and `check:citations` exit 0; CI 5 of 5 green. The full `verify` was not re-run for a two-file prose change.
 - [x] Merge #115: merged as `148217b`. **HANDOFF §1 was NOT updated in that landing**; it is carried into the docs-recast change instead, which is a rule-3 miss recorded rather than hidden.
 - [x] **Clear the red production audit** (found 2026-09-18: failing every Monday since 2026-08-10 on `js-yaml`), close the unaudited dev tree, and make a failing scheduled audit file an issue. PR #126: `verify` exit 0, review MERGE, Medium finding fixed; merged `e00ea93`, all seven checks green.
-- [ ] Triage the Dependabot PRs. Each gets a reason in the PR. **2026-09-18:** #117 merged; #118, #119, #120 declined with reasons; the group (#125, then #127) waits on the D-28 ignore rule in `.github/dependabot.yml`, then a recreate:
+- [x] Triage the Dependabot PRs. **Done 2026-09-18:** #117 and the group #131 merged green on every leg; the D-28 pin landed in `.github/dependabot.yml` (#130); declined with reasons and an ignore rule: #118, #119, #120, #132, #133, #134, #135, #136, #137, #138, #139, #140, each confirmed `CLOSED` with `gh pr view`. **What "done" means here:** every Dependabot pull request opened through 2026-09-18 is merged or declined. It does not mean the queue stays empty: Dependabot opened #140 minutes after this line was first written as "zero open", which was true only at that moment:
   - **#125** (minor/patch group): merge if green on every leg.
   - **#117** globals, **#118** jsdom 30, **#119** eslint 10: take each only if all legs are green. Otherwise close it with the failing leg quoted.
   - **#120** react-resizable-panels 2→4: **decline, deferred to after 1.0** (done 2026-09-18, reason on the PR). It is a migration of the divider/layout engine, which is where both data-destroying defects lived. Wave 3 already rewrites that surface, so the substrate should not move under it.
-- [ ] React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0. React 18 has no known defect in this tree.
+- [x] React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0. React 18 has no known defect in this tree.
 
-## Step 0b — Stand up the BuildCraft pilot  (0/4)
-- [ ] Write `docs/sdlc.md`: the stage map (every step below tagged with its BuildCraft stage), the D3 role routing, the review-record fields (reviewer, role, stage, SHA, verdict), and the adoption-ratchet table.
-- [ ] Install BuildCraft's Claude plugin from its marketplace into ShellUX's `.claude/settings.json`, pinned to a commit SHA because there is no tag. Show `lwb_version` firing on a tool call, with the output pasted. Labelled as enforcing nothing.
-- [ ] The owner confirms the `pilot:shellux` label and that ShellUX friction is filed in BuildCraft's tracker. Then the first issues are filed: consumer-side review-record format; gates hard-coded to BuildCraft's tree; a D3 definition for single-developer projects.
-- [ ] Every later step's checklist gains a final substep: **"SDLC friction filed, or none found — stated."**
+## Step 0b — Withdrawn
+The BuildCraft pilot is not part of this plan (D-44). The 1.0 tag still waits for BuildCraft (D-39).
 
 ## Step 1 — Record the decisions before acting on them  (0/2)
 - [ ] In `docs/DECISIONS.md`, add D-31 through D-34 (one per row above, "Called by: Owner, 2026-09-18"). Strike through the superseded D-09, D-11 (as the v1 gate), D-12 and D-27, and rewrite §3 as the new line of sight: this plan's steps. Add D-35: **contract gaps ship as documented limits** (#16, #17, #28, #32, #57, #80, #91). This is consistent with D-23 (no third parties). #65 is re-scoped to the 1.1 milestone.
@@ -110,10 +107,10 @@ Measured today:
 The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (checked with `gh repo view`). Copy its open-source scaffolding, but **not** its plugin or dual-host parts: `.claude-plugin/`, `.agents/`, `.codex/`, `AGENTS.md`, `.github/apps/lws-*.json`, `docs/install-claude.md` and `docs/install-codex.md` have no equivalent here.
 
 - [ ] Scan the full history for secrets with `npx gitleaks detect --log-opts="--all"`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated** before the repository is flipped. Deleting it from history is not enough.
-- [ ] Content review of tracked files for anything that must not be public: customer names, internal hosts, credentials in docs.
+- [x] Content review of tracked files for anything that must not be public: customer names, internal hosts, credentials in docs. Two found and repaired: a personal-looking contact in `CODE_OF_CONDUCT.md`, a wrong org in `CODEOWNERS`.
 - [ ] **Licence.** Sessionkeeper ships `LICENSE` (Apache-2.0, 201 lines) and a `NOTICE`, and its README carries a license line. ShellUX's `package.json` says `MIT`. **Owner picks one**; the default is Apache-2.0 to match the house pattern. That means the `LICENSE` and `NOTICE` files, `package.json` `license`, and the README line, all in one commit.
-- [ ] Community files mirroring sessionkeeper's shape: `CODE_OF_CONDUCT.md`, and `.github/ISSUE_TEMPLATE/bug.yml` + `feature.yml` (form-based). `CONTRIBUTING.md` and `SECURITY.md` already exist and get re-aimed rather than replaced. `.editorconfig` and `.gitattributes` are added if missing; `.gitattributes` enforces LF, which `check:portability` already requires.
-- [ ] `.github/CODEOWNERS` → `* @LEAPWare-Software`. The current `@LEAPWare-HQ` is inert (HANDOFF §5).
+- [x] Community files mirroring sessionkeeper's shape: `CODE_OF_CONDUCT.md`, and `.github/ISSUE_TEMPLATE/bug.yml` + `feature.yml` (form-based). `CONTRIBUTING.md` and `SECURITY.md` already exist and get re-aimed rather than replaced. `.editorconfig` and `.gitattributes` are added if missing; `.gitattributes` enforces LF, which `check:portability` already requires.
+- [x] `.github/CODEOWNERS` → `* @LEAPWare-Software`. The current `@LEAPWare-HQ` is inert (HANDOFF §5).
 - [ ] **Owner flips the visibility** (outward and hard to reverse, so no agent does it). Owner also confirms the Context risk statement.
 - [ ] **Ruleset as code, not classic branch protection.** Add `.github/rulesets/main.json` modelled on sessionkeeper's:
   - `~DEFAULT_BRANCH` with `bypass_actors: []`.
