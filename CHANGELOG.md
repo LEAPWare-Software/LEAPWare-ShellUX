@@ -172,7 +172,8 @@ from so a reader can check it.
   one unasked; it is removed from the plan and `docs/sdlc.md`); the six gate-4
   screens approved; ADR-0001 Amendment P accepted; no plugin signing in 1.0; a fifth
   plugin-manager state for files that no longer match their manifest. Plan step 0 is
-  complete: no open pull requests remain.
+  complete: every Dependabot pull request opened through 2026-09-18 is merged or
+  declined, each checked `CLOSED` or `MERGED`.
 - **Public-release scaffolding, without going public** (plan step 3; the licence,
   D-42, and the visibility flip, D-43, stay with the owner). `.github/rulesets/main.json`
   models `leapware-sessionkeeper`'s ruleset: deletion and force-push blocked, pull
