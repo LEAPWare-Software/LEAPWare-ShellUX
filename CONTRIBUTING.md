@@ -192,8 +192,11 @@ and that one is a real typo or a real missing file.
 
 ## Standing rules for anything written here, including documentation
 
-These predate this document and are unchanged. See the Contributing section of
-[README.md](README.md) and ADR-0001 Amendment G. Rule 2 of the working agreement
+These predate this document and are unchanged. Their live home is `CLAUDE.md`
+("Also standing"); as first written they were the Contributing section of the
+README, archived verbatim in
+[`docs/history/readme-status-2026-08.md`](docs/history/readme-status-2026-08.md).
+See also ADR-0001 Amendment G. Rule 2 of the working agreement
 above generalises rule 3 below from security claims to every claim of a property;
 neither replaces the other.
 
@@ -254,6 +257,8 @@ theory that CI will catch it.
 [`README.md`](README.md) still carries the same incorrect sentence in its script
 table. It is filed rather than fixed here, as GitHub issue #58, under rule 7 of the
 working agreement above — correcting it belongs with a change that owns that file.
+**Since corrected:** #58 was closed for real on 2026-08-03, and the README was
+recast on 2026-09-18; the script table now lives in `docs/getting-started.md`.
 
 `verify` needs network access, for `npm ci` and for the audit's advisory-database
 query. It is not an offline operation.

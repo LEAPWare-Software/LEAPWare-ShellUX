@@ -59,7 +59,7 @@ ADR-0001 Amendment G requires that no security claim stands in prose without
 naming the test that exercises it, and `npm run check:citations` fails the build
 on a citation that no longer resolves. **This file names no test titles**, on
 purpose: every claim below is a summary of one stated at full width, with its
-tests named, in the Security posture section of [`README.md`](README.md) and in
+tests named, in [`docs/security-posture.md`](docs/security-posture.md) and in
 ADR-0001. Duplicating a title here would create a second copy to go stale, and a
 stale citation reads as evidence when it is not. Read the summary here; read the
 evidence there.
@@ -270,7 +270,7 @@ repository *claims* otherwise is genuinely valuable — see below.
   covered: rendering plug-in strings as text nodes is a delivered, tested property
   at the ribbon and at the row virtualizer, and elsewhere it is still the correct
   pattern written with nothing asserting it — an intent, which must not be cited as
-  a control. README.md says which site is which.
+  a control. `docs/security-posture.md` says which site is which.
 - **Suppression of hotkey dispatch inside editable targets is a guardrail.** A
   plug-in can render a custom editor carrying no recognised role, and the
   suppression will not see it.
@@ -355,7 +355,7 @@ report it privately like any other.
 
 | Document | What it carries |
 |---|---|
-| [`README.md`](README.md) | The Security posture section: every claim above at full width, labelled with one of the three words, each naming the tests that exercise it. |
+| [`docs/security-posture.md`](docs/security-posture.md) | The security posture (in `README.md` until 2026-09-18): every claim above at full width, labelled with one of the three words, each naming the tests that exercise it. |
 | [`docs/adr/0001-ioc-registry-architecture.md`](docs/adr/0001-ioc-registry-architecture.md) | The architecture and its amendments. Amendment E for why there is no boundary between extensions and for the trigger that voids the decision; Amendment B for `unregister`; Amendment G for the no-claim-without-a-test rule. |
 | [`DEVELOPER.md`](DEVELOPER.md) | The rules an extension author's own code has to follow. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The standing rules for anything written into this repository, documentation included. |

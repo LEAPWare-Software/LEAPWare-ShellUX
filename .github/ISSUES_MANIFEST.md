@@ -1578,7 +1578,7 @@ These apply to every issue above and are not restated per ticket.
   without a test. Three floors survive because each is gated rather than
   asserted: contrast pairs (`design/check-contrast.mjs`), visible focus measured
   on painted pixels (`e2e/focus-visibility.spec.ts`), and colour never being the
-  only channel. See `README.md` § Accessibility for what is explicitly not
+  only channel. See `docs/accessibility.md` (moved from `README.md` § Accessibility on 2026-09-18) for what is explicitly not
   committed to.
 - **Untrusted plugin content.** Any surface that renders extension-supplied
   strings **must** render them as text nodes, and `dangerouslySetInnerHTML` is

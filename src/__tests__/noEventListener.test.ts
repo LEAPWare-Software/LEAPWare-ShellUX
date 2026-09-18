@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest';
  * NO LISTENER, NOWHERE UNDER `src/`. KEY HANDLING IN EXACTLY ONE MODULE.
  * ============================================================================
  * Several places — the `Hotkey` docblock in `src/core/types.ts`, ADR-0001
- * Amendment H, the `Hotkey` section of `DEVELOPER.md` and `README.md` — say that
+ * Amendment H, the `Hotkey` section of `DEVELOPER.md` and `docs/overview.md`
+ * (in `README.md` until 2026-09-18) — say that
  * the shell registers no event listener and dispatches no hotkey. Until this
  * file existed, all of them cited "hotkeys module — does not attach anything" in
  * `src/core/__tests__/hotkeys.test.ts`, which asserts something much smaller:

@@ -127,7 +127,7 @@ body:
       options:
         - label: I read DEVELOPER.md, and this is not something it already documents how to do.
           required: true
-        - label: I checked the accepted limits in README.md and SECURITY.md, and this is not one of them being reported as a defect.
+        - label: I checked the accepted limits in docs/security-posture.md and SECURITY.md, and this is not one of them being reported as a defect.
           required: true
         - label: This is not a suspected vulnerability. (If it is, close this and use SECURITY.md.)
           required: true
