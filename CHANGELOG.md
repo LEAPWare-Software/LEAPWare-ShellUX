@@ -165,6 +165,15 @@ from so a reader can check it.
 
 ### Changed
 
+- **D-28's pin now lives where Dependabot reads it.** `.github/dependabot.yml`
+  ignores `eslint-plugin-react-refresh` at `>=0.5.0`. The minor-and-patch group had
+  been carrying the 0.5 bump into every weekly pull request, which D-28 pins against
+  and which fails `lint` under `--max-warnings 0`; #125 and then #127 went red on it.
+  **What made it possible:** the pin was recorded only in `docs/DECISIONS.md`, a file
+  the bot does not read. Same day, Step 0's other Dependabot calls: #117 (globals 17)
+  merged green; #118 (jsdom 30, a Node-floor raise plus about 30 assertion changes)
+  and #119 (eslint 10, no peer range in eslint-plugin-react-hooks) declined with
+  reasons on the pull requests; #120 declined as a layout-engine migration.
 - **`README.md`'s long sections moved, verbatim, into `docs/`**: `getting-started.md`,
   `overview.md`, `performance.md`, `accessibility.md` (with the 1.0 keyboard-gate
   position, D-37, stated first), `testing.md` and `security-posture.md`. The old
