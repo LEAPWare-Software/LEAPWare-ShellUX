@@ -18,4 +18,4 @@
 # Note that the last matching pattern wins, so any future per-path line must be
 # written BELOW this catch-all, not above it.
 
-* @LEAPWare-HQ
+* @LEAPWare-Software
