@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "LEAPWare ShellUX — a pluggable UI shell host.",
   "author": "LEAPWare Software",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist-electron/main/index.js",
   "engines": {
@@ -21,7 +21,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --sequence.shuffle src/__tests__/IntegrationSuite.test.tsx",
-    "test:scripts": "node --test scripts/__tests__/check-portability.test.mjs scripts/__tests__/check-tokens.test.mjs scripts/__tests__/context-caps.test.mjs",
+    "test:scripts": "node --test scripts/__tests__/check-portability.test.mjs scripts/__tests__/check-tokens.test.mjs scripts/__tests__/context-caps.test.mjs scripts/__tests__/apply-rulesets.test.mjs",
     "test:browser": "playwright test",
     "test:browser:install": "playwright install --with-deps chromium",
     "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json --noEmit",

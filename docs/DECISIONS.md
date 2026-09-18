@@ -25,16 +25,21 @@ question from a settled one. That is a reporting defect, not a process one.
 
 | # | Decision | Called by | Blocks | Cost to decide |
 |---|---|---|---|---|
-| D-42 | **Licence for the public repository**: Apache-2.0 (the house pattern, as `leapware-sessionkeeper` ships) or MIT (what `package.json` and `LICENSE` say today) | **Owner** | Plan step 3, going public | One word. A licence granted on public code cannot be taken back |
-| D-43 | **Flip the repository to public**, having read the risk D-34 records | **Owner** | Plan step 3, and through it the update feed, the ruleset and private vulnerability reporting | A settings click, after the history scan in step 3 is clean |
-| D-44 | **Route ShellUX's SDLC friction into BuildCraft's tracker under a `pilot:shellux` label** | **Owner** | Plan step 0b, and BuildCraft's readiness bar (D-39) depends on it | A yes. Filing into another repository is outward, so it is asked rather than assumed |
-| D-45 | **Approve the gate-4 screens** (the ShellUX 1.0 Screens canvas) | **Owner** | Plan steps 4 to 6b: no redesign component is written before this | A review of six frames |
 | ~~D-22~~ | ~~Who runs #65, and when do they start?~~ **No longer blocks v1: D-32 moves #65 after 1.0.** It still needs an owner before 1.1, and the reason it cannot be an agent is unchanged | Owner | 1.1 | An assignment |
+
+**Nothing else is open.** D-42 to D-48 were answered by the owner on 2026-09-18.
 
 ## 2. DECIDED
 
 | # | Decision | Called by | When | What was decided |
 |---|---|---|---|---|
+| D-42 | **The licence is Apache-2.0**, with a `NOTICE` file | Owner | 2026-09-18 | The house pattern, as `leapware-sessionkeeper` ships it. Replaces the MIT `LICENSE` and `package.json` declaration in the same change. A licence granted on public code cannot be withdrawn, so this row does not carry a "reverses if" |
+| D-43 | **The repository goes public once the public-release scaffolding has landed** | Owner | 2026-09-18 | The owner flips visibility in GitHub's settings, an owner-only act. Afterwards: apply `.github/rulesets/main.json`, enable private vulnerability reporting and secret scanning, and mark #74 and #103 done with the API responses as evidence. The history check behind it: a grep of all 105 commits found no secrets; gitleaks itself could not run |
+| D-44 | **No BuildCraft pilot.** ShellUX does not install BuildCraft's plugin early or file its process gaps in BuildCraft's tracker | Owner | 2026-09-18 | The agent had proposed the pilot and the owner had not asked for it. What stands is D-39 alone: the 1.0 tag waits for BuildCraft readiness bar R1 to R7, and `docs/sdlc.md` maps ShellUX's stages to BuildCraft's by convention until then |
+| D-45 | **The six gate-4 screens are approved** ("ShellUX 1.0 Screens") | Owner | 2026-09-18 | Redesign waves 2 to 4 and the plugin manager are built to them. D-48 adds one plugin-manager state to the screens |
+| D-46 | **ADR-0001 Amendment P is accepted**: first-party runtime loading does not meet Amendment E's trigger | Owner | 2026-09-18 | Holds while plugins are first-party (D-23), built by LEAPWare CI from LEAPWare source, and installed remotely only from the LEAPWare-Software organisation. **The trigger fires**, and real per-plugin separation becomes mandatory, the day a publisher outside that organisation is allowed, a catalogue or marketplace exists, D-23 reverses, or a hosted deployment ships |
+| D-47 | **Plugins are not signed in 1.0** | Owner | 2026-09-18 | The source restriction and the manifest `sha512` stand. The checksum is **entry-point validation**: it catches a damaged or mismatched package, not a deliberate substitution, because manifest and bundle travel together. Ed25519 signing in CI is the recorded alternative, for after 1.0 |
+| D-48 | **The plugin manager gains a fifth state: the installed files do not match their manifest**, offering **Reinstall** rather than Restart | Owner | 2026-09-18 | A restart cannot repair altered files. The screens and `DESIGN.md` gain the state in the change that builds the plugin manager |
 | D-31 | **The mission: a best-in-class UI/UX shell that hosts application plugins** | Owner | 2026-09-18 | "Best in class" is measured, not asserted: the bar is the table in `docs/plans/v1-production.md`, judged against **VS Code, Linear, Raycast and Outlook/Teams** (D-38). Delivering it is assigned to the agent sessions working this repository |
 | D-32 | **1.0 ships before #65**; #65 becomes a 1.1 item | Owner | 2026-09-18 | **Supersedes D-11 as the v1 gate, and D-13 in part (see D-36).** Consequence stated rather than hidden: "best for plugin authors" stays unproven at 1.0, because nobody outside the design will have built a plugin, and every document must say so |
 | D-33 | **1.0 ships unsigned**, for LEAPWare operators | Owner | 2026-09-18 | D-25's vendor choice (Azure Trusted Signing) stands; the purchase is deferred past 1.0. Operators get the SmartScreen path in `docs/INSTALL.md`. **Reverses if** distribution goes beyond LEAPWare operators |

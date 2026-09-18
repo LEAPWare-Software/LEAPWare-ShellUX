@@ -267,6 +267,16 @@ const ALLOWLIST = [
       'individually would make an unrelated dependency bump fail this check. Every ' +
       'other rule, including the path and line-ending rules, still applies here.',
   },
+  {
+    files: ['LICENSE', 'NOTICE'],
+    rules: ['hardcoded-hostname'],
+    reason:
+      'Decision D-42 licenses this repository under Apache-2.0. The licence text must be ' +
+      'reproduced verbatim, and it names the Apache licence URL; the NOTICE file names ' +
+      'the copyright holder by its public organisation URL, as the Apache NOTICE ' +
+      'convention expects. Neither is an endpoint anything in this repository contacts, ' +
+      'and neither file is code. Every other rule still applies to both.',
+  },
 ];
 
 // ---------------------------------------------------------------------------

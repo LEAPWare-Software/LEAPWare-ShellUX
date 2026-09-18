@@ -14,8 +14,7 @@ Raycast and Outlook/Teams, and the measurements are listed in
 [`docs/plans/v1-production.md`](docs/plans/v1-production.md). Until they are met and
 measured, this README does not claim them.
 
-License: [MIT](LICENSE). The licence for the public release is an open owner
-decision (D-42 in [`docs/DECISIONS.md`](docs/DECISIONS.md)).
+License: [Apache-2.0](LICENSE), with a [`NOTICE`](NOTICE) (decision D-42).
 
 ## Status
 
