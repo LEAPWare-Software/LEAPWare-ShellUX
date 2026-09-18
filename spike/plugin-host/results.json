@@ -1,0 +1,99 @@
+{
+  "electron": "43.2.0",
+  "chromium": "150.0.7871.129",
+  "platform": "win32",
+  "measuredAt": "2026-09-18T22:43:39.687Z",
+  "cases": [
+    {
+      "case": "A-same-scheme-path",
+      "csp": "default-src 'self'; script-src 'self' 'sha256-KUzwNnWmyOwq/87X+wktIQi68ElVC94WkBwM368UOjc='",
+      "loadError": null,
+      "result": {
+        "loaded": true,
+        "sameReact": true,
+        "chunk": "chunk-loaded",
+        "violations": []
+      },
+      "console": []
+    },
+    {
+      "case": "B-second-scheme-nocors",
+      "csp": "default-src 'self'; script-src 'self' spike-plugin-nocors: 'sha256-KUzwNnWmyOwq/87X+wktIQi68ElVC94WkBwM368UOjc='",
+      "loadError": null,
+      "result": {
+        "loaded": false,
+        "error": "TypeError: Failed to fetch dynamically imported module: spike-plugin-nocors://p1/entry.js",
+        "violations": []
+      },
+      "console": [
+        "Access to script at 'spike-plugin-nocors://p1/entry.js' from origin 'shellux-spike://renderer' has been blocked by CORS policy: Cross origin requests are only supported for protocol schemes: chrome, chrome-extension, chrome-untrusted, data, http, https, spike-plugin-cors."
+      ]
+    },
+    {
+      "case": "C-second-scheme-cors",
+      "csp": "default-src 'self'; script-src 'self' spike-plugin-cors: 'sha256-KUzwNnWmyOwq/87X+wktIQi68ElVC94WkBwM368UOjc='",
+      "loadError": null,
+      "result": {
+        "loaded": true,
+        "sameReact": true,
+        "chunk": "chunk-loaded",
+        "violations": []
+      },
+      "console": []
+    },
+    {
+      "case": "D-second-scheme-cors-csp-omits-it",
+      "csp": "default-src 'self'; script-src 'self' 'sha256-KUzwNnWmyOwq/87X+wktIQi68ElVC94WkBwM368UOjc='",
+      "loadError": null,
+      "result": {
+        "loaded": false,
+        "error": "TypeError: Failed to fetch dynamically imported module: spike-plugin-cors://p1/entry.js",
+        "violations": [
+          "script-src-elem blocked spike-plugin-cors"
+        ]
+      },
+      "console": [
+        "Loading the script 'spike-plugin-cors://p1/entry.js' violates the following Content Security Policy directive: \"script-src 'self' 'sha256-KUzwNnWmyOwq/87X+wktIQi68ElVC94WkBwM368UOjc='\". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blo"
+      ]
+    },
+    {
+      "case": "E-no-csp-at-all",
+      "csp": null,
+      "loadError": null,
+      "result": {
+        "loaded": true,
+        "sameReact": true,
+        "chunk": "chunk-loaded",
+        "violations": []
+      },
+      "console": [
+        "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://"
+      ]
+    },
+    {
+      "case": "G-build-time-rewrite-no-importmap",
+      "csp": "default-src 'self'; script-src 'self'",
+      "loadError": null,
+      "result": {
+        "loaded": true,
+        "sameReact": true,
+        "chunk": "chunk-loaded",
+        "violations": []
+      },
+      "console": []
+    },
+    {
+      "case": "F-inline-importmap-not-hashed",
+      "csp": "default-src 'self'; script-src 'self'",
+      "loadError": null,
+      "result": {
+        "loaded": false,
+        "error": "TypeError: Failed to resolve module specifier \"react\". Relative references must start with either \"/\", \"./\", or \"../\".",
+        "violations": []
+      },
+      "console": [
+        "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-KUzwNnWmyOwq/87X+wktIQi68ElVC94WkBwM368UOjc='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+      ]
+    }
+  ]
+}
