@@ -16,6 +16,24 @@ from so a reader can check it.
 
 ### Added
 
+- **The mission, and the documents that carry it.** The owner set the mission on
+  2026-09-18: a best-in-class UI/UX shell that hosts application plugins (D-31).
+  `README.md` is recast around it, in the order `leapware-sessionkeeper` uses for a
+  public repository. `DESIGN.md` is design gate 3, written with impeccable from the
+  generated tokens ("The Operator's Instrument"), with its sidecar in
+  `.impeccable/design.json`. `docs/plans/v1-production.md` is the plan and the bar
+  "best in class" is measured by. `docs/sdlc.md` is the lifecycle ShellUX runs by
+  convention until LEAPWare BuildCraft can enforce it (D-39), with the readiness bar
+  the 1.0 tag waits for. `docs/DECISIONS.md` records D-31 to D-41, and D-42 to D-45
+  as open owner calls. **Not done:** gate 4 (the screens) awaits owner approval, and
+  nothing in `src/` implements `DESIGN.md` yet.
+- **A test that holds the context files to their caps**
+  (`scripts/__tests__/context-caps.test.mjs`, inside `test:scripts` and so inside
+  `verify`): `HANDOFF.md` at most 3000 bytes, `CLAUDE.md` at most 200 lines, the
+  caps the owner set on 2026-09-17. Both halves were mutation-probed: a 3001-byte
+  `HANDOFF.md` and a 201-line `CLAUDE.md` each fail it. **What made it necessary:**
+  a cap nothing measured. On 2026-09-18 the two files were 70,219 bytes and 334 lines.
+
 - **The process split: one `BaseWindow`, two `WebContentsView`s, and a host-owned
   focus ring (plan §3.2, §5, Phase 7).** The shell is no longer one renderer.
   `electron/main/paneViews.ts` creates host chrome and an extension surface,
@@ -147,6 +165,26 @@ from so a reader can check it.
 
 ### Changed
 
+- **`README.md`'s long sections moved, verbatim, into `docs/`**: `getting-started.md`,
+  `overview.md`, `performance.md`, `accessibility.md` (with the 1.0 keyboard-gate
+  position, D-37, stated first), `testing.md` and `security-posture.md`. The old
+  Project Status, Documentation and Contributing sections are archived in
+  `docs/history/readme-status-2026-08.md`. Relative links were corrected for each new
+  location, and every reference to a moved section was repointed: `SECURITY.md`,
+  `CONTRIBUTING.md`, `DEVELOPER.md`, two issue templates, `.github/ISSUES_MANIFEST.md`,
+  ADR-0001 (as a dated superseding note) and four code comments. Measured afterwards with a
+  one-off Node script that resolved every `](path)` link in `git ls-files "*.md"`
+  against the filesystem: 0 unresolved across 39 files. Nothing in the repository
+  checks this on every change (GitHub #54); `check:portability` skips `.md`.
+- **`HANDOFF.md` cut to the transition only** (2,137 bytes); the previous file is
+  archived verbatim in `docs/history/handoff-archive-2026-08.md`, and a line in the
+  new file says that the "HANDOFF §N" citations across the repository refer there.
+  **`CLAUDE.md` cut to 199 lines**: the traps and the gates' history moved verbatim to
+  `docs/traps.md`, with a one-line pointer per trap left behind.
+- **`PRODUCT.md` states the mission first**, and three passages today's decisions
+  made stale are corrected: the commercial question is decided (D-23), the title
+  freeze is lifted (D-36, D-40), and 1.0's accessibility bar is the keyboard gate
+  (D-37).
 - **ADR-0002 gained Amendment A, and the checker gained three rules' worth of
   teeth.** ADR-0004 clause 8 named four collisions between the desktop lane and
   the no-local-environment-dependencies mandate *in advance*; all four are settled
@@ -233,6 +271,10 @@ from so a reader can check it.
   become the expensive one.
 
 ### Fixed
+
+- **Two links in `DEVELOPER.md` pointed outside the repository**
+  (`../src/examples/HelloExtension.tsx` and its test, from a file at the root). Found
+  by the link sweep this change ran; nothing checks inter-document links (GitHub #54).
 
 - **The production audit had been red for six weeks and nobody saw it.** The
   scheduled audit failed on every Monday from 2026-08-10 to 2026-09-14 on a high

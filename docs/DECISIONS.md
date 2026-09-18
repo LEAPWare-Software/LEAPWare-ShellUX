@@ -25,21 +25,27 @@ question from a settled one. That is a reporting defect, not a process one.
 
 | # | Decision | Called by | Blocks | Cost to decide |
 |---|---|---|---|---|
-| D-22 | **Who runs #65, and when do they start?** | **Owner** | Step 3 of 8, and step 4 is unsizeable behind it | An assignment and a calendar slot. **This is the only question on this page an agent cannot answer**, because the whole point of #65 is that the author must not be whoever designed the contract |
-
-**Every other row on this page was OPEN and is now decided.** On **2026-08-04**
-the owner delegated in one instruction: *"these are CPO/CTO calls, make them."*
-That delegation is the authority for D-23 through D-28 below and it is written
-down rather than assumed, because this file's own rule is that an agent may
-recommend and may not fill the CALLED BY column unaided. **Each is one line to
-reverse, and each names what reverses it.**
-
----
+| D-42 | **Licence for the public repository**: Apache-2.0 (the house pattern, as `leapware-sessionkeeper` ships) or MIT (what `package.json` and `LICENSE` say today) | **Owner** | Plan step 3, going public | One word. A licence granted on public code cannot be taken back |
+| D-43 | **Flip the repository to public**, having read the risk D-34 records | **Owner** | Plan step 3, and through it the update feed, the ruleset and private vulnerability reporting | A settings click, after the history scan in step 3 is clean |
+| D-44 | **Route ShellUX's SDLC friction into BuildCraft's tracker under a `pilot:shellux` label** | **Owner** | Plan step 0b, and BuildCraft's readiness bar (D-39) depends on it | A yes. Filing into another repository is outward, so it is asked rather than assumed |
+| D-45 | **Approve the gate-4 screens** (the ShellUX 1.0 Screens canvas) | **Owner** | Plan steps 4 to 6b: no redesign component is written before this | A review of six frames |
+| ~~D-22~~ | ~~Who runs #65, and when do they start?~~ **No longer blocks v1: D-32 moves #65 after 1.0.** It still needs an owner before 1.1, and the reason it cannot be an agent is unchanged | Owner | 1.1 | An assignment |
 
 ## 2. DECIDED
 
 | # | Decision | Called by | When | What was decided |
 |---|---|---|---|---|
+| D-31 | **The mission: a best-in-class UI/UX shell that hosts application plugins** | Owner | 2026-09-18 | "Best in class" is measured, not asserted: the bar is the table in `docs/plans/v1-production.md`, judged against **VS Code, Linear, Raycast and Outlook/Teams** (D-38). Delivering it is assigned to the agent sessions working this repository |
+| D-32 | **1.0 ships before #65**; #65 becomes a 1.1 item | Owner | 2026-09-18 | **Supersedes D-11 as the v1 gate, and D-13 in part (see D-36).** Consequence stated rather than hidden: "best for plugin authors" stays unproven at 1.0, because nobody outside the design will have built a plugin, and every document must say so |
+| D-33 | **1.0 ships unsigned**, for LEAPWare operators | Owner | 2026-09-18 | D-25's vendor choice (Azure Trusted Signing) stands; the purchase is deferred past 1.0. Operators get the SmartScreen path in `docs/INSTALL.md`. **Reverses if** distribution goes beyond LEAPWare operators |
+| D-34 | **The repository goes public and updates come from GitHub Releases** (`provider: github`) | Owner | 2026-09-18 | **Reverses D-09 and D-12**, and makes D-27's branch protection possible, as a ruleset. **The risk, recorded so it is accepted knowingly:** a public release makes the unsigned installer downloadable by anyone, and update integrity then rests on the `sha512` in `latest.yml` over HTTPS from the same release. That is a **guardrail**, not an integrity control: whoever controls the GitHub account controls what every client installs. Gated on D-42 and D-43 |
+| D-35 | **Redesign waves 2, 3 and 4 all ship in 1.0** | Owner | 2026-09-18 | Waves 3 and 4 no longer wait for #65. Each wave passes design gates 3 and 4 first (D-40, D-45) |
+| D-36 | **Plugins install, enable and disable at runtime in 1.0** | Owner | 2026-09-18 | A manifest, a loader, lifecycle hooks (#17), a versioned contract (#28, #32, deciding #68), a mutable nav tree (#16), badge clearing (#80) and a conformance kit (#57), plus a block `title` and a plugin `icon` (D-40). **Supersedes D-13 for those issues.** Other contract gaps ship as named limits. D-23 still holds: first-party plugins only, and the extension surface is **crash containment, not isolation** (ADR-0001 Amendment E) |
+| D-37 | **Accessibility at 1.0 is a keyboard gate**: every command reachable from the palette, shortcuts visible, full keyboard operation with a visible focus ring, pinned by browser-lane specs | Owner | 2026-09-18 | Screen readers (WCAG 2.2 AA, NVDA, #60) move to 1.1 and are labelled **not done** wherever accessibility is described. D-24 is unchanged: ADR-0005 stays `Proposed` |
+| D-38 | **The benchmarks are VS Code, Linear, Raycast and Outlook/Teams** | Owner | 2026-09-18 | The heuristic review in plan step 6c is scored against these four, by an agent that did not build the UI |
+| D-39 | **The SDLC is led by LEAPWare BuildCraft, and v1.0.0 waits for it** | Owner | 2026-09-18 | BuildCraft is itself being built: on this date it was v0.1.0 with no tag, one no-op rule, and every stage, role and proof gate `PROPOSED`. ShellUX runs BuildCraft's decided model (stage order, role rule D3) **by convention** per `docs/sdlc.md`, supplies BuildCraft's requirements as its pilot, and installs each gate as it ships. **The 1.0 tag waits for BuildCraft readiness bar R1 to R7**, and then the release candidate runs BuildCraft's full stage sequence, enforcing. **No 1.0 date can be given** until BuildCraft sizes its gates. "Built under BuildCraft" may be claimed only for rules that were enforcing |
+| D-40 | **SHAPE-BRIEF gate points confirmed**: §3 editorial voice, **plus** the manifest gains a block `title` and a plugin `icon`; §4 type stays 11 to 13px; §9 the full keyboard-driven palette is in 1.0, arrow keys included | Owner | 2026-09-18 | §9's arrow keys still land as their own change with their own review, because they cost an entry in `KEY_EVENT_ALLOWLIST`; the owner call moves them into 1.0, not into a redesign wave. §13.1 (redesign before #65) is moot under D-32 |
+| D-41 | **DESIGN.md's Creative North Star is "The Operator's Instrument"** | Agent, recommended when the owner asked for guidance | 2026-09-18 | Taken from `PRODUCT.md`'s own words, and the sharpest test of the three offered: "would an instrument do this?" rejects decoration, sales copy and loud chrome. "Night-Shift Console" was rejected because it pulls toward dark-because-tools-are-dark, an anti-reference; "Switchboard" because its imagery invites skeuomorphic chrome. **Reverses** on the owner's word; it is one line |
 | D-23 | **Third parties are NOT customers in the next 12 months** (#93, was D-01) | Agent, under the owner's 2026-08-04 delegation | 2026-08-04 | Follows the answer already given in `PRODUCT.md`: the users are LEAPWare's own operators and third-party authors are a means, not a customer. Deciding the commercial question the same way makes the two consistent instead of quietly opposed. **Consequence, which is the point:** #29, #30, #31, #32 and #57 shrink from "build an ecosystem" to "keep the contract honest and documented". No conformance kit, no published package, no versioning mechanism, no stability markers — until a real third party exists. **Reverses if** one signs |
 | D-24 | **ADR-0005 stays `Proposed`; two-process ships; arm B is not run for v1** (#102, was D-04) | Agent, under delegation | 2026-08-04 | The register already recorded this as not release-blocking, and D-17 chose two-process *because it is safe under either outcome*. Running arm B would resolve a question whose answer changes nothing that ships. It is also an assistive-technology measurement, and #60 records that no assistive technology has ever been pointed at this application — so arm B is one narrow probe inside a hole that big, and doing it alone would read as more coverage than it is. **Folded into step 4**, where the accessibility question gets addressed as a whole or not at all. **Reverses if** a three-process need appears |
 | D-25 | **Windows signing is Azure Trusted Signing, bought at step 6 and not before** (was D-05) | Agent, under delegation | 2026-08-04 | The vendor question is decided now; the spend still waits on D-10. The installed `electron-builder` is 26.15.3, which ships `windowsSignAzureManager.js` and a native `azureSignOptions` key, so no custom signtool integration is needed. The alternative is behind reality: since the 2023 CA/B rule change, OV/EV private keys are issued on hardware tokens or in a cloud HSM and are **not** handed over as an exportable file, and a hardware token cannot attach to a GitHub-hosted runner — which is what `docs/signing.md`'s `CSC_LINK` route assumes. `azureSignOptions` and `signtoolOptions` are mutually exclusive, so switching later stays a configuration edit. **Reverses if** the clean-VM SmartScreen check in step 8 fails on Azure's intermediates, a live risk `docs/signing.md` §3 already records |
@@ -48,11 +54,11 @@ reverse, and each names what reverses it.**
 | D-28 | **`eslint-plugin-react-refresh` pins at 0.4.26 until after #65** (#105, was D-08) | Agent, under delegation | 2026-08-04 | 0.5.3 emits 11 warnings, every one on an `Object.freeze(...)` export. The tree did not change; the rule did. `Object.freeze` on a module-level constant is load-bearing in this repository — `hostConstants.test.ts` pins what it does and does not deliver — so silencing 11 sites to take a lint bump is the tail wagging the dog. **Bundled deliberately with D-19**: React 19 also waits for #65, and both touch the same surfaces, so they become one considered change instead of two deferrals that each return a third time. The pin carries its reason in configuration, not as an inline suppression. **Reverses when** #65's friction log lands |
 | D-29 | **Row height is 32px, `--row-h-comfortable`** | Agent, under delegation | 2026-08-04 | Both mock extensions render two-line rows, and two lines at 12px over 11px do not fit 28px once the 4px vertical rhythm is there. 32px is still a **27% density gain over today's measured 44px**, and it consumes a token that already exists with zero consumers rather than inventing a number. Direction B's per-row series fits its 20px band exactly. **Reverses if** an operator turns out to scan 200 rows at a time, which is a question #65 will answer better than taste will |
 | D-30 | **`npm run verify` runs once per wave, not once at the end** | Agent, under delegation | 2026-08-04 | Ten stages, 12–13 minutes. Four waves means roughly 52 minutes of gate time across the redesign. That is cheap against a failed matrix leg and it is what rule 2 asks for — real output in each pull request body, which only a real run produces. Wave 1 is the highest blast radius in the whole plan, because a token change moves every painted pixel, so it is the last place to batch verification |
-| D-09 | **Repository stays private for now** | Owner | 2026-08-03 | Going public would have collapsed D-03, D-07 and the update feed into one free answer. Rejected for now on its own merits. The consequence is that each of those three needs its own answer, which is why they are three rows above and not one |
+| D-09 | ~~**Repository stays private for now**~~ **Superseded by D-34, 2026-09-18.** | Owner | 2026-08-03 | Going public would have collapsed D-03, D-07 and the update feed into one free answer. Rejected for now on its own merits. The consequence is that each of those three needs its own answer, which is why they are three rows above and not one |
 | D-10 | **No money spent before #65** | Owner | 2026-08-03 | No signing certificate, no paid GitHub plan, no update-feed host. All three would buy a release for a product with no proven consumer. D-05 and D-07 are therefore **deferred, not open-ended** |
-| D-11 | **#65 is the next move**, and it decides the project | Owner | 2026-08-03 | Build one real first-party module against the contract, by someone who did not design it. The deliverable is the author's friction log, not the module. **Not started — standing by** |
-| D-12 | **The update feed is out of v1** (#103) | Owner | 2026-08-03 | Follows from D-10. `publish` is unset, so electron-builder writes no `app-update.yml` and the app reports the updater unconfigured — `electron-builder.yml` calls that the honest state. A first release does not need a feed |
-| D-13 | **Contract gaps stay open until #65 runs** | Owner | 2026-08-03 | #17, #16, #80, #91, #57, #28/#32/#68. Each is a plausible thing #65's author will hit. Fixing them first is deciding the gaps from inside, which is the one thing #65 exists not to do |
+| D-11 | ~~**#65 is the next move**, and it decides the project~~ **Superseded as the v1 gate by D-32, 2026-09-18.** | Owner | 2026-08-03 | Build one real first-party module against the contract, by someone who did not design it. The deliverable is the author's friction log, not the module. **Not started — standing by** |
+| D-12 | ~~**The update feed is out of v1** (#103)~~ **Superseded by D-34, 2026-09-18.** | Owner | 2026-08-03 | Follows from D-10. `publish` is unset, so electron-builder writes no `app-update.yml` and the app reports the updater unconfigured — `electron-builder.yml` calls that the honest state. A first release does not need a feed |
+| D-13 | ~~**Contract gaps stay open until #65 runs**~~ **Superseded for #16, #17, #28, #32, #57, #68 and #80 by D-36, 2026-09-18.** | Owner | 2026-08-03 | #17, #16, #80, #91, #57, #28/#32/#68. Each is a plausible thing #65's author will hit. Fixing them first is deciding the gaps from inside, which is the one thing #65 exists not to do |
 | D-14 | Runtime is **Electron 43.x** | Owner | 2026-08-02 | Tauri rejected: multi-webview-in-one-window is behind an `unstable` flag, and Win+macOS under Tauri means two rendering engines for a graphics-heavy app. See ADR-0004 |
 | D-15 | **Windows 11 primary, macOS second, no Linux** | Owner | 2026-08-02 | See D-06, which asks whether macOS is in the *first* release |
 | D-16 | **The ribbon is deleted** | Owner | 2026-08-02 | One command registry, four surfaces: 32px context bar, Cmd-K palette, floating toolbar, docked omnibox. Shipped in Phase 4 |
@@ -68,54 +74,19 @@ reverse, and each names what reverses it.**
 
 ## 3. Line of sight to v1
 
-**Eight steps. One of them cannot be sized until #65 runs, and pretending otherwise
-is what makes this feel endless.**
+**Rewritten 2026-09-18.** The eight-step table that stood here was built around #65
+as the v1 gate. D-32 moved #65 after 1.0 and D-39 made BuildCraft's readiness the
+gate instead, so the old table is superseded rather than edited. **The plan is now
+[`docs/plans/v1-production.md`](plans/v1-production.md)**, and its step list is
+the line of sight. Its status is re-derived from `git` and `gh`, never quoted.
 
-**Re-measured 2026-08-04.** Steps 1 and 2 are done. Step 2b is new: the owner asked
-for the redesign and it is real work sitting between here and a release, so it is on
-the page rather than in a side conversation. Numbering is not shifted, because
-references to "step 4" exist elsewhere.
+What is still true from the old table: signing (old step 6) is deferred by D-33;
+the application icon, version bump and clean-VM verification (old steps 5, 7
+and 8) are plan steps 8 to 10.
 
-| Step | What | Status | Size |
-|---|---|---|---|
-| 1 | Merge PR #104 — the pre-#65 prep | **DONE**, merged 2026-08-03 | — |
-| 2 | D-02: merge or reject PR #71 | **DONE**, merged 2026-08-03 | — |
-| 2b | **The redesign.** Wave 1 landed at `ce1d97a`; waves 2–4 remain | **IN FLIGHT**, 1 of 4 waves | ~3 sessions, sized below |
-| 3 | **Run #65.** Go / no-go on the whole project | **Waiting on D-22 — an assignment.** The one thing nobody has picked up | Unknown until an author starts |
-| 4 | **Fix what #65 finds**, plus the accessibility question D-24 folded in | **UNKNOWN SIZE until step 3 runs.** This is the honest gap and it has not moved | Unknown |
-| 5 | Application icon — `electron-builder.yml` contains zero `icon` keys, measured | Not started | ~1 hour |
-| 6 | Buy and wire Azure Trusted Signing per D-25 | Vendor decided; spend still deferred by D-10 | ~half a day + money |
-| 7 | Version bump, CHANGELOG, tag `vX.Y.Z` | Not started | ~1 hour |
-| 8 | `docs/RELEASE.md` §2.3 and §3 — signature verified with the platform's own tool, clean-VM SmartScreen run | Not started. **Windows only, per D-26** | ~half a day |
-
-**Step 2b, broken out.** Three waves, and the streams inside wave 2 own disjoint
-files so they do not serialise (rule 6):
-
-| Wave | Streams | Closes | Gate |
-|---|---|---|---|
-| 2 | **A** `echartsRenderer.ts` + `chart/*` + `e2e/chart.spec.ts` · **B+C, MERGED — see below** | A: #111, #112, #113 · B+C: **#110, #114 DONE in tree, unmerged** | `verify` ten stages + browser lane, per D-30 |
-| 3 | The system: rows, nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` | none — this is the redesign proper | same |
-| 4 | Direction B's instrument layer: per-row series with threshold bands, the list minimap, the overview state | none | same |
-
-**Streams B and C did not stay disjoint, and were run as one stream rather than
-two.** The split assumed #110 was confined to `PaneWrapper.tsx`. It is not: giving
-the pane a `footer` slot only fixes anything once a caller uses it, and the caller
-is pane 3 in `ShellLayout.tsx` — the file stream B owns. Two streams writing that
-file concurrently is what rule 6 forbids, so they were serialised into one change
-covering both issues rather than run in parallel against a false disjointness. **The
-disjointness claim for stream A is untouched and still holds**; A remains parallel
-to whatever comes next.
-
-**Steps 5, 7 and 8 are roughly one session together** once step 4 is known.
-**Steps 2b and 3 are independent of each other** and could run in parallel if a
-second person existed; with one, 2b first is the choice already made, so that #65's
-author judges the contract rather than a shell whose chart title overprints its own
-axis.
-
-**The one number that cannot be given.** Everything above is sized except step 4, and
-step 4 cannot be sized until step 3 runs, and step 3 has no owner. **Any total that
-includes step 4 is invented.** Excluding it: roughly five sessions plus the signing
-spend.
+**The one number that cannot be given** has changed rather than gone away. It used
+to be step 4, unsizable until #65 ran. It is now BuildCraft's readiness bar
+(D-39), unsizable until BuildCraft's requirements package sizes its gates.
 
 ---
 

@@ -94,7 +94,7 @@ body:
       options:
         - label: This is not a suspected vulnerability. (If it is, close this and use SECURITY.md.)
           required: true
-        - label: I checked the accepted limits in README.md's security posture section and in SECURITY.md, and this is not one of them.
+        - label: I checked the accepted limits in docs/security-posture.md and in SECURITY.md, and this is not one of them.
           required: true
         - label: Every claim above names the file and line it rests on.
           required: true

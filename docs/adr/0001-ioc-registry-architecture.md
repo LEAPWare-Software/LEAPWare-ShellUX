@@ -3607,5 +3607,6 @@ green tree with the views, the adapter and a deterministic focus ring:
   specification, adversarial edge cases and definition of done.
 - [`DEVELOPER.md`](../../DEVELOPER.md) — the extension-author view of this
   contract.
-- [`README.md`](../../README.md) — project status, security posture and its
-  stated limits.
+- [`README.md`](../../README.md) — project status. **Superseding note, 2026-09-18:** the
+  security posture and its stated limits moved verbatim to
+  [`docs/security-posture.md`](../security-posture.md) when the README was recast.

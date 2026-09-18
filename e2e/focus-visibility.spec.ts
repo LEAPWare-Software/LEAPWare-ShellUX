@@ -6,8 +6,9 @@ import { activateExtension, openShell } from './shell';
  * ============================================================================
  * A VISIBLE FOCUS INDICATOR, MEASURED RATHER THAN ASSUMED.
  * ============================================================================
- * WCAG 2.2 asks for visible focus indication, and README.md lists it as AA work
- * in scope. jsdom cannot check it: it computes no styles from a stylesheet, it
+ * WCAG 2.2 asks for visible focus indication. The AA target that once put it in
+ * scope is withdrawn; decision D-37 makes a visible focus ring part of the 1.0
+ * keyboard gate instead (`docs/accessibility.md`). jsdom cannot check it: it computes no styles from a stylesheet, it
  * has no `:focus-visible` matching, and it paints nothing — so a jsdom test can
  * only assert that a class name is present, which is a statement about the
  * source and not about what a user can see.

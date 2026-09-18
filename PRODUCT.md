@@ -9,6 +9,22 @@ is the owner's, not an inference, except where the sentence says otherwise.
 
 ---
 
+## Mission
+
+**A best-in-class UI/UX shell that hosts application plugins.** The owner set this
+on 2026-09-18 (decision D-31), and it is the test every other section of this file
+serves.
+
+"Best in class" is only a claim once it is measured. The bar, in full, is in
+[`docs/plans/v1-production.md`](docs/plans/v1-production.md): plugins installed and
+removed at runtime, every command reachable from the keyboard, performance budgets
+that CI enforces, a heuristic review against **VS Code, Linear, Raycast and
+Outlook/Teams** (D-38), and operators using the packaged app with the owner watching.
+One part stays unproven at 1.0 and is said so everywhere: **"best for plugin
+authors"**. Nobody outside the design will have built a plugin before 1.0 (D-32).
+
+---
+
 ## Register
 
 product
@@ -23,8 +39,9 @@ tab visited for a minute.
 
 Third-party extension authors are **a means, not a customer**. The contract they
 build against has to be legible, but they are not who the interface is designed
-for. GitHub #93 / register row D-01 asks the commercial version of this question
-and is still open; this file answers only the design version of it.
+for. The commercial version of this question (GitHub #93) was decided on 2026-08-04 as
+register row D-23: third parties are not customers in the next 12 months. The two
+answers agree.
 
 **The operator does all four jobs, and no one of them wins.** Asked which task
 dominates the screen — monitoring, working a queue, investigating, or configuring
@@ -121,9 +138,10 @@ Five. Strategic, not visual. Each one decides arguments that will actually come 
 1. **The host has an editorial voice over publisher data.** A publisher's
    identifier is never presented as a human heading, and a payload's *type* is
    never a user-visible label. Where the contract gives the host nothing human to
-   show, the host shows nothing rather than showing the machine string. (Some of
-   this is freeze-blocked by GitHub #65 — the blueprint has no title field. The
-   host-side half is not blocked.)
+   show, the host shows nothing rather than showing the machine string. The
+   freeze that once blocked a human title (the blueprint has no title field) is
+   lifted: decisions D-36 and D-40 add a block `title` and a plugin `icon` to the
+   versioned plugin manifest.
 
 2. **No mode owns the layout.** The operator monitors, transacts, investigates and
    configures in the same window. The shell must not be tuned so that one of those
@@ -148,6 +166,14 @@ Five. Strategic, not visual. Each one decides arguments that will actually come 
 ---
 
 ## Accessibility & Inclusion
+
+**For 1.0: a keyboard gate** (decision D-37, 2026-09-18). Every command is reachable
+from the command palette, shortcuts are shown in the interface, the whole shell can be
+operated from the keyboard, and focus is always visible. Each of those is pinned by a
+browser-lane spec. **Screen-reader support is not done**: WCAG 2.2 AA and an NVDA
+pass (GitHub #60) are 1.1 work, and no document may describe them otherwise.
+
+What follows is the 2026-08-03 position, which D-37 extends rather than replaces.
 
 **Best effort. No stated compliance target.** The owner's decision, 2026-08-03.
 

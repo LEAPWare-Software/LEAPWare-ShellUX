@@ -18,7 +18,8 @@ import { CommandButton, CommandMenuItem } from './commandListItem';
  * THE 2026-07-31 ACCESSIBILITY AUDIT FOUND EIGHT BLOCKERS. HERE IS WHERE EACH
  * ONE LIVES NOW, AND THE TEST THAT HOLDS IT.
  * ---------------------------------------------------------------------------
- * Enumerated from `README.md`'s own list rather than reconstructed from the old
+ * Enumerated from the list in `docs/accessibility.md` (in `README.md` until
+ * 2026-09-18) rather than reconstructed from the old
  * component, because picking eight by inference is how one of them is lost.
  *
  *  1. **The overflow menu was clipped to zero height** by two `overflow-hidden`

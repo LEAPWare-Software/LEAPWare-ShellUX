@@ -47,7 +47,7 @@ import { makeBlueprint } from './fixtures';
  *   4. A NON-`ShellUXError` IN THE WRITER'S FRAME — out of `patchContext` and out
  *      of `setBadgeCount`, neither of which is contracted to deliver one.
  *
- * The real limit, stated in the vocabulary of `README.md`: **a listener is a
+ * The real limit, stated in the vocabulary of `docs/security-posture.md`: **a listener is a
  * synchronous call into untrusted code inside another holder's write. It can
  * observe, it can re-enter, and it can throw into the writer's frame.** That is
  * not a defect in the freeze and it is not a bug to fix here — a store with no

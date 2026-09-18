@@ -4,13 +4,13 @@ This is the onboarding guide for third parties building extensions against the
 LEAPWare-ShellUX host.
 
 > **START WITH THE EXAMPLE, NOT WITH THIS DOCUMENT.**
-> [`src/examples/HelloExtension.tsx`](../src/examples/HelloExtension.tsx) is a
+> [`src/examples/HelloExtension.tsx`](src/examples/HelloExtension.tsx) is a
 > complete, working extension in about a hundred lines, most of which is comment.
 > Copy it, rename it, and change the two view components; the five manifest keys
 > and the one command are the whole contract you must satisfy.
 >
 > It is **registered and driven by a test** —
-> [`src/examples/__tests__/HelloExtension.test.tsx`](../src/examples/__tests__/HelloExtension.test.tsx)
+> [`src/examples/__tests__/HelloExtension.test.tsx`](src/examples/__tests__/HelloExtension.test.tsx)
 > — so it cannot quietly stop being a working extension. *Tests:* "is accepted by
 > the registry the host actually uses", "renders both of its panes and moves the
 > selection between them", and "offers its command only when its predicate says
@@ -35,7 +35,7 @@ LEAPWare-ShellUX host.
 landed**: `src/core/types.ts`, `src/core/RegistryContext.tsx` and
 `src/core/ShellAPI.ts` all exist and are covered by tests. The signatures in
 this guide are now printed from those files rather than withheld. See
-[`README.md`](README.md#project-status).
+[`README.md`](README.md#status).
 
 **ISSUE-002 — the three-pane resizable layout — is implemented, tested and
 merged**, so the passages describing the panes are written in the present tense
@@ -1200,7 +1200,7 @@ exactly one of them.
 | **Entry-point validation** | Real at the documented door; bypassable by a caller who reaches internals another way. | Id allowlisting, reserved-word refusal, every length and count bound, `setBadgeCount`/`setSelectedItem`/`patchContext` argument checks. |
 | **Guardrail** | Prevents honest mistakes only; enforces nothing against deliberate action. | `ExtensionHostBoundary`, `useActivation()`'s refusal below it, `useExtensionActivation()`, the registry sweep's listener guard, and "`isVisible` predicates must be pure" — the signature closes the direct route, it does not close a captured one. |
 
-Every one of those cells names its tests in `README.md`'s "Security posture" section,
+Every one of those cells names its tests in [`docs/security-posture.md`](docs/security-posture.md),
 which is where the full list lives. **No security sentence in this guide may stand
 without naming the test that exercises it** — see "The rule about security claims"
 below.
