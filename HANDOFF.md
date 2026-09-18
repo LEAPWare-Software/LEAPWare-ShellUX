@@ -31,7 +31,7 @@ Decisions, including the four owner calls still open (D-42 to D-45):
 ## The next step
 
 1. Land `docs/mission-recast`.
-2. Plan step 0: triage Dependabot #117 to #120 and #125. All were red when checked.
+2. Plan step 0: land the D-28 ignore in `dependabot.yml`, then recreate the group (#127).
 3. The owner calls D-42 to D-45. Steps 3, 0b and 4 onward wait on them.
 
 ## The rules that bite

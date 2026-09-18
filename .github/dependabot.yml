@@ -40,6 +40,20 @@ updates:
           - minor
           - patch
 
+    # A pin recorded where the bot reads it, not only in docs/DECISIONS.md.
+    # D-28 holds eslint-plugin-react-refresh below 0.5: 0.5.x flags every
+    # `Object.freeze(...)` export (11 warnings under `--max-warnings 0`), and
+    # those freezes are load-bearing here (see hostConstants.test.ts). Without
+    # this entry the minor-and-patch group carries the 0.5 bump into every weekly
+    # pull request and turns the whole group red: #125 and #127 both did, and on
+    # 2026-09-18 the group was declined for it. 0.x minors count as minor for
+    # grouping, so the ignore is by version range, not by update type.
+    # Remove this entry in the change that decides D-28's rule question (#105).
+    ignore:
+      - dependency-name: eslint-plugin-react-refresh
+        versions:
+          - '>=0.5.0'
+
     # Low, on purpose. Every one of these has to pass the full verify gate on
     # three operating systems before it merges, and an open queue longer than
     # this means the earlier ones are going stale rather than waiting.
