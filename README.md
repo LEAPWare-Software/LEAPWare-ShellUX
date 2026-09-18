@@ -626,12 +626,40 @@ that is a documentation bug — please report it.
 
 ## Accessibility
 
-**This project targets WCAG 2.2 Level AA.** That is the standard the work is
-being held to, and it is not yet met — the shell is pre-alpha and has not been
-audited. AA is the commitment; conformance will be claimed only after an audit,
-not before.
+> **CHANGED 2026-08-03.** This section said **"This project targets WCAG 2.2
+> Level AA"**, and that sentence is withdrawn rather than left standing. The
+> owner's decision, recorded in `PRODUCT.md`, is **best effort with no stated
+> conformance target.** A target nothing commits to is a claim without a test,
+> and this project's own rule is that such a claim is narrowed to what is
+> measured or deleted. The old sentence is quoted here rather than erased,
+> because the record of what was claimed is worth more than a clean page.
+>
+> This is a narrowing of a *claim*, not a withdrawal of *work*. Everything below
+> that has a test behind it still has that test behind it, and the three floors
+> named next are enforced by gates that run on every pull request.
 
-Level AA work in scope:
+**There is no stated conformance target.** Three floors are real, because each
+one is enforced mechanically rather than asserted:
+
+- **Contrast pairs are gated.** `design/check-contrast.mjs` fails a semantic
+  colour token with no row in `design/contrast-manifest.json`, and fails a row
+  naming a token that does not exist. Individual manifest rows still cite the
+  WCAG criterion they were measured against, because a measured ratio is a
+  measurement whatever the project's overall posture is.
+- **Focus is visible, measured on painted pixels.** `e2e/focus-visibility.spec.ts`
+  runs in a real browser, which is the only place this is observable at all.
+- **Colour is never the only channel.** Status carries a word or a mark as well
+  as a hue.
+
+Not committed to, and named so that no reader infers otherwise: screen-reader
+semantics, any assistive-technology verification at all (still open: #60 — none
+has ever been run against this application), reduced motion beyond what the two
+existing motion tokens imply, and internationalisation or RTL (still open: #66).
+Still open: #55, which records that an AA target was unattainable as written
+anyway, because extensions render two of the three panes and are given one
+accessibility obligation.
+
+Work that was done under the old target, and still stands on its own tests:
 
 - 4.5:1 contrast for body text, 3:1 for large text and for UI component
   boundaries.
@@ -692,7 +720,7 @@ claim that the shell has no keyboard behaviour.
 those eight. That is the whole of the claim.** It is not an audit against the full
 WCAG 2.2 AA criteria set, it was not performed by an external auditor, and it does
 **not** move this project to conformance — the paragraph at the top of this section
-still stands, and AA remains a target rather than a delivered state. What changed is
+still stands: there is no stated conformance target, AA included. What changed is
 that eight specific, reproducible defects that had been found are no longer present:
 
 - The overflow menu was **clipped to zero height** by two `overflow-hidden`

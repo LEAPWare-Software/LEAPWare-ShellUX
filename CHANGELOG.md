@@ -234,6 +234,48 @@ from so a reader can check it.
 
 ### Fixed
 
+- **The omnibox was never docked, and the word "docked" was already in this file
+  describing it (GitHub issue #110).** `PaneWrapper`'s body was a flex ITEM of a
+  `flex-row` and was not itself a column, so a child using `flex-1` to fill
+  vertically had no column parent to fill against and sized to its content; the
+  composer, being the last child of the scroll container, came to rest wherever
+  the ledger stopped — measured at y≈408 in an 860px pane, above roughly 450px
+  of empty pane. **Two changes, and they fix different halves.** The body is now
+  `flex flex-col`, so children can fill it; and `PaneWrapper` grows a `footer`
+  slot outside the scroll container, symmetric with `header`, which is where
+  pane 3's composer now lives. `OmniboxComposer` stopped drawing its own
+  `border-t p-1` because the slot draws them.
+  - **Found by looking at the running application. 1,739 tests were green
+    through it,** which is rule 4 in `CLAUDE.md` and the reason `e2e/` exists.
+  - **The two halves needed two browser assertions, and a mutation probe is what
+    proved it.** Reverting `flex flex-col` left the docked-footer case green —
+    the footer docks off the section's column and asks nothing of the body's.
+    `e2e/shell-layout.spec.ts` now carries "gives pane 3 a detail stack that
+    reaches the bottom of the scroll container rather than stopping at its
+    content" as well, and that one goes red under the same revert. The vitest
+    side asserts a class string and says so in its own title.
+
+- **The two content panes opened at sizes summing to 83 and warned on every
+  load (GitHub issue #114).** `react-resizable-panels` requires one group's
+  panels to sum to 100. When navigation collapses, pane 1 becomes a fixed 48px
+  `div` rendered outside `shell-panes`, so the group holds panes 2 and 3 alone —
+  but the pane-1 share was still being subtracted from pane 3's remainder. At a
+  measured 1440px that is 25 and 58.33333333333334, which the library
+  renormalised while warning `Invalid layout total size`, and pane 2 opened
+  about a fifth wider than `PANE_PX` asks for. The predicate is now
+  `paneOneIsInGroup = showChrome && !isNavCollapsed`, which is the question the
+  arithmetic was always asking. No new arithmetic: the same rebase the restored
+  path already applied, applied to the predicate that decides it.
+  - **Observable in jsdom, unusually for this redesign's defects.**
+    `measureGroup` reads a width jsdom reports as 0, `percentOf` falls through to
+    `PANE_FALLBACK_PERCENT`, and the library still does the arithmetic and still
+    warns — 26 and 56, summing to 82, at that fallback. Both totals are real; the
+    number moves with the group width and the defect does not.
+  - The existing case "survives a collapse toggled while a divider drag is in
+    flight" **expected the defect** at stubbed 1000px geometry: 47.4 and 52.6,
+    renormalised up from 36 and 40. It now expects 36 and 64, which is pane 2 at
+    exactly its 360px intent.
+
 - **`sr-only` does not work on a `<table>`, and the shell was shipping one.** CSS
   table sizing says a table's used width is never below its min-content width, so
   the `width: 1px` in `sr-only` is ignored; being absolutely positioned with no
@@ -250,7 +292,9 @@ from so a reader can check it.
   `src/components/command/`: `ContextBar.tsx` (32px, replacing the ribbon at about
   a third of the vertical cost), `CommandPalette.tsx` (Cmd-K, **browsable on an
   empty query**), `FloatingToolbar.tsx` (selection-triggered, pane 3 only) and
-  `OmniboxComposer.tsx` (docked, with the detected intent labelled before submit).
+  `OmniboxComposer.tsx` (**not** docked when this was written, though this entry
+  said it was — see the #110 entry at the top of this section, which is the
+  change that made the word true).
   `commandListItem.tsx` is the one row all four render, and the one place a plug-in
   string reaches the DOM. See ADR-0001 Amendment N.
 - **`Command`, generalising `RibbonAction`.** Four optional fields — `when`,

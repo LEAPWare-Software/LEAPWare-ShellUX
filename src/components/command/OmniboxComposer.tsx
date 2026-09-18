@@ -92,6 +92,15 @@ export const OMNIBOX_MATCH_LIMIT = 5;
 /**
  * The docked composer.
  *
+ * **"Docked" describes where the CALLER puts it, and became true with GitHub
+ * issue #110.** This form draws no border and no padding of its own: it belongs
+ * in `PaneWrapper`'s `footer` slot, and that slot draws both. Rendered anywhere
+ * else — as `paneSurfaces.test.tsx` does, standalone — it has no separating
+ * edge, which is correct for a component whose container owns its chrome and
+ * worth knowing before moving it. *Test:* `e2e/shell-layout.spec.ts` — "rests
+ * the omnibox against the bottom edge of pane 3, not against the end of the
+ * content", which measures both the docking and that the form spans the slot.
+ *
  * `matches` is recomputed on every render from the registry, so a command whose
  * predicate goes false while the box is open stops being offered on the next
  * render rather than staying listed until the user retypes.
@@ -126,10 +135,16 @@ export function OmniboxComposer({
     <form
       data-shell-region="omnibox"
       aria-label="Composer"
-      className={
-        'flex w-full flex-none flex-col gap-1 border-t p-1 text-[12px] ' +
-        `${TOKEN_CLASS.paneSlotEdge} ${TOKEN_CLASS.paneSurface} ${TOKEN_CLASS.paneText}`
-      }
+      /*
+        THE CONTAINER SUPPLIES THE EDGE AND THE PADDING, NOT THIS FORM.
+        This used to carry `border-t p-1` and `TOKEN_CLASS.paneSlotEdge`
+        because it was the last child of pane 3's scroll container and had to
+        draw its own separation from the ledger above it. It is now handed to
+        `PaneWrapper`'s `footer` slot (GitHub issue #110), and that slot already
+        draws exactly those three — keeping them here would render two border
+        lines a padding step apart.
+      */
+      className={`flex w-full flex-none flex-col gap-1 text-[12px] ${TOKEN_CLASS.paneSurface} ${TOKEN_CLASS.paneText}`}
       onSubmit={(event) => {
         // The page must not navigate. This is the whole of the key handling in
         // this module, and it is not key handling.

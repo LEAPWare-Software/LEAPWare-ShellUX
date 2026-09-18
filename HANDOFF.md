@@ -35,7 +35,66 @@ The rules:
 re-derivation are folded in below and throughout §3, §6, §7, §8 and §12.** Re-derive
 every SHA and every count again before trusting it — see §0.
 
-### NOTHING IS IN FLIGHT. `pre-65-prep` MERGED as `9929410` (PR #104)
+### IN FLIGHT: PR #115, `design/redesign-groundwork` → `main`, OPEN and unreviewed
+
+**This section said "NOTHING IS IN FLIGHT" and was stale for a whole branch.**
+Recorded rather than quietly overwritten, because §0 exists for exactly this.
+Re-derived 2026-08-04.
+
+**Nine commits of substance, 21 files, +2089 / −320 against `main`.** The total
+commit count is deliberately not given: it moves every time this section is
+corrected, and two corrections were already spent chasing it — one said nine when
+it was the tenth, the next said ten and twenty-two when it was the eleventh and
+twenty-one. `git rev-list --count main..HEAD` answers it in a second and cannot go
+stale, which is what §0 asks for. Three layers, worth separating when reading:
+
+| Commits | What | Issue |
+|---|---|---|
+| `73ee90e` … `6ba6053` (six) | Documents only — the UI audit, `PRODUCT.md`, the shape brief, the withdrawn WCAG 2.2 AA target, a compressed `CLAUDE.md`, six decisions closed in the register | — |
+| `ce1d97a` | Wave 1 of the redesign — chrome becomes its own plane, the accent becomes petrol | — |
+| `af6fdd9`, `c919e6d` | Pane 3's composer docks; the collapsed pane split sums to 100 | **#110**, **#114** |
+
+**Five UI defects were filed off the running application, #110 through #114.** The
+PR repairs two of them — the docked composer, issue #110 (~450px of dead pane), and the
+pane split, issue #114 (panes opened summing to 83 and warned on every load). **#111, #112 and #113 are
+untouched** — all three are chart-title and chart-contrast work in
+`echartsRenderer.ts` and `chart/*`, a disjoint file set, and they are the next
+change.
+
+**Both fixes were mutation-probed, and one probe changed the work.** Reverting
+`flex flex-col` on the pane body left the docked-footer browser case GREEN — the
+footer docks off the section's own column and never asked anything of the body's —
+so citing that file as the class's guard was an overclaim, caught before merge. A
+second case now guards the half that had nothing. A third finding came from review
+rather than a gate: the composer's WIDTH was unmeasured by both lanes after it
+stopped drawing its own chrome, and is now asserted.
+
+**A correction to `ce1d97a`'s own evidence block, which cannot be amended once
+pushed:** its message says "4 CIEDE2000 reference pairs green". Measured with
+`node design/check-contrast.mjs --self-test` during the adversarial review of this PR,
+the self-test prints **6** named reference-pair PASS lines (1, 2, 3, 9, 11, 25). The
+script is byte-identical to `e3078db`, so this is a miscount, not drift (rule 9).
+
+**Gates at the branch tip:** `npm run verify` exit 0, all ten stages, 1742 tests,
+100% on all four metrics, pasted in PR #115's body. `npm run test:browser` 54 of
+54. **Read the exit code carefully if you re-run it** — piping `verify` into
+`tail` reports `tail`'s status, which cost this session two false "exit 0"
+readings before it was caught.
+
+**Not done, and it is the whole of what is left before merge:**
+
+- **Nobody has reviewed PR #115.** Rule 1 wants adversarial review before merge and
+  this has had none. #74 records that branch protection is impossible on this
+  repository, so nothing mechanical will stop a merge without one.
+- **No person has seen either fix in the packaged Electron app.** The guards are
+  Playwright's, in Chromium, from the dev server — which is #61's point, unchanged.
+- **Wave 1's colour decisions have no reviewer either.** `tokens:check` and
+  `e2e/theme.spec.ts` gate the ratios; neither is a judgement about whether it
+  looks right.
+- **The PR is not split.** The six documentation commits and wave 1 could have been
+  their own PR and were not. `af6fdd9..c919e6d` is the fix-only range.
+
+### `pre-65-prep` MERGED as `9929410` (PR #104)
 
 **Read `docs/DECISIONS.md` first, not this file.** The decision register is new and it
 is where the open questions now live — one row each, who calls it, what it blocks,

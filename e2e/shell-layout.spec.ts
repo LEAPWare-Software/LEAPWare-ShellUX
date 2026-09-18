@@ -355,3 +355,100 @@ test.describe('the 240px navigation intent at a wide viewport', () => {
     expect(restored, 'the navigation pane no longer opens on its 240px intent').toBeLessThan(250);
   });
 });
+
+/**
+ * ============================================================================
+ * GITHUB ISSUE #110 — THE COMPOSER HAD NOWHERE TO DOCK.
+ * ============================================================================
+ * `PaneWrapper`'s body sat inside a `flex-row`, and was not itself a column
+ * flex container, so a child using `flex-1` to fill VERTICALLY had no column
+ * parent to fill against and sized to its content. The omnibox — the product's
+ * one persistent input — came to rest wherever the ledger happened to stop,
+ * above as much as 450px of dead pane.
+ *
+ * jsdom is structurally unable to see this. It does not lay out, and
+ * `getBoundingClientRect` returns 0x0, so the 1,739-case suite was green
+ * through the whole defect. The vitest side of this fix asserts only that a
+ * CLASS is present and says so in its own title; the behaviour is here.
+ *
+ * **THE FIX HAS TWO SEPARABLE HALVES AND THEY NEED TWO ASSERTIONS.** The issue
+ * says so, and a mutation probe confirmed it: reverting `flex flex-col` on the
+ * body while leaving the footer wiring in place left the docked-footer case
+ * below GREEN, because the footer is a `flex-none` sibling of the body's row
+ * inside the section's own column and docks whether or not the BODY is a
+ * column. The footer case guards part 2 only. The case after it guards part 1
+ * — that a child of the body using `flex-1` now fills the pane instead of
+ * sizing to its content — and that is the half the dead space was.
+ * ============================================================================
+ */
+test.describe('the pane footer is docked, not floating', () => {
+  test('rests the omnibox against the bottom edge of pane 3, not against the end of the content', async ({
+    page,
+  }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+    await selectFirstMailMessage(page);
+
+    const pane = page.locator('[data-pane="pane3"]');
+    const footer = pane.locator('[data-pane-slot="footer"]');
+    await expect(footer).toBeVisible();
+
+    const paneBox = await pane.boundingBox();
+    const footerBox = await footer.boundingBox();
+    expect(paneBox).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+
+    // The footer's bottom edge sits within the pane's 1px border of the pane's
+    // own bottom edge. A floating composer misses this by hundreds of pixels,
+    // which is the point: the tolerance does not have to be clever to
+    // discriminate.
+    const paneBottom = (paneBox as { y: number; height: number }).y + (paneBox as { height: number }).height;
+    const footerBottom =
+      (footerBox as { y: number; height: number }).y + (footerBox as { height: number }).height;
+    expect(Math.abs(paneBottom - footerBottom)).toBeLessThanOrEqual(2);
+
+    // AND IT SPANS THE SLOT. The composer stopped drawing its own `border-t
+    // p-1` when it moved into the footer, because the slot draws them — but the
+    // slot is a ROW with `items-center`, and the form is `flex-none`, so its
+    // width now comes from `w-full` alone. Nothing else in either lane measures
+    // that: a composer rendering at its intrinsic input width would sit at the
+    // right bottom edge and pass every other assertion here.
+    const form = footer.locator('[data-shell-region="omnibox"]');
+    const formBox = await form.boundingBox();
+    expect(formBox).not.toBeNull();
+    const footerWidth = (footerBox as { width: number }).width;
+    const formWidth = (formBox as { width: number }).width;
+    // The slot's `p-1` is 4px each side, so the form fills it less 8px.
+    expect(Math.abs(footerWidth - 8 - formWidth)).toBeLessThanOrEqual(1);
+  });
+});
+
+test.describe('the pane body is a column its children can fill', () => {
+  test('gives pane 3 a detail stack that reaches the bottom of the scroll container rather than stopping at its content', async ({
+    page,
+  }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+    // Deliberately NO selection: the shorter the content, the larger the dead
+    // space the defect leaves, and the more the assertion discriminates.
+
+    const body = page.locator('[data-pane="pane3"] [data-pane-slot="body"]');
+    const stack = body.locator('[data-shell-region="detail-stack"]');
+    await expect(stack).toBeVisible();
+
+    const bodyBox = await body.boundingBox();
+    const stackBox = await stack.boundingBox();
+    expect(bodyBox).not.toBeNull();
+    expect(stackBox).not.toBeNull();
+
+    // The body carries `p-1` — 4px each side — so the stack fills it to within
+    // the padding. Measured with the fix in place the two agree to the pixel;
+    // measured with `flex flex-col` reverted the stack collapses to its own
+    // content height, which is hundreds of pixels short. The tolerance below is
+    // the padding plus a pixel, not a fudge factor.
+    const bodyInner = (bodyBox as { height: number }).height - 8;
+    const stackHeight = (stackBox as { height: number }).height;
+    expect(bodyInner).toBeGreaterThan(200);
+    expect(Math.abs(bodyInner - stackHeight)).toBeLessThanOrEqual(9);
+  });
+});

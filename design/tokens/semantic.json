@@ -25,9 +25,9 @@
       },
       "--surface-raised": {
         "type": "color",
-        "source": { "ramp": "gray", "step": 2 },
-        "description": "Host chrome sitting above the app but outside a pane: the ribbon, the contained-fault surface. Shares a step with --surface-app on purpose — they are the same plane, and separating them would be a distinction with no rendering behind it.",
-        "consumers": ["src/components/ui/RibbonToolbar.tsx", "src/components/error/FaultBoundary.tsx (SURFACE)"]
+        "source": { "ramp": "gray", "step": 3 },
+        "description": "Host chrome sitting above the app but outside a pane: the 32px context bar, the navigation pane, the contained-fault surface. MOVED FROM STEP 2 ON 2026-08-04, and the sentence it replaces argued the other way: 'Shares a step with --surface-app on purpose — they are the same plane, and separating them would be a distinction with no rendering behind it.' That was true when written, because nothing rendered chrome. The native-host pivot's 32px context bar renders it now, so there IS rendering behind the distinction and the window read as one flat field without it. Deliberate consequence: this now resolves to the same value as --surface-sunken. The two are never adjacent — one is the bar above the panes, the other a well inside a pane — and the manifest measures both independently, so nothing goes unvalidated. The alternative, moving --surface-app to step 3 instead, produces the identical collision and reads worse, because it makes the gutter deeper than the chrome.",
+        "consumers": ["src/components/command/ContextBar.tsx", "src/components/error/FaultBoundary.tsx (SURFACE)"]
       },
       "--surface-overlay": {
         "type": "color",

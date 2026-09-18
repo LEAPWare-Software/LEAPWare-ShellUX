@@ -185,3 +185,49 @@ test.describe('pane dividers, driven by a real pointer', () => {
     expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
   });
 });
+
+/**
+ * ============================================================================
+ * GITHUB ISSUE #114 — THE PANES OPENED AT SIZES SUMMING TO 83.
+ * ============================================================================
+ * With navigation collapsed on the chrome surface, pane 1 is a fixed 48px
+ * `div` outside `shell-panes`, so the group holds pane 2 and pane 3 alone. The
+ * pane-1 share was still being subtracted from pane 3's remainder, so the pair
+ * asked for 25% and 58.333%. `react-resizable-panels` renormalised and warned
+ * on every load, and pane 2 opened about a fifth wider than `PANE_PX` asks.
+ *
+ * The vitest case beside this one watches for the library's warning, which
+ * jsdom CAN observe because the arithmetic does not need pixels. This one
+ * watches the pixels, which jsdom cannot: it is the half that proves pane 2
+ * actually opens at the width the pixel intent asks for.
+ * ============================================================================
+ */
+test.describe('default pane sizes with navigation collapsed', () => {
+  test('opens pane 2 and pane 3 filling the group between them, with no layout warning on the console', async ({
+    page,
+  }) => {
+    const complaints: string[] = [];
+    page.on('console', (message) => {
+      const text = message.text();
+      if (text.includes('Invalid layout total size')) {
+        complaints.push(text);
+      }
+    });
+
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+    await page.getByRole('button', { name: 'Collapse navigation' }).click();
+
+    const two = await paneWidth(page, 'pane2');
+    const three = await paneWidth(page, 'pane3');
+    const group = two + three;
+
+    // Both panes are non-degenerate and together they account for the group.
+    expect(two).toBeGreaterThan(0);
+    expect(three).toBeGreaterThan(0);
+    expect(two / group + three / group).toBeCloseTo(1, 5);
+
+    // And the library never had to renormalise to get there.
+    expect(complaints).toEqual([]);
+  });
+});

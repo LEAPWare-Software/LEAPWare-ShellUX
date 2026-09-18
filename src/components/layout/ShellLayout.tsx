@@ -1354,7 +1354,23 @@ export function ShellLayout({
   // decides only whether the RESULT is used; that is worth stating, because the
   // guard sits on the next expression and reads at a glance as if it guarded
   // this one.
-  const restoredListPercent = showChrome
+  // WHETHER PANE 1 IS A MEMBER OF THE GROUP THESE PERCENTAGES ARE HANDED TO,
+  // which is not the same question as whether the shell is drawing chrome.
+  //
+  // GitHub issue #114. This used to read `showChrome`, and that is right on the
+  // extension surface and wrong when navigation is COLLAPSED on the chrome
+  // surface: the rail is a fixed 48px `div` rendered outside `shell-panes`, so
+  // the group holds pane 2 and pane 3 alone and its members must sum to 100. At
+  // 1440px the old expression produced 25 and 58.333 — `react-resizable-panels`
+  // renormalised them and warned `Invalid layout total size: 25%,
+  // 58.33333333333334%` on every load, and pane 2 opened about a fifth wider
+  // than the 360px `PANE_PX` asks for.
+  //
+  // Nothing here is new arithmetic. It is the same rebase the restored path
+  // already documents three paragraphs down, applied to the predicate that
+  // decides it rather than to only one of its two uses.
+  const paneOneIsInGroup = showChrome && !isNavCollapsed;
+  const restoredListPercent = paneOneIsInGroup
     ? restoredSizes.pane2
     : (restoredSizes.pane2 / (restoredSizes.pane2 + restoredSizes.pane3)) * 100;
   const listDefaultPercent = hasRestoredLayout
@@ -1368,12 +1384,14 @@ export function ShellLayout({
   // rather than the three of them summing to something the library has to
   // renormalise.
   //
-  // **The pane-1 term is zero on the extension surface**, and leaving it in
-  // would be the same denominator error one paragraph up, in the other
-  // direction: pane 1 is not in this group, so the remainder pane 3 gets is
-  // everything the list did not take rather than everything the list and a
-  // pane in another document did not take.
-  const paneOneShare = showChrome ? navDefaultPercent : 0;
+  // **The pane-1 term is zero whenever pane 1 is not a member of this group**,
+  // and leaving it in would be the same denominator error one paragraph up, in
+  // the other direction: the remainder pane 3 gets is everything the list did
+  // not take rather than everything the list and a pane that is not here did
+  // not take. That is true on the extension surface, where pane 1 lives in
+  // another document, AND when navigation is collapsed to its 48px rail, where
+  // pane 1 is a fixed-width `div` outside the group. The second case is #114.
+  const paneOneShare = paneOneIsInGroup ? navDefaultPercent : 0;
   const detailDefaultPercent = Math.max(
     detailMinPercent,
     100 - paneOneShare - listDefaultPercent,
@@ -1622,19 +1640,78 @@ export function ShellLayout({
               </div>
             ) : undefined
           }
+          footer={
+            /*
+              THE COMPOSER IS A SLOT, NOT A CHILD, AND THAT IS GITHUB
+              ISSUE #110.
+
+              It used to be the last element of the scroll container, so
+              it came to rest wherever the ledger content happened to
+              stop — measured at y≈408 in an 860px pane, above roughly
+              450px of dead space, and moving every time the ledger grew.
+              `PaneWrapper`'s `footer` slot renders BELOW the scroll
+              container, so it is docked to the pane's bottom edge and
+              stays there.
+
+              It is still host chrome around a plug-in view, and it is
+              still OUTSIDE the fault boundary further down: a plug-in
+              render that throws must not take the shell's own input
+              surface down with it. The slot puts it further outside than
+              it was, not less.
+
+              The slot supplies the top border and the padding — see
+              `PaneWrapper` — which is why `OmniboxComposer` no longer
+              draws its own.
+            */
+            <OmniboxComposer
+              registry={commandRegistry}
+              context={context}
+              onSubmit={(submission) => {
+                // The host owns no filter and answers no question, and
+                // says so rather than pretending. Reaching into the
+                // active extension's view to apply a filter would be host
+                // chrome operating a plug-in's UI, which nothing in this
+                // repository grants; publishing the text as a context key
+                // would write into a namespace that is the extension's.
+                // The submission is recorded, and the surface that
+                // would consume it — the block ledger in the body — is
+                // fed by the structured payload channel, which only the
+                // EXTENSION may publish on. The host has no door to it
+                // that would not be the host impersonating the
+                // extension.
+                setLastSubmission(submission);
+              }}
+            />
+          }
         >
           {/*
-            PANE 3 IS THREE THINGS STACKED, AND THE ORDER IS THE DESIGN.
-            The floating toolbar rides above the view because it is
-            triggered by a selection made INSIDE the view; the composer is
-            docked below it because it is persistent and must not move
-            when the toolbar appears. Both are host chrome around a
-            plug-in view, so both sit OUTSIDE the fault boundary: a
-            plug-in render that throws must not take the shell's own input
-            surface down with it, which is the whole point of putting a
-            boundary there at all.
+            WHAT IS LEFT IN THE BODY IS THE SCROLLING PART, AND THE ORDER
+            IS THE DESIGN. The floating toolbar rides above the view
+            because it is triggered by a selection made INSIDE the view;
+            the ledger and the two echo lines follow the view because they
+            are its output. The composer is no longer here — it is the
+            pane's `footer`, docked below this scroll container, for the
+            reason given at that prop.
+
+            The toolbar and the ledger are host chrome around a plug-in
+            view, so both sit OUTSIDE the fault boundary below: a plug-in
+            render that throws must not take the shell's own surfaces down
+            with it, which is the whole point of putting a boundary there
+            at all.
           */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1">
+          {/*
+            `data-shell-region="detail-stack"` exists for one reason: this is
+            the element whose `flex-1` had no column parent to fill against
+            before GitHub issue #110, and a browser assertion needs a handle on
+            it. `e2e/shell-layout.spec.ts` measures it against the body's own
+            box — that is the guard for the `flex flex-col` half of the fix,
+            and the docked-footer case does NOT cover it, measured by reverting
+            the class and watching the footer case stay green.
+          */}
+          <div
+            data-shell-region="detail-stack"
+            className="flex min-h-0 min-w-0 flex-1 flex-col gap-1"
+          >
             <FloatingToolbar registry={commandRegistry} context={context} />
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <FaultBoundary
@@ -1711,25 +1788,6 @@ export function ShellLayout({
                 {`: ${lastSubmission.text}`}
               </p>
             )}
-            <OmniboxComposer
-              registry={commandRegistry}
-              context={context}
-              onSubmit={(submission) => {
-                // The host owns no filter and answers no question, and
-                // says so rather than pretending. Reaching into the
-                // active extension's view to apply a filter would be host
-                // chrome operating a plug-in's UI, which nothing in this
-                // repository grants; publishing the text as a context key
-                // would write into a namespace that is the extension's.
-                // The submission is recorded, and the surface that
-                // would consume it — the block ledger below — is fed by
-                // the structured payload channel, which only the
-                // EXTENSION may publish on. The host has no door to it
-                // that would not be the host impersonating the
-                // extension.
-                setLastSubmission(submission);
-              }}
-            />
           </div>
         </PaneWrapper>
       </Panel>
