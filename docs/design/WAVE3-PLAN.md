@@ -133,24 +133,69 @@ under its probe is not a guard and is rewritten or deleted.
   the loading label; the spinner probe was dropped, because a spinner fails the bar
   assertion rather than the width one).
 
-### W3-2 — List rows at 32px (D-29). Planned.
+### W3-2 — List rows at 32px (D-29). **BUILT.**
 
-- Two-line row at `--row-h-comfortable`; hover grey on pointer rest (today the primary
-  list has none); selected grey plus focus-weight title, no outline; keyboard focus ring
-  inside the row edge. The v4 **row status vocabulary**: a status line under the title
-  pairs a mark with a word in status ink — warning triangle "Below reorder point",
-  success dot "Delivered", danger mark "Delivery overdue", info dot "Awaiting
-  supplier" — never colour alone (DESIGN.md: every status colour has a word or a mark).
-- Tokens: `--row-h-comfortable`, `--status-{warning,success,danger,info}`,
-  `--text-warning`, `--text-success`, `--text-danger`, `--surface-hover`, `--surface-selected`,
-  `--text-primary`, `--text-muted`, `--focus-ring`.
-- e2e, new `e2e/list-rows.spec.ts`: a row measures 32px tall (probe: the old height
-  class); a pointer resting on a row changes its painted background (probe: remove the
-  hover class); a selected row has no outline and a heavier title weight; the focus ring
-  of the current row is inside the list's clip, not cut by it (probe: ring outside the
-  edge — this is the ribbon-overflow class of defect); every status line renders its
-  mark and its word and the word clears 4.5:1 on the row in all three themes (probe:
-  drop the mark).
+- Two-line row at `TOKEN_CLASS.rowHeightComfortable` (`--row-h-comfortable`, 32px);
+  hover grey via `rowHoverSurface`; selected grey via `navSelectedSurface`, no outline,
+  a heavier title weight; the keyboard ring via `rowFocusRingInset` (`ring-inset`, drawn
+  inside the row edge). The v4 **row status vocabulary**, a new host primitive
+  `src/components/ui/RowStatus.tsx` over a small frozen record in `rowStatusVocabulary.ts` (the
+  same split `rowDelta.ts` + `RowMetric.tsx` use, for the same fast-refresh reason): a
+  status line under the title pairs a mark (`aria-hidden`, a character glyph) with a
+  word in status ink — warning triangle "Below reorder point", success dot "Delivered",
+  danger mark "Delivery overdue", info dot "Awaiting supplier" — never colour alone.
+  `word` is a required prop, so a caller cannot omit the sentence and still get the
+  mark. A **guardrail**, not more: `word: string` accepts `''`, so it holds against
+  the honest omission and not against an empty string, and no test asserts otherwise.
+  `RowStatus.tsx`'s banner carries the full argument and the open question it leaves.
+- Adopted in both mock row renderers, honestly and not identically. `DatabasePlugin.tsx`
+  is the one mock that models inventory, so it is where all four statuses are
+  exercised: "Below reorder point" from the existing live stock-vs-reorder check, and
+  "Delivered"/"Delivery overdue"/"Awaiting supplier" from a new `supplyState` field
+  seeded once per record, off the record's own id and NOT off the catalogue's shared
+  `nextRandom` sequence (drawing from that sequence would have shifted every record
+  after the first one step further through it, silently changing every name, size and
+  reorder level a suite outside this increment's ownership already asserts on). Only
+  one status shows per row; low stock wins the tie, because it is the number already on
+  screen. `MailPlugin.tsx` renders no status line at all: read/unread is its only real
+  state axis and is not one of the four words, and "give it the vocabulary honestly"
+  reads as "do not invent one" — its rows keep their sender/time second line, restyled
+  to the new row treatment, and are what exercises "a row with no status renders no
+  status line" in practice. The old border-based hover/selected treatment
+  (`navSelectedBorder`, `controlHoverBorder`, and `VirtualizedList`'s `rowSelectedRule`
+  stripe) is dropped from all three rows rather than kept beside the new one.
+- `VirtualizedList.tsx` gains `ROW_HEIGHT_COMFORTABLE` (32) for an extension to declare
+  instead of typing the number, and its `role="option"` row carries `rowHoverSurface`
+  and `rowFocusRingInset`. **Recorded limit:** the ring is inert there today. The file's
+  own decision 2 keeps DOM focus on the listbox container with `aria-activedescendant`
+  naming the current row, so an option element never itself matches `:focus-visible`
+  and the class cannot paint under that architecture — wiring a per-row ring onto a
+  container-focus model needs its own `TOKEN_CLASS` variant this increment does not
+  add (rule 6: a role this file finds it needs waits for its own serialised edit).
+  Nothing in the shipped shell mounts `VirtualizedList` with real content today either,
+  so there is no route to it from the browser lane; the ring is instead measured
+  against the mock rows' real, individually-focusable buttons, where it genuinely can.
+- Tokens: all pre-existing, added by W3-1 for this increment and unconsumed until now —
+  `--row-h-comfortable`, `--status-{warning,success,danger,info}`, `--text-warning`,
+  `--text-success`, `--text-danger`, `--surface-hover`, `--surface-selected`,
+  `--text-primary`, `--text-muted`, `--focus-ring`. `tokenClasses.ts` was not edited.
+- **Not built:** the step 6 instrument band. The trailing slot each row already had is
+  left exactly as `RowMetric` drew it; W3-2 adds nothing to the 20px band the plan
+  reserves for step 6.
+- e2e, new `e2e/list-rows.spec.ts`, five cases: "measures a row 32px tall" (probe: drop
+  `rowHeightComfortable` from a mock row's className); "changes the painted background
+  when a pointer rests on a row" (probe: drop `rowHoverSurface`); "draws a selected row
+  with no outline and a heavier title weight" (probe: reintroduce `navSelectedBorder` on
+  the row, or drop the selected-title weight conditional); "keeps the current row's
+  keyboard focus ring inside the list's clip" (probe: swap `rowFocusRingInset` for the
+  non-inset `controlFocusRing` — the ribbon-overflow class of defect); one case per
+  status, "renders the *kind* status line's mark and word, clearing 4.5:1 in every
+  theme" (probe: drop the mark's rendering, or point a status's `markClass`/`textClass`
+  at the wrong token). **Written and reviewed, not run in this environment**: the
+  sandbox's Playwright build is pinned below what `playwright.config.ts` wants and the
+  proxy blocks the newer download (`docs/cloud/runbook.md`); the PR's `Browser tests
+  (chromium)` GitHub Actions check is the evidence, and the exact mutation for each case
+  is recorded in the PR body for the conductor to push and watch go red.
 
 ### W3-3 — Navigation tree and the 48px rail. Planned. Serialised on `ShellLayout.tsx`.
 

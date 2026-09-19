@@ -106,6 +106,21 @@ import {
 /** Rows mounted beyond each edge of the viewport, absorbing fast scrolls. */
 const DEFAULT_OVERSCAN = 4;
 
+/**
+ * The comfortable row height (D-29), as the declared number an extension can
+ * pass for `rowHeight` instead of typing `32`.
+ *
+ * A constant, not a lookup into `--row-h-comfortable`: `rowHeight` is a plain
+ * `number` by decision 0 above — declared, never measured — and reading a CSS
+ * custom property back out of the DOM to get a number this file already knows
+ * would be the measurement decision 0 refuses, arrived at from the other
+ * direction. The two are kept equal by convention: `src/styles/tokens.generated.css`
+ * names `--row-h-comfortable: 32px` for exactly this row, and a change to one
+ * without the other is a design/ review's job to catch, the same way `paneBorder`
+ * being pointed at the wrong colour is.
+ */
+export const ROW_HEIGHT_COMFORTABLE = 32;
+
 export interface VirtualizedListProps<T> {
   /** The full list. Only the rows in the window are ever mounted. */
   readonly items: readonly T[];
@@ -357,9 +372,31 @@ export function VirtualizedList<T>({
             onSelect(index);
           }
         }}
+        // W3-2 (D-29): the selected fill is `rowSelectedSurface`, and
+        // `rowSelectedRule` — the inset left stripe — is dropped rather than
+        // kept beside it. R7's "no side stripe, no outline" is written against
+        // banners; the same reading applies to a selected row, whose stripe was
+        // exactly the border-shaped affordance the plan's "no outline" retires.
+        // `aria-selected:font-semibold` is the row's own heavier title weight
+        // and needed no change: it already sets the OPTION's font weight, which
+        // a row renderer inherits unless it sets its own.
+        //
+        // `rowFocusRingInset` is written here as the plan names it, and it is
+        // HONESTLY NOT YET LIVE: decision 2 above keeps DOM focus on the
+        // listbox container, with `aria-activedescendant` naming the current
+        // row, so this option element never itself matches `:focus-visible` and
+        // the ring cannot paint under today's architecture. Wiring a per-row
+        // ring onto a container-focus model needs its own `TOKEN_CLASS` variant
+        // (a `group-focus-visible` pairing, not `focus-visible` alone) and W3-2
+        // does not add one — rule 6 says a role this file finds it needs waits
+        // for its own serialised edit to `tokenClasses.ts` rather than being
+        // invented here. The class is left in place for the day that role
+        // exists; until then it is inert, and `e2e/list-rows.spec.ts` measures
+        // the ring against the mock rows' real, individually-focusable buttons
+        // instead, where it truly can paint.
         className={
           'flex min-w-0 items-center overflow-hidden px-1 aria-selected:font-semibold ' +
-          `${TOKEN_CLASS.rowSelectedSurface} ${TOKEN_CLASS.rowSelectedRule}`
+          `${TOKEN_CLASS.rowSelectedSurface} ${TOKEN_CLASS.rowHoverSurface} ${TOKEN_CLASS.rowFocusRingInset}`
         }
       >
         <FaultBoundary boundaryLabel="This row" extensionId={extensionId} variant="row">

@@ -564,6 +564,123 @@ describe('case-collision', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// module-case-collision
+//
+// The rule case-collision above cannot catch, because it compares whole tracked
+// paths — extension included — and a component `RowStatus.tsx` sitting beside its
+// data module `rowStatus.ts` is a whole-path pair that genuinely can coexist on
+// any filesystem. The two files ARE, unlike a case-collision fixture, ordinary
+// files that this suite can `git add` directly: nothing here needs
+// `trackInIndexOnly`, because nothing about the pair is blocked by the filesystem
+// this suite runs on, case-insensitive or not — the collision this rule reports
+// exists one level up, in how tsc's module resolver answers an extensionless
+// specifier, not in what a directory listing can hold.
+// ---------------------------------------------------------------------------
+
+describe('module-case-collision', () => {
+  it('reports two module sources whose basenames collide once the extension is stripped', () => {
+    // The exact pair from the incident this rule was written for.
+    const root = newRepo('module-case');
+    track(
+      root,
+      write(root, 'src/components/ui/RowStatus.tsx', 'export const RowStatus = 1;\n'),
+      write(root, 'src/components/ui/rowStatus.ts', 'export const rowStatus = 1;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 1);
+    const collision = report.violations.find((v) => v.rule === 'module-case-collision');
+    assert.ok(collision !== undefined, JSON.stringify(ruleIds(report)));
+    assert.match(collision.text, /RowStatus\.tsx/);
+    assert.match(collision.text, /rowStatus\.ts/);
+  });
+
+  it('reports nothing for two module sources with different names', () => {
+    const root = newRepo('module-case-different-names');
+    track(
+      root,
+      write(root, 'src/RowMetric.tsx', 'export const a = 1;\n'),
+      write(root, 'src/rowDelta.ts', 'export const b = 2;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 0);
+  });
+
+  it('reports nothing for the identical basename that differs only in extension', () => {
+    // Button.tsx and Button.ts share the exact same basename — the finding this
+    // rule looks for is DIFFERENT case, not SAME name, and this pair is neither
+    // colliding on a filesystem nor colliding in tsc's resolver: each extension
+    // resolves to its own file.
+    const root = newRepo('module-case-extension-only');
+    track(
+      root,
+      write(root, 'src/Button.tsx', 'export const a = 1;\n'),
+      write(root, 'src/Button.ts', 'export const b = 2;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 0);
+  });
+
+  it('reports nothing for the same basename in two different directories', () => {
+    // TypeScript resolves a specifier within one directory; a same-named module in
+    // a sibling directory is never what an extensionless import in the other one
+    // could mean, so this must not be reported however the two basenames compare.
+    const root = newRepo('module-case-different-directory');
+    track(root, write(root, 'a/Foo.ts', 'export const a = 1;\n'), write(root, 'b/foo.ts', 'export const b = 2;\n'));
+    const report = run(root);
+    assert.equal(report.status, 0);
+  });
+
+  it('reports the third file against BOTH earlier spellings, not just the first one retained', () => {
+    // Three files, two spellings. `Button.js` and `Button.tsx` share a spelling,
+    // so that pair is correctly silent (the extension-only exclusion above). Git
+    // lists tracked files sorted by path, uppercase before lowercase, so this
+    // checker sees them in the order `Button.js`, `Button.tsx`, `button.ts` — the
+    // exact order that once let `Button.tsx` be skipped by the "same spelling as
+    // what's retained" guard WITHOUT being retained itself, leaving `button.ts`
+    // compared only against `Button.js`. Both `Button.js` and `Button.tsx` are
+    // genuine, independent collisions with `button.ts`; a reader deciding which
+    // file to rename needs to be told about both, so this must be two reports,
+    // not one standing in for the pair.
+    const root = newRepo('module-case-three-files-two-spellings');
+    track(
+      root,
+      write(root, 'src/widgets/Button.tsx', 'export const Button = 1;\n'),
+      write(root, 'src/widgets/Button.js', 'export const Button2 = 2;\n'),
+      write(root, 'src/widgets/button.ts', 'export const button = 3;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 1);
+    const collisions = report.violations.filter((v) => v.rule === 'module-case-collision');
+    assert.equal(collisions.length, 2, JSON.stringify(collisions));
+    assert.ok(collisions.some((v) => v.text.includes('Button.tsx') && v.text.includes('button.ts')));
+    assert.ok(collisions.some((v) => v.text.includes('Button.js') && v.text.includes('button.ts')));
+  });
+
+  it('reports every unordered pair once when three files each use a different spelling', () => {
+    // Three distinct spellings of the same name: BUTTON, Button, button. Every one
+    // of the three unordered pairs is a genuine collision — none of them share a
+    // spelling, so none of the extension-only exclusion applies to any pair — and
+    // each must be reported exactly once, not zero times (under-reported) and not
+    // twice (the same pair reported from both directions).
+    const root = newRepo('module-case-three-spellings');
+    track(
+      root,
+      write(root, 'src/widgets/BUTTON.js', 'export const a = 1;\n'),
+      write(root, 'src/widgets/Button.ts', 'export const b = 2;\n'),
+      write(root, 'src/widgets/button.tsx', 'export const c = 3;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 1);
+    const collisions = report.violations.filter((v) => v.rule === 'module-case-collision');
+    assert.equal(collisions.length, 3, JSON.stringify(collisions));
+    const pairs = collisions.map((v) => v.text).sort();
+    assert.ok(pairs.some((p) => p.includes('BUTTON.js') && p.includes('Button.ts')));
+    assert.ok(pairs.some((p) => p.includes('BUTTON.js') && p.includes('button.tsx')));
+    assert.ok(pairs.some((p) => p.includes('Button.ts') && p.includes('button.tsx')));
+  });
+});
+
 describe('unreadable-tracked-file', () => {
   it('reports a path the index lists that the working tree does not have', () => {
     const root = newRepo('unreadable');
@@ -806,7 +923,7 @@ describe('exit codes', () => {
     const report = run(root, { USERNAME: inventLogin() });
     assert.equal(report.status, 0, report.stderr);
     assert.match(report.stdout, /^check-portability: OK — 3 tracked files/);
-    assert.match(report.stdout, /20 rules, 0 violations/);
+    assert.match(report.stdout, /21 rules, 0 violations/);
     assert.equal(report.stderr, '');
   });
 

@@ -873,18 +873,26 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
       <ul className="flex min-w-0 flex-col gap-px" data-mail-list={folderId}>
         {messages.map((message) => {
           const isUnread = !snapshot.readIds.has(message.id);
+          const isCurrent = context.selectedItemId === message.id;
           const activity = activityMetric(message);
           return (
             <li key={message.id} className="min-w-0">
               <button
                 type="button"
                 data-message-id={message.id}
-                aria-current={context.selectedItemId === message.id ? 'true' : undefined}
+                aria-current={isCurrent ? 'true' : undefined}
                 className={
-                  'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm border p-1 ' +
+                  // W3-2 (D-29): the comfortable row height, hover and selected
+                  // grey, and the inset keyboard ring — never an outline. The
+                  // old `border` + `navSelectedBorder` + `controlHoverBorder`
+                  // scheme is dropped rather than kept beside these: a rule
+                  // that appears on hover or on selection is exactly the
+                  // border-shaped affordance "no outline" retires (R7's
+                  // reading, carried from banners to rows).
+                  'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm px-2 ' +
                   'text-left text-[12px] leading-4 ' +
-                  `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
-                  `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
+                  `${TOKEN_CLASS.rowHeightComfortable} ${TOKEN_CLASS.rowHoverSurface} ` +
+                  `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.rowFocusRingInset}`
                 }
                 onClick={() => {
                   // Module state first, host second. Both are synchronous, so
@@ -897,10 +905,25 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                   });
                 }}
               >
-                <span className="flex min-w-0 flex-1 flex-col items-start gap-px">
-                  <span className={isUnread ? 'truncate font-semibold' : 'truncate'}>
+                <span className="flex min-w-0 flex-1 flex-col justify-center gap-px">
+                  <span
+                    data-row-title=""
+                    className={
+                      isUnread || isCurrent ? 'truncate font-semibold' : 'truncate'
+                    }
+                  >
                     {message.subject}
                   </span>
+                  {/*
+                    Mail's second line stays what it always was — sender and
+                    time — rather than gaining the v4 status vocabulary. This
+                    mock's only real state axis is read/unread, which is not
+                    one of the plan's four words (danger/warning/success/info
+                    all name a supply-chain fact this mailbox has no data
+                    for), and "give it the vocabulary from their own data
+                    honestly" means not inventing one. See
+                    `docs/design/WAVE3-PLAN.md` W3-2 and this change's report.
+                  */}
                   <span className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
                     {message.from} — {message.receivedAt}
                     {isUnread ? ' — unread' : ''}

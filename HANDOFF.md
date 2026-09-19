@@ -15,7 +15,6 @@ with a merge queue.
 ## What landed on 2026-09-18 and 19
 
 `git log --oneline` is the full list; the landmarks:
-- Public, Apache-2.0, ruleset and merge queue (#141); Claude review working (#151).
 - Proof of completion: design (#152, D-50), PR A (#156), rollout 2 (#169).
 - ADR-0006 Accepted (#145); steps 1 CSP (#154), 2 SDK (#170).
 - Charts (#148), crash log (#150), ShellLayout split (#160).
@@ -31,7 +30,8 @@ with a merge queue.
 - Proof rows C-38 to C-43 for work already built (#186).
 - Cloud lanes can merge: the auto-queue workflow (#192, lane C item 0a).
 - The cloud runbook, the `lw-*` roles and the gate-4 record (#188, D-52).
-- This change: the proof audit — false claims corrected, checks tightened.
+- The proof audit — false claims corrected, checks tightened.
+- This change: wave-3 W3-2, list rows at 32px (D-29).
 
 ## In flight
 
@@ -43,7 +43,7 @@ with a merge queue.
 
 ## The next step
 
-1. ADR-0006 steps 6 to 11, and W3-2 onward.
+1. ADR-0006 steps 6 to 11, and W3-3 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

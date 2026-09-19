@@ -1,6 +1,8 @@
 import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { RowMetric } from '../components/ui/RowMetric';
+import { RowStatus } from '../components/ui/RowStatus';
+import type { RowStatusKind } from '../components/ui/rowStatusVocabulary';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,
@@ -189,6 +191,18 @@ const CATEGORY_IDS: ReadonlySet<string> = new Set([
   ...LEAF_CATEGORIES.map((leaf) => leaf.id),
 ]);
 
+/**
+ * The inbound-supply state a record can be in, beside its stock level.
+ *
+ * `null` is "nothing to say" — most records have no inbound order in flight,
+ * and the row status vocabulary renders no status line for them. This is a
+ * SEPARATE axis from `reorderLevel` vs live stock: a record can be adequately
+ * stocked and still have a shipment overdue, or below its reorder point with
+ * nothing on order at all. Only one status line is drawn per row (see
+ * `rowStatus`), and low stock is read as the more urgent fact of the two.
+ */
+type SupplyState = 'delivered' | 'overdue' | 'awaiting' | null;
+
 interface InventoryRecord {
   readonly id: string;
   /** Leaf category this record belongs to. */
@@ -197,6 +211,8 @@ interface InventoryRecord {
   readonly name: string;
   /** Stock at or below this level counts as low. */
   readonly reorderLevel: number;
+  /** Seeded once at catalogue build, independent of the live stock level. */
+  readonly supplyState: SupplyState;
 }
 
 /**
@@ -221,6 +237,26 @@ function nextRandom(seed: number): number {
   return (seed * 48271) % 2147483647;
 }
 
+/** The four `SupplyState` outcomes a draw can land on, one in four each. */
+const SUPPLY_STATES: readonly SupplyState[] = [null, 'delivered', 'overdue', 'awaiting'];
+
+/**
+ * A record's `SupplyState`, deterministic in its id and in nothing else.
+ *
+ * Not `nextRandom` off the catalogue's shared seed — see the call site in
+ * `buildCatalogue` for why that would silently redraw every record after the
+ * first. This is the same shape as `MailPlugin.tsx`'s `seededStream`: a small,
+ * well-known hash folded over the id's characters, with no claim to being
+ * cryptographic.
+ */
+function supplyStateFor(id: string): SupplyState {
+  let hash = 0;
+  for (const character of id) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+  return SUPPLY_STATES[hash % SUPPLY_STATES.length] ?? null;
+}
+
 /** The seeded catalogue. Records added at runtime live in the store. */
 function buildCatalogue(): readonly InventoryRecord[] {
   const built: InventoryRecord[] = [];
@@ -231,12 +267,21 @@ function buildCatalogue(): readonly InventoryRecord[] {
       const noun = leaf.nouns[seed % leaf.nouns.length] ?? leaf.label;
       seed = nextRandom(seed);
       const millimetres = 4 + (seed % 24);
+      const id = `${RECORD_ID_PREFIX}${leaf.id}-${String(index).padStart(3, '0')}`;
       built.push({
-        id: `${RECORD_ID_PREFIX}${leaf.id}-${String(index).padStart(3, '0')}`,
+        id,
         categoryId: leaf.id,
         sku: `${leaf.skuPrefix}-${String(1000 + index)}`,
         name: `${noun} ${String(millimetres)}mm`,
         reorderLevel: 8 + (seed % 5),
+        // Drawn from a stream of its OWN, keyed on the id rather than on the
+        // shared `seed` this loop advances: this field is new, and every
+        // record after the first would otherwise shift one step further
+        // through `nextRandom`'s sequence than it did before this change —
+        // silently changing every name, size and reorder level this catalogue
+        // has always generated, and with it every hardcoded badge and stock
+        // figure a suite outside W3-2's ownership already asserts.
+        supplyState: supplyStateFor(id),
       });
     }
   }
@@ -447,6 +492,42 @@ function isLowStock(snapshot: InventoryState, record: InventoryRecord): boolean 
   return stockOf(snapshot, record.id) <= record.reorderLevel;
 }
 
+/**
+ * ============================================================================
+ * THE ROW STATUS VOCABULARY, READ HONESTLY OFF THIS MODULE'S OWN DATA.
+ * ============================================================================
+ * `docs/design/WAVE3-PLAN.md` W3-2 names four words off the v4 canvas' inventory
+ * list, and this is the one mock that actually models inventory, so it is where
+ * all four are exercised: "Below reorder point" (warning) is the live stock
+ * check this file already had; "Delivered", "Delivery overdue" and "Awaiting
+ * supplier" read `InventoryRecord.supplyState`, seeded once per record at
+ * catalogue build (`buildCatalogue`) as a fact independent of the stock level.
+ *
+ * Exactly one status shows per row, because the row draws one status LINE, and
+ * low stock wins the tie: it is the number on screen (`RowMetric`'s value and
+ * delta already say it), where a supply state is a fact this module holds and
+ * prints nowhere else. A record that is both below reorder AND overdue reads as
+ * "Below reorder point" — the more urgent of the two truths, not the only one.
+ */
+function rowStatus(
+  record: InventoryRecord,
+  stock: number,
+): { readonly kind: RowStatusKind; readonly word: string } | null {
+  if (stock <= record.reorderLevel) {
+    return { kind: 'warning', word: 'Below reorder point' };
+  }
+  switch (record.supplyState) {
+    case 'delivered':
+      return { kind: 'success', word: 'Delivered' };
+    case 'overdue':
+      return { kind: 'danger', word: 'Delivery overdue' };
+    case 'awaiting':
+      return { kind: 'info', word: 'Awaiting supplier' };
+    case null:
+      return null;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* The pane-3 ledger blocks                                                    */
 /* -------------------------------------------------------------------------- */
@@ -644,6 +725,8 @@ function addRecord(shell: IShellAPI, categoryId: string): InventoryRecord {
     sku: `NEW-${String(1000 + addedCount)}`,
     name: `Unclassified part ${String(addedCount)}`,
     reorderLevel: 10,
+    // Nothing is known about a freshly added record's supply chain yet.
+    supplyState: null,
   };
   const levels = new Map(state.stockById);
   levels.set(record.id, 0);
@@ -802,7 +885,7 @@ function InventoryRecordRow({
         'This is a deliberate fault raised by a mock extension to exercise host containment.',
     );
   }
-  const isLow = stock <= record.reorderLevel;
+  const status = rowStatus(record, stock);
   return (
     <button
       type="button"
@@ -810,16 +893,40 @@ function InventoryRecordRow({
       aria-current={isSelected ? 'true' : undefined}
       onClick={onSelect}
       className={
-        'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm border p-1 ' +
+        // W3-2 (D-29): comfortable row height, hover and selected grey, the
+        // inset keyboard ring — never an outline. The old `border` +
+        // `navSelectedBorder` + `controlHoverBorder` scheme is dropped rather
+        // than kept beside these; see the twin comment in `MailPlugin.tsx`.
+        'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm px-2 ' +
         'text-left text-[12px] leading-4 ' +
-        `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
-        `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.controlHoverBorder}`
+        `${TOKEN_CLASS.rowHeightComfortable} ${TOKEN_CLASS.rowHoverSurface} ` +
+        `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.rowFocusRingInset}`
       }
     >
-      <span className={`w-20 flex-none truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>
-        {record.sku}
+      <span className="flex min-w-0 flex-1 flex-col justify-center gap-px">
+        <span data-row-title="" className={isSelected ? 'truncate font-semibold' : 'truncate'}>
+          {record.name}
+        </span>
+        {/*
+          The second line: the SKU always, and the status vocabulary when this
+          record has one. `rowStatus` returns at most one status per row (see
+          its own docblock for why low stock wins the tie), and a record with
+          neither a low-stock reading nor a supply state ends this line at the
+          SKU alone — "a row with no status renders no status line" is this
+          branch, not a fabricated one.
+        */}
+        <span className="flex min-w-0 items-center gap-1">
+          <span className={`truncate text-[11px] ${TOKEN_CLASS.mutedText}`}>{record.sku}</span>
+          {status === null ? null : (
+            <>
+              <span aria-hidden="true" className={`text-[11px] ${TOKEN_CLASS.mutedText}`}>
+                ·
+              </span>
+              <RowStatus status={status.kind} word={status.word} />
+            </>
+          )}
+        </span>
       </span>
-      <span className="min-w-0 flex-1 truncate">{record.name}</span>
       {/*
         TIER 0, AND A `bar` RATHER THAN A `sparkline`, WHICH IS THE HONEST SHAPE.
 
@@ -830,15 +937,16 @@ function InventoryRecordRow({
         record is allowed. Synthesising eight fake readings to get a prettier
         glyph is the thing `MetricGlyph`'s `dot` docblock refuses in the other
         direction, and it is refused here too.
+
+        This trailing slot is also where a future instrument band (step 6,
+        `docs/design/WAVE3-PLAN.md` "Not wave 3") would sit; W3-2 draws nothing
+        there beyond what `RowMetric` already did and leaves the space as is.
       */}
       <RowMetric
         metric={stockMetric(record, stock)}
         value={String(stock)}
         delta={stock - record.reorderLevel}
       />
-      <span className={isLow ? 'flex-none font-semibold' : `flex-none ${TOKEN_CLASS.mutedText}`}>
-        {isLow ? 'low' : 'ok'}
-      </span>
     </button>
   );
 }
