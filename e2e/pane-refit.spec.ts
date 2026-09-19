@@ -220,4 +220,46 @@ test.describe('the pane layout after a live window resize', () => {
       'the reload opened pane 1 at the width correction, not the width the user chose',
     ).toBeCloseTo(chosenNav, 0);
   });
+  test('opened narrow on a stored layout, drag divider 2, widen and reload: pane 1 keeps the stored width', async ({
+    page,
+  }) => {
+    await openShell(page);
+    // Chosen at 1600: pane 1 at 12.5%, about 199px.
+    await page.evaluate(
+      (key) => {
+        window.localStorage.setItem(
+          key,
+          JSON.stringify({
+            v: 1,
+            paneSizes: { pane1: 12.5, pane2: 30, pane3: 57.5 },
+            isPane1Collapsed: false,
+            activeExtensionId: null,
+            extensions: {},
+          }),
+        );
+      },
+      STORAGE_KEY,
+    );
+    // Opened at 900: the mount fit lifts pane 1 to its minimum, a correction.
+    await page.setViewportSize({ width: 900, height: 900 });
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Navigation' })).toBeVisible();
+    expect(await paneWidth(page, 'pane1')).toBeGreaterThanOrEqual(bandFloor(NAV_MIN, 900) - 0.5);
+
+    const listBefore = await paneWidth(page, 'pane2');
+    const listDivider = page.getByRole('separator', { name: 'Resize the list pane' });
+    expect((await dragHorizontally(page, listDivider, 40)).sawDragState).toBe(true);
+    expect(await paneWidth(page, 'pane2'), 'the second divider did not move').toBeGreaterThan(
+      listBefore + 20,
+    );
+    await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Navigation' })).toBeVisible();
+    expect(
+      await paneWidth(page, 'pane1'),
+      'the reload opened pane 1 at the 900px correction, not the stored width',
+    ).toBeCloseTo(0.125 * (1600 - DIVIDERS_PX), 0);
+  });
 });

@@ -168,9 +168,17 @@ import { useHostPalette } from './useHostPalette';
  *
  *    What it does NOT do: below roughly 700px the minimums still cannot all be
  *    met and the library still renormalises and warns, exactly as the paragraph
- *    on overflow above says; a pane re-added after a collapse still takes its
- *    `defaultSize` from the mount-time width, not the live one; and a runtime
- *    with no `ResizeObserver` never re-fits, because its band width never moves.
+ *    on overflow above says; and a runtime with no `ResizeObserver` never
+ *    re-fits, because its band width never moves. (A pane re-added after a
+ *    collapse used to be listed here, shown at its mount-time `defaultSize`;
+ *    `defaultSize` now reads the record as it stands, so the rebuild the library
+ *    performs on re-registration is the record itself.)
+ *
+ *    **The record is the user's intent; bands are applied when it is read.** It
+ *    is never clamped at the width it is written at, so it can hold a pane
+ *    outside that width's bands, and it is never updated from a fit: not from a
+ *    width change, not from the mount-time fit of a record that was corrected on
+ *    open, and not from laying the record back out after a membership change.
  *    *Tests:* `src/components/__tests__/ShellLayoutRefit.test.tsx` — "fits an
  *    untouched layout to the pixel intent at the new width, rather than scaling
  *    the old shares", "fits a restored layout into the bands at the new width,
@@ -179,15 +187,17 @@ import { useHostPalette } from './useHostPalette';
  *    records that one rather than the correction", "fits the two-pane group from
  *    the record when pane 1 is collapsed", "keeps a collapsed-group layout a
  *    person arranged, which is never persisted, across a width change" and
- *    "fits the stored layout, not the renormalised one, once pane 1 has collapsed
- *    and come back" and "records the width the user chose for pane 1, not its
- *    correction, when the second divider is dragged after a narrowing", "saves
- *    the pane-1 width the user chose, not the rebuilt one, when divider 2 is
- *    dragged after a collapse and a re-expansion", "narrows a restored 40/30/30
+ *    "shows and fits the stored layout, not a rebuilt one, once pane 1 has
+ *    collapsed and come back" and "records the width the user chose for pane 1, not its
+ *    correction, when the second divider is dragged after a narrowing", "shows
+ *    and saves the pane-1 width the user chose, not the rebuilt one, when divider
+ *    2 is dragged after a collapse and a re-expansion", "opened at 800px on a
+ *    record chosen at 1000px, drag divider 2, the stored pane 1 is still 17.6", "narrows a restored 40/30/30
  *    to 800px with every pane in its band, summing to 100, and no layout
  *    warning" and "reopens a record written after a widening on the layout that
  *    was live, with every pane in its band" — all
- *    arithmetic over stubbed widths; `e2e/pane-refit.spec.ts` — "narrow, drag the
+ *    arithmetic over stubbed widths; `e2e/pane-refit.spec.ts` — "opened narrow on a stored layout, drag
+ *    divider 2, widen and reload: pane 1 keeps the stored width", "narrow, drag the
  *    second divider, widen, reload: pane 1 keeps the width the user chose",
  *    "keeps every pane inside its
  *    pixel band when a restored layout is narrowed live", "returns to the dragged
@@ -329,8 +339,17 @@ import { useHostPalette } from './useHostPalette';
  *    the engine's state as of this mount and never moves again. `defaultSize` is
  *    read by the library only when a panel mounts and MEANS "where this panel
  *    starts"; feeding it a live subscription would make the value the user is
- *    dragging also the value being fed back as the starting point. The collapsed
- *    flag is the opposite case and is bound live through
+ *    dragging also the value being fed back as the starting point.
+ *
+ *    **Amended 2026-09-19 (GitHub issue #23): `defaultSize` now reads the record
+ *    as it stands at each render, not this snapshot.** The snapshot still seeds
+ *    the session and announced layouts. The concern above does not arise for
+ *    `defaultSize` itself: the library reads it only when a panel REGISTERS — at
+ *    mount, and when pane 1 joins or leaves the group — and no drag registers a
+ *    panel, so the value a drag writes never becomes that drag's starting point.
+ *    What the snapshot did cause was a re-expansion rebuilding the mount-time
+ *    layout instead of the one chosen since. See `registrationLayout`. The
+ *    collapsed flag is the opposite case and is bound live through
  *    `useLocalStorageState`, because it drives which component tree renders.
  *
  *    **There is no flash of the default layout, and the mechanism is the whole
@@ -619,9 +638,9 @@ export function ShellLayout({
     requestPalette();
   });
 
-  // A mount-time SNAPSHOT, not a subscription. `defaultSize` means "where this
-  // panel starts"; see decision 6 for why binding it live would feed the value
-  // being dragged back in as the starting point.
+  // A mount-time SNAPSHOT, not a subscription: what the session and announced
+  // layouts start from. `defaultSize` no longer reads it — see decision 6's
+  // amendment and `registrationLayout`.
   const [restoredSizes] = useState<PaneSizes>(() => engine.getState().paneSizes);
 
   // The three-pane layout as the group last ANNOUNCED it, which is not the same
@@ -840,16 +859,25 @@ export function ShellLayout({
   const reportPaneSize = useCallback(
     (pane: PaneId, size: number, previousSize: number | undefined): void => {
       const committed = committedBandWidth.current;
-      const isWidthDriven = committed !== null && committed !== liveBandWidth.current;
-      if (!isWidthDriven) {
+      const isCorrection =
+        committed !== null && committed !== liveBandWidth.current;
+      // A mount report — no previous size — is the fitted layout, and when the
+      // record holds a real choice that fit may be a CORRECTION of it (a record
+      // chosen at 1000px opened at 800px mounts pane 1 lifted to its minimum).
+      // `sessionLayout` is seeded from that record, so the report is not taken
+      // into it. When the record is the engine's untouched default, the mount
+      // fit is `PANE_PX` at this width, which IS the intent, and is learned.
+      const isFittedChoice =
+        previousSize === undefined && !isEngineDefaultLayout(engine.getState().paneSizes);
+      if (!isCorrection && !isFittedChoice) {
         const next: Record<PaneId, number> = { ...sessionLayout.current };
         next[pane] = size;
         sessionLayout.current = next;
         isUserArranged.current = isUserArranged.current || previousSize !== undefined;
       }
-      persistPaneSize(pane, size, previousSize, isWidthDriven);
+      persistPaneSize(pane, size, previousSize, isCorrection);
     },
-    [persistPaneSize],
+    [engine, persistPaneSize],
   );
 
   useEffect(() => {
@@ -934,14 +962,28 @@ export function ShellLayout({
   // #114), and on the extension surface it is in another document.
   const paneOneIsInGroup = showChrome && !isNavCollapsed;
   const bands = paneBandsAt(bandWidth);
-  // The mount-time layout: the restored snapshot, or `PANE_PX` at the measured
-  // width when nothing was chosen, held to the live bands. `intentFromRecord`
-  // and `fitPaneLayout` carry the arithmetic and the reasons for it — the rebase
-  // of a restored pane-2 share, pane 3 as the remainder, and the pane-1 term
-  // that is zero when pane 1 is not in the group — and the re-fit below calls
-  // the same two functions, which is what makes a live resize and a reload agree.
-  const mountLayout = fitPaneLayout(
-    intentFromRecord(restoredSizes, paneOneIsInGroup, width),
+  // The layout a panel is REGISTERED at: the record, or `PANE_PX` at the
+  // measured width when nothing was chosen, held to the live bands.
+  // `intentFromRecord` and `fitPaneLayout` carry the arithmetic and the reasons
+  // for it — the rebase of a stored pane-2 share, pane 3 as the remainder, and
+  // the pane-1 term that is zero when pane 1 is not in the group — and the
+  // re-fit below calls the same two functions, which is what makes a live
+  // resize and a reload agree.
+  //
+  // **The record is read as it stands NOW, not as it stood at mount.** The
+  // library reads `defaultSize` only when a panel registers — at mount, and
+  // when pane 1 joins or leaves the group — and rebuilds the whole group from
+  // it then. With the mount snapshot here, a re-expansion rebuilt the
+  // mount-time layout rather than the one the person had since chosen, the
+  // screen showed that, and a reload showed the choice. Laying the record out
+  // with `setLayout` after the rebuild was tried and failed in the browser
+  // lane: the library rebuilds a second time on the render its own registration
+  // forces, and that second rebuild overwrote it and was saved. Since no drag
+  // re-registers a panel, the live record reaching `defaultSize` is never fed
+  // back as the starting point of the drag that wrote it — the concern decision
+  // 6 raises about binding it live.
+  const registrationLayout = fitPaneLayout(
+    intentFromRecord(engine.getState().paneSizes, paneOneIsInGroup, width),
     bands,
     paneOneIsInGroup,
   );
@@ -1171,7 +1213,7 @@ export function ShellLayout({
         id="pane2"
         order={2}
         className="min-h-0 min-w-0"
-        defaultSize={mountLayout.list}
+        defaultSize={registrationLayout.list}
         minSize={bands.list.min}
         maxSize={bands.list.max}
         onResize={(size, previousSize) => {
@@ -1206,7 +1248,7 @@ export function ShellLayout({
         id="pane3"
         order={3}
         className="min-h-0 min-w-0"
-        defaultSize={mountLayout.detail}
+        defaultSize={registrationLayout.detail}
         minSize={bands.detail.min}
         onResize={(size, previousSize) => {
           reportPaneSize('pane3', size, previousSize);
@@ -1455,7 +1497,7 @@ export function ShellLayout({
                         id="pane1"
                         order={1}
                         className="min-h-0 min-w-0"
-                        defaultSize={mountLayout.nav}
+                        defaultSize={registrationLayout.nav}
                         minSize={bands.nav.min}
                         maxSize={bands.nav.max}
                         onResize={(size, previousSize) => {

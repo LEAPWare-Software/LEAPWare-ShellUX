@@ -249,7 +249,7 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
     expect(engine.getState().paneSizes).toEqual({ pane1: 20, pane2: 30, pane3: 50 });
   });
 
-  it('fits the stored layout, not the renormalised one, once pane 1 has collapsed and come back', async () => {
+  it('shows and fits the stored layout, not a rebuilt one, once pane 1 has collapsed and come back', async () => {
     measureAt(1000);
     const user = userEvent.setup();
     const engine = createHydrationEngine({ storage: memoryStorage().storage });
@@ -260,15 +260,14 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
 
     await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
-    // Re-adding pane 1 renormalises the group from each panel's mount-time
-    // `defaultSize`, which is not the layout the person chose. Every panel
-    // reports that renormalisation with a previous size, exactly as a drag does.
-    const renormalised = panelSizes();
-    expect(renormalised).not.toEqual(chosen);
+    // Re-adding pane 1 makes the library rebuild the group from each panel's
+    // mount-time `defaultSize` — 24 / 36 / 40 here — which is not the layout
+    // the person chose. The membership effect lays the record back out, so the
+    // screen shows the choice, as a reload would.
+    expect(panelSizes()).toEqual(chosen);
 
     // At 1200px the chosen shares all fit their bands, so a re-fit from the
-    // stored record gives them back unchanged. A re-fit that took the
-    // renormalisation for an arrangement would give back `renormalised`.
+    // stored record gives them back unchanged.
     resizeTo(1200);
     expect(panelSizes()).toEqual(chosen);
   });
@@ -300,7 +299,7 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
     resizeTo(1000);
     expect(panelSizes()[0]).toBeCloseTo(17.6, 1);
   });
-  it('saves the pane-1 width the user chose, not the rebuilt one, when divider 2 is dragged after a collapse and a re-expansion', async () => {
+  it('shows and saves the pane-1 width the user chose, not the rebuilt one, when divider 2 is dragged after a collapse and a re-expansion', async () => {
     measureAt(1000);
     const user = userEvent.setup();
     const engine = createHydrationEngine({ storage: memoryStorage().storage });
@@ -310,8 +309,9 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
 
     await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
-    // The library rebuilds pane 1 from its mount-time `defaultSize`, 24%.
-    expect(panelSizes()[0]).toBeCloseTo(24, 1);
+    // The library rebuilds pane 1 from its mount-time `defaultSize`, 24%, and
+    // the membership effect lays the chosen 17.6 back out over it.
+    expect(panelSizes()[0]).toBeCloseTo(17.6, 1);
 
     const listBefore = panelSizes()[1] as number;
     await nudgeDivider(user, 1, '{ArrowLeft}');
@@ -378,5 +378,22 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
     observers.length = 0;
     render(<Harness engine={createHydrationEngine({ storage: storage.storage })} />);
     expect(panelSizes()).toEqual(live);
+  });
+  it('opened at 800px on a record chosen at 1000px, drag divider 2, the stored pane 1 is still 17.6', async () => {
+    measureAt(800);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({
+      storage: memoryStorage(record({ pane1: 17.6, pane2: 42.4, pane3: 40 })).storage,
+    });
+    render(<Harness engine={engine} />);
+    // The mount fit lifts pane 1 to its 800px minimum: 176/800 = 22.
+    expect(panelSizes()[0]).toBeCloseTo(22, 1);
+
+    const listBefore = panelSizes()[1] as number;
+    await nudgeDivider(user, 1, '{ArrowLeft}');
+    expect(panelSizes()[1]).toBeLessThan(listBefore - 1);
+    const stored = engine.getState().paneSizes;
+    expect(stored.pane1).toBeCloseTo(17.6, 5);
+    expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
   });
 });
