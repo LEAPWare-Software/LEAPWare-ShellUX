@@ -190,7 +190,7 @@ export function ShellNavButton({
         `${TOKEN_CLASS.controlRestBorder} ` +
         `${TOKEN_CLASS.navCurrentSurface} ${TOKEN_CLASS.navCurrentText} ${TOKEN_CLASS.navSelectedRule} ` +
         `${TOKEN_CLASS.controlHoverBorder} ` +
-        (isCollapsed ? 'relative h-8 w-8 justify-center' : 'w-full min-w-0 justify-start')
+        (isCollapsed ? 'relative h-7 w-7 justify-center' : 'w-full min-w-0 justify-start')
       }
     >
       {isCollapsed ? (
