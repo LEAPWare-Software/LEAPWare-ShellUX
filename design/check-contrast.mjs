@@ -52,10 +52,10 @@
  *     a reference in dead code satisfies it. It catches "no painter at all",
  *     which is what #111 was, and nothing narrower. CIEDE2000 rows compare two
  *     series, not a series with a background, and are out of its scope.
- *   - It is run by hand and by nothing else: no `package.json` script and no CI
- *     workflow invokes this file (`tokens:check` is `scripts/check-tokens.mjs`,
- *     a different checker). UNPAINTED therefore guards only a run someone chose
- *     to make.
+ *   - It runs as the second half of `npm run tokens:check` (after
+ *     `scripts/check-tokens.mjs`, a different checker), so in `verify` and in
+ *     `ci.yml` on three operating systems. It ran by hand only until the change
+ *     that repaired #111.
  *   - It measures colour, not rendering. Anti-aliasing, sub-pixel positioning,
  *     font weight and a translucent ancestor all change what a user actually
  *     sees, and none of them is visible to a resolver reading JSON.

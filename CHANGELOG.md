@@ -366,6 +366,21 @@ from so a reader can check it.
   review, and nobody opened the run's log. **Not proven here:** a PR that changes
   this workflow is skipped by the action, so whether the review comments is proven
   by the next PR.
+- **Chart titles overprinted the plot and ignored the theme; the chart contrast rows
+  were measured on a background nothing painted** (GitHub #112, #113; #111 addressed).
+  The title is no longer drawn into the ECharts canvas: the `<figcaption>` is the
+  visible heading, in `--text-primary`, and the canvas host paints `--surface-sunken`,
+  the plot well the twelve series were validated on. `design/check-contrast.mjs` gains
+  an UNPAINTED failure (a contrast row whose background nothing in `src/` paints) and a
+  STALE EXEMPTION failure, and now runs inside `npm run tokens:check`, so in `verify`
+  and in CI on three operating systems; until this change no script invoked it.
+  **What made it possible:** text rasterised into a canvas had no instrument pointed
+  at it (jsdom paints nothing; the contrast gate read declared pairs, never what is
+  painted), and the gate checked that a background token existed, never that it was
+  used. **Not done:** the Database chart is clipped to about 44px of its 160px canvas
+  at the default viewport. That predates this change, and this change makes it about
+  14px worse; it is filed with measurements as #146. The canvas font family is still
+  ECharts' default, and legend text is still 12px.
 - **Two links in `DEVELOPER.md` pointed outside the repository**
   (`../src/examples/HelloExtension.tsx` and its test, from a file at the root). Found
   by the link sweep this change ran; nothing checks inter-document links (GitHub #54).

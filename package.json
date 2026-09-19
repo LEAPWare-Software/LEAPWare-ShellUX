@@ -28,7 +28,7 @@
     "lint": "eslint . --max-warnings 0",
     "check:portability": "node scripts/check-portability.mjs",
     "check:citations": "node scripts/check-citations.mjs",
-    "tokens:check": "node scripts/check-tokens.mjs",
+    "tokens:check": "node scripts/check-tokens.mjs && node design/check-contrast.mjs --self-test",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "audit:all": "npm audit --audit-level=high",
     "verify": "npm run check:portability && npm run check:citations && npm run tokens:check && npm run lint && npm run typecheck && npm run test:coverage && npm run test:integration && npm run test:scripts && npm run build && npm run audit:prod"

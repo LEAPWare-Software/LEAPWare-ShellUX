@@ -131,10 +131,10 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 - [ ] Impeccable critique pass on the wireframes by an agent that did not draw them (D3). Findings resolved on the canvas, not in code.
 - [ ] **Owner approves gate 4.** Steps 4–6 and 6b's UI implement the approved wireframes, and a live impeccable pass on the running app checks the result against them.
 
-## Step 4 — Redesign wave 2: charts  (0/3)  — `opus`, design discovery
-- [ ] Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: #112 (title overprint), #113 (title outside the token system, dark contrast), #111 (contrast gate measured against a background the app never paints).
-- [ ] Browser-lane cases, mutation-probed. Revert the fix and watch them go red.
-- [ ] Review → `verify` → merge (per D-30).
+## Step 4 — Redesign wave 2: charts  (3/3)  — `opus`, design discovery
+- [x] Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: #112 (title overprint), #113 (title outside the token system, dark contrast), #111 (contrast gate measured against a background the app never paints). Landed in the charts PR; the contrast check now runs in `tokens:check`. #146 (Database chart clipped) filed, not fixed.
+- [x] Browser-lane cases, mutation-probed. Revert the fix and watch them go red. Whole-fix revert re-run at landing; result in the charts PR body.
+- [x] Review → `verify` → merge (per D-30). Record and `VERIFY_EXIT` in the charts PR body.
 
 ## Step 5 — Redesign wave 3: the system  (0/4)  — `opus`
 - [ ] Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6).
