@@ -103,7 +103,10 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // ---------------------------------------------------------------------------
 
 /** Ports a tracked file may assume, each because it is a documented default. */
-const DOCUMENTED_PORTS = new Map([[5173, "Vite's default dev-server port, documented in README.md"]]);
+const DOCUMENTED_PORTS = new Map([
+  [5173, "Vite's default dev-server port, documented in README.md"],
+  [4173, "Vite's default `vite preview` port, the browser lane's built-app server, documented in CONTRIBUTING.md"],
+]);
 
 /**
  * Network hosts a tracked file may name, each with the reason it is declared.

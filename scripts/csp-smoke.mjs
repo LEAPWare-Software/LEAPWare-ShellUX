@@ -51,11 +51,29 @@
  * `driveFixtures`), hovers the Database chart until its tooltip shows, and drags
  * a divider with the pointer. Each step's outcome is recorded in `driven`.
  *
+ * THE SHARED MODULES (ADR-0006 step 2), extension surface only. Before the
+ * reload, a minimal `__REACT_DEVTOOLS_GLOBAL_HOOK__` is installed beside the
+ * counter, so the surface's React DOM hands it `currentDispatcherRef` as it
+ * loads. After driving, and BEFORE the counts are read — so anything the imports
+ * trip is inside the zero — the surface imports `/shared/sdk.js`,
+ * `/shared/react.js` and `/shared/react-jsx-runtime.js` over the `shellux:`
+ * scheme and records: each resolved; `HOST_API_VERSION` against
+ * `src/sdk/api-surface.json`; exactly one renderer, whose dispatcher is the one
+ * `/shared/react.js` exposes; and `jsx` making a React element. `ok` requires
+ * every one. The browser-lane twin is `e2e/shared-modules.spec.ts`.
+ *
  * LIMITS. Nothing else is interacted with: no row selection, no command, no
- * drawer, no theme switch. Windows only.
+ * drawer, no theme switch. Windows only. The imports are made by evaluated
+ * code, not by a plugin bundle's static import — no plugin loads before step 6.
  * ============================================================================
  */
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+
+/** The version `/shared/sdk.js` must report: the one the committed baseline records. */
+const RECORDED_HOST_API_VERSION = JSON.parse(
+  readFileSync(new URL('../src/sdk/api-surface.json', import.meta.url), 'utf8'),
+).version;
 
 const exe = process.argv[2];
 if (exe === undefined) {
@@ -133,6 +151,48 @@ const COUNTER = `
     globalThis.__cspViolations.push({ directive: e.effectiveDirective, blocked: e.blockedURI, sample: e.sample });
   });
 `;
+
+/**
+ * A devtools hook with only what React DOM 18 calls, recording each renderer it
+ * is handed. Installed on the extension surface only.
+ */
+const REACT_HOOK = `
+  globalThis.__smokeRenderers = [];
+  globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+    supportsFiber: true,
+    isDisabled: false,
+    renderers: new Map(),
+    inject(renderer) { globalThis.__smokeRenderers.push(renderer); return globalThis.__smokeRenderers.length; },
+    onScheduleFiberRoot() {},
+    onCommitFiberRoot() {},
+    onCommitFiberUnmount() {},
+    onPostCommitFiberRoot() {},
+    checkDCE() {},
+  };
+`;
+
+/** Import the three shared modules in the surface, and read what they are. */
+const SHARED_MODULES = `(async () => {
+  const modules = {};
+  const resolved = {};
+  for (const name of ['sdk', 'react', 'react-jsx-runtime']) {
+    try {
+      modules[name] = await import(new URL('/shared/' + name + '.js', location.href).href);
+      resolved[name] = true;
+    } catch (error) {
+      resolved[name] = String(error);
+    }
+  }
+  const renderers = globalThis.__smokeRenderers || [];
+  const internals = modules.react && modules.react.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  return {
+    resolved,
+    hostApiVersion: modules.sdk ? modules.sdk.HOST_API_VERSION : null,
+    renderers: renderers.length,
+    sameDispatcher: renderers.map((r) => internals !== undefined && r.currentDispatcherRef === internals.ReactCurrentDispatcher),
+    jsxElement: modules['react-jsx-runtime'] ? modules['react-jsx-runtime'].jsx('div', {}).$$typeof === Symbol.for('react.element') : false,
+  };
+})()`;
 
 async function evaluate(session, expression) {
   const result = await session.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
@@ -294,12 +354,16 @@ async function measure(target, surface) {
   await sleep(500);
   const firstLoad = { logRefusals: refusals(session), auditIssues: auditIssues(session) };
 
-  await session.send('Page.addScriptToEvaluateOnNewDocument', { source: COUNTER });
+  await session.send('Page.addScriptToEvaluateOnNewDocument', {
+    source: surface === 'extension' ? COUNTER + REACT_HOOK : COUNTER,
+  });
   session.events.length = 0;
   await session.send('Page.reload', { ignoreCache: true });
   await sleep(SETTLE_MS);
 
   const driven = surface === 'chrome' ? await openPalette(session) : await driveFixtures(session);
+  const sharedModules = surface === 'extension' ? await evaluate(session, SHARED_MODULES) : null;
+  await sleep(500);
 
   const afterReload = {
     events: await evaluate(session, 'globalThis.__cspViolations'),
@@ -326,7 +390,7 @@ async function measure(target, surface) {
     null`);
 
   session.close();
-  return { surface, url: target.url, header, firstLoad, afterReload, controls: { inlineScript, dataImage } };
+  return { surface, url: target.url, header, firstLoad, afterReload, sharedModules, controls: { inlineScript, dataImage } };
 }
 
 const { child, endpoint } = launch();
@@ -351,14 +415,28 @@ try {
         (c) => c.events === 1 && c.logRefusals === 1 && c.auditIssues === 1,
       ),
     driven: r.afterReload.driven,
+    sharedModules: r.sharedModules,
   }));
+  // ADR-0006 step 2, on the extension surface: all three resolved over the
+  // scheme, the recorded version, one renderer sharing /shared/react.js's
+  // dispatcher, and a working jsx runtime.
+  const sharedOk = (m) =>
+    m !== null &&
+    ['sdk', 'react', 'react-jsx-runtime'].every((name) => m.resolved[name] === true) &&
+    m.hostApiVersion === RECORDED_HOST_API_VERSION &&
+    m.renderers === 1 &&
+    m.sameDispatcher.length === 1 &&
+    m.sameDispatcher[0] === true &&
+    m.jsxElement === true;
   // A zero only counts if the driven steps happened: an activation that silently
   // failed would measure an empty surface and pass (review finding R1).
   const drove = (s) =>
     s.surface === 'chrome'
       ? s.driven?.paletteOpen === true
       : s.driven?.mail?.ok === true && s.driven?.database?.ok === true && s.driven?.tooltipShown === true && s.driven?.dragged === true;
-  const ok = summary.every((s) => s.headerPresent && s.violations === 0 && s.controlsRegistered && drove(s));
+  const ok =
+    summary.every((s) => s.headerPresent && s.violations === 0 && s.controlsRegistered && drove(s)) &&
+    sharedOk(summary.find((s) => s.surface === 'extension').sharedModules);
   process.stdout.write(`${JSON.stringify({ ok, summary, results }, null, 2)}\n`);
   exitCode = ok ? 0 : 1;
 } catch (error) {

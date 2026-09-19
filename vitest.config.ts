@@ -71,11 +71,16 @@ export default defineConfig({
         'src/core/**/*.{ts,tsx}',
         'src/components/**/*.{ts,tsx}',
         'src/hooks/**/*.{ts,tsx}',
+        // ADR-0006 step 2: the SDK barrel, the shared-module entries and the
+        // bump rule. A widening: plugin-facing code is gated from the commit
+        // that creates it.
+        'src/sdk/**/*.{ts,tsx}',
       ],
       exclude: [
         'src/core/**/__tests__/**',
         'src/components/**/__tests__/**',
         'src/hooks/**/__tests__/**',
+        'src/sdk/**/__tests__/**',
       ],
       // `all: true` was removed here when vitest 4 removed the option itself.
       //

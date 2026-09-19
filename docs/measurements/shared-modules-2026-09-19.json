@@ -1,0 +1,149 @@
+{
+  "measurement": "ADR-0006 step 2: /shared/* in the packaged app, extension surface",
+  "command": "npm run verify:desktop && node scripts/csp-smoke.mjs \"release/win-unpacked/LEAPWare ShellUX.exe\"",
+  "tree": "83fa283 plus the scripts/csp-smoke.mjs change committed with this file",
+  "platform": "win32, Electron 43.2.0",
+  "date": "2026-09-19",
+  "exit": 0,
+  "output": {
+    "ok": true,
+    "summary": [
+      {
+        "surface": "extension",
+        "headerPresent": true,
+        "violations": 0,
+        "controlsRegistered": true,
+        "driven": {
+          "mail": {
+            "found": true,
+            "ok": true
+          },
+          "mailText": "List\n\nINBOX — 8 MESSAGES\n\nQ3 shipping forecast needs your sign-off\nPriya Raman — 09:14 — unread\nthread activity over 8 d",
+          "mailCanvas": 1,
+          "database": {
+            "found": true,
+            "ok": true
+          },
+          "databaseText": "List\n\nALL CATEGORIES — 280 RECORDS\n\nFST-1001\nHex bolt 13mm\n1 in stock against a reorder level of 9\n1\n▼\n-8\ndown\nlow\nFST-1",
+          "canvases": 1,
+          "tooltipShown": true,
+          "handleFound": true,
+          "dragged": true
+        },
+        "sharedModules": {
+          "resolved": {
+            "sdk": true,
+            "react": true,
+            "react-jsx-runtime": true
+          },
+          "hostApiVersion": "1.0",
+          "renderers": 1,
+          "sameDispatcher": [
+            true
+          ],
+          "jsxElement": true
+        }
+      },
+      {
+        "surface": "chrome",
+        "headerPresent": true,
+        "violations": 0,
+        "controlsRegistered": true,
+        "driven": {
+          "paletteOpen": true
+        },
+        "sharedModules": null
+      }
+    ],
+    "results": [
+      {
+        "surface": "extension",
+        "url": "shellux://renderer/paneview.html",
+        "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+        "firstLoad": {
+          "logRefusals": [],
+          "auditIssues": 0
+        },
+        "afterReload": {
+          "events": [],
+          "logRefusals": [],
+          "auditIssues": 0,
+          "driven": {
+            "mail": {
+              "found": true,
+              "ok": true
+            },
+            "mailText": "List\n\nINBOX — 8 MESSAGES\n\nQ3 shipping forecast needs your sign-off\nPriya Raman — 09:14 — unread\nthread activity over 8 d",
+            "mailCanvas": 1,
+            "database": {
+              "found": true,
+              "ok": true
+            },
+            "databaseText": "List\n\nALL CATEGORIES — 280 RECORDS\n\nFST-1001\nHex bolt 13mm\n1 in stock against a reorder level of 9\n1\n▼\n-8\ndown\nlow\nFST-1",
+            "canvases": 1,
+            "tooltipShown": true,
+            "handleFound": true,
+            "dragged": true
+          }
+        },
+        "sharedModules": {
+          "resolved": {
+            "sdk": true,
+            "react": true,
+            "react-jsx-runtime": true
+          },
+          "hostApiVersion": "1.0",
+          "renderers": 1,
+          "sameDispatcher": [
+            true
+          ],
+          "jsxElement": true
+        },
+        "controls": {
+          "inlineScript": {
+            "events": 1,
+            "logRefusals": 1,
+            "auditIssues": 1,
+            "inlineScriptRan": false
+          },
+          "dataImage": {
+            "events": 1,
+            "logRefusals": 1,
+            "auditIssues": 1
+          }
+        }
+      },
+      {
+        "surface": "chrome",
+        "url": "shellux://renderer/index.html",
+        "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+        "firstLoad": {
+          "logRefusals": [],
+          "auditIssues": 0
+        },
+        "afterReload": {
+          "events": [],
+          "logRefusals": [],
+          "auditIssues": 0,
+          "driven": {
+            "paletteOpen": true
+          }
+        },
+        "sharedModules": null,
+        "controls": {
+          "inlineScript": {
+            "events": 1,
+            "logRefusals": 1,
+            "auditIssues": 1,
+            "inlineScriptRan": false
+          },
+          "dataImage": {
+            "events": 1,
+            "logRefusals": 1,
+            "auditIssues": 1
+          }
+        }
+      }
+    ]
+  }
+}

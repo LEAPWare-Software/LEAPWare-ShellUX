@@ -92,7 +92,9 @@ jobs:
         run: npx playwright install-deps chromium
 
       # playwright.config.ts starts `npm run dev` itself through its webServer
-      # option and waits for the port, so there is no server step here.
+      # option and waits for the port, so there is no server step here. It also
+      # builds the renderer and serves it with `vite preview` on 4173, for the
+      # /shared/* case in e2e/shared-modules.spec.ts (ADR-0006 step 2).
       - name: Run browser tests
         run: npm run test:browser
 

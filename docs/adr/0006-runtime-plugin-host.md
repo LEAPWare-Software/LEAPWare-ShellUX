@@ -259,6 +259,34 @@ new required key, needs a major; anything added needs a minor. That is the
 with no shape — a validator that starts refusing a value it used to accept — is
 invisible to it, and still depends on review.
 
+> **2026-09-19, step 2 landed — what the baseline records, as built.**
+> `HOST_API_VERSION` is `'1.0'`, exported by `src/sdk/index.ts`. The rule is
+> `src/sdk/apiSurface.ts`; `src/sdk/api-surface.json` is its baseline. Three parts
+> beyond this decision's list are recorded. `IShellAPI`'s members, split required
+> and optional — the host provides that interface, so a required member made
+> optional is a major and the reverse a minor, the blueprint's rule reversed.
+> `HOTKEY_MODIFIER_REQUIRED_KEYS`, a denylist, so an entry added is a narrowing.
+> And the shared modules: the names `/shared/react.js` and
+> `/shared/react-jsx-runtime.js` export, read from their module namespaces, under
+> the same add/remove rule, plus React's major — a React major change is a host
+> major. The version moves one step only: `M.m` to `M+1.0` or `M.m+1`; `1.3 → 2.3`
+> and `1.0 → 7.0` are refused. `REGISTRY_LIMITS` compares by
+> value: a bound added or lowered is a major, removed or raised a minor.
+> `EXTENSION_ID_PATTERN` changing at all is a major, since two patterns cannot be
+> compared for "accepts less" by their text. The limit is wider than stated
+> above: the description is **top-level only** — a new required key on `Command`
+> or `NavigationNode`, or a changed parameter type on an `IShellAPI` member, is
+> invisible — and it records `commands` and `ribbonActions` as two optional keys,
+> not as "exactly one of". Keys come from the checker's `getPropertiesOfType`,
+> which for a union reports only the keys **every** member carries: a key only
+> one branch declares would be absent from the description, and adding or
+> removing it would move nothing. Neither type has such a key today. It is a **guardrail**: a baseline edited by hand to
+> match defeats it, and review of that file's diff is what catches that.
+> *Tests:* `src/sdk/__tests__/apiSurface.test.ts` — "fails when the contract
+> changes and the version does not move", "records the contract as it stands,
+> version included". Main cannot import `src/` (Amendment O decision 6), so how
+> step 3's check in main reads `HOST_API_VERSION` is step 3's to decide.
+
 **Rejected:**
 
 | Alternative | Why not |
@@ -377,6 +405,42 @@ host and plugin receive **one module instance**, which is the precondition for h
 working, not the property. That Vite emits `/shared/react.js` as a stable entry sharing
 its chunk with `paneview.html`'s entry — so the instance the host renders with is the
 one the plugin imports — is step 2's browser-lane case to write.
+
+> **2026-09-19, step 2 — the case, as written.** `vite.config.ts` lists
+> `src/sdk/shared/react.ts`, `src/sdk/shared/react-jsx-runtime.ts` and
+> `src/sdk/index.ts` as build inputs beside the two documents, emitted unhashed as
+> `dist/shared/react.js`, `react-jsx-runtime.js` and `sdk.js`; in the measured
+> build `shared/react.js` and both documents' entries import one
+> `assets/react-*.js` chunk. The
+> dev server answers the same three URLs from source. The browser lane compares
+> the `ReactCurrentDispatcher` a module importing `/shared/react.js` receives
+> with the `currentDispatcherRef` React DOM hands the devtools hook on
+> `paneview.html` — on the build under `vite preview` with this policy, and on
+> the dev server. *Tests:* `e2e/shared-modules.spec.ts` — "a module importing
+> /shared/react.js receives the React instance the extension surface renders
+> with". With `src/sdk/shared/react.ts` pointed at a copied second React, the
+> build case fails on that comparison.
+>
+> **The packaged app, measured.** `scripts/csp-smoke.mjs` now also imports the
+> three modules in the packaged extension surface over the `shellux:` scheme,
+> after driving the fixtures and before reading the violation counts. One run
+> (Windows, Electron 43.2.0, `docs/measurements/shared-modules-2026-09-19.json`):
+> all three resolved, `HOST_API_VERSION` `1.0`, one renderer whose
+> `currentDispatcherRef` is `/shared/react.js`'s dispatcher, `jsx` made a React
+> element, and 0 CSP violations on each surface with both positive controls
+> registering. The smoke's `ok` now requires all of it. The imports are
+> evaluated code, not a plugin's static import. **Not measured:** a plugin
+> component actually rendering — no plugin loads before step 6 — and macOS or
+> Linux.
+>
+> **The baseline changed shape without a version bump** in review (`shellApi`
+> split into required and optional; `sharedModules` added). Accepted: `1.0` has
+> never been released, so no plugin was built against the earlier description.
+>
+> **A cost, measured:** with five inputs sharing chunks, the build splits more.
+> `<link rel="modulepreload">` tags went from 1 to 4 in `dist/index.html` and
+> from 1 to 5 in `dist/paneview.html` (`vite build` at `de252c9` and after); the
+> total emitted JavaScript is about the same size. Load time was not measured.
 
 **Renderer switches are unchanged.** `contextIsolation: true`, `sandbox: true`,
 `nodeIntegration: false` stay on both views, as ADR-0004 decision 4 fixes them.

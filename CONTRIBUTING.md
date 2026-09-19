@@ -322,10 +322,19 @@ shell with the two verification remotes in `src/mocks/` registered, and the dev
 server serves that fixture at **`/`** as well as at `/dev.html` — a middleware in
 `vite.config.ts` rewrites the one path. It is dev-server-only by construction
 twice over: the middleware is installed under `configureServer`, which `vite
-build` never calls, and Vite's build input is `index.html` alone, so `dev.html` is
-never emitted into `dist/`. It uses **no environment variable**, because ADR-0002
+build` never calls, and Vite's build inputs are listed in `vite.config.ts` and
+`dev.html` is not among them, so it is never emitted into `dist/`. It uses **no environment variable**, because ADR-0002
 forbids one without a working default. What the production bundle renders is
 unchanged, and `/index.html` still serves it on the dev server.
+
+**Two servers, since ADR-0006 step 2.** `playwright.config.ts` also runs `vite
+build` and serves `dist/` with `vite preview` on port 4173, which sends the
+renderer's Content-Security-Policy (`preview.headers` in `vite.config.ts`, imported
+from `electron/main/rendererCsp.ts`). A case about what the bundler *emits* — the
+`/shared/*.js` modules — belongs there, because the dev server emits nothing.
+The preview server is Vite's static server with the same header; it is not the
+`shellux:` scheme handler, and a case run against it says nothing about the
+packaged app's asar.
 
 **When you add a case here, make it one jsdom could not have made.** Assert
 measured pixels, real clipping, a real pointer, or a real reload. A case that

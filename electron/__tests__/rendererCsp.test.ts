@@ -161,4 +161,13 @@ describe('rendererCsp: resolveRendererFile, moved unchanged from index.ts', () =
     expect(resolveRendererFile(root, 'shellux://renderer/..%2fdist-extra%2fx.js')).toBeNull();
     expect(resolveRendererFile(root, 'shellux://renderer/%E0%A4%A')).toBeNull();
   });
+
+  it('resolves each /shared/ module to the file the build emits under the renderer root', () => {
+    // ADR-0006 step 2: `vite.config.ts` emits `shared/<name>.js` unhashed into
+    // `dist/`, and the scheme needs no route of its own to serve them. Path
+    // arithmetic only: that the packaged asar holds the files is not shown here.
+    for (const name of ['react', 'react-jsx-runtime', 'sdk']) {
+      expect(resolveRendererFile(root, `shellux://renderer/shared/${name}.js`)).toBe(join(root, 'shared', `${name}.js`));
+    }
+  });
 });
