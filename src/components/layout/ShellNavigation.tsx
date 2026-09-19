@@ -190,7 +190,7 @@ export function ShellNavButton({
         `${TOKEN_CLASS.controlRestBorder} ` +
         `${TOKEN_CLASS.navCurrentSurface} ${TOKEN_CLASS.navCurrentText} ${TOKEN_CLASS.navSelectedRule} ` +
         `${TOKEN_CLASS.controlHoverBorder} ` +
-        (isCollapsed ? 'relative h-7 w-7 justify-center' : 'w-full min-w-0 justify-start')
+        (isCollapsed ? 'relative h-8 w-8 justify-center' : 'w-full min-w-0 justify-start')
       }
     >
       {isCollapsed ? (
@@ -200,10 +200,7 @@ export function ShellNavButton({
           // above for why that independence is the point.
           <span
             aria-hidden="true"
-            className={
-              'flex h-full w-full items-center justify-center rounded-sm font-semibold ' +
-              `${TOKEN_CLASS.identityTileSurface} ${TOKEN_CLASS.identityTileText}`
-            }
+            className="flex h-full w-full items-center justify-center rounded-sm font-semibold"
           >
             {label.trim().slice(0, 1).toUpperCase()}
           </span>
