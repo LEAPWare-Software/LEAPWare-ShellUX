@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `10a5e8d` (#181, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `82eae29` (#182, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -27,15 +27,16 @@ with a merge queue.
 - Operator install guide and 1.0 known limits, plan step 7 (#178).
 - PR B (#179): both proof-of-completion checks required, applied and read back.
 - Plan step 0c complete: the protocol is in force (#181, row C-37).
-- This change: the plugin store, ADR-0006 step 4.
+- The plugin store, ADR-0006 step 4 (#182).
+- This change: wave-3 W3-1, the state primitives.
 
 ## In flight
 
-- Wave-3 W3-1 (state primitives), reviewed; lands next.
+- ADR-0006 step 5 (lifecycle hooks, `setNavigationTree`, `clearBadge`), in build.
 
 ## The next step
 
-1. Land W3-1; then ADR-0006 steps 5 to 11 and W3-2 onward.
+1. ADR-0006 steps 5 to 11, and W3-2 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
