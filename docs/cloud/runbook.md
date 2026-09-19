@@ -133,6 +133,8 @@ Each run does one unit of work, then exits.
 
 ## 3. Reviewer routine (hourly; a routine cannot run more often than once an hour)
 
+0. **Reviewer lock:** use a comment on #187 starting `REVIEWER`, with the same `LOCK <utc>` protocol as the lanes, 110 minutes. If another reviewer run holds it, exit. Unlock at the end.
+
 1. Find open PRs whose head SHA has no review comment from this routine: `Reviewer: shellux-cloud-reviewer` with `Reviewed SHA: <head>`.
 2. For each one, oldest first, **at most 3 per run:** check out the head. Review adversarially per `CLAUDE.md` rule 1:
    - measure every claim;
@@ -146,6 +148,12 @@ Each run does one unit of work, then exits.
 ## 4. Lane item lists, in order
 
 **Lane C, release, docs and hygiene. Do these first:**
+0. **Make the cloud fully operational first** (owner order, 2026-09-19). These come before every other lane C item, in this order:
+   - **a. Merging that does not depend on the proxy.** Add `.github/workflows/auto-queue.yml`. It triggers on `pull_request` (labeled, synchronize), `check_suite` completed, and `issue_comment` created. When a PR carries label `lane-a`, `lane-b` or `lane-c`, has a MERGE verdict at its head from the reviewer, and the `PR evidence` check passes at that head, it runs `gh pr merge <n> --squash --auto` with the workflow's `GITHUB_TOKEN` (`pull-requests: write`, `contents: write`), which enters the merge queue. Keep it least-privilege, test the decision logic with `node:test`, and state it as a guardrail. After it lands, conductors stop calling the proxy auto-merge route.
+   - **b.** Make the open lane PRs green (#190 first). Take every CI failure log with `mcp__github__get_job_logs`.
+   - **c.** Land #188, this runbook.
+   - **d.** Lane C item 3: the `claude[bot]` review gate.
+   - **e.** Make `npm run status` fall back to running `prove-claims` in the VM when the CI artifact cannot be downloaded. Label the output `measured locally`. Add a test.
 1. **Finish branch `docs/handoff-package`**, but only once the `LOCAL LOCK` comment on #187 says RELEASED, or 4 hours pass with no new commit on the branch. Until then skip to item 2. If a PR from that branch is already open, review-and-land it instead of rebuilding:
    - commit `9f47f87` holds audit fixes 1–14; commit `53311c8` holds work in progress on 15–32 and is **unverified**;
    - complete items 15–32 as `docs/handoff/next-session.md` §5 lists them;
