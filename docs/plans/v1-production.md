@@ -106,7 +106,7 @@ Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until
 
 ## Step 2 — Context files within their caps  (4/4)
 - [x] HANDOFF.md → ≤3000 bytes. It keeps only the transition: where main is, what landed, what is in flight, the next step. §2–§12 move verbatim to `docs/history/handoff-archive-2026-08.md`. [C-08]
-- [x] CLAUDE.md → ≤200 lines. The "Traps" and "jsdom is blind" bodies move to `docs/traps.md`, and CLAUDE.md keeps one-line pointers plus the rules. [C-09]
+- [x] CLAUDE.md → ≤200 lines. The "Traps" and "jsdom is blind" bodies move into `docs/traps.md`, and CLAUDE.md keeps one-line pointers plus the rules. [C-09]
 - [x] The caps lint: `scripts/__tests__/context-caps.test.mjs` in `test:scripts`, so inside `verify` with no new stage. Mutation-probed both halves. [C-10]
 - [x] `git add` the new files before running `verify` (the portability trap). Citations must still resolve: moved text keeps its `*Tests:*` markers. [C-11]
 
