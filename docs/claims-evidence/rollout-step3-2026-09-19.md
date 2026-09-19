@@ -23,5 +23,5 @@ after the clean run:  reference run: 35427580893 (success, 2026-09-19T06:48:48Z)
 ```
 
 The two `MANUAL` rows are dated evidence rows, which a run never re-proves, so a failed
-run does not change them. Issue #174 was closed with this explanation: it was the
-harness, and no real claim failed.
+run does not change them. Issue #174 is no longer open; the comment that ended it, posted by the
+CTO agent, says it was the harness and that no real claim failed.

@@ -20,7 +20,7 @@ with a merge queue.
 - ADR-0006 Accepted (#145); steps 1 CSP (#154) and 2 SDK (#170).
 - Charts (#148), crash log and build target (#150), ShellLayout split (#160).
 - Rollout step 2 complete (#171, row C-30).
-- The rollout step 3 harness (#173); step 3 then run on main (#174 filed, closed).
+- The rollout step 3 harness (#173); step 3 then run on main (it filed #174, now no longer open).
 - This change: plan step 0c item 4 ticked (row C-31).
 
 ## In flight
