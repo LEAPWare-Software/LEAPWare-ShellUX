@@ -345,21 +345,23 @@ covered; stated, not fixed.
 >   when the palette opened. Attributed by reading the bundle, not by the report
 >   (which carries no sample): Radix Dialog's scroll lock inserts a `<style>` element
 >   whose text carries a measured scrollbar width, so no hash can name it.
-> - An ECharts axis tooltip writes HTML with `style="…"` attributes: 13
->   `style-src-attr` violations for one shown tooltip under `style-src 'self'`, 13
+> - An ECharts axis tooltip writes HTML with `style="…"` attributes. The packaged
+>   extension surface registers the Mail and Database fixtures
+>   (`src/paneview/PaneViewShell.tsx`) though nothing in the packaged app activates
+>   them; the smoke activates both, hovers the Database chart until its tooltip
+>   shows, and drags a divider. Under `style-src 'self'` that raised 21
+>   `style-src-attr` and 1 `style-src-elem` violation on the extension surface. In
+>   isolation against ECharts' own build: 13 `style-src-attr` for one tooltip, 13
 >   with only `style-src-elem` relaxed, 0 with `style-src 'self' 'unsafe-inline'`.
->   Measured against ECharts' own browser build, not the app's bundle — the packaged
->   app draws no chart, because it registers no extension.
-> - With the shipped policy, the packaged app recorded **0 violations on each
->   surface** (host chrome with the palette open; the extension surface, empty), and
->   both positive controls — an inline `<script>`, a `data:` image — were refused on
->   both.
+> - With the shipped policy, the same driven run recorded **0 violations on each
+>   surface**, and both positive controls — an inline `<script>`, a `data:` image —
+>   were refused on both, each raising exactly one entry in each of the smoke's three
+>   counters.
 >
 > Runs: `scripts/csp-smoke.mjs` and `scripts/csp-echarts-probe.mjs`; output committed
 > in `docs/measurements/csp-2026-09-18.json`. Neither is in `npm run verify`: the
-> smoke needs a packaged app. Not measured: a populated extension pane, a pointer
-> drag of a divider (`react-resizable-panels` also inserts a `<style>` element for
-> the drag cursor; the grant should admit it, unmeasured), or macOS or Linux.
+> smoke needs a packaged app. Not measured: row selection, commands, the drawer, a
+> theme switch, or macOS or Linux.
 
 **Shared modules by build-time rewrite, not an import map.** The plugin build marks
 `react`, `react/jsx-runtime` and `@shellux/sdk` external and rewrites them to

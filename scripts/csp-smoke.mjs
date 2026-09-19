@@ -43,11 +43,16 @@
  * (A `style` attribute is not a control: `style-src` carries `'unsafe-inline'`,
  * measured necessary — see `electron/main/rendererCsp.ts`.)
  *
- * LIMITS. The packaged application registers no extensions (`index.ts`
- * decision 4), so the extension surface is measured empty and no chart is drawn.
- * The palette is opened (Ctrl+K) so host chrome's dialog layer is exercised;
- * nothing else is interacted with. A violation that only a populated pane or a
- * hovered chart tooltip would raise is not observable by this run.
+ * WHAT IS DRIVEN. Host chrome: the palette is opened (Ctrl+K). The extension
+ * surface: `src/paneview/PaneViewShell.tsx` registers the Mail and Database
+ * fixtures in the production `paneview.html` bundle, but host chrome's registry
+ * is empty, so pane 1 offers nothing to click and nothing activates them. The
+ * smoke activates each through the surface's own controller (see
+ * `driveFixtures`), hovers the Database chart until its tooltip shows, and drags
+ * a divider with the pointer. Each step's outcome is recorded in `driven`.
+ *
+ * LIMITS. Nothing else is interacted with: no row selection, no command, no
+ * drawer, no theme switch. Windows only.
  * ============================================================================
  */
 import { spawn } from 'node:child_process';
@@ -146,6 +151,139 @@ function auditIssues(session) {
   ).length;
 }
 
+/**
+ * One positive control: run `expression`, which the policy must refuse, and
+ * report how much EACH of the three counters rose. All three must rise by
+ * exactly one (F2 of the review of 02dd98b): a counter that does not move for a
+ * known violation is blind, and its zero above means nothing.
+ */
+async function control(session, expression) {
+  const snapshot = async () => ({
+    events: await evaluate(session, 'globalThis.__cspViolations.length'),
+    logRefusals: refusals(session).length,
+    auditIssues: auditIssues(session),
+  });
+  const before = await snapshot();
+  await evaluate(session, expression);
+  await sleep(500);
+  const after = await snapshot();
+  return {
+    events: after.events - before.events,
+    logRefusals: after.logRefusals - before.logRefusals,
+    auditIssues: after.auditIssues - before.auditIssues,
+  };
+}
+
+/** Host chrome's own chord, as a real key event through the shipping dispatch path. */
+async function openPalette(session) {
+  for (const type of ['keyDown', 'keyUp']) {
+    await session.send('Input.dispatchKeyEvent', {
+      type, key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2,
+    });
+  }
+  await sleep(1000);
+  return { paletteOpen: await evaluate(session, "document.querySelector('[role=dialog]') !== null") };
+}
+
+/**
+ * Bring the extension surface's two registered fixtures to the foreground.
+ *
+ * `src/paneview/PaneViewShell.tsx` registers Mail and Database in the production
+ * `paneview.html` bundle, but nothing activates them: activation follows the
+ * replicated `activeExtensionId`, host chrome writes it from pane 1, and host
+ * chrome's registry is empty, so there is nothing in pane 1 to click. So this
+ * reaches the surface's own activation controller the way ADR-0001 Amendment E
+ * says any code in the document can — by walking React fibers from the root —
+ * and calls `activate`. That is the smoke acting as hostile page code on
+ * purpose; it is not a route the application offers.
+ */
+const ACTIVATE = (id) => `(() => {
+  const root = document.getElementById('root');
+  const key = Object.keys(root).find((k) => k.startsWith('__reactContainer$'));
+  const stack = [root[key]];
+  while (stack.length > 0) {
+    const fiber = stack.pop();
+    if (fiber === null || fiber === undefined) continue;
+    const value = fiber.memoizedProps && fiber.memoizedProps.value;
+    if (value && typeof value.activate === 'function' && typeof value.blur === 'function') {
+      const result = value.activate(${JSON.stringify(id)});
+      return { found: true, ok: result && result.ok === true };
+    }
+    stack.push(fiber.sibling, fiber.child);
+  }
+  return { found: false, ok: false };
+})()`;
+
+async function mouse(session, type, x, y, buttons) {
+  await session.send('Input.dispatchMouseEvent', {
+    type, x, y, button: type === 'mouseMoved' && buttons === 0 ? 'none' : 'left', buttons, clickCount: type === 'mouseMoved' ? 0 : 1,
+  });
+}
+
+/** An ECharts tooltip: a `z-index` div with text in it that is laid out and not hidden. */
+const TOOLTIP_VISIBLE = `[...document.querySelectorAll('div[style*="z-index"]')].some((d) => {
+  const style = getComputedStyle(d);
+  return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0 && d.innerText.trim().length > 0;
+})`;
+
+async function driveFixtures(session) {
+  const mail = await evaluate(session, ACTIVATE('mail'));
+  await sleep(1500);
+  const mailCanvas = await evaluate(session, "document.querySelectorAll('canvas').length");
+  const mailText = await evaluate(session, 'document.body.innerText.slice(0, 120)');
+  const database = await evaluate(session, ACTIVATE('inventory-db'));
+  await sleep(2500);
+  // Every chart the Database fixture drew, hovered in turn across a grid of
+  // points, until one shows its axis tooltip — ECharts writes that tooltip as
+  // HTML with `style` attributes, the `style-src-attr` case.
+  const canvases = await evaluate(session, `[...document.querySelectorAll('canvas')].map((c) => {
+    c.scrollIntoView({ block: 'center' });
+    const r = c.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  })`);
+  let tooltipShown = false;
+  for (const [index] of canvases.entries()) {
+    const box = await evaluate(session, `(() => {
+      const c = document.querySelectorAll('canvas')[${String(index)}];
+      c.scrollIntoView({ block: 'center' });
+      const r = c.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    })()`);
+    for (const fy of [0.3, 0.5, 0.7]) {
+      for (let step = 1; step <= 8 && !tooltipShown; step++) {
+        await mouse(session, 'mouseMoved', box.x + (box.width * step) / 9, box.y + box.height * fy, 0);
+        await sleep(150);
+        tooltipShown = await evaluate(session, TOOLTIP_VISIBLE);
+      }
+    }
+    if (tooltipShown) break;
+  }
+  const handle = await evaluate(session, `(() => {
+    const h = document.querySelector('[data-panel-resize-handle-id], [role=separator]');
+    if (h === null) return null;
+    const r = h.getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  })()`);
+  let dragged = false;
+  if (handle !== null) {
+    const before = await evaluate(session, "document.querySelector('[data-panel-resize-handle-id], [role=separator]').getAttribute('aria-valuenow')");
+    await mouse(session, 'mouseMoved', handle.x, handle.y, 0);
+    await mouse(session, 'mousePressed', handle.x, handle.y, 1);
+    for (let step = 1; step <= 6; step++) {
+      await mouse(session, 'mouseMoved', handle.x - step * 15, handle.y, 1);
+      await sleep(60);
+    }
+    // Counted while the drag is still held, when the cursor <style> exists.
+    await sleep(300);
+    await mouse(session, 'mouseReleased', handle.x - 90, handle.y, 1);
+    await sleep(300);
+    const after = await evaluate(session, "document.querySelector('[data-panel-resize-handle-id], [role=separator]').getAttribute('aria-valuenow')");
+    dragged = before !== after;
+  }
+  const databaseText = await evaluate(session, 'document.body.innerText.slice(0, 120)');
+  return { mail, mailText, mailCanvas, database, databaseText, canvases: canvases.length, tooltipShown, handleFound: handle !== null, dragged };
+}
+
 async function measure(target, surface) {
   const session = connect(target.webSocketDebuggerUrl);
   await session.opened;
@@ -161,22 +299,13 @@ async function measure(target, surface) {
   await session.send('Page.reload', { ignoreCache: true });
   await sleep(SETTLE_MS);
 
-  if (surface === 'chrome') {
-    // Host chrome's own chord. `Input.dispatchKeyEvent` reaches the page as a
-    // real key event, so the palette opens through the shipping dispatch path.
-    for (const type of ['keyDown', 'keyUp']) {
-      await session.send('Input.dispatchKeyEvent', {
-        type, key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2,
-      });
-    }
-    await sleep(1000);
-  }
+  const driven = surface === 'chrome' ? await openPalette(session) : await driveFixtures(session);
 
   const afterReload = {
     events: await evaluate(session, 'globalThis.__cspViolations'),
     logRefusals: refusals(session),
     auditIssues: auditIssues(session),
-    paletteOpen: surface === 'chrome' ? await evaluate(session, "document.querySelector('[role=dialog]') !== null") : null,
+    driven,
   };
 
   const header = await evaluate(
@@ -184,30 +313,20 @@ async function measure(target, surface) {
     "fetch(location.href).then((r) => r.headers.get('content-security-policy'))",
   );
 
-  const before = afterReload.events.length;
-  await evaluate(session, `
+  const inlineScript = await control(session, `
     const s = document.createElement('script');
     s.textContent = 'globalThis.__inlineRan = true';
     document.head.appendChild(s);
     null`);
-  await sleep(300);
-  const scriptControl = {
-    raised: (await evaluate(session, 'globalThis.__cspViolations.length')) - before,
-    inlineScriptRan: await evaluate(session, 'globalThis.__inlineRan === true'),
-  };
-  const beforeImage = await evaluate(session, 'globalThis.__cspViolations.length');
-  await evaluate(session, `
+  inlineScript.inlineScriptRan = await evaluate(session, 'globalThis.__inlineRan === true');
+  const dataImage = await control(session, `
     const img = document.createElement('img');
     img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
     document.body.appendChild(img);
     null`);
-  await sleep(300);
-  const imageControl = {
-    raised: (await evaluate(session, 'globalThis.__cspViolations.length')) - beforeImage,
-  };
 
   session.close();
-  return { surface, url: target.url, header, firstLoad, afterReload, controls: { inlineScript: scriptControl, dataImage: imageControl } };
+  return { surface, url: target.url, header, firstLoad, afterReload, controls: { inlineScript, dataImage } };
 }
 
 const { child, endpoint } = launch();
@@ -226,8 +345,12 @@ try {
     violations:
       r.firstLoad.logRefusals.length + r.firstLoad.auditIssues + r.afterReload.events.length +
       r.afterReload.logRefusals.length + r.afterReload.auditIssues,
-    controlsRegistered: r.controls.inlineScript.raised === 1 && !r.controls.inlineScript.inlineScriptRan &&
-      r.controls.dataImage.raised === 1,
+    // Every counter must rise by exactly one for every control.
+    controlsRegistered: !r.controls.inlineScript.inlineScriptRan &&
+      [r.controls.inlineScript, r.controls.dataImage].every(
+        (c) => c.events === 1 && c.logRefusals === 1 && c.auditIssues === 1,
+      ),
+    driven: r.afterReload.driven,
   }));
   const ok = summary.every((s) => s.headerPresent && s.violations === 0 && s.controlsRegistered);
   process.stdout.write(`${JSON.stringify({ ok, summary, results }, null, 2)}\n`);

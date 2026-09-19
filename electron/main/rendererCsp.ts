@@ -28,7 +28,9 @@ import { join, sep } from 'node:path';
  * **What is tested, and what is only measured.** The suite shows that every
  * response this handler builds carries the header. *Tests:*
  * `electron/__tests__/rendererCsp.test.ts` — "every HTML response the scheme
- * serves carries the policy". It cannot show that Chromium enforces it; that is
+ * serves carries the policy", "puts the policy on a script and a stylesheet
+ * too", and "puts the policy on the 403 and 404 responses too, and warns for
+ * each". It cannot show that Chromium enforces it; that is
  * measured, not tested: spike case D, and the two positive controls in
  * `scripts/csp-smoke.mjs` — an inline `<script>` that did not run and a `data:`
  * image that was refused, on both surfaces of the packaged app. The policy is
@@ -55,13 +57,16 @@ import { join, sep } from 'node:path';
  *       `scripts/csp-smoke.mjs`; every run is in
  *       `docs/measurements/csp-2026-09-18.json`.
  *     - `style-src-attr`: an ECharts axis tooltip writes its markup as HTML with
- *       `style="…"` attributes; one shown tooltip raised 13 violations under
- *       `style-src 'self'`, 13 under `style-src-elem 'unsafe-inline'` alone, and
- *       0 under this directive. Measured by `scripts/csp-echarts-probe.mjs`
- *       against ECharts' own browser build, not the app's bundle — the packaged
- *       app draws no chart, because it registers no extension.
+ *       `style="…"` attributes. In the PACKAGED app, with `style-src 'self'`,
+ *       activating the Database fixture and hovering its chart raised 21
+ *       `style-src-attr` and 1 `style-src-elem` violation on the extension
+ *       surface. In isolation (`scripts/csp-echarts-probe.mjs`, ECharts' own
+ *       browser build): 13 under `style-src 'self'`, 13 with only
+ *       `style-src-elem` relaxed, 0 under this directive.
  *   What the grant admits is injected CSS; what CSS could use to send anything
  *   anywhere is `img-src`, `font-src` and `connect-src`, and each is `'self'`.
+ *   *Tests:* same file — "allows no 'unsafe-eval', 'unsafe-inline' only for
+ *   styles, and no source beyond 'self' and 'none'".
  *   React `style` props are not the reason: they write through the CSSOM
  *   (`element.style.x = …`), which `style-src` does not govern.
  * - `img-src 'self'`, `font-src 'self'` — implied by `default-src` already;
@@ -155,8 +160,13 @@ export function createRendererHandler(options: RendererHandlerOptions): (request
       options.warn(`refused a request that resolves outside the renderer root: ${request.url}`);
       return withRendererCsp(new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/plain' } }));
     }
+    // Only the fetch is inside the `try`. A failure of `withRendererCsp` itself
+    // is not a missing asset, and reporting it as one would send a reader
+    // looking for a file that exists; it rejects, and `protocol.handle` fails
+    // the request, which is the honest outcome for a response with no policy.
+    let fetched: Response;
     try {
-      return withRendererCsp(await options.fetchFile(target));
+      fetched = await options.fetchFile(target);
     } catch (error) {
       // The white-screen case: the document loaded and one of its assets did
       // not. No load-failure event fires for this, so this line is the only
@@ -164,5 +174,6 @@ export function createRendererHandler(options: RendererHandlerOptions): (request
       options.warn(`renderer asset not found: ${request.url} (${describeError(error)})`);
       return withRendererCsp(new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } }));
     }
+    return withRendererCsp(fetched);
   };
 }

@@ -2,10 +2,11 @@
  * ============================================================================
  * THE ECHARTS TOOLTIP UNDER CANDIDATE STYLE POLICIES. ADR-0006 STEP 1.
  * ============================================================================
- * The packaged smoke (`scripts/csp-smoke.mjs`) cannot see a chart: the packaged
- * application registers no extensions, so nothing draws one. ECharts is a
- * production dependency and the shell's chart component shows an axis tooltip
- * (`src/core/chart/echartsRenderer.ts`), so this probe measures that one piece
+ * Written first, when the packaged smoke did not yet activate the Database
+ * fixture and so drew no chart. The smoke now does (`scripts/csp-smoke.mjs`,
+ * `driveFixtures`), and its strict-policy run is the application-level
+ * measurement; this probe is kept as the isolated one, because it separates
+ * the two `style-src` sub-directives, which the smoke does not. It measures
  * directly: ECharts' own browser build, an axis-trigger tooltip shown with
  * `showTip`, in an Electron renderer with the shipping switches, served over a
  * privileged scheme with each candidate policy. Prints one JSON line per policy.

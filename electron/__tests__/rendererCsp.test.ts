@@ -73,6 +73,28 @@ describe('rendererCsp: the Content-Security-Policy on the shellux:// scheme', ()
     }
   });
 
+  it('puts the policy on a script and a stylesheet too', async () => {
+    // Not classifying by type is the design (see rendererCsp.ts); this pins it,
+    // with real non-HTML files from the tree and their real content types.
+    const serve = createRendererHandler({
+      root: REPO_ROOT,
+      fetchFile: (absolutePath) =>
+        Promise.resolve(
+          new Response(readFileSync(absolutePath), {
+            status: 200,
+            headers: { 'content-type': absolutePath.endsWith('.css') ? 'text/css' : 'text/javascript' },
+          }),
+        ),
+      warn: () => undefined,
+    });
+    for (const path of ['postcss.config.js', 'src/index.css']) {
+      const response = await serve(new Request(`shellux://renderer/${path}`));
+      expect(response.status, path).toBe(200);
+      expect(response.headers.get('content-type'), path).not.toContain('html');
+      expect(response.headers.get('content-security-policy'), path).toBe(RENDERER_CSP);
+    }
+  });
+
   it('puts the policy on the 403 and 404 responses too, and warns for each', async () => {
     const warnings: string[] = [];
     const serve = handler(warnings);
