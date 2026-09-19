@@ -16,6 +16,21 @@ from so a reader can check it.
 
 ### Added
 
+- **A crash now leaves a report someone can read, and the bundle declares its target**
+  (GitHub #86, #85; Electron half). `electron/main/diagnosticsLog.ts` writes a rotating
+  log (1 MiB, two backups) under `app.getPath('logs')`; main records
+  `uncaughtException`, `unhandledRejection` and `render-process-gone`; both renderers
+  forward `error` and `unhandledrejection` through one new preload member. Nothing
+  leaves the machine: no endpoint exists. Vite now emits sourcemaps and
+  `build.target: 'chrome150'`, the Chromium measured in the installed Electron 43.2.0.
+  Sourcemaps are kept out of the asar, **third-party ones included**: the first version
+  excluded only the project's own, and a packaged build still held 129 maps from
+  production dependencies. Re-measured at landing: `npx asar list` on a fresh
+  `verify:desktop` build lists 2,001 entries and 0 `.map` files. **Not done:** the maps
+  are not yet attached to a release (plan step 8); the packaged app was launched (it
+  starts, five processes) but no screenshot of its window was captured at landing;
+  the Safari half of #85 is moot for an Electron-only target and is not addressed.
+
 - **ADR-0006, the runtime plugin host, Accepted; ADR-0001 Amendment P.** The design
   for step 6b: package format, per-user plugin store, a custom-scheme loader into the
   extension surface, lifecycle hooks, the contract version rule, the conformance kit

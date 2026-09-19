@@ -98,6 +98,12 @@ files:
   # rather than needing `dist/**` rewritten as a positive list of non-map files.
   - '!dist/**/*.map'
   - '!dist-electron/**/*.map'
+  # Production dependencies electron-builder copies into the asar ship their own
+  # `*.map` files too. The first version of this change excluded only ours, and
+  # its "0 .map files" was true of the project entries alone: a packaged build
+  # still held third-party maps (129, counted with `npx asar list`). They serve
+  # nothing at runtime, so they are excluded as well.
+  - '!**/node_modules/**/*.map'
 
 # ---------------------------------------------------------------------------
 # THE UPDATE FEED. ONE URL, IN ONE FILE, AND NOT A GITHUB TOKEN.
