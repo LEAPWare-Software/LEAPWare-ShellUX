@@ -133,11 +133,17 @@ Each run does one unit of work, then exits.
    - add a HANDOFF.md pointer to `docs/handoff/next-session.md`;
    - open a PR.
 2. **Land this runbook and `.claude/agents/lw-*.md`** from branch `cloud/runbook`, as its own PR.
-3. The D-27 strike and reversal (plan step 1 and step 3 item), then the SECURITY.md reorder, the README move, and the #74/#103 raw API evidence.
-4. **The gate-4 record is already on this branch** under `docs/design/gate4/`: the v4 canvas source, PNGs and a README. It lands with the runbook PR. After it lands, open a `needs-owner` issue with links to the PNGs on `main`, asking the owner to approve gate 4 (C-24).
-5. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
-6. Step 6c performance budgets (#62): budgets measurable in CI without a packaged launch (bundle size, dev-server palette open in Playwright), each labelled as not the packaged app. The packaged baseline is owner/VM.
-7. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also close #17, #16, #80, #23 and #95, each with evidence pasted from `main`.
+3. **Make the independent review a gate** (owner order, 2026-09-19: "we must have full proof of completion on the cloud"). Extend `scripts/claims/pr-evidence.mjs` and its tests, so that a PR fails the required `PR evidence` check unless:
+   - its conversation has a comment starting `Reviewer: shellux-cloud-reviewer`;
+   - that comment's `Reviewed SHA:` equals the PR head;
+   - its `Verdict:` is `MERGE`.
+
+   Read the comments through the REST API with the workflow's token. Add a probe row that shows a missing or stale review fails. Name the limit honestly: every routine posts under the owner's login, so the check proves a review exists at the head, not who wrote it. It is a guardrail. This change is a gate change, so list it under `Gate changes:`. The reviewer routine reviews it like any other PR.
+4. The D-27 strike and reversal (plan step 1 and step 3 item), then the SECURITY.md reorder, the README move, and the #74/#103 raw API evidence.
+5. **The gate-4 record is already on this branch** under `docs/design/gate4/`: the v4 canvas source, PNGs and a README. It lands with the runbook PR. After it lands, open a `needs-owner` issue with links to the PNGs on `main`, asking the owner to approve gate 4 (C-24).
+6. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
+7. Step 6c performance budgets (#62): budgets measurable in CI without a packaged launch (bundle size, dev-server palette open in Playwright), each labelled as not the packaged app. The packaged baseline is owner/VM.
+8. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also close #17, #16, #80, #23 and #95, each with evidence pasted from `main`.
 
 **Lane A, plugin host:**
 1. ADR-0006 step 6. Decide #183 first and record the decision.
