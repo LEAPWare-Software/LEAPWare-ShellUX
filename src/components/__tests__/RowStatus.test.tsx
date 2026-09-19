@@ -5,8 +5,8 @@ import {
   ROW_STATUS_MARK,
   ROW_STATUS_MARK_CLASS,
   ROW_STATUS_TEXT_CLASS,
-} from '../ui/rowStatus';
-import type { RowStatusKind } from '../ui/rowStatus';
+} from '../ui/rowStatusVocabulary';
+import type { RowStatusKind } from '../ui/rowStatusVocabulary';
 
 /**
  * ============================================================================

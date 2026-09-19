@@ -137,7 +137,7 @@ under its probe is not a guard and is rewritten or deleted.
   hover grey via `rowHoverSurface`; selected grey via `navSelectedSurface`, no outline,
   a heavier title weight; the keyboard ring via `rowFocusRingInset` (`ring-inset`, drawn
   inside the row edge). The v4 **row status vocabulary**, a new host primitive
-  `src/components/ui/RowStatus.tsx` over a small frozen record in `rowStatus.ts` (the
+  `src/components/ui/RowStatus.tsx` over a small frozen record in `rowStatusVocabulary.ts` (the
   same split `rowDelta.ts` + `RowMetric.tsx` use, for the same fast-refresh reason): a
   status line under the title pairs a mark (`aria-hidden`, a character glyph) with a
   word in status ink — warning triangle "Below reorder point", success dot "Delivered",

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
 import { RowMetric } from '../components/ui/RowMetric';
 import { RowStatus } from '../components/ui/RowStatus';
-import type { RowStatusKind } from '../components/ui/rowStatus';
+import type { RowStatusKind } from '../components/ui/rowStatusVocabulary';
 import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import type {
   ExtensionViewProps,

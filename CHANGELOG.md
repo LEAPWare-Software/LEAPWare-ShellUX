@@ -20,7 +20,7 @@ from so a reader can check it.
   comfortable row height, hover grey on pointer rest (the primary list had none
   before this), selected grey with no outline and a heavier title weight, and the
   keyboard ring drawn inside the row edge rather than on it. A new host primitive,
-  `RowStatus` (`src/components/ui/RowStatus.tsx`, data in `rowStatus.ts` — the same
+  `RowStatus` (`src/components/ui/RowStatus.tsx`, data in `rowStatusVocabulary.ts` — the same
   split `rowDelta.ts`/`RowMetric.tsx` use), draws the v4 row status vocabulary: a
   mark (`aria-hidden`) beside a required `word`, so a status cannot render colour
   alone. `DatabasePlugin.tsx` — the mock that models inventory — exercises all four

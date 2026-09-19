@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
-import { ROW_STATUS_MARK, ROW_STATUS_MARK_CLASS, ROW_STATUS_TEXT_CLASS } from './rowStatus';
-import type { RowStatusKind } from './rowStatus';
+import { ROW_STATUS_MARK, ROW_STATUS_MARK_CLASS, ROW_STATUS_TEXT_CLASS } from './rowStatusVocabulary';
+import type { RowStatusKind } from './rowStatusVocabulary';
 
 /**
  * ============================================================================
@@ -20,7 +20,7 @@ import type { RowStatusKind } from './rowStatus';
  * name, so a caller cannot render the mark without also saying, in the
  * operator's own words, what it means; a future status kind with no honest
  * sentence yet has nothing to render rather than a placeholder that looks
- * finished. See `rowStatus.ts` for the WCAG 1.4.1 argument in full and for why
+ * finished. See `rowStatusVocabulary.ts` for the WCAG 1.4.1 argument in full and for why
  * the frozen records live there rather than here.
  *
  * The word here is VISIBLE, not `sr-only` — unlike `RowMetric`'s delta, where
