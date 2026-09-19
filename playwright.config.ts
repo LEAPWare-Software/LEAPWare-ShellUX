@@ -40,6 +40,12 @@ const PORT = 5173;
 
 const BASE_URL = `http://localhost:${PORT}`;
 
+/**
+ * Vite's default `vite preview` port, fixed with `strictPort` in `vite.config.ts`.
+ * Exported so a spec that needs the built application names the same server.
+ */
+export const PREVIEW_URL = 'http://localhost:4173';
+
 export default defineConfig({
   // `e2e/` sits at the repository root rather than under `src/`, so that
   // `vitest.config.ts`'s `include` of `src/**/*.{test,spec}.{ts,tsx}` never picks
@@ -70,9 +76,25 @@ export default defineConfig({
 
   // Vite, on the documented port, started and waited for by Playwright rather
   // than by a script the reader has to remember to run first.
-  webServer: {
-    command: 'npm run dev',
-    url: BASE_URL,
-    timeout: 120_000,
-  },
+  //
+  // The second server is a BUILD, previewed. ADR-0006 step 2's case is about
+  // what the bundler emits — `/shared/react.js` sharing one React with
+  // `paneview.html`'s entry — and the dev server does not emit anything, so a
+  // dev-server pass alone would answer a different question. `vite build`
+  // without `tsc` because `npm run verify` owns the type check; the build is
+  // otherwise the one `npm run build` produces, into the same `dist/`. The
+  // preview server sends the renderer's Content-Security-Policy
+  // (`vite.config.ts`, `preview.headers`).
+  webServer: [
+    {
+      command: 'npm run dev',
+      url: BASE_URL,
+      timeout: 120_000,
+    },
+    {
+      command: 'npx vite build && npx vite preview',
+      url: `${PREVIEW_URL}/paneview.html`,
+      timeout: 180_000,
+    },
+  ],
 });

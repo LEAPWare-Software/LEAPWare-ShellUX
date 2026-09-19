@@ -259,6 +259,25 @@ new required key, needs a major; anything added needs a minor. That is the
 with no shape — a validator that starts refusing a value it used to accept — is
 invisible to it, and still depends on review.
 
+> **2026-09-19, step 2 landed — what the baseline records, as built.**
+> `HOST_API_VERSION` is `'1.0'`, exported by `src/sdk/index.ts`. The rule is
+> `src/sdk/apiSurface.ts`; `src/sdk/api-surface.json` is its baseline. Two parts
+> beyond this decision's list are recorded, both named above as major triggers
+> but not listed: `IShellAPI`'s member names, and `HOTKEY_MODIFIER_REQUIRED_KEYS`
+> (a denylist, so an entry added is a narrowing). `REGISTRY_LIMITS` compares by
+> value: a bound added or lowered is a major, removed or raised a minor.
+> `EXTENSION_ID_PATTERN` changing at all is a major, since two patterns cannot be
+> compared for "accepts less" by their text. The limit is wider than stated
+> above: the description is **top-level only** — a new required key on `Command`
+> or `NavigationNode`, or a changed parameter type on an `IShellAPI` member, is
+> invisible — and it records `commands` and `ribbonActions` as two optional keys,
+> not as "exactly one of". It is a **guardrail**: a baseline edited by hand to
+> match defeats it, and review of that file's diff is what catches that.
+> *Tests:* `src/sdk/__tests__/apiSurface.test.ts` — "fails when the contract
+> changes and the version does not move", "records the contract as it stands,
+> version included". Main cannot import `src/` (Amendment O decision 6), so how
+> step 3's check in main reads `HOST_API_VERSION` is step 3's to decide.
+
 **Rejected:**
 
 | Alternative | Why not |
@@ -377,6 +396,23 @@ host and plugin receive **one module instance**, which is the precondition for h
 working, not the property. That Vite emits `/shared/react.js` as a stable entry sharing
 its chunk with `paneview.html`'s entry — so the instance the host renders with is the
 one the plugin imports — is step 2's browser-lane case to write.
+
+> **2026-09-19, step 2 — the case, as written.** `vite.config.ts` lists
+> `src/sdk/shared/react.ts`, `src/sdk/shared/react-jsx-runtime.ts` and
+> `src/sdk/index.ts` as build inputs beside the two documents, emitted unhashed as
+> `dist/shared/react.js`, `react-jsx-runtime.js` and `sdk.js`; in the measured
+> build `shared/react.js` and both documents' entries import one
+> `assets/react-*.js` chunk. The
+> dev server answers the same three URLs from source. The browser lane compares
+> the `ReactCurrentDispatcher` a module importing `/shared/react.js` receives
+> with the `currentDispatcherRef` React DOM hands the devtools hook on
+> `paneview.html` — on the build under `vite preview` with this policy, and on
+> the dev server. *Tests:* `e2e/shared-modules.spec.ts` — "a module importing
+> /shared/react.js receives the React instance the extension surface renders
+> with". With `src/sdk/shared/react.ts` pointed at a copied second React, the
+> build case fails on that comparison. **Not measured:** the packaged app
+> serving `/shared/*.js` from its asar under the `shellux:` scheme, and a plugin
+> component actually rendering — no plugin loads before step 6.
 
 **Renderer switches are unchanged.** `contextIsolation: true`, `sandbox: true`,
 `nodeIntegration: false` stay on both views, as ADR-0004 decision 4 fixes them.

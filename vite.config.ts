@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
+import { RENDERER_CSP } from './electron/main/rendererCsp.js';
 
 /**
  * Serve the fixture shell at `/` on the DEV SERVER ONLY.
@@ -61,10 +62,73 @@ function serveFixtureAtRoot(): Plugin {
   };
 }
 
+/**
+ * The build-input name prefix, and the URL path, of ADR-0006's shared modules.
+ * An entry whose name starts with it is emitted as `<name>.js` with no hash.
+ */
+const SHARED_PREFIX = 'shared/';
+
+/**
+ * Each `/shared/*` URL, and the source module that answers it.
+ *
+ * One table for both servers: the build inputs below are named from it, and the
+ * dev-server route serves from it, so the two cannot list different modules.
+ */
+const SHARED_MODULES: Readonly<Record<string, string>> = Object.freeze({
+  react: 'src/sdk/shared/react.ts',
+  'react-jsx-runtime': 'src/sdk/shared/react-jsx-runtime.ts',
+  sdk: 'src/sdk/index.ts',
+});
+
+/**
+ * Serve `/shared/<name>.js` on the DEV SERVER, from the source module that
+ * the build emits under that name.
+ *
+ * The request is rewritten to the module's source path before Vite's own
+ * transform middleware sees it, so Vite serves it the way it serves any source
+ * module: its `react` import resolves to the one pre-bundled React every other
+ * module on the page gets. `apply: 'serve'`, so `vite build` never runs it; in a
+ * build the same URLs are real files (`build.rollupOptions` below). Only the
+ * three names in `SHARED_MODULES` are rewritten; anything else under `/shared/`
+ * falls through to Vite's own 404.
+ */
+function serveSharedModules(): Plugin {
+  return {
+    name: 'leapware-shellux:serve-shared-modules',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const match = /^\/shared\/([a-z-]+)\.js(?:\?.*)?$/.exec(req.url ?? '');
+        const source = match?.[1] === undefined ? undefined : SHARED_MODULES[match[1]];
+        if (source !== undefined) req.url = `/${source}`;
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), serveFixtureAtRoot()],
+  plugins: [react(), serveFixtureAtRoot(), serveSharedModules()],
   server: {
     port: 5173,
+  },
+  // -------------------------------------------------------------------------
+  // `vite preview` SERVES THE BUILD THE WAY THE PACKAGED APP'S SCHEME DOES:
+  // one origin, and the renderer's Content-Security-Policy on every response.
+  //
+  // The policy is imported from `electron/main/rendererCsp.ts`, not restated,
+  // so this server cannot send a different one. The browser lane
+  // (`playwright.config.ts`) builds and previews on this port to load
+  // `/shared/*.js` from a real build under `script-src 'self'` — ADR-0006 step
+  // 2. What it is not: the `shellux:` scheme handler. That handler's path
+  // resolution and headers are tested in `electron/__tests__/rendererCsp.test.ts`;
+  // this server is Vite's static server with the same header, nothing more.
+  // The dev server above still sends no policy (ADR-0006 decision 5).
+  // -------------------------------------------------------------------------
+  preview: {
+    port: 4173,
+    strictPort: true,
+    headers: { 'Content-Security-Policy': RENDERER_CSP },
   },
   build: {
     // ---------------------------------------------------------------------
@@ -113,6 +177,30 @@ export default defineConfig({
       input: {
         index: fileURLToPath(new URL('index.html', import.meta.url)),
         paneview: fileURLToPath(new URL('paneview.html', import.meta.url)),
+        // -------------------------------------------------------------------
+        // THE THREE SHARED MODULES — ADR-0006 decision 5, step 2.
+        //
+        // A plugin built on its own imports `react`, `react/jsx-runtime` and
+        // `@shellux/sdk` as `/shared/react.js`, `/shared/react-jsx-runtime.js`
+        // and `/shared/sdk.js`. Listing them here, in the SAME build as the two
+        // documents, is what makes them the host's instances rather than
+        // copies: the bundler emits one React and every entry that imports it
+        // reaches that one. `output.entryFileNames` below gives exactly these
+        // three a stable, unhashed name; `preserveEntrySignatures` keeps their
+        // exports, which Vite otherwise drops from every entry because an HTML
+        // entry has none to keep.
+        // -------------------------------------------------------------------
+        ...Object.fromEntries(
+          Object.entries(SHARED_MODULES).map(([name, source]) => [
+            `${SHARED_PREFIX}${name}`,
+            fileURLToPath(new URL(source, import.meta.url)),
+          ]),
+        ),
+      },
+      preserveEntrySignatures: 'exports-only',
+      output: {
+        entryFileNames: (chunk) =>
+          chunk.name.startsWith(SHARED_PREFIX) ? '[name].js' : 'assets/[name]-[hash].js',
       },
     },
   },
