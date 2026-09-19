@@ -31,7 +31,8 @@ import { join, sep } from 'node:path';
  * serves carries the policy", "puts the policy on a script and a stylesheet
  * too", and "puts the policy on the 403 and 404 responses too, and warns for
  * each". It cannot show that Chromium enforces it; that is
- * measured, not tested: spike case D, and the two positive controls in
+ * measured, not tested: spike case D (`spike/plugin-host/README.md`, its table), and
+ * the two positive controls in
  * `scripts/csp-smoke.mjs` — an inline `<script>` that did not run and a `data:`
  * image that was refused, on both surfaces of the packaged app. The policy is
  * NOT a boundary between two pieces of code in one document (ADR-0001
@@ -58,9 +59,11 @@ import { join, sep } from 'node:path';
  *       `docs/measurements/csp-2026-09-18.json`.
  *     - `style-src-attr`: an ECharts axis tooltip writes its markup as HTML with
  *       `style="…"` attributes. In the PACKAGED app, with `style-src 'self'`,
- *       activating the Database fixture and hovering its chart raised 21
- *       `style-src-attr` and 1 `style-src-elem` violation on the extension
- *       surface. Standalone (`scripts/csp-echarts-probe.mjs`, ECharts' own
+ *       the driven sequence (both fixtures activated, the Database chart
+ *       hovered, a divider dragged) raised 21 `style-src-attr` and 1
+ *       `style-src-elem` violation on the extension surface; the one
+ *       `style-src-elem` was recorded while the drag was held, when the drag's
+ *       cursor `<style>` exists, not during the hover. Standalone (`scripts/csp-echarts-probe.mjs`, ECharts' own
  *       browser build): 13 under `style-src 'self'`, 13 with only
  *       `style-src-elem` relaxed, 0 under this directive.
  *   What the grant admits is injected CSS; what CSS could use to send anything

@@ -23,7 +23,8 @@ import {
  *
  * **What this does NOT show**, stated because it is the half that matters: that
  * Chromium enforces the header, and that the built application runs under it
- * without a violation. Neither is observable here. The first is spike case D;
+ * without a violation. Neither is observable here. The first is spike case D
+ * (`spike/plugin-host/README.md`, its table);
  * the second is `scripts/csp-smoke.mjs` against the packaged application, whose
  * recorded runs are in `docs/measurements/csp-2026-09-18.json`.
  * ============================================================================
