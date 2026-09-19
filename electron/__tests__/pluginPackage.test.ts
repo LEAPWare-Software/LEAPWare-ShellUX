@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import baseline from '../../src/sdk/api-surface.json';
 import { HOST_API_VERSION as SDK_HOST_API_VERSION } from '../../src/sdk';
@@ -163,6 +166,69 @@ describe('the .lwplugin package', () => {
     for (const [result, reason] of cases) expect(reasonOf(result)).toBe(reason);
   });
 
+  it('refuses a title carrying a bidi control, a C0 or C1 control, or nothing but zero-width characters', () => {
+    const controls = ['\u202Eliam', 'Mail\u200F', 'Ma\u2066il', '\u061CMail', 'Mail\u0000', 'Mail\n', 'Mail\u007F', 'Mail\u0085'];
+    for (const title of controls) {
+      expect(reasonOf(parse({ title }))).toBe('manifest.title must not contain control characters or bidi controls');
+    }
+    for (const title of ['\u200B', '\u200B\u200C\u200D', ' \u2060 ', '\uFEFF']) {
+      expect(reasonOf(parse({ title }))).toBe('manifest.title must not be blank');
+    }
+    // Zero-width characters inside a real title are left alone.
+    expect(parse({ title: 'Ma\u200Dil' }).ok).toBe(true);
+  });
+
+  it('quotes an untrusted value in a refusal cut short and escaped', () => {
+    const huge = 'A'.repeat(7 * 1024 * 1024);
+    const reason = reasonOf(parse({ id: huge }));
+    expect(reason).toBe(`manifest.id ${JSON.stringify(`${'A'.repeat(64)}…`)} is not a valid extension id`);
+    expect(reason.length).toBeLessThan(120);
+    // A newline in the value arrives escaped: the reason stays one line.
+    const newline = reasonOf(parse({ id: 'mail\n' }));
+    expect(newline).toBe('manifest.id "mail\\n" is not a valid extension id');
+    expect(newline).not.toContain('\n');
+    expect(reasonOf(parse({}, { ['x'.repeat(100)]: 1 }))).toBe(
+      `package has a field lwplugin/1 does not define: "${'x'.repeat(64)}…"`,
+    );
+  });
+
+  it('refuses a bundle that is base64 only by a lenient decoder', () => {
+    const canonical = base64Of(BUNDLE);
+    const urlSafe = Buffer.from([0xfb, 0xff]).toString('base64url');
+    const cases = [
+      urlSafe, // "-_8": the URL-safe alphabet
+      canonical.replace(/=+$/, ''), // padding dropped
+      `${canonical.slice(0, 8)} ${canonical.slice(8)}`, // whitespace inside
+      `${canonical}\n`, // trailing newline
+      'QR==', // non-zero trailing bits: decodes as "QQ=="
+    ];
+    expect(canonical.endsWith('=')).toBe(true);
+    for (const bundle of cases) {
+      expect(reasonOf(parse({}, { bundle }))).toBe('bundle is not canonical base64');
+    }
+  });
+
+  it('refuses a __proto__ key at both levels as a field lwplugin/1 does not define', () => {
+    const pkg = JSON.stringify(packageObject());
+    const top = pkg.replace('{', '{"__proto__":{"polluted":true},');
+    expect(reasonOf(parsePluginPackage(new TextEncoder().encode(top)))).toBe(
+      'package has a field lwplugin/1 does not define: "__proto__"',
+    );
+    const inner = pkg.replace('"manifest":{', '"manifest":{"__proto__":{"polluted":true},');
+    expect(reasonOf(parsePluginPackage(new TextEncoder().encode(inner)))).toBe(
+      'manifest has a field lwplugin/1 does not define: "__proto__"',
+    );
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('refuses every reserved id, including the one the id pattern admits', () => {
+    expect(EXTENSION_ID_PATTERN.test('constructor')).toBe(true);
+    for (const id of RESERVED_IDS) {
+      expect(reasonOf(parse({ id }))).toBe(`manifest.id ${JSON.stringify(id)} is not a valid extension id`);
+    }
+    expect([...RESERVED_IDS].sort()).toEqual(['__proto__', 'constructor', 'prototype']);
+  });
+
   it('accepts a title at the registry bound exactly', () => {
     expect(parse({ title: 'x'.repeat(MAX_TEXT_LENGTH) }).ok).toBe(true);
   });
@@ -238,6 +304,8 @@ describe('the hostApiVersion rule', () => {
     expect(HOST_API_VERSION).toBe(SDK_HOST_API_VERSION);
     expect(HOST_API_VERSION).toBe(baseline.version);
     expect(EXTENSION_ID_PATTERN.source).toBe(baseline.extensionIdPattern);
+    // The baseline records the source only; a flag would change what it accepts.
+    expect(EXTENSION_ID_PATTERN.flags).toBe('');
     expect([...RESERVED_IDS].sort()).toEqual([...baseline.reservedIds].sort());
     expect(MAX_TEXT_LENGTH).toBe(baseline.registryLimits.MAX_TEXT_LENGTH);
   });
@@ -281,62 +349,125 @@ describe('the manifest icon (D-40)', () => {
 });
 
 describe('reading a package from disk, through the injected filesystem', () => {
-  interface FakeFs extends PluginPackageFs {
-    readonly reads: string[];
+  interface FakeFile {
+    readonly bytes: Uint8Array;
+    /** What `fstat` reports, when it is not the truth. */
+    readonly statSize?: number;
+    readonly isFile?: boolean;
   }
 
-  function fakeFs(files: Record<string, Uint8Array>, statSize?: number): FakeFs {
-    const reads: string[] = [];
+  interface FakeFs extends PluginPackageFs {
+    readonly readBytes: number[];
+    readonly open: Set<number>;
+  }
+
+  function fakeFs(files: Record<string, FakeFile>): FakeFs {
+    const descriptors = new Map<number, FakeFile>();
+    const open = new Set<number>();
+    const readBytes: number[] = [];
+    let next = 3;
+    function fileOf(fd: number): FakeFile {
+      const file = descriptors.get(fd);
+      if (file === undefined || !open.has(fd)) throw new Error(`EBADF: bad file descriptor ${String(fd)}`);
+      return file;
+    }
     return {
-      reads,
-      statSync: (path) => {
-        const bytes = files[path];
-        if (bytes === undefined) throw new Error(`ENOENT: no such file, stat '${path}'`);
-        return { size: statSize ?? bytes.byteLength };
+      readBytes,
+      open,
+      openSync: (path) => {
+        const file = files[path];
+        if (file === undefined) throw new Error(`ENOENT: no such file, open '${path}'`);
+        const fd = next++;
+        descriptors.set(fd, file);
+        open.add(fd);
+        return fd;
       },
-      readFileSync: (path) => {
-        reads.push(path);
-        return files[path] ?? new Uint8Array();
+      fstatSync: (fd) => {
+        const file = fileOf(fd);
+        return { size: file.statSize ?? file.bytes.byteLength, isFile: () => file.isFile ?? true };
+      },
+      readSync: (fd, buffer, offset, length, position) => {
+        const chunk = fileOf(fd).bytes.subarray(position, position + length);
+        buffer.set(chunk, offset);
+        readBytes.push(chunk.byteLength);
+        return chunk.byteLength;
+      },
+      closeSync: (fd) => {
+        fileOf(fd);
+        open.delete(fd);
       },
     };
   }
 
-  it('reads and validates the package at the path it is given', () => {
-    const fs = fakeFs({ 'mail.lwplugin': encode(packageObject()) });
+  it('reads and validates the package at the path it is given, and closes its descriptor', () => {
+    const fs = fakeFs({ 'mail.lwplugin': { bytes: encode(packageObject()) } });
     const result = readPluginPackage(fs, 'mail.lwplugin');
     expect(result.ok).toBe(true);
-    expect(fs.reads).toEqual(['mail.lwplugin']);
+    expect(fs.open.size).toBe(0);
   });
 
   it('refuses a file over 8 MiB from its size, without reading a byte of it', () => {
-    const fs = fakeFs({ 'big.lwplugin': new Uint8Array(1) }, MAX_PACKAGE_BYTES + 1);
+    const fs = fakeFs({ 'big.lwplugin': { bytes: new Uint8Array(1), statSize: MAX_PACKAGE_BYTES + 1 } });
     expect(reasonOf(readPluginPackage(fs, 'big.lwplugin'))).toBe(
       `package is ${String(MAX_PACKAGE_BYTES + 1)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}`,
     );
-    expect(fs.reads).toEqual([]);
+    expect(fs.readBytes).toEqual([]);
+    expect(fs.open.size).toBe(0);
   });
 
-  it('refuses a file that grew past 8 MiB between its stat and its read', () => {
-    const fs = fakeFs({ 'grew.lwplugin': new Uint8Array(MAX_PACKAGE_BYTES + 1) }, 10);
-    expect(reasonOf(readPluginPackage(fs, 'grew.lwplugin'))).toMatch(/the limit is 8388608$/);
+  it('stops reading at the limit when a file yields more than its stat said', () => {
+    // `fstat` says 10 bytes; the file yields 3 * the limit. The read must stop
+    // at MAX_PACKAGE_BYTES + 1 and refuse, never buffering the rest.
+    const fs = fakeFs({ 'grew.lwplugin': { bytes: new Uint8Array(3 * MAX_PACKAGE_BYTES), statSize: 10 } });
+    expect(reasonOf(readPluginPackage(fs, 'grew.lwplugin'))).toBe(
+      `package is ${String(MAX_PACKAGE_BYTES + 1)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}`,
+    );
+    expect(fs.readBytes.reduce((sum, n) => sum + n, 0)).toBe(MAX_PACKAGE_BYTES + 1);
+    expect(fs.open.size).toBe(0);
   });
 
-  it('turns a failed read into a refusal rather than a throw', () => {
+  it('refuses a path that is not a regular file', () => {
+    // A FIFO or a device reports size 0, which says nothing about what a read yields.
+    const fs = fakeFs({ fifo: { bytes: encode(packageObject()), statSize: 0, isFile: false } });
+    expect(reasonOf(readPluginPackage(fs, 'fifo'))).toBe('the package is not a regular file');
+    expect(fs.readBytes).toEqual([]);
+    expect(fs.open.size).toBe(0);
+  });
+
+  it('reads a file that arrives in short reads, to the end', () => {
+    const bytes = encode(packageObject());
+    const fs = fakeFs({ 'mail.lwplugin': { bytes } });
+    const shortRead = fs.readSync;
+    fs.readSync = (fd, buffer, offset, length, position) => shortRead(fd, buffer, offset, Math.min(length, 7), position);
+    expect(readPluginPackage(fs, 'mail.lwplugin').ok).toBe(true);
+    expect(fs.readBytes.reduce((sum, n) => sum + n, 0)).toBe(bytes.byteLength);
+  });
+
+  it('turns a failed open into a refusal rather than a throw', () => {
     expect(reasonOf(readPluginPackage(fakeFs({}), 'missing.lwplugin'))).toBe(
-      "the package could not be read: Error: ENOENT: no such file, stat 'missing.lwplugin'",
+      `the package could not be read: ${JSON.stringify("Error: ENOENT: no such file, open 'missing.lwplugin'")}`,
     );
   });
 
   it('passes the host version through, so the rule runs against the host it is told', () => {
-    const fs = fakeFs({ 'mail.lwplugin': encode(packageObject({ hostApiVersion: '1.1' })) });
+    const fs = fakeFs({ 'mail.lwplugin': { bytes: encode(packageObject({ hostApiVersion: '1.1' })) } });
     const result = readPluginPackage(fs, 'mail.lwplugin', '1.0');
     if (!result.ok) throw new Error(result.reason);
     expect(result.plugin.compatibility.state).toBe('incompatible');
   });
 
-  it('gives production the real statSync and readFileSync, not a wrapper', async () => {
-    const nodeFs = await import('node:fs');
-    expect(nodePluginPackageFs.statSync).toBe(nodeFs.statSync);
-    expect(nodePluginPackageFs.readFileSync).toBe(nodeFs.readFileSync);
+  it('reads a real package from a real temporary file through the production filesystem', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lwplugin-'));
+    try {
+      const path = join(dir, 'mail.lwplugin');
+      writeFileSync(path, encode(packageObject()));
+      const result = readPluginPackage(nodePluginPackageFs, path);
+      if (!result.ok) throw new Error(result.reason);
+      expect(result.plugin.manifest.id).toBe('mail');
+      // A directory opens on POSIX and fails to open on Windows; refused either way.
+      expect(readPluginPackage(nodePluginPackageFs, dir).ok).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

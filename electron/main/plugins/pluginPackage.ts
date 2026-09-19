@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
-import { compareHostApiVersion, CONTRACT_VERSION_PATTERN } from './compatibility.js';
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { compareHostApiVersion, CONTRACT_VERSION_PATTERN, quoteUntrusted } from './compatibility.js';
 import type { Compatibility } from './compatibility.js';
 import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS } from './hostContract.js';
 
@@ -43,10 +43,37 @@ import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS }
  * the host does not act on is never mistaken for one it does.
  *
  * ---------------------------------------------------------------------------
- * THE FILESYSTEM IS INJECTED, AS IN `diagnosticsLog.ts`.
+ * DUPLICATE KEYS: LAST WINS, AND EVERY READER MUST USE `JSON.parse`.
+ * ---------------------------------------------------------------------------
+ * `JSON.parse` keeps the last of two same-named keys, so a package with two
+ * `sha512` fields is judged by the second. That is not refused here: refusing
+ * it needs a second JSON parser, and two parsers disagreeing is the hazard. The
+ * invariant, binding on step 4: every reader of a package or an installed
+ * `plugin.json` parses with `JSON.parse` and nothing else, and what install
+ * writes to `plugin.json` is the validated `PluginManifest` re-serialised, never
+ * the raw bytes, so no reader can see a different value than the one validated.
+ *
+ * ---------------------------------------------------------------------------
+ * REFUSAL REASONS QUOTE UNTRUSTED VALUES, CUT AND ESCAPED.
+ * ---------------------------------------------------------------------------
+ * A reason echoes the offending value so a packager can find it, through
+ * `quoteUntrusted`: at most 64 characters, then `JSON.stringify`, so a 7 MB id
+ * or a value carrying a newline reaches a log or a dialog as one short, escaped
+ * line. *Tests:* `electron/__tests__/pluginPackage.test.ts` — "quotes an
+ * untrusted value in a refusal cut short and escaped".
+ *
+ * ---------------------------------------------------------------------------
+ * THE FILESYSTEM IS INJECTED, AS IN `diagnosticsLog.ts`, AND READ THROUGH ONE DESCRIPTOR.
  * ---------------------------------------------------------------------------
  * `PluginPackageFs` is the seam: production passes `nodePluginPackageFs`, a
- * test passes an in-memory fake, and nothing stubs `node:fs` globally.
+ * test passes an in-memory fake, and nothing stubs `node:fs` globally. The file
+ * is opened once and `fstat`ed on that descriptor (a FIFO or a device is
+ * refused: its size reads 0 and says nothing), then read into a buffer of
+ * `MAX_PACKAGE_BYTES + 1`, so memory is bounded by that buffer whatever the file
+ * does between the stat and the read. *Tests:*
+ * `electron/__tests__/pluginPackage.test.ts` — "stops reading at the limit when
+ * a file yields more than its stat said", "refuses a path that is not a regular
+ * file".
  * ============================================================================
  */
 
@@ -117,15 +144,31 @@ export type PluginPackageResult =
 
 /** The filesystem operations reading a package needs, and nothing else. */
 export interface PluginPackageFs {
-  statSync: (path: string) => { size: number };
-  readFileSync: (path: string) => Uint8Array;
+  /** Open for reading; returns a descriptor. */
+  openSync: (path: string) => number;
+  fstatSync: (fd: number) => { size: number; isFile: () => boolean };
+  /** Node's positional `readSync`: bytes read into `buffer` at `offset`, 0 at end of file. */
+  readSync: (fd: number, buffer: Uint8Array, offset: number, length: number, position: number) => number;
+  closeSync: (fd: number) => void;
 }
 
 /** The real filesystem. What production code passes. */
 export const nodePluginPackageFs: PluginPackageFs = {
-  statSync,
-  readFileSync,
+  openSync: (path) => openSync(path, 'r'),
+  fstatSync,
+  readSync,
+  closeSync,
 };
+
+/**
+ * Bidi controls (ALM, LRM, RLM, the embeddings and overrides, the isolates) and
+ * Unicode `Cc`. A title is host-chrome text: an RLO in it reorders what the
+ * plugin manager shows beside it, and a NUL or a newline is never display text.
+ */
+const TITLE_FORBIDDEN_PATTERN = /[\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
+
+/** Zero-width characters, removed before the blank check so a title of only these is blank. */
+const ZERO_WIDTH_PATTERN = /[\u200B-\u200D\u2060\uFEFF]/g;
 
 /** Base64 SHA-512 of `bytes`, the form the manifest records. Step 4's serve-time rehash reuses it. */
 export function sha512Base64(bytes: Uint8Array): string {
@@ -148,7 +191,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function refuseUnknownKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>, where: string): void {
   for (const key of Object.keys(value)) {
-    if (!allowed.has(key)) refuse(`${where} has a field lwplugin/1 does not define: "${key}"`);
+    if (!allowed.has(key)) refuse(`${where} has a field lwplugin/1 does not define: ${quoteUntrusted(key)}`);
   }
 }
 
@@ -164,21 +207,24 @@ function validateManifest(value: unknown): PluginManifest {
 
   const id = requireString(value, 'id', 'manifest');
   if (!EXTENSION_ID_PATTERN.test(id) || RESERVED_IDS.has(id)) {
-    refuse(`manifest.id "${id}" is not a valid extension id`);
+    refuse(`manifest.id ${quoteUntrusted(id)} is not a valid extension id`);
   }
 
   const version = requireString(value, 'version', 'manifest');
   if (!PLUGIN_VERSION_PATTERN.test(version)) {
-    refuse(`manifest.version "${version}" must be MAJOR.MINOR.PATCH`);
+    refuse(`manifest.version ${quoteUntrusted(version)} must be MAJOR.MINOR.PATCH`);
   }
 
   const hostApiVersion = requireString(value, 'hostApiVersion', 'manifest');
   if (!CONTRACT_VERSION_PATTERN.test(hostApiVersion)) {
-    refuse(`manifest.hostApiVersion "${hostApiVersion}" must be MAJOR.MINOR, as HOST_API_VERSION is`);
+    refuse(`manifest.hostApiVersion ${quoteUntrusted(hostApiVersion)} must be MAJOR.MINOR, as HOST_API_VERSION is`);
   }
 
   const title = requireString(value, 'title', 'manifest');
-  if (title.trim().length === 0) refuse('manifest.title must not be blank');
+  if (TITLE_FORBIDDEN_PATTERN.test(title)) {
+    refuse('manifest.title must not contain control characters or bidi controls');
+  }
+  if (title.replace(ZERO_WIDTH_PATTERN, '').trim().length === 0) refuse('manifest.title must not be blank');
   if (title.length > MAX_TEXT_LENGTH) {
     refuse(`manifest.title exceeds ${String(MAX_TEXT_LENGTH)} characters`);
   }
@@ -248,9 +294,11 @@ export function parsePluginPackage(bytes: Uint8Array, hostVersion: string = HOST
 }
 
 /**
- * Read and validate the package at `path`. The size is checked from `stat`
- * before a byte is read, and again on the bytes read, so a file that grows
- * between the two is still refused. A read that fails is a refusal, not a throw.
+ * Read and validate the package at `path`, through one descriptor. A path that
+ * is not a regular file is refused before a read; a size over the limit is
+ * refused from `fstat`; and the read stops at `MAX_PACKAGE_BYTES + 1`, so a file
+ * that grows between the stat and the read is refused without being buffered
+ * whole. A failure to open or read is a refusal, not a throw.
  */
 export function readPluginPackage(
   fs: PluginPackageFs,
@@ -259,13 +307,26 @@ export function readPluginPackage(
 ): PluginPackageResult {
   let bytes: Uint8Array;
   try {
-    const { size } = fs.statSync(path);
-    if (size > MAX_PACKAGE_BYTES) {
-      return { ok: false, reason: `package is ${String(size)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}` };
+    const fd = fs.openSync(path);
+    try {
+      const stat = fs.fstatSync(fd);
+      if (!stat.isFile()) return { ok: false, reason: 'the package is not a regular file' };
+      if (stat.size > MAX_PACKAGE_BYTES) {
+        return { ok: false, reason: `package is ${String(stat.size)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}` };
+      }
+      const buffer = new Uint8Array(MAX_PACKAGE_BYTES + 1);
+      let total = 0;
+      while (total < buffer.byteLength) {
+        const read = fs.readSync(fd, buffer, total, buffer.byteLength - total, total);
+        if (read === 0) break;
+        total += read;
+      }
+      bytes = buffer.subarray(0, total);
+    } finally {
+      fs.closeSync(fd);
     }
-    bytes = fs.readFileSync(path);
   } catch (error) {
-    return { ok: false, reason: `the package could not be read: ${String(error)}` };
+    return { ok: false, reason: `the package could not be read: ${quoteUntrusted(String(error))}` };
   }
   return parsePluginPackage(bytes, hostVersion);
 }

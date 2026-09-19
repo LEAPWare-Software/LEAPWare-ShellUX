@@ -30,6 +30,18 @@
  */
 export const CONTRACT_VERSION_PATTERN = /^(0|[1-9]\d{0,8})\.(0|[1-9]\d{0,8})$/;
 
+/** The most characters of an untrusted value a refusal reason repeats. */
+export const MAX_QUOTED_CHARS = 64;
+
+/**
+ * An untrusted value as a refusal reason quotes it: cut to `MAX_QUOTED_CHARS`
+ * (marked with `…` when cut), then `JSON.stringify`, so control characters
+ * arrive escaped and the reason stays one short line whatever the package held.
+ */
+export function quoteUntrusted(value: string): string {
+  return JSON.stringify(value.length > MAX_QUOTED_CHARS ? `${value.slice(0, MAX_QUOTED_CHARS)}…` : value);
+}
+
 /** What the rule decides for one plugin against one host. */
 export type Compatibility =
   | { readonly state: 'compatible' }
@@ -53,7 +65,7 @@ export function compareHostApiVersion(pluginVersion: string, hostVersion: string
   if (plugin === null || host === null) {
     return {
       state: 'incompatible',
-      reason: `host contract versions must be "major.minor"; the plugin states "${pluginVersion}", this shell offers "${hostVersion}"`,
+      reason: `host contract versions must be "major.minor"; the plugin states ${quoteUntrusted(pluginVersion)}, this shell offers ${quoteUntrusted(hostVersion)}`,
     };
   }
   const [pluginMajor, pluginMinor] = plugin;
