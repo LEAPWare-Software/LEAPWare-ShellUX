@@ -44,7 +44,7 @@ in parallel.
 | Increment | Edits `ShellLayout.tsx`? | Owns (no other increment edits these) |
 |---|---|---|
 | W3-0 | yes, first | `paneSizing.ts`, `e2e/pane-refit.spec.ts` |
-| W3-1 | no | `src/core/theme/tokenClasses.ts` (the **only** increment that edits it; see below), new `src/components/ui/Banner.tsx`, new `src/components/ui/buttonClasses.ts` |
+| W3-1 | no | `src/core/theme/tokenClasses.ts` (the **only** increment that edits it; see below), new `src/components/ui/Banner.tsx`, new `src/components/ui/buttonClasses.ts`, new `src/components/ui/Button.tsx`, the dev-only fixture `states.html`, `src/dev/StatesFixture.tsx`, `src/dev/main.states.tsx`, and `design/lib/painters.mjs` |
 | W3-2 | no | `src/components/shared/VirtualizedList.tsx`, `src/components/ui/RowMetric.tsx`, the row renderers in `src/mocks/**` |
 | W3-3 | yes, second | `src/components/layout/ShellNavigation.tsx`, `src/components/ui/shellIcons.tsx` |
 | W3-4 | yes, third | `src/components/layout/PaneWrapper.tsx`, `src/components/layout/ShellResizeHandle.tsx` |
@@ -93,7 +93,7 @@ under its probe is not a guard and is rewritten or deleted.
   change, which wrote the corrected width of a pane nobody moved). The first stays green with the whole change reverted, because the bands
   were already live; it goes red only when the bands are frozen. Stated, not hidden.
 
-### W3-1 — State primitives: pressed, disabled, focus, banners. Planned.
+### W3-1 — State primitives: pressed, disabled, focus, banners. **BUILT.**
 
 - R6, R7, and the v4 *States* screen's **button Loading state**: the label is
   replaced in place by the in-progress verb ("Reordering") with a determinate or
@@ -102,19 +102,34 @@ under its probe is not a guard and is rewritten or deleted.
   §8 "cut to one". Pressed as one surface step past hover. Disabled uses
   `--text-disabled`, never opacity. `Banner` in four statuses: status wash, icon, a
   bold first line, no border, no side stripe.
-- Tokens: `--accent-solid`, `--accent-solid-hover`, `--surface-hover`,
+- Built as `buttonClasses.ts`, `Button.tsx` (loading: both labels in one grid cell,
+  so the width holds; a loading submit button does not submit) and `Banner.tsx`.
+  `TOKEN_CLASS` carries every role W3-2 to W3-8 names, unconsumed until each lands.
+  **No shipped surface renders them yet**, so the browser lane drives the dev-only
+  `states.html`, and `design/check-contrast.mjs` keeps the eight backgrounds they
+  paint exempt as unbuilt: UNPAINTED now counts only modules reachable from the
+  production documents (`design/lib/painters.mjs`).
+- **Deviations from the canvas, recorded in DESIGN.md:** primary pressed is the hover
+  fill plus a 1px inset `--accent-border` rule (no darker petrol token exists); the info
+  banner's first line is `--text-primary` (no `--text-info` token); no scrim role
+  (no scrim token).
+- Tokens: `--accent-solid`, `--accent-solid-hover`, `--accent-border`, `--surface-hover`,
   `--surface-selected`, `--text-disabled`, `--border-subtle`, `--focus-ring`,
   `--focus-ring-offset`, `--focus-ring-width`, `--status-{danger,warning,success,info}`
   and their `-subtle` washes, `--text-danger`, `--text-warning`, `--text-success`,
   `--radius-md`, `--motion-micro`.
-- e2e, `e2e/focus-visibility.spec.ts` and `e2e/theme.spec.ts`: a mouse click paints no
-  ring and a Tab paints one (probe: switch the ring to `:focus`); a pressed button
-  paints a different background from hover (probe: drop the pressed class); a disabled
-  button's text is `--text-disabled` and its computed opacity is 1 (probe: restore
-  `opacity-40`); an error banner has a zero-width border on all four sides (probe: add
-  `border-l-2`); every banner's text clears 4.5:1 on its wash in all three themes; a
-  loading button measures the same width as its idle state and paints its bar inside
-  its own box (probe: swap the label for a spinner of a different width).
+- e2e, run and mutation-probed: `e2e/focus-visibility.spec.ts` "paints no ring on a
+  mouse click and the two-tone ring on a Tab, in the {light, dark, high contrast} theme"
+  (probe: the ring on `:focus`); `e2e/theme.spec.ts` "paints pressed one step past
+  hover, on a quiet and on a primary button", all three themes: quiet pressed paints a
+  different background from hover, **primary pressed paints the same fill as hover
+  plus an inset `--accent-border` rule** (probe: drop either pressed class); "draws a
+  disabled button in disabled ink at full opacity" (probe: `opacity-40`); "draws every
+  banner as a wash with no border on any side" (probe: `border-l-2`); "clears 4.5:1 for
+  every banner's words on its own wash, in every theme" (probe: a failing ink); "keeps a
+  loading button at its idle width, with its bar inside its own box" (probe: unstack
+  the loading label; the spinner probe was dropped, because a spinner fails the bar
+  assertion rather than the width one).
 
 ### W3-2 — List rows at 32px (D-29). Planned.
 

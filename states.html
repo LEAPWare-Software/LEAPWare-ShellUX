@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LEAPWare ShellUX — state primitives fixture</title>
+  </head>
+  <!--
+    A browser-lane fixture document, and NOT a production entry point.
+
+    Like `dev.html`, it is in neither of `vite.config.ts`'s build inputs, so the
+    dev server serves it and `dist/` never contains it. It renders the wave-3
+    state primitives (buttons, the loading button, the four banners) on their
+    own, because until W3-5 and later increments consume them nothing in the
+    shell draws them. See `src/dev/StatesFixture.tsx`.
+  -->
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/dev/main.states.tsx"></script>
+  </body>
+</html>

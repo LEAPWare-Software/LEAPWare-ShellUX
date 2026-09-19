@@ -44,14 +44,20 @@
  *   - It measures the BUILT-IN themes. It cannot validate a third-party theme,
  *     because nothing in `src/` runs this code — see design/README.md, "The gap
  *     between this manifest and the plan".
- *   - UNPAINTED is a GUARDRAIL, not an integrity control. It asks whether
- *     `src/` references the background the way a painter would — a Tailwind
- *     colour utility (`bg-surface-sunken`), `var(--surface-sunken)`, or the
- *     quoted name `'--surface-sunken'` — with comments stripped first. It does
- *     NOT check that the background is painted UNDER the row's foreground, and
- *     a reference in dead code satisfies it. It catches "no painter at all",
- *     which is what #111 was, and nothing narrower. CIEDE2000 rows compare two
- *     series, not a series with a background, and are out of its scope.
+ *   - UNPAINTED is a GUARDRAIL, not an integrity control. It asks whether a
+ *     module the PRODUCTION BUILD CAN REACH (from `index.html` and
+ *     `paneview.html` by relative imports) references the background the way
+ *     a painter would: a Tailwind colour utility (`bg-surface-sunken`),
+ *     `var(--surface-sunken)`, the quoted name `'--surface-sunken'`, or
+ *     `TOKEN_CLASS.<role>` for a role whose class names it. Comments are
+ *     stripped first. `tokenClasses.ts` is a table and never a painter, and a
+ *     dev fixture (`src/dev/**`) or a test paints nothing, because neither is
+ *     reachable. It does NOT check that the background is painted UNDER the
+ *     row's foreground, and a reachable reference in dead code satisfies it.
+ *     It catches "no shipped module can paint this", which is what #111 was,
+ *     and nothing narrower. `design/lib/painters.mjs` holds the rule and its
+ *     limits. CIEDE2000 rows compare two series, not a series with a
+ *     background, and are out of its scope.
  *   - It runs as the second half of `npm run tokens:check` (after
  *     `scripts/check-tokens.mjs`, a different checker), so in `verify` and in
  *     `ci.yml` on three operating systems. It ran by hand only until the change
@@ -62,7 +68,6 @@
  * ============================================================================
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { contrastRatio, deltaE2000, deltaE2000Lab, hexToRgb } from './lib/color.mjs';
 import {
@@ -75,60 +80,41 @@ import {
   resolveTheme,
   semanticEntries,
 } from './lib/resolve.mjs';
+import { isPainted, repositoryPainters } from './lib/painters.mjs';
 
 const PASS = 'PASS';
 const FAIL = 'FAIL';
 
 /**
- * Manifest backgrounds that nothing paints YET, each with its reason. An entry
- * is a decision, not an oversight: the row stays in the manifest because the
- * pair is reviewed ahead of the UI that will paint it. Remove the entry in the
- * change that builds that UI — STALE EXEMPTION makes that the only option.
+ * Manifest backgrounds that nothing shipped paints YET, each with its reason. An
+ * entry is a decision, not an oversight: the row stays in the manifest because
+ * the pair is reviewed ahead of the UI that will paint it. Remove the entry in
+ * the change that makes a production module paint it — STALE EXEMPTION makes
+ * that the only option.
+ *
+ * Wave-3 increment W3-1 (`docs/design/WAVE3-PLAN.md`) BUILT the primitives
+ * behind seven of these, and they stay exempt: until a later increment gives
+ * them a shipped consumer they are rendered only by the dev fixture
+ * `states.html`, which is exactly the condition #111 was.
  */
 const UNBUILT_BACKGROUNDS = Object.freeze({
-  '--accent-solid': 'The primary-button fill. No primary button is built yet.',
-  '--accent-solid-hover': 'The primary-button hover fill. No primary button is built yet.',
-  '--accent-subtle': 'The accent wash behind a current item. Not built yet.',
-  '--status-danger-subtle': 'The tinted background of a danger block. Not built yet.',
-  '--status-warning-subtle': 'The tinted background of a warning block. Not built yet.',
-  '--status-success-subtle': 'The tinted background of a success block. Not built yet.',
-  '--status-info-subtle': 'The tinted background of an info block. Not built yet.',
+  '--accent-solid':
+    'The primary-button fill. Built in W3-1 (buttonClasses.ts), rendered only by states.html until W3-5 or W3-8 ships a primary button.',
+  '--accent-solid-hover':
+    'The primary-button hover and pressed fill. Built in W3-1, rendered only by states.html until W3-5 or W3-8 ships a primary button.',
+  '--accent-subtle':
+    'The accent wash behind a current item. TOKEN_CLASS roles declared in W3-1, consumed by W3-3 (nav, identity tile) and W3-6 (palette active row).',
+  '--status-danger-subtle':
+    'The danger banner wash. Built in W3-1 (Banner.tsx), rendered only by states.html until W3-5 ships the block error.',
+  '--status-warning-subtle':
+    'The warning banner wash. Built in W3-1 (Banner.tsx), rendered only by states.html until W3-5 or 6b consumes Banner.',
+  '--status-success-subtle':
+    'The success banner wash. Built in W3-1 (Banner.tsx), rendered only by states.html until W3-5 or 6b consumes Banner.',
+  '--status-info-subtle':
+    'The info banner wash. Built in W3-1 (Banner.tsx), rendered only by states.html until W3-5 or 6b consumes Banner.',
   '--focus-ring-offset':
-    'The inner half of the two-tone focus ring. tailwind.config.js maps it as the default ring-offset colour, and no ring-offset utility is used yet.',
+    'The inner half of the two-tone focus ring. Built in W3-1 (TOKEN_CLASS.controlFocusRing), rendered only by states.html until a shipped control adopts it.',
 });
-
-/** The text of every file under `src/` that can paint: not generated, not a test. */
-function paintingSources() {
-  const root = join(DESIGN_ROOT, '..', 'src');
-  /** @type {string[]} */
-  const texts = [];
-  const walk = (directory) => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (entry.name !== '__tests__') walk(path);
-      } else if (/\.(tsx?|css)$/.test(entry.name) && !/\.(generated|test)\./.test(entry.name)) {
-        // Comments stripped, so a docblock NAMING a background is not a painter.
-        // The line-comment rule skips `://`, so a URL inside a string survives.
-        texts.push(
-          readFileSync(path, 'utf8')
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/(^|[^:])\/\/.*$/gm, '$1'),
-        );
-      }
-    }
-  };
-  walk(root);
-  return texts.join('\n');
-}
-
-/** Whether `source` references `token` the way a painter would. */
-function isPainted(source, token) {
-  const bare = token.slice(2);
-  return new RegExp(
-    `(?<![\\w-])[a-z-]+-${bare}(?![\\w-])|var\\(--${bare}\\)|['"\`]--${bare}['"\`]`,
-  ).test(source);
-}
 
 /**
  * Verify the maths against values this repository already publishes, and
@@ -264,22 +250,22 @@ function main(argv) {
   // Exactness, direction three (GitHub #111): a contrast row measured on a
   // background nothing paints. Reported once per background, not per row.
   // ---------------------------------------------------------------------
-  const source = paintingSources();
+  const painterSet = repositoryPainters(join(DESIGN_ROOT, '..'));
   const backgrounds = new Set(
     manifest.rows.filter((row) => row.metric !== 'deltaE2000').map((row) => row.background),
   );
   for (const background of [...backgrounds].sort()) {
     if (!declared.has(background)) continue; // already reported as STALE
-    const painted = isPainted(source, background);
+    const painted = isPainted(painterSet, background);
     const exempt = Object.hasOwn(UNBUILT_BACKGROUNDS, background);
     if (!painted && !exempt) {
       failures.push(
-        `UNPAINTED  ${background} is the background of a manifest row and nothing in src/ paints it. ` +
+        `UNPAINTED  ${background} is the background of a manifest row and no shipped module paints it (design/lib/painters.mjs). ` +
           'A pair measured on a background the product never draws measures nothing.',
       );
     } else if (painted && exempt) {
       failures.push(
-        `STALE EXEMPTION  ${background} is in UNBUILT_BACKGROUNDS ("${UNBUILT_BACKGROUNDS[background]}") and src/ now paints it. Remove the entry.`,
+        `STALE EXEMPTION  ${background} is in UNBUILT_BACKGROUNDS ("${UNBUILT_BACKGROUNDS[background]}") and a shipped module now paints it. Remove the entry.`,
       );
     }
   }

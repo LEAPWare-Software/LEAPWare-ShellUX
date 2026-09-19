@@ -178,6 +178,7 @@ accent (hue 185), and a four-word status vocabulary.
 
 ### Status
 - **Danger, Warning, Success, Info** (`--status-*`, with `--status-*-subtle` washes and `--text-*` inks): a threshold was crossed. Always paired with a word or a mark. Never colour alone.
+- **Banners** (W3-1, `src/components/ui/Banner.tsx`): the status wash, a mark in `--status-*`, and a first line at focus weight in `--text-*`. No border and no side stripe. **The info banner's first line is `--text-primary`, not info ink**: there is no `--text-info` token, and `--status-info` on its own wash is declared at 3:1, a mark's threshold and not a word's, so the dot carries the status. The v4 canvas sets it in `--status-info`; matching the canvas is a `--text-info` token in `design/tokens/**` first. *Tests:* `e2e/theme.spec.ts` — "clears 4.5:1 for every banner's words on its own wash, in every theme".
 
 ### Charts
 Twelve series (`--chart-1` to `--chart-12`), searched and pairwise-validated per theme, plus grid, axis, label, tooltip, crosshair, sequential and diverging ramps. Chart colour is data colour; it never leaks into chrome.
@@ -237,7 +238,8 @@ Two durations, one curve: **micro** (`--motion-micro`, 120ms) for hover, press a
 - **Shape:** gently squared (4px radius), 24px tall, 12px horizontal padding, label type.
 - **Primary:** petrol fill, white label. One per surface.
 - **Quiet:** content-white background, ink-primary label, 1px default rule. The default button.
-- **States:** hover shifts one surface step (primary to deep petrol, quiet to hover grey) at 120ms; pressed shifts one more step; focus draws the two-tone ring (2px petrol, 1px offset in the surface colour) on `:focus-visible` only; disabled uses disabled ink and a subtle rule, not opacity; loading replaces the label with a determinate or indeterminate bar in place, never a centred spinner.
+- **States:** hover shifts one surface step (primary to deep petrol, quiet to hover grey) at 120ms; pressed shifts one more step (quiet to selected grey); focus draws the two-tone ring (2px petrol, 1px offset in the surface colour) on `:focus-visible` only; disabled uses disabled ink and a subtle rule on the hover-grey fill, not opacity; loading replaces the label in place with its in-progress verb and a 2px bar along the bottom edge (determinate or indeterminate), keeps the button's width, and is never a centred spinner.
+- **Primary pressed is the hover fill plus a 1px inset `--accent-border` rule**, not a darker fill. The accent ramp has no step past `--accent-solid-hover`, so the v4 *States* screen draws pressed this way and the build follows it. A darker pressed fill is a new token in `design/tokens/**` first. Built in W3-1: `src/components/ui/buttonClasses.ts`, `Button.tsx`; *Tests:* `e2e/theme.spec.ts` — "paints pressed one step past hover, on a quiet and on a primary button".
 
 ### List rows (pane 2)
 - **Height:** 32px (`--row-h-comfortable`, register row D-29) for the two-line row: body-weight title over a metadata line.
@@ -262,7 +264,7 @@ Two durations, one curve: **micro** (`--motion-micro`, 120ms) for hover, press a
 
 ### Command palette (signature component)
 The Raycast lever, and the primary way a keyboard operator works.
-- **Surface:** popover shadow, content-white, 4px radius, 512px wide, opening over a scrim that **dims** the shell (never a light wash that bleaches it).
+- **Surface:** popover shadow, content-white, 4px radius, 512px wide, opening over a scrim that **dims** the shell (never a light wash that bleaches it). **There is no scrim token yet**, so the dimming scrim has no `TOKEN_CLASS` role; W3-6 needs one added in `design/tokens/**` first (target, not built).
 - **Rows:** 32px, body type, icon at left, **shortcut column at right** in metadata type (from `describeHotkey`), group names in label type. There is no "Uncategorised" heading; ungrouped commands sit under the plugin's title.
 - **Keyboard:** up and down move a petrol-wash **active row**; Enter runs it; Escape closes and returns focus to where it came from. A footer states what Enter will do and shows the two or three keys that matter.
 - **Empty and error:** a query with no match says what was searched and offers the closest command; a command that fails reports inline in the palette, not in a modal.
@@ -295,6 +297,7 @@ Ten states, drawn the same way everywhere: default, hover, focus, pressed, disab
 - **Don't** use colour as decoration: not on headings, borders, the context bar, or to "look designed".
 - **Don't** type a colour value into `src/`; regenerate from `design/tokens/**`.
 - **Don't** use opacity for disabled; use `--text-disabled`.
+- **Don't** fake a darker primary pressed state with opacity or a filter; until a token exists, pressed primary is the hover fill plus the inset `--accent-border` rule.
 - **Don't** put a shadow on a pane, row, block or card.
 - **Don't** use a side-stripe border (a coloured `border-left` over 1px) as an accent on rows, blocks or alerts.
 - **Don't** open a modal where inline will do; the palette, the inspector and the plugin manager all confirm in place.

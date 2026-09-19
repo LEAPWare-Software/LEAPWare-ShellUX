@@ -16,6 +16,26 @@ from so a reader can check it.
 
 ### Added
 
+- **Wave-3 state primitives** (W3-1, `docs/design/WAVE3-PLAN.md` R6 and R7). A
+  `Button` (primary and quiet: hover, a pressed state one step past hover, a two-tone
+  focus-visible ring, disabled in disabled ink at full opacity, and a loading state that
+  keeps its idle width and does not submit its form) and a `Banner` in four statuses
+  (a wash, a mark and a bold first line, no border on any side). `TOKEN_CLASS` gains
+  every role the rest of wave 3 needs, so no later increment edits it. Nothing in the
+  shell renders them yet: they are shown by a dev-only fixture, `states.html`, which is
+  not a build input. Six browser tests pin the painted result (eight cases, since the
+  ring test runs once per theme), each mutation-probed red:
+  "paints pressed one step past hover, on a quiet and on a primary button", "draws a
+  disabled button in disabled ink at full opacity", "draws every banner as a wash with
+  no border on any side", "clears 4.5:1 for every banner's words on its own wash, in
+  every theme", "keeps a loading button at its idle width, with its bar inside its own
+  box", and "paints no ring on a mouse click and the two-tone ring on a Tab, in the …
+  theme". The contrast
+  gate's unpainted-background check now counts a background as painted only when a
+  module the shipped pages reach uses it (`design/lib/painters.mjs`, with node tests),
+  so a token painted only by the fixture is not counted as shipped (a guardrail; its
+  limits are listed in `design/lib/painters.mjs`).
+
 - **The plugin store** (ADR-0006 step 4). Main installs a `.lwplugin` chosen through its
   own file picker (the renderer never supplies a path) into
   `<userData>/plugins/<id>/<version>/`, staging, validating and renaming so a

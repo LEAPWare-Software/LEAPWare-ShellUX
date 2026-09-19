@@ -377,3 +377,211 @@ test.describe('the token stylesheet reaches the DOM', () => {
     expect(applied).toEqual([]);
   });
 });
+
+/**
+ * ============================================================================
+ * W3-1: THE STATE PRIMITIVES, PAINTED.
+ * ============================================================================
+ * `docs/design/WAVE3-PLAN.md` W3-1. The buttons and banners have no consumer in
+ * the shell yet, so these cases drive `states.html`, a dev-only fixture that is
+ * not a build input (`src/dev/StatesFixture.tsx`). Every case below was
+ * mutation-probed before merge: the named line was broken, the case was watched
+ * going red, and the line was restored.
+ *
+ * Motion is emulated as reduced for the whole block. The buttons carry a 120ms
+ * `--motion-micro` transition that `motion-reduce:transition-none` removes, so
+ * a colour read right after a hover or a press is the end state rather than a
+ * frame of the transition.
+ * ============================================================================
+ */
+
+/** The browser lane's fixture for the wave-3 state primitives. */
+const STATES_PATH = '/states.html';
+
+async function openStates(page: Page): Promise<void> {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(STATES_PATH);
+  await expect(page.getByRole('region', { name: 'Buttons' })).toBeVisible();
+}
+
+/** The four banner statuses, and the wash token each is painted on. */
+const BANNERS = [
+  { status: 'error', wash: '--status-danger-subtle' },
+  { status: 'warning', wash: '--status-warning-subtle' },
+  { status: 'success', wash: '--status-success-subtle' },
+  { status: 'info', wash: '--status-info-subtle' },
+] as const;
+
+/** One computed property of the first element matching `selector`, as serialised. */
+async function computed(page: Page, selector: string, property: string): Promise<string> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((node, name) => window.getComputedStyle(node).getPropertyValue(name), property);
+}
+
+/**
+ * The colour of the first 1px INSET layer of an element's box-shadow, painted
+ * through a canvas to an 8-bit triple, or `null` when it draws none.
+ */
+async function insetRule(page: Page, selector: string): Promise<[number, number, number] | null> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((node) => {
+      const value = window.getComputedStyle(node).boxShadow;
+      const layers: string[] = [];
+      let depth = 0;
+      let current = '';
+      for (const char of value) {
+        if (char === '(') depth += 1;
+        if (char === ')') depth -= 1;
+        if (char === ',' && depth === 0) {
+          layers.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      layers.push(current.trim());
+      const layer = layers.find((entry) => /\binset\b/.test(entry) && /\b1px\b/.test(entry));
+      if (layer === undefined) return null;
+      const colour = /^(?:[a-z]+\([^)]*\)|#[0-9a-f]+)/i.exec(layer)?.[0] ?? '';
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (context === null) throw new Error('e2e: no 2d context');
+      context.fillStyle = colour;
+      context.fillRect(0, 0, 1, 1);
+      const data = context.getImageData(0, 0, 1, 1).data;
+      return [data[0] as number, data[1] as number, data[2] as number] as [number, number, number];
+    });
+}
+
+test.describe('the W3-1 state primitives paint their states', () => {
+  test('paints pressed one step past hover, on a quiet and on a primary button', async ({
+    page,
+  }) => {
+    for (const theme of THEMES) {
+      // A fresh page per theme: releasing the press clicks the fixture's
+      // primary button, which puts it into its loading state.
+      await openStates(page);
+      await forceTheme(page, theme.attribute);
+      const at = (token: string): string => annotated(theme.selector, token);
+      const name = theme.name;
+
+      // Quiet: rest is the pane, hover is one grey step, pressed is the next.
+      await page.hover('#fixture-quiet');
+      const quietHover = await paintedColor(page, '#fixture-quiet', 'background-color');
+      await page.mouse.down();
+      const quietPressed = await paintedColor(page, '#fixture-quiet', 'background-color');
+      await page.mouse.up();
+      expectColor(quietHover, at('--surface-hover'), `${name}: the quiet button on hover`);
+      expectColor(quietPressed, at('--surface-selected'), `${name}: the quiet button pressed`);
+      expect(quietPressed, `${name}: pressed quiet paints its hover background`).not.toEqual(
+        quietHover,
+      );
+
+      // Primary: the ramp has no step past deep petrol, so the v4 canvas draws
+      // pressed as deep petrol plus a 1px inset `--accent-border` rule. The rule
+      // is what separates the two states, so the rule and its colour are asserted.
+      await page.hover('#fixture-primary');
+      const primaryHover = await paintedColor(page, '#fixture-primary', 'background-color');
+      const hoverRule = await insetRule(page, '#fixture-primary');
+      await page.mouse.down();
+      const primaryPressed = await paintedColor(page, '#fixture-primary', 'background-color');
+      const pressedRule = await insetRule(page, '#fixture-primary');
+      await page.mouse.up();
+      expectColor(primaryHover, at('--accent-solid-hover'), `${name}: the primary on hover`);
+      expectColor(primaryPressed, at('--accent-solid-hover'), `${name}: the primary pressed`);
+      expect(hoverRule, `${name}: a hovered primary draws an inset rule`).toBeNull();
+      expect(pressedRule, `${name}: a pressed primary draws no inset rule`).not.toBeNull();
+      expectColor(pressedRule ?? [], at('--accent-border'), `${name}: the pressed inset rule`);
+    }
+  });
+
+  test('draws a disabled button in disabled ink at full opacity', async ({ page }) => {
+    await openStates(page);
+    for (const theme of THEMES) {
+      await forceTheme(page, theme.attribute);
+      for (const id of ['#fixture-primary-disabled', '#fixture-quiet-disabled']) {
+        const ink = await paintedColor(page, id, 'color');
+        expectColor(ink, annotated(theme.selector, '--text-disabled'), `${id} ink`);
+        const fill = await paintedColor(page, id, 'background-color');
+        expectColor(fill, annotated(theme.selector, '--surface-hover'), `${id} fill`);
+        expect(
+          await computed(page, id, 'opacity'),
+          `${id} is drawn with opacity, not with disabled ink`,
+        ).toBe('1');
+      }
+    }
+  });
+
+  test('draws every banner as a wash with no border on any side', async ({ page }) => {
+    await openStates(page);
+    for (const theme of THEMES) {
+      await forceTheme(page, theme.attribute);
+      for (const banner of BANNERS) {
+        const selector = `[data-banner-status="${banner.status}"]`;
+        const widths = [];
+        for (const side of ['top', 'right', 'bottom', 'left']) {
+          widths.push(await computed(page, selector, `border-${side}-width`));
+        }
+        expect(widths, `the ${banner.status} banner draws a border`).toEqual([
+          '0px',
+          '0px',
+          '0px',
+          '0px',
+        ]);
+        const wash = await paintedColor(page, selector, 'background-color');
+        expectColor(wash, annotated(theme.selector, banner.wash), `the ${banner.status} wash`);
+      }
+    }
+  });
+
+  test("clears 4.5:1 for every banner's words on its own wash, in every theme", async ({
+    page,
+  }) => {
+    await openStates(page);
+    for (const theme of THEMES) {
+      await forceTheme(page, theme.attribute);
+      for (const banner of BANNERS) {
+        const selector = `[data-banner-status="${banner.status}"]`;
+        const wash = await paintedColor(page, selector, 'background-color');
+        for (const part of ['[data-banner-title]', '[data-banner-body]']) {
+          const ink = await paintedColor(page, `${selector} ${part}`, 'color');
+          const ratio = contrastRatio(ink, wash);
+          expect(
+            ratio,
+            `${banner.status} ${part} measured ${ratio.toFixed(2)}:1 in the ${theme.name} theme`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  test('keeps a loading button at its idle width, with its bar inside its own box', async ({
+    page,
+  }) => {
+    await openStates(page);
+    const button = page.locator('#fixture-primary');
+    const idle = await button.boundingBox();
+    await button.click();
+    await expect(button).toHaveAttribute('aria-busy', 'true');
+    await expect(button).toHaveAccessibleName('Reordering');
+    const busy = await button.boundingBox();
+    const bar = await button.locator('[data-loading-bar]').boundingBox();
+    if (idle === null || busy === null || bar === null) {
+      throw new Error('e2e: the loading button or its bar has no box');
+    }
+    expect(Math.abs(busy.width - idle.width), 'the button changed width').toBeLessThan(0.5);
+    expect(Math.abs(busy.height - idle.height), 'the button changed height').toBeLessThan(0.5);
+    // Inside its own box, along its bottom edge: not a centred spinner.
+    expect(bar.height).toBeCloseTo(2, 0);
+    expect(bar.x).toBeGreaterThanOrEqual(busy.x - 0.5);
+    expect(bar.x + bar.width).toBeLessThanOrEqual(busy.x + busy.width + 0.5);
+    expect(bar.y + bar.height).toBeLessThanOrEqual(busy.y + busy.height + 0.5);
+    expect(bar.y).toBeGreaterThan(busy.y + busy.height / 2);
+  });
+});
