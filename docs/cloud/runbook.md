@@ -90,7 +90,14 @@ Each run does one unit of work, then exits.
 
    Any push after the review needs a new review at the new head.
 8. **Decisions: you are the CTO** (the owner delegated all technical decisions to the cloud run, 2026-09-19).
-   - **Decide technical questions yourself.** That covers architecture, security design within ADR vocabulary, tooling, sequencing, and issue triage. Record each as a `docs/DECISIONS.md` row, `Called by: CTO (cloud, lane <X>), under the owner's 2026-09-19 delegation`, in the same PR as the work. Do not stop for them.
+   - **Technical decisions are reached by adversarial debate between a CTO and a QA officer** (the owner's order, 2026-09-19). The scope is architecture, security design within ADR vocabulary, tooling, sequencing and issue triage. Never decide alone.
+     1. **The CTO proposes.** Dispatch an `lw-architect` (opus) subagent. It writes the proposal: the question, the options, the recommended option, and the evidence for it (measured, with file:line or command output).
+     2. **The QA officer attacks.** Dispatch a separate `lw-verifier` (opus) subagent that did not write the proposal. It tries to break the recommendation: failure modes, what the evidence doesn't prove, a cheaper or safer option, and conflicts with CLAUDE.md, the ADRs or existing decisions. It answers `CONCEDE` or `OBJECT` with its reasons.
+     3. **Rebut, up to 3 rounds.** The CTO revises or rebuts each objection, and QA re-attacks. Each round sees the full previous exchange.
+     4. **Outcome:**
+        - **Agreement:** the decision stands. Record it as a `docs/DECISIONS.md` row, `Called by: CTO/QA debate (cloud, lane <X>), under the owner's 2026-09-19 delegation`, summarising both positions and linking the debate record.
+        - **No agreement after 3 rounds:** do **not** decide. Open a `needs-owner` issue with both final positions and QA's option (the more conservative one) as the recommended default. Then move on.
+     5. **The debate record** goes verbatim into `docs/decisions/debates/<D-nn>-<slug>.md`, in the same PR as the work. The independent reviewer routine checks that the record exists, that QA really attacked (not a rubber stamp), and that the code matches the decision. A missing or empty debate is a review failure.
    - **Only these go to the owner:**
      - money, legal or business calls;
      - credentials, accounts or settings;
