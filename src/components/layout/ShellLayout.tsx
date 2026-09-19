@@ -1,25 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactElement } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { ExtensionHostBoundary, useActivation } from '../../core/ActivationContext';
-import type { ActiveExtension } from '../../core/ActivationContext';
+import { Panel, PanelGroup } from 'react-resizable-panels';
+import { useActivation } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
-import { useBadgeCount, useNavMetric, useShellContext, useShellStore } from '../../core/ShellAPI';
+import { useShellContext, useShellStore } from '../../core/ShellAPI';
 import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import { useHotkeyDispatch } from '../../core/hotkeyDispatch';
 import {
-  DEFAULT_SHELL_STATE,
-  HYDRATION_LIMITS,
   getDefaultHydrationEngine,
   selectActiveExtensionId,
 } from '../../core/services/HydrationEngine';
 import type { HydrationEngine, PaneSizes } from '../../core/services/HydrationEngine';
-import type { NavigationMetric, NavigationNode, PaneId, RibbonContext } from '../../core/types';
+import type { PaneId } from '../../core/types';
 import { useLocalStorageState } from '../../hooks/useLocalStorageState';
 import { useElementWidth } from '../../hooks/useElementWidth';
 import { useHostUpdates } from '../../hooks/useHostUpdates';
 import { hostUpdateCommands } from '../../core/updates/hostUpdates';
-import { MetricGlyph } from '../ui/MetricGlyph';
 import { createCommandRegistry, withRecent } from '../../core/commands/CommandRegistry';
 import type { ExtensionCommands, HostCommand } from '../../core/commands/CommandRegistry';
 import { CommandPalette } from '../command/CommandPalette';
@@ -30,13 +26,34 @@ import type { OmniboxSubmission } from '../command/OmniboxComposer';
 import { echartsRenderer } from '../../core/chart/echartsRenderer';
 import { BlockLedger } from '../ledger/BlockLedger';
 import { FaultBoundary } from '../error/FaultBoundary';
-import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
+import { EmptyPane, ExtensionPane } from './ExtensionPane';
 import { PaneWrapper } from './PaneWrapper';
+import {
+  PANE_FALLBACK_PERCENT,
+  PANE_PX,
+  clampPanePercent,
+  clampToBand,
+  isEngineDefaultLayout,
+  percentOf,
+} from './paneSizing';
+import { NavigationTree, ShellNavButton } from './ShellNavigation';
+import { ShellResizeHandle } from './ShellResizeHandle';
+import { useHostPalette } from './useHostPalette';
 
 /**
  * ============================================================================
  * THE THREE-PANE SHELL. SEVEN DECISIONS WORTH ARGUING WITH BEFORE CHANGING.
  * ============================================================================
+ *
+ * WHERE THE PARTS LIVE, SINCE GITHUB ISSUE #95. This banner governs the whole
+ * shell and stays with the composition; the pieces it names were split into
+ * modules beside this one with no change to the DOM, the props or any value:
+ * `paneSizing.ts` (`PANE_PX`, `PANE_FALLBACK_PERCENT`, `percentOf`,
+ * `clampToBand`, `clampPanePercent`, `isEngineDefaultLayout`),
+ * `ShellNavigation.tsx` (`ShellNavButton`, `NavNodeButton`, `NavigationTree`),
+ * `ExtensionPane.tsx` (`ExtensionPane`, `EmptyPane`), `ShellResizeHandle.tsx`
+ * and `useHostPalette.ts`. Where a decision below says "this file", read those
+ * modules and this one together.
  *
  * 1. SIZES ARE PERCENTAGES, MEASURED ONCE INTO PIXELS.
  *    `react-resizable-panels` v2 sizes panels in percent of the group and has no
@@ -376,573 +393,6 @@ import { PaneWrapper } from './PaneWrapper';
  */
 
 /**
- * The pixel intent behind every pane constraint, in one table.
- *
- * `navCollapsed` is the only one of these that is applied as pixels directly —
- * it is a CSS width on a track outside the panel group — and it is listed here
- * so that the 48px in the specification has exactly one home in the code.
- */
-const PANE_PX = Object.freeze({
-  navCollapsed: 48,
-  navDefault: 240,
-  navMin: 176,
-  navMax: 400,
-  listDefault: 360,
-  listMin: 240,
-  listMax: 640,
-  detailMin: 260,
-});
-
-/**
- * Percentages used when the group width cannot be measured.
- *
- * These are the same constraints expressed against a 1360px content area, which
- * is the width `PANE_PX` was chosen for. They keep the layout legal and
- * proportionate rather than pretending to be the pixel values.
- */
-const PANE_FALLBACK_PERCENT = Object.freeze({
-  navDefault: 18,
-  navMin: 13,
-  navMax: 29,
-  listDefault: 26,
-  listMin: 18,
-  listMax: 47,
-  detailMin: 19,
-});
-
-/**
- * A pixel width as a percentage of `groupWidth`, clamped to a legal band.
- *
- * The lower clamp is what stops a divider dragged fully to one edge from leaving
- * a 0px pane behind: every panel's `minSize` comes through here, so the smallest
- * value any panel can be given is 2% of the group rather than nothing. The
- * library reports the same floor to assistive technology as `aria-valuemin` on
- * the separator, which is what the zero-width test asserts.
- */
-function percentOf(px: number, groupWidth: number, fallbackPercent: number): number {
-  if (groupWidth <= 0) {
-    return fallbackPercent;
-  }
-  return Math.min(90, Math.max(2, (px / groupWidth) * 100));
-}
-
-/**
- * A restored percentage held to one pane's own live band.
- *
- * `low` and `high` are this pane's `minSize` and `maxSize` at the width measured
- * on THIS load, so a layout saved on a wide monitor and reopened on a narrow one
- * is corrected here rather than being handed to the library and re-clamped by it
- * with a console warning. `Math.min`/`Math.max` rather than an `if`, so the
- * function has one exit and no branch to leave untested.
- */
-function clampToBand(value: number, low: number, high: number): number {
-  return Math.min(high, Math.max(low, value));
-}
-
-/**
- * A percentage held to the band the ENGINE will store, before it is written.
- *
- * This is not belt and braces. Pane 3 declares a `minSize` and deliberately no
- * `maxSize` — it is the remainder pane — so a layout with both dividers driven
- * fully leading gives it whatever is left, and the engine refuses a slot value
- * outside `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]` by throwing. A throw from a
- * panel resize callback is a throw out of the library's own layout effect, so
- * the value is clamped to what is storable instead. The bounds are the engine's
- * own constants, imported rather than restated, for the reason
- * `HYDRATION_LIMITS` gives about the two ends of this band agreeing.
- */
-function clampPanePercent(value: number): number {
-  return clampToBand(
-    value,
-    HYDRATION_LIMITS.MIN_PANE_PERCENT,
-    HYDRATION_LIMITS.MAX_PANE_PERCENT,
-  );
-}
-
-/**
- * Whether a restored record's pane sizes are the engine's own untouched
- * defaults.
- *
- * BY VALUE, AND THE IDENTITY TEST THIS REPLACES WAS A FALSE SENTINEL. It read
- * `restoredSizes !== DEFAULT_SHELL_STATE.paneSizes` and called the answer
- * "somebody chose a layout". Identity only survives the paths that hand the one
- * shared frozen default straight back — an absent or discarded record. A record
- * that was PARSED gets a fresh `paneSizes` object whatever it holds, so a shell
- * whose record exists only because the user collapsed pane 1, or opened an
- * extension, answered "somebody chose a layout" for a record holding nothing but
- * defaults, and `PANE_PX` was never consulted again on that machine. Comparing
- * the three numbers is the fact the sentinel was reaching for.
- *
- * What that trades away, stated rather than glossed: a user who drags the panes
- * to exactly the engine's default percentages and reloads gets the pixel intent
- * for this width instead of those percentages back. The two are the same layout
- * at the 1360px reference width `PANE_FALLBACK_PERCENT` was written for and
- * differ elsewhere, so that user's reload can move the dividers. It is the
- * narrower error of the two, and it needs a coincidence to reach.
- *
- * The keys come from the defaults themselves rather than from a list written
- * here, so a fourth pane cannot be added to the record and quietly skipped, and
- * `every` rather than a chain of `||` so there is one exit.
- */
-function isEngineDefaultLayout(sizes: PaneSizes): boolean {
-  const defaults = DEFAULT_SHELL_STATE.paneSizes;
-  return (Object.keys(defaults) as PaneId[]).every((pane) => sizes[pane] === defaults[pane]);
-}
-
-interface ShellNavButtonProps {
-  /** UNTRUSTED plug-in text. Rendered as a text node in both pane-1 states. */
-  readonly label: string;
-  /**
-   * UNTRUSTED icon key, or `undefined` for none. Resolved through the host's own
-   * `SHELL_ICONS` table and never interpolated anywhere. See the collapsed-track
-   * paragraph below.
-   */
-  readonly icon: string | undefined;
-  /** Registry-validated non-negative integer, or `undefined` for no badge. */
-  readonly badgeCount: number | undefined;
-  /**
-   * The host-owned metric to draw beside the row, or `undefined` for none.
-   *
-   * Already resolved against the store by `NavNodeButton` — see decision 8 in
-   * the banner. Every field on it is registry-validated, and the only one this
-   * component's caller can have moved is `value`.
-   */
-  readonly metric: NavigationMetric | undefined;
-  readonly isCollapsed: boolean;
-  readonly isCurrent: boolean;
-  readonly onSelect: () => void;
-}
-
-/**
- * One selectable row in pane 1, in whichever of the two states pane 1 is in.
- *
- * Collapsed, the row becomes a 32px square — and the label itself stays in the
- * accessible tree as an `sr-only` text node rather than being dropped. That is
- * the "accessible names preserved" half of the 48px icon track: the same
- * `getByRole('button', { name })` query finds the same button in both states.
- *
- * WHAT THE SQUARE SHOWS, SINCE GITHUB ISSUE #19. A declared `NavigationNode.icon`
- * is resolved through `SHELL_ICONS` and drawn; a node that declares none keeps
- * the monogram — the first letter of its label — which is what every row used to
- * get. The monogram is not a fallback for a BAD key: an icon key the host does
- * not publish resolves to `FALLBACK_ICON`, the same host glyph the ribbon shows,
- * because a vendor who mistyped a key and a vendor who declared none are two
- * different situations and should not look identical. The monogram was the whole
- * of the problem this fixes: `DatabasePlugin`'s roots are Components,
- * Assemblies and Consumables, so the collapsed rail read "C A C" and two of the
- * three rows were indistinguishable.
- *
- * The extension rows above the tree take `icon={undefined}` and keep their
- * monograms deliberately — `LEAPExtensionBlueprint` has no `icon` field, an
- * extension is not a navigation node, and inventing one from the first nav node
- * would be the host guessing.
- *
- * *Tests:* `src/components/__tests__/ShellLayoutIcons.test.tsx` — "renders a
- * declared node icon in the collapsed track instead of the monogram", "falls back
- * to the host glyph for an icon key the host does not publish", "keeps the
- * monogram for a node that declares no icon" and "keeps the monogram on the
- * extension rows, which declare no icon at all".
- *
- * THE SELECTED STATE IS A RULE AND A WEIGHT, NOT ONLY A FILL. `aria-current` was
- * always set, so a screen-reader user was always told which extension was
- * active. A sighted user was not: the fill measured 1.09:1 against white and the
- * outline beside it 1.26:1, against the 3:1 that WCAG 1.4.11 asks of a non-text
- * state indicator. Both were far below it, and no fill reaches 3:1 against white
- * without going dark enough to read as a different control entirely. So the fill
- * stays — it is a pleasant hint for anyone who can see it — and the state is
- * actually CARRIED by two things that clear the bar on their own: a 2px leading
- * rule at `--border-selected`, and a semibold label.
- *
- * The rule and the fill are now `TOKEN_CLASS.navSelectedRule` and
- * `navSelectedSurface`, so there is one declaration per affordance instead of a
- * light one and a `dark:` twin. The ratios above are no longer restated per
- * theme here on purpose: they are measured for all three themes, against every
- * surface each token is drawn on, by `design/check-contrast.mjs` and by
- * `npm run check:tokens`. A number copied into a comment is a number that goes
- * stale silently, and this file had three such paragraphs before this change.
- *
- * The 1px outline is the decorative tier, `--border-subtle`, and that is a
- * decision `design/README.md` explicitly declined to make for us — see its "For
- * whoever wires this" section. `--border-default` would make a selected row's
- * edge as heavy as a pane's; the outline is not what carries the state, so it
- * gets the tier that keeps weight off decoration.
- *
- * The rule is an inset `box-shadow` rather than a left border. A border would
- * have to grow from 1px to 2px on selection and shift the label sideways by a
- * pixel each time the user moved between rows; an inset shadow paints inside the
- * padding box and moves nothing.
- *
- * `min-h-6` is the 24px WCAG 2.5.8 target-size floor. Measured before it was
- * added, these rows were 163.9 × 22 with 0px and 1px gaps between them, so the
- * spacing exception did not apply and they simply failed.
- */
-function ShellNavButton({
-  label,
-  icon,
-  badgeCount,
-  metric,
-  isCollapsed,
-  isCurrent,
-  onSelect,
-}: ShellNavButtonProps): ReactElement {
-  return (
-    <button
-      type="button"
-      aria-current={isCurrent ? 'true' : undefined}
-      title={label}
-      onClick={onSelect}
-      className={
-        'flex min-h-6 items-center gap-1 rounded-sm border p-1 text-[12px] leading-none ' +
-        'aria-[current]:font-semibold ' +
-        `${TOKEN_CLASS.controlRestBorder} ${TOKEN_CLASS.navSelectedBorder} ` +
-        `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.navSelectedRule} ` +
-        `${TOKEN_CLASS.controlHoverBorder} ` +
-        (isCollapsed ? 'relative h-8 w-8 justify-center' : 'w-full min-w-0 justify-start')
-      }
-    >
-      {isCollapsed ? (
-        <span aria-hidden="true" className="flex font-semibold">
-          {/*
-            A lookup, never an interpolation. `icon` is untrusted and reaches
-            nothing but `Map.prototype.get`; the element that comes back is
-            host-authored SVG. An unpublished key gets the host fallback, and no
-            icon at all gets the monogram.
-          */}
-          {icon === undefined ? (
-            label.trim().slice(0, 1).toUpperCase()
-          ) : (
-            <>{SHELL_ICONS.get(icon) ?? FALLBACK_ICON}</>
-          )}
-        </span>
-      ) : null}
-      <span className={isCollapsed ? 'sr-only' : 'truncate'}>{label}</span>
-      {/*
-        Host-drawn geometry and an `sr-only` description; nothing a plug-in
-        supplied reaches an attribute. `MetricGlyph` decides what a collapsed
-        row keeps, which is the text channel — see its `isGlyphHidden`
-        docblock — so there is no second copy of that rule here.
-      */}
-      {metric === undefined ? null : (
-        <MetricGlyph metric={metric} isGlyphHidden={isCollapsed} />
-      )}
-      {badgeCount === undefined ? null : (
-        <span
-          className={
-            `flex-none rounded-sm ${TOKEN_CLASS.badgeSurface} px-1 text-[11px] leading-4 ` +
-            (isCollapsed ? 'absolute -right-1 -top-1' : 'ml-auto')
-          }
-        >
-          {/*
-            The digit alone folds into the button's accessible name as a bare
-            number — "Root A 3" — which names no unit and reads as part of the
-            label. `badgeCount` is documented in `core/types.ts` as a "badge" and
-            nothing narrower, so the qualifier says "badge" and not "unread" or
-            "items": inventing the unit would be a different lie from omitting
-            it. The name becomes "Root A badge 3".
-          */}
-          <span className="sr-only">badge </span>
-          {badgeCount}
-        </span>
-      )}
-    </button>
-  );
-}
-
-interface NavNodeButtonProps {
-  /** The scope the store keys this node's badge under. Registry-validated. */
-  readonly extensionId: string;
-  readonly node: NavigationNode;
-  readonly isCollapsed: boolean;
-  readonly isCurrent: boolean;
-  readonly onSelect: (nodeId: string) => void;
-}
-
-/**
- * One navigation node, with its badge read from the store and not only from the
- * blueprint.
- *
- * A component of its own because `useBadgeCount` is a hook and there is one
- * subscription per node — which is also what makes a badge write re-render one
- * row rather than the whole tree, since the hook's snapshot is a primitive and
- * `useSyncExternalStore` bails out for every subscriber whose own number did not
- * move. See decision 7 in the banner for the override rule and for why the
- * hook's render-phase `INVALID_ID` is not caught here.
- */
-function NavNodeButton({
-  extensionId,
-  node,
-  isCollapsed,
-  isCurrent,
-  onSelect,
-}: NavNodeButtonProps): ReactElement {
-  const liveBadge = useBadgeCount(extensionId, node.id);
-  const liveMetric = useNavMetric(extensionId, node.id);
-  // The override reaches `value` and nothing else, and it produces a FRESH
-  // frozen object rather than mutating the registry's record — which is what
-  // makes `MetricGlyph`'s `useMemo` on the metric identity correct. When the
-  // node declared no metric there is nothing to draw a store value ON: a metric
-  // needs a `kind` and a `description` and the host will not invent either, so
-  // the write is stored, readable through `getNavMetric`, and drawn by nobody.
-  // See decision 8 in the banner.
-  const metric = useMemo((): NavigationMetric | undefined => {
-    const declared = node.metric;
-    if (declared === undefined || liveMetric === undefined) {
-      return declared;
-    }
-    return Object.freeze({ ...declared, value: liveMetric });
-  }, [node.metric, liveMetric]);
-  return (
-    <ShellNavButton
-      label={node.label}
-      icon={node.icon}
-      // `??`, not `||`: a badge written down to `0` is a value, and a truthiness
-      // test would silently fall back to the blueprint's stale number for it.
-      badgeCount={liveBadge ?? node.badgeCount}
-      metric={metric}
-      isCollapsed={isCollapsed}
-      isCurrent={isCurrent}
-      onSelect={() => {
-        onSelect(node.id);
-      }}
-    />
-  );
-}
-
-interface NavigationTreeProps {
-  /** The foreground extension, which is the badge scope for every node below. */
-  readonly extensionId: string;
-  readonly nodes: readonly NavigationNode[];
-  readonly activeNodeId: string | null;
-  readonly isCollapsed: boolean;
-  readonly onSelect: (nodeId: string) => void;
-}
-
-/**
- * The active extension's navigation tree.
- *
- * Collapsed, only the top level is shown: an icon track has no room for
- * indentation, and hiding depth is better than rendering it unreadably. Every
- * label still reaches the DOM as a text node either way.
- */
-function NavigationTree({
-  extensionId,
-  nodes,
-  activeNodeId,
-  isCollapsed,
-  onSelect,
-}: NavigationTreeProps): ReactElement {
-  return (
-    <ul className={isCollapsed ? 'flex flex-col items-center gap-1' : 'flex flex-col gap-px'}>
-      {nodes.map((node) => (
-        <li key={node.id} className="min-w-0">
-          <NavNodeButton
-            extensionId={extensionId}
-            node={node}
-            isCollapsed={isCollapsed}
-            isCurrent={activeNodeId === node.id}
-            onSelect={onSelect}
-          />
-          {isCollapsed || node.children === undefined ? null : (
-            <div className="pl-2">
-              <NavigationTree
-                extensionId={extensionId}
-                nodes={node.children}
-                activeNodeId={activeNodeId}
-                isCollapsed={isCollapsed}
-                onSelect={onSelect}
-              />
-            </div>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-interface ExtensionPaneProps {
-  readonly active: ActiveExtension;
-  readonly pane: 'pane2' | 'pane3';
-  /** Host text naming the surface, for the fault surface. Never plug-in text. */
-  readonly label: string;
-  readonly context: Readonly<RibbonContext>;
-}
-
-/**
- * A plug-in view, inside both boundaries the host is required to wrap it in.
- *
- * ORDER: `FaultBoundary` OUTSIDE `ExtensionHostBoundary`. See decision 5 in the
- * banner — the inner one throws for a non-string `extensionId`, and a boundary
- * beneath it could not catch its own parent.
- */
-function ExtensionPane({ active, pane, label, context }: ExtensionPaneProps): ReactElement {
-  const View = active.blueprint.views[pane];
-  return (
-    <FaultBoundary boundaryLabel={label} extensionId={active.id} resetKey={active.id}>
-      <ExtensionHostBoundary extensionId={active.id}>
-        <View shell={active.shell} context={context} />
-      </ExtensionHostBoundary>
-    </FaultBoundary>
-  );
-}
-
-/**
- * Body text for a pane with nothing to show.
- *
- * This used to be `text-neutral-500` with a `dark:text-neutral-400` beside it,
- * and that pair is the clearest single illustration of what the token set
- * replaces. `#737373` measured 4.18:1 on the dark pane — under the 4.5:1 WCAG
- * 1.4.3 requires of 12px body text — while measuring fine in light, so the fix
- * had to be a per-theme override written by hand at every muted string in the
- * shell. `--text-muted` is resolved per theme by the generator and validated
- * against all eight surfaces in all three themes, so the override has nothing
- * left to correct and one declaration replaces two.
- */
-function EmptyPane({ children }: { readonly children: string }): ReactElement {
-  return <p className={`p-1 text-[12px] leading-5 ${TOKEN_CLASS.mutedText}`}>{children}</p>;
-}
-
-interface ShellResizeHandleProps {
-  readonly label: string;
-}
-
-/**
- * A divider. Mouse dragging and the window-splitter keyboard pattern both come
- * from the library; see decision 3 in the banner above.
- *
- * THREE THINGS HERE ARE ACCESSIBILITY FIXES, AND ALL THREE ARE EASY TO UNDO BY
- * ACCIDENT.
- *
- * COLOUR. The divider once used the SAME value as the 1px border on the panes
- * either side of it, so it did not read as a control at all — it read as one
- * more pane border, at 1.26:1 against the panes it separates. WCAG 1.4.11 wants
- * 3:1 for a control's visual boundary.
- *
- * It now uses `--control-divider` and `--control-divider-hover`, which are their
- * own token group rather than a shade of `--border-*`. `design/README.md`
- * "Honest limits" item 9 records why: this is a filled 4px bar with hover and
- * drag states, not a border, and folding it into `--border-strong` would have
- * made one token answer to two different measurements. `--control-divider`
- * measures 5.94:1 on `--surface-app` in light and 8.10:1 in dark.
- *
- * The hover and drag states still move AWAY from the page background in each
- * theme — darker in light, lighter in dark — but that direction now lives in the
- * token values rather than in a `dark:` variant here, which is why there are two
- * declarations where there were six.
- *
- * TARGET SIZE. The visual divider stays 4px, because a 24px bar between two
- * panes would look broken. `hitAreaMargins` widens the region the library's own
- * pointer tracking treats as this handle, without touching the painted width:
- * 4 + 12 + 12 = 28px of fine-pointer target, over the 24px WCAG 2.5.8 asks for.
- * The library's defaults are `coarse: 15, fine: 5`, which is 14px and not
- * enough; `coarse` is restated at its default so that the pair is read as one
- * decision rather than as a half-configured object.
- *
- * ORIENTATION. A `separator` reports `aria-orientation="horizontal"` by default,
- * and these are vertical splitters between side-by-side panes. The library
- * spreads unknown props onto the element before setting `role`, so the attribute
- * reaches the DOM and nothing of the library's own is displaced.
- */
-function ShellResizeHandle({ label }: ShellResizeHandleProps): ReactElement {
-  return (
-    <PanelResizeHandle
-      aria-label={label}
-      aria-orientation="vertical"
-      hitAreaMargins={{ coarse: 15, fine: 12 }}
-      className={
-        'w-1 flex-none cursor-col-resize outline-none ' +
-        `${TOKEN_CLASS.dividerIdle} ${TOKEN_CLASS.dividerHover} ` +
-        `${TOKEN_CLASS.dividerFocus} ${TOKEN_CLASS.dividerDrag}`
-      }
-    />
-  );
-}
-
-/**
- * ============================================================================
- * ONE HOST CHORD, TWO DOCUMENTS, AND THE SURFACE THAT OWNS THE PALETTE.
- * ============================================================================
- * The command palette is host chrome's — `HOST_CHORDS` in
- * `src/core/hotkeyDispatch.ts` holds exactly one entry, and
- * `src/components/command/__tests__/hostChrome.test.tsx` pins three independent
- * spellings of "an extension cannot declare it". Phase 7 put panes 2 and 3 in a
- * different document, and that made a question out of something that had never
- * been one: **what happens when the chord is pressed in the surface that does
- * not have the palette in it?**
- *
- * Before this hook, nothing. The extension surface's dispatcher matched the
- * chord, called its handler, set a piece of state no rendered component reads,
- * and the user got silence from a keystroke they use constantly.
- *
- * ---------------------------------------------------------------------------
- * RENDERER-FIRST, AND MAIN ROUTES WHAT THE RENDERER COULD NOT ACT ON
- * ---------------------------------------------------------------------------
- * The obvious alternative is to match the chord in the main process, which
- * already watches `before-input-event` for the escape hatch. It is refused for
- * the reason `electron/main/paneKeyBridge.ts` sets out at length: that event
- * fires BEFORE the renderer's DOM handling and carries neither a target nor
- * `defaultPrevented`, so main cannot tell `Ctrl+K` aimed at the shell from
- * `Ctrl+K` aimed at the omnibox composer the user is typing in. Every
- * suppression rule that answers that question — `isEditableTarget`,
- * `isComposing`, the repeat guard — lives in the renderer and stays there.
- *
- * So the chord is recognised where it always was, and only the surviving INTENT
- * crosses. Main focuses host chrome and tells it to open; see
- * `registerPaletteRouting` in `electron/main/index.ts` for why focus moves as
- * well as the palette opening.
- *
- * ---------------------------------------------------------------------------
- * ONE HOOK FOR BOTH DIRECTIONS, AND IT LIVES HERE RATHER THAN IN `src/hooks/`
- * ---------------------------------------------------------------------------
- * A surface that can ASK is a surface that must also be able to HEAR: host
- * chrome and the extension view load the same preload and the same component,
- * and which of them is which is a prop rather than a build. Splitting this into
- * a sender hook and a receiver hook would have made "who subscribes" a second
- * decision that could disagree with the first one.
- *
- * It sits beside its one caller rather than in `src/hooks/` because it has
- * exactly one caller and no meaning away from it: `useHostUpdates` is a general
- * reading of host state that any surface could want, and this is the answer to
- * one question this component asks about itself.
- * ============================================================================
- */
-
-/** The `panes` half of the preload bridge. Declared in `src/App.tsx`. */
-type HostPanesBridge = NonNullable<NonNullable<Window['shelluxHost']>['panes']>;
-
-/** The bridge, or `null` when this document is not running inside the host. */
-function hostPanesBridge(): HostPanesBridge | null {
-  return window.shelluxHost?.panes ?? null;
-}
-
-/**
- * Subscribe to the host's request to open the palette, and get the way to make
- * one.
- *
- * @param onRequested called when another surface's chord reached this one.
- *   **Its identity must be stable** — wrap it in `useCallback` — because it is
- *   the subscription's dependency, and a fresh function every render would
- *   detach and re-attach the listener on every render.
- * @returns the way to hand the chord to the host, or `null` in a browser
- *   document, where there is no other surface and the caller's own palette is
- *   the whole answer.
- */
-function useHostPalette(onRequested: () => void): (() => void) | null {
-  const panes = hostPanesBridge();
-
-  useEffect(() => {
-    if (panes === null) {
-      return undefined;
-    }
-    // `onPaletteRequest` returns its own unsubscribe, so the cleanup is the
-    // host's rather than a second bookkeeping scheme built on top of it — the
-    // same shape `useHostUpdates` uses.
-    return panes.onPaletteRequest(onRequested);
-  }, [panes, onRequested]);
-
-  return panes === null ? null : panes.requestPalette;
-}
-
-/**
  * ============================================================================
  * WHICH PART OF THE SHELL ONE DOCUMENT DRAWS.
  * ============================================================================
@@ -1078,8 +528,10 @@ export function ShellLayout({
   // the chord pressed in the extension view set a piece of state nothing reads
   // and the user got silence from a keystroke they use constantly. So the
   // extension surface hands the surviving intent to the host, which focuses host
-  // chrome and asks it to open — see `src/hooks/useHostPalette.ts` for why the
-  // MATCHING stays in the renderer and only the intent crosses.
+  // chrome and asks it to open — see `useHostPalette.ts` beside this file for
+  // why the MATCHING stays in the renderer and only the intent crosses. (This
+  // pointer used to name `src/hooks/useHostPalette.ts`, a path that never
+  // existed: the hook lived in this file until GitHub issue #95.)
   //
   // `showChrome` first, so the surface that owns the palette never takes a round
   // trip to open its own; `requestPalette === null` second, so a browser
