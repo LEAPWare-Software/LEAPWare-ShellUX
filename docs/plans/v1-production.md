@@ -96,7 +96,7 @@ The BuildCraft pilot is not part of this plan (D-44). The 1.0 tag still waits fo
 Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until its PR B lands, a tick here is recorded under the old convention.
 - [x] Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50. [C-07]
 - [x] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items. [C-28]
-- [ ] Rollout step 2: every throwaway-PR case shown with its run id.
+- [x] Rollout step 2: every throwaway-PR case shown with its run id. [C-06]
 - [ ] Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue.
 - [ ] PR B: both checks required with `integration_id: 15368`, applied and read back.
 
