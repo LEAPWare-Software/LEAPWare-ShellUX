@@ -46,6 +46,16 @@
           "headRefOid,statusCheckRollup",
           "--jq",
           "\"pr115_head=\\(.headRefOid[0:7])\", \"pr115_checks_success=\\([.statusCheckRollup[] | select(.conclusion == \"SUCCESS\")] | length)\", \"pr115_checks_total=\\(.statusCheckRollup | length)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "115",
+          "--json",
+          "comments",
+          "--jq",
+          "[.comments[] | select(.body|contains(\"Findings, all in prose\"))][0].body as $b | \"pr115_findings_count=\\([($b|contains(\"README.md` Accessibility\")), ($b|contains(\"placed a closing keyword\")), ($b|contains(\"CIEDE2000 reference pairs\"))] | map(select(.)) | length)\", \"pr115_portability_zero=\\($b|contains(\"check:portability` finds 0 violations\"))\", \"pr115_citations_found=\\($b|contains(\"check:citations` finds 1075 citations\"))\""
         ]
       ],
       "expect": [
@@ -63,10 +73,25 @@
           "key": "pr115_checks_total",
           "op": "==",
           "value": 5
+        },
+        {
+          "key": "pr115_findings_count",
+          "op": "==",
+          "value": 3
+        },
+        {
+          "key": "pr115_portability_zero",
+          "op": "==",
+          "value": "true"
+        },
+        {
+          "key": "pr115_citations_found",
+          "op": "==",
+          "value": "true"
         }
       ],
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 15): the row checked CI's 5/5 rollup but not the box's own \"three prose findings\" count or the `check:portability`/`check:citations` exit-code claim; both were prose in the reviewer's comment on PR #115, unread by any check. Now the same comment is fetched and its three named findings (README.md accessibility wording, HANDOFF closing keyword, CIEDE2000 pair count) and its \"check:portability\\` finds 0 violations\" / \"check:citations\\` finds 1075 citations\" lines are matched by literal substring (contains, not a fragile regex)."
     },
     {
       "id": "C-03",
@@ -101,9 +126,69 @@
     },
     {
       "id": "C-04",
-      "box": "**Clear the red production audit** (found 2026-09-18: failing every Monday since 2026-08-10 on `js-yaml`), close the unaudited dev tree, and make a failing scheduled audit file an issue. PR #126: `verify` exit 0, review MERGE, Medium finding fixed; merged `e00ea93`, all seven checks green.",
+      "box": "**Clear the red production audit** (found 2026-09-18: `audit-schedule.yml`'s six scheduled Monday runs from 2026-08-10 through 2026-09-14 all failed on `js-yaml`), close the unaudited dev tree, and make a failing scheduled audit file an issue. PR #126: `verify` exit 0, review MERGE, Medium finding fixed; merged `e00ea93`, all seven checks green.",
       "class": "github",
       "checks": [
+        [
+          "gh",
+          "run",
+          "view",
+          "31380645863",
+          "--json",
+          "conclusion,event,createdAt",
+          "--jq",
+          "\"run1_date=\\(.createdAt[0:10])\", \"run1_conclusion=\\(.conclusion)\", \"run1_event=\\(.event)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "32007304020",
+          "--json",
+          "conclusion,event,createdAt",
+          "--jq",
+          "\"run2_date=\\(.createdAt[0:10])\", \"run2_conclusion=\\(.conclusion)\", \"run2_event=\\(.event)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "32703510905",
+          "--json",
+          "conclusion,event,createdAt",
+          "--jq",
+          "\"run3_date=\\(.createdAt[0:10])\", \"run3_conclusion=\\(.conclusion)\", \"run3_event=\\(.event)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "33404400637",
+          "--json",
+          "conclusion,event,createdAt",
+          "--jq",
+          "\"run4_date=\\(.createdAt[0:10])\", \"run4_conclusion=\\(.conclusion)\", \"run4_event=\\(.event)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "34126115469",
+          "--json",
+          "conclusion,event,createdAt",
+          "--jq",
+          "\"run5_date=\\(.createdAt[0:10])\", \"run5_conclusion=\\(.conclusion)\", \"run5_event=\\(.event)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "34849961947",
+          "--json",
+          "conclusion,event,createdAt",
+          "--jq",
+          "\"run6_date=\\(.createdAt[0:10])\", \"run6_conclusion=\\(.conclusion)\", \"run6_event=\\(.event)\""
+        ],
         [
           "gh",
           "pr",
@@ -200,250 +285,580 @@
           "key": "issue142_author",
           "op": "==",
           "value": "app/github-actions"
+        },
+        {
+          "key": "run1_date",
+          "op": "==",
+          "value": "2026-08-10"
+        },
+        {
+          "key": "run1_conclusion",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "run1_event",
+          "op": "==",
+          "value": "schedule"
+        },
+        {
+          "key": "run2_date",
+          "op": "==",
+          "value": "2026-08-17"
+        },
+        {
+          "key": "run2_conclusion",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "run2_event",
+          "op": "==",
+          "value": "schedule"
+        },
+        {
+          "key": "run3_date",
+          "op": "==",
+          "value": "2026-08-24"
+        },
+        {
+          "key": "run3_conclusion",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "run3_event",
+          "op": "==",
+          "value": "schedule"
+        },
+        {
+          "key": "run4_date",
+          "op": "==",
+          "value": "2026-08-31"
+        },
+        {
+          "key": "run4_conclusion",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "run4_event",
+          "op": "==",
+          "value": "schedule"
+        },
+        {
+          "key": "run5_date",
+          "op": "==",
+          "value": "2026-09-07"
+        },
+        {
+          "key": "run5_conclusion",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "run5_event",
+          "op": "==",
+          "value": "schedule"
+        },
+        {
+          "key": "run6_date",
+          "op": "==",
+          "value": "2026-09-14"
+        },
+        {
+          "key": "run6_conclusion",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "run6_event",
+          "op": "==",
+          "value": "schedule"
         }
       ],
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 16): the box's \"failing every Monday since 2026-08-10\" clause was unchecked prose. `gh run list --workflow=audit-schedule.yml` (list endpoint, not usable inside a registered check) shows the scheduled-event runs at 2026-08-10, -17, -24, -31, 2026-09-07 and -14 were all `failure`; the box is narrowed to that exact six-run, dated range (2026-09-21's run has not happened yet, so it is not claimed) and each run is now pinned by id via `gh run view`. Note: two `workflow_dispatch` runs of the same workflow on 2026-09-18, after PR #126 merged, also failed — logged as `npm run audit:all` exiting via a bare `false` step with 0 vulnerabilities reported, matching CLAUDE.md's documented trap \"audit:prod fails at random with a false lockfile message\"; not the js-yaml advisory this row is about, and not asserted here."
     },
     {
       "id": "C-05",
-      "box": "Triage the Dependabot PRs. **Done 2026-09-18:** #117 and the group #131 merged green on every leg; the D-28 pin landed in `.github/dependabot.yml` (#130); declined with reasons and an ignore rule: #118, #119, #120, #132, #133, #134, #135, #136, #137, #138, #139, #140, each confirmed `CLOSED` with `gh pr view`. **What \"done\" means here:** every Dependabot pull request opened through 2026-09-18 is merged or declined. It does not mean the queue stays empty: Dependabot opened #140 minutes after this line was first written as \"zero open\", which was true only at that moment:",
-      "class": "github",
-      "checks": [
-        [
-          "gh",
-          "pr",
-          "view",
-          "117",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr117=\\(.state)\""
+        "box": "Triage the Dependabot PRs. Every Dependabot pull request opened through 2026-09-18 — 30 in total, #34 to #140 — is merged or closed, none left open; the D-28 pin landed separately in `.github/dependabot.yml` as the human-authored #130 (MERGED). It does not mean the queue stays empty going forward: Dependabot can open a new PR at any time after this date.",
+        "class": "github",
+        "checks": [
+          [
+            "gh",
+            "pr",
+            "view",
+            "34",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr34_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "35",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr35_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "36",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr36_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "37",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr37_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "38",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr38_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "96",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr96_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "97",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr97_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "98",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr98_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "99",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr99_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "116",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr116_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "117",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr117_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "118",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr118_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "119",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr119_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "120",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr120_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "121",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr121_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "122",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr122_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "123",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr123_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "124",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr124_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "125",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr125_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "127",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr127_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "131",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr131_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "132",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr132_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "133",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr133_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "134",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr134_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "135",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr135_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "136",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr136_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "137",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr137_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "138",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr138_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "139",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr139_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "140",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr140_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+          ],
+          [
+            "gh",
+            "pr",
+            "view",
+            "130",
+            "--json",
+            "state",
+            "--jq",
+            "\"pr130=(.state)\""
+          ]
         ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "131",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr131=\\(.state)\""
+        "expect": [
+          {
+            "key": "pr34_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr35_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr36_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr37_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr38_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr96_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr97_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr98_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr99_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr116_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr117_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr118_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr119_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr120_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr121_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr122_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr123_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr124_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr125_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr127_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr131_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr132_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr133_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr134_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr135_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr136_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr137_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr138_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr139_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr140_disposed",
+            "op": "==",
+            "value": 1
+          },
+          {
+            "key": "pr130",
+            "op": "==",
+            "value": "MERGED"
+          }
         ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "130",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr130=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "118",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr118=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "119",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr119=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "120",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr120=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "132",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr132=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "133",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr133=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "134",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr134=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "135",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr135=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "136",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr136=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "137",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr137=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "138",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr138=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "139",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr139=\\(.state)\""
-        ],
-        [
-          "gh",
-          "pr",
-          "view",
-          "140",
-          "--json",
-          "state",
-          "--jq",
-          "\"pr140=\\(.state)\""
-        ]
-      ],
-      "expect": [
-        {
-          "key": "pr117",
-          "op": "==",
-          "value": "MERGED"
-        },
-        {
-          "key": "pr131",
-          "op": "==",
-          "value": "MERGED"
-        },
-        {
-          "key": "pr130",
-          "op": "==",
-          "value": "MERGED"
-        },
-        {
-          "key": "pr118",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr119",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr120",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr132",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr133",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr134",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr135",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr136",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr137",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr138",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr139",
-          "op": "==",
-          "value": "CLOSED"
-        },
-        {
-          "key": "pr140",
-          "op": "==",
-          "value": "CLOSED"
-        }
-      ],
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
-    },
+        "provenOn": "2026-09-19",
+        "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 17): the old check hand-picked 15 of the 30 Dependabot PRs opened through 2026-09-18 (missing #34,35,36,37,38,96,97,98,99,116,121,122,123,124,125,127), so a PR left open outside that hand-picked list would have gone unnoticed. `gh pr list --author app/dependabot --state all` (a list endpoint, usable here only to build this row, not inside a registered check under the argv allowlist) enumerated the full 30; every one is now checked by id via `gh pr view` and asserted not OPEN (merged or closed, either being an acceptable disposition)."
+      },
     {
       "id": "C-06",
-      "box": "React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0. React 18 has no known defect in this tree.",
+      "box": "React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0: the lockfile resolves React and React DOM to 18.3.1, not a stray 19.x from a transitive bump.",
       "class": "repo",
       "checks": [
         [
@@ -458,9 +873,19 @@
           "value": 18
         },
         {
+          "key": "react_version",
+          "op": "==",
+          "value": "18.3.1"
+        },
+        {
           "key": "react_dom_major",
           "op": "==",
           "value": 18
+        },
+        {
+          "key": "react_dom_version",
+          "op": "==",
+          "value": "18.3.1"
         },
         {
           "key": "react_refresh_line",
@@ -469,19 +894,19 @@
         }
       ],
       "probe": {
-        "name": "take React 19",
+        "name": "take React 19 in the lockfile (a declared-range check alone would miss this)",
         "edits": [
           {
-            "file": "package.json",
+            "file": "package-lock.json",
             "replace": [
-              "\"react\": \"^18.3.1\"",
-              "\"react\": \"^19.0.0\""
+              "\"node_modules/react\": {\n      \"version\": \"18.3.1\"",
+              "\"node_modules/react\": {\n      \"version\": \"19.0.0\""
             ]
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 18): the check read package.json's declared range (satisfied even by a resolved 19.x), now reads package-lock.json's resolved version and asserts the exact 18.3.1; the unmeasurable clause \"React 18 has no known defect in this tree\" is removed from the box (no test or audit in this repo makes that claim checkable). Cross-checked manually 2026-09-19: `gh issue view 105`/`106` both report milestone \"1.1\" — not part of this row's automated check, because a github-class gh call cannot be mixed with this row's repo-class node check under the argv allowlist (docs/proof-of-completion.md §3.1); reported as a manual finding, not machine-proved."
     },
     {
       "id": "C-07",
