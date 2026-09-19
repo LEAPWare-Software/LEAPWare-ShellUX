@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `7a8eb67` (#151, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `5528993` (#152, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -22,7 +22,8 @@ with a merge queue.
 - #149: the review job may launch its subagents.
 - #150: crash diagnostics log (#86, in part) and the Chromium build target (#85).
 - #151: the Claude review is a direct prompt that must post a summary.
-- This change: the proof-of-completion design (D-50); milestones v1.0.0 and 1.1 (D-51).
+- #152: the proof-of-completion design (D-50); milestones v1.0.0 and 1.1 (D-51).
+- This change: a Content-Security-Policy on the packaged renderer (ADR-0006 step 1).
 
 ## In flight
 
