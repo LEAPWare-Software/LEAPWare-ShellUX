@@ -110,7 +110,7 @@ Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until
 - [x] The caps lint: `scripts/__tests__/context-caps.test.mjs` in `test:scripts`, so inside `verify` with no new stage. Mutation-probed both halves. [C-10]
 - [x] `git add` the new files before running `verify` (the portability trap). Citations must still resolve: moved text keeps its `*Tests:*` markers. [C-11]
 
-## Step 3 — Go public, on the `leapware-sessionkeeper` pattern  (10/13)
+## Step 3 — Go public, on the `leapware-sessionkeeper` pattern  (10/14)
 
 The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (checked with `gh repo view`). Copy its open-source scaffolding, but **not** its plugin or dual-host parts: `.claude-plugin/`, `.agents/`, `.codex/`, `AGENTS.md`, `.github/apps/lws-*.json`, `docs/install-claude.md` and `docs/install-codex.md` have no equivalent here.
 
@@ -125,6 +125,7 @@ The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (che
 - [x] Private vulnerability reporting, secret scanning and Dependabot security updates are enabled on the repository, measured with `gh api repos/LEAPWare-Software/LEAPWare-ShellUX` (`security_and_analysis`) and `gh api repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting`. [C-39]
 - [ ] Rewrite `SECURITY.md` the way sessionkeeper does: a "Report a vulnerability" link first, then `leapware@outlook.com` (D-03), then scope notes (what the host does and does not claim, citing tests per Amendment G), then supported versions ("1.x: latest release only"). Measured 2026-09-19, after `9a70025` fixed the stale "repository is private" language: the section order is still wrong — `SECURITY.md` leads with "Supported versions" and "Reporting a vulnerability" is still the second-to-last section, not first — and "Supported versions" still doesn't say "1.x: latest release only" or an equivalent; it says "There has been no release" and a table of what's supported instead.
 - [x] #74 ("Branch protection is impossible on this repository...") and #103 ("Decide the update feed...") are closed. [C-40]
+- [ ] #74 and #103 are marked done with evidence (API responses pasted). Split from the README item on 2026-09-19: both closing comments state the read-back values in prose (visibility `PUBLIC`, ruleset 23685990 and its rules), and neither pastes a raw API response.
 - [x] The audit gap is closed: a full-tree `npm audit --audit-level=high` job (`audit-all` in `audit-dependencies.yml`, running `npm run audit:all`) audits the dev tree as its own job (HANDOFF §6.2). [C-41]
 - [ ] README top matter in sessionkeeper's order: a one-paragraph what-it-is, a license line, an Installing link (`docs/INSTALL.md`, Step 7), a Developing block (`npm ci && npm run verify`), and Contributing/Security links. The long body moves to `docs/`.
 
