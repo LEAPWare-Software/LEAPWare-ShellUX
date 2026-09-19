@@ -4,7 +4,7 @@ These are the gate-4 wireframes, v4, copied from the design canvas published on 
 
 - `screens/*.dc.html` holds the canvas source, one file per artboard; `canvas.json` is the layout.
 - `png/*.png` holds a rendered picture of each artboard.
-- `gen.v4.mjs` is the generator that produced them from the token values.
+- `gen.v4.mjs` writes the nine `.dc.html` files and `canvas.json` from the token values, and **nothing else**: its only output call is `writeFileSync`, and it renders no images. **What produced the PNGs is not recorded here.** They were rendered somewhere with a browser and committed beside the source, and this repository does not say where or when, so nobody can currently regenerate them and check that they still match the HTML.
 
 **Status: an approval is recorded on #189; the ledger has not caught up yet.** D-45 recorded an owner approval on 2026-09-18 that the owner did not recognise on 2026-09-19, so #189 was opened for the conflict. An `OWNER: gate 4 approved` comment was posted there at 2026-09-19T13:23Z, asking for a new decision row to supersede the D-45 conflict and for C-24 to cite it.
 
