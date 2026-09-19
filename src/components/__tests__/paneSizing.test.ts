@@ -153,9 +153,24 @@ describe('fitPaneLayout — an intent held to the bands, pane 3 the remainder', 
   });
 
   it('lifts a leading pane to its minimum and lowers one to its maximum', () => {
-    // 176/800 = 22 and 640/800 = 80.
+    // 176/800 = 22.
     expect(fitPaneLayout({ nav: 10, list: 30 }, bandsAt800, true).nav).toBe(22);
-    expect(fitPaneLayout({ nav: 10, list: 95 }, bandsAt800, false).list).toBe(80);
+    // 640/2000 = 32, with room left for pane 3.
+    expect(fitPaneLayout({ nav: 10, list: 95 }, paneBandsAt(2000), false).list).toBe(32);
+  });
+
+  it("takes pane 3's deficit from pane 1, then pane 2, so the layout still sums to 100", () => {
+    // The review case: {40, 30, 30} at 800px. Pane 3's minimum is 32.5, so 2.5
+    // comes off pane 1, which stays above its own 22.
+    const fitted = fitPaneLayout({ nav: 40, list: 30 }, bandsAt800, true);
+    expect(fitted.nav).toBeCloseTo(37.5, 10);
+    expect(fitted.list).toBe(30);
+    expect(fitted.detail).toBeCloseTo(32.5, 10);
+    // Pane 1 already on its minimum: the deficit comes off pane 2 instead.
+    const second = fitPaneLayout({ nav: 22, list: 50 }, bandsAt800, true);
+    expect(second.nav).toBe(22);
+    expect(second.list).toBeCloseTo(45.5, 10);
+    expect(second.nav + second.list + second.detail).toBeCloseTo(100, 10);
   });
 
   it('floors pane 3 at its own minimum rather than handing it a negative share', () => {

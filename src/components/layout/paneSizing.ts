@@ -240,18 +240,31 @@ export interface FittedLayout {
  * the group divides — GitHub issue #114, where it made the library renormalise
  * and warn on every load.
  *
- * Below roughly 700px the three minimums cannot all be met and this returns a
- * layout summing to more than 100; the library renormalises that and says so.
- * That is the state `ShellLayout.tsx`'s decision 1 measures and explains, and
- * nothing here changes it.
+ * **When pane 3's remainder would fall under its own minimum, the deficit is
+ * taken from the leading panes** — pane 1 first, down to its minimum, then pane
+ * 2 — so the layout still sums to 100 while every pane stays in its band. Before
+ * this, a restored {40, 30, 30} narrowed from 1000px to 800px asked for 40 / 30 /
+ * 32.5 and the library warned `Invalid layout total size`; measured in review of
+ * GitHub issue #23. Only when the three minimums together exceed 100 — below
+ * roughly 700px — is there nothing left to take, and the layout sums to more
+ * than 100; the library renormalises that and says so, which is the state
+ * `ShellLayout.tsx`'s decision 1 measures and explains.
  */
 export function fitPaneLayout(
   intent: PaneIntent,
   bands: PaneBands,
   paneOneIsInGroup: boolean,
 ): FittedLayout {
-  const nav = clampToBand(intent.nav, bands.nav.min, bands.nav.max);
-  const list = clampToBand(intent.list, bands.list.min, bands.list.max);
+  const clampedNav = clampToBand(intent.nav, bands.nav.min, bands.nav.max);
+  const clampedList = clampToBand(intent.list, bands.list.min, bands.list.max);
+  const deficit = Math.max(
+    0,
+    bands.detail.min - (100 - (paneOneIsInGroup ? clampedNav : 0) - clampedList),
+  );
+  const navCut = paneOneIsInGroup ? Math.min(deficit, clampedNav - bands.nav.min) : 0;
+  const listCut = Math.min(deficit - navCut, clampedList - bands.list.min);
+  const nav = clampedNav - navCut;
+  const list = clampedList - listCut;
   const paneOneShare = paneOneIsInGroup ? nav : 0;
   return { nav, list, detail: Math.max(bands.detail.min, 100 - paneOneShare - list) };
 }

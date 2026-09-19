@@ -41,6 +41,7 @@ import {
   clampPanePercent,
   fitPaneLayout,
   intentFromRecord,
+  isEngineDefaultLayout,
   paneBandsAt,
 } from './paneSizing';
 import type { PaneIntent } from './paneSizing';
@@ -159,6 +160,12 @@ import { useHostPalette } from './useHostPalette';
  *    Every report the width change causes is classified by `reportPaneSize` and
  *    is neither written nor learned as the session layout.
  *
+ *    Above that floor a fitted layout sums to 100: when pane 3's remainder would
+ *    fall under its minimum, `fitPaneLayout` takes the deficit from pane 1 and
+ *    then pane 2 (a restored 40/30/30 narrowed to 800px used to warn). A saved
+ *    record is the intent and may hold a pane outside the bands of the width it
+ *    was written at; it is fitted where it is read, never where it is written.
+ *
  *    What it does NOT do: below roughly 700px the minimums still cannot all be
  *    met and the library still renormalises and warns, exactly as the paragraph
  *    on overflow above says; a pane re-added after a collapse still takes its
@@ -174,7 +181,12 @@ import { useHostPalette } from './useHostPalette';
  *    person arranged, which is never persisted, across a width change" and
  *    "fits the stored layout, not the renormalised one, once pane 1 has collapsed
  *    and come back" and "records the width the user chose for pane 1, not its
- *    correction, when the second divider is dragged after a narrowing" — all
+ *    correction, when the second divider is dragged after a narrowing", "saves
+ *    the pane-1 width the user chose, not the rebuilt one, when divider 2 is
+ *    dragged after a collapse and a re-expansion", "narrows a restored 40/30/30
+ *    to 800px with every pane in its band, summing to 100, and no layout
+ *    warning" and "reopens a record written after a widening on the layout that
+ *    was live, with every pane in its band" — all
  *    arithmetic over stubbed widths; `e2e/pane-refit.spec.ts` — "narrow, drag the
  *    second divider, widen, reload: pane 1 keeps the width the user chose",
  *    "keeps every pane inside its
@@ -791,11 +803,19 @@ export function ShellLayout({
       // and one divider moves only two panes, so writing the live layout would
       // save the correction of a pane nobody moved. `sessionLayout` holds the
       // panes this drag moved at their new size and every other pane at the size
-      // the person chose. If the correction means those no longer divide the
-      // whole, pane 3 — the remainder pane — takes the difference, so the record
-      // still sums to 100. Found in review of the first #23 change: narrowed to
-      // 800px, dragged divider 2, and a reload at 1000px opened pane 1 at the
-      // 800px minimum.
+      // the person chose — including across a collapse and re-expansion, where
+      // the membership effect below puts the chosen record back over the
+      // library's rebuilt shares. Found in review of the first #23 change:
+      // narrowed to 800px, dragged divider 2, and a reload at 1000px opened pane
+      // 1 at the 800px minimum.
+      //
+      // The record is the INTENT and is deliberately not clamped to the bands at
+      // the width it is written at: doing so would save the correction again,
+      // which is the defect above. Bands are applied where the record is READ —
+      // `fitPaneLayout`, at mount and on every re-fit — so a pane chosen wider
+      // than this width allows reopens in band. If the correction means the
+      // intent no longer divides the whole, pane 3 takes the difference, so the
+      // record still sums to 100.
       const intent = sessionLayout.current;
       const isWhole = Math.abs(intent.pane1 + intent.pane2 + intent.pane3 - 100) < 0.01;
       engine.setSlot('paneSizes', {
@@ -931,9 +951,21 @@ export function ShellLayout({
   // did to the previous membership's shares does not describe this one. A
   // LAYOUT effect, so it runs after the panels' own — which is where the library
   // reports — and before the re-fit below, in the same commit.
+  //
+  // The shares the library rebuilds are LEARNED by `reportPaneSize` like any
+  // other report, and they are built from mount-time `defaultSize`, not from
+  // what the person chose. So the chosen record is put back over them here: a
+  // divider-2 drag after a re-expansion then saves the pane-1 width the person
+  // chose, not the rebuilt one. A record holding the engine's untouched defaults
+  // is not a choice (see `isEngineDefaultLayout`) and is not put back; the
+  // learned layout, which is the pixel intent, stands.
   useLayoutEffect(() => {
     isUserArranged.current = false;
-  }, [paneOneIsInGroup]);
+    const record = engine.getState().paneSizes;
+    if (!isEngineDefaultLayout(record)) {
+      sessionLayout.current = { ...record };
+    }
+  }, [engine, paneOneIsInGroup]);
 
   // THE RE-FIT. When the width the bands are derived from changes, the layout is
   // fitted again from what was ASKED for — the session layout a person arranged,

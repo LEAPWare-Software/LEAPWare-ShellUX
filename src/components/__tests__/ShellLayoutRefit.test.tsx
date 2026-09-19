@@ -285,13 +285,98 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
     resizeTo(800);
     expect(panelSizes()[0]).toBeCloseTo(22, 1);
 
-    // The person moves the SECOND divider only. Pane 1 was not touched.
+    // The person moves the SECOND divider only. Pane 1 was not touched. The
+    // guard first: the nudge really moved pane 2 and really wrote, or the
+    // assertion on pane 1 below would pass by writing nothing at all.
+    const listBefore = panelSizes()[1] as number;
+    const recordBefore = engine.getState().paneSizes;
     await nudgeDivider(user, 1, '{ArrowLeft}');
+    expect(panelSizes()[1]).toBeLessThan(listBefore - 1);
+    expect(engine.getState().paneSizes).not.toBe(recordBefore);
     const stored = engine.getState().paneSizes;
     expect(stored.pane1).toBeCloseTo(17.6, 1);
     expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
 
     resizeTo(1000);
     expect(panelSizes()[0]).toBeCloseTo(17.6, 1);
+  });
+  it('saves the pane-1 width the user chose, not the rebuilt one, when divider 2 is dragged after a collapse and a re-expansion', async () => {
+    measureAt(1000);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({ storage: memoryStorage().storage });
+    render(<Harness engine={engine} />);
+    await nudgeFirstDivider(user, '{ArrowLeft}');
+    expect(engine.getState().paneSizes.pane1).toBeCloseTo(17.6, 1);
+
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
+    // The library rebuilds pane 1 from its mount-time `defaultSize`, 24%.
+    expect(panelSizes()[0]).toBeCloseTo(24, 1);
+
+    const listBefore = panelSizes()[1] as number;
+    await nudgeDivider(user, 1, '{ArrowLeft}');
+    expect(panelSizes()[1]).toBeLessThan(listBefore - 1);
+    // What was saved is the 17.6 the person chose, not the rebuilt 24.
+    const stored = engine.getState().paneSizes;
+    expect(stored.pane1).toBeCloseTo(17.6, 1);
+    expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
+  });
+
+  it('narrows a restored 40/30/30 to 800px with every pane in its band, summing to 100, and no layout warning', () => {
+    const warnings: string[] = [];
+    const collect = (...args: unknown[]): void => {
+      warnings.push(args.map(String).join(' '));
+    };
+    vi.spyOn(console, 'warn').mockImplementation(collect);
+    vi.spyOn(console, 'error').mockImplementation(collect);
+    measureAt(1000);
+    const engine = createHydrationEngine({
+      storage: memoryStorage(record({ pane1: 40, pane2: 30, pane3: 30 })).storage,
+    });
+    render(<Harness engine={engine} />);
+    expect(panelSizes()).toEqual([40, 30, 30]);
+
+    // 800px: pane 3's minimum is 32.5, so 2.5 comes off pane 1 (min 22).
+    resizeTo(800);
+    const sizes = panelSizes();
+    expect(sizes).toEqual([37.5, 30, 32.5]);
+    expect(warnings.filter((line) => line.includes('Invalid layout'))).toEqual([]);
+  });
+
+  it('reopens a record written after a widening on the layout that was live, with every pane in its band', async () => {
+    measureAt(900);
+    const user = userEvent.setup();
+    const storage = memoryStorage(record({ pane1: 44, pane2: 27, pane3: 29 }));
+    const engine = createHydrationEngine({ storage: storage.storage });
+    const view = render(<Harness engine={engine} />);
+    expect(panelSizes()).toEqual([44, 27, 29]);
+
+    // At 1000px pane 1's maximum is 40%, so it is lowered to it.
+    resizeTo(1000);
+    expect(panelSizes()).toEqual([40, 27, 33]);
+    // Divider 2 to the right, stopped by pane 3's 26% minimum. (To the left,
+    // the library cascades past pane 2's minimum into pane 1, which is a drag
+    // of both and not the case here.)
+    await nudgeDivider(user, 1, '{ArrowRight}');
+    const live = panelSizes();
+    expect(live).toEqual([40, 34, 26]);
+    act(() => {
+      engine.flush();
+    });
+    // The record keeps the 44 the person chose — it is intent, not a
+    // correction — and still sums to 100 because pane 3 took the difference,
+    // which leaves pane 3 at 22, under its 26% band at this width. That is the
+    // review's case, and it is deliberate: the record is not what is laid out.
+    const stored = engine.getState().paneSizes;
+    expect(stored.pane1).toBe(44);
+    expect(stored.pane3).toBeCloseTo(22, 5);
+    expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
+    view.unmount();
+
+    // A reload at the same width reads it through the same fit: the layout that
+    // was live, every pane in its band.
+    observers.length = 0;
+    render(<Harness engine={createHydrationEngine({ storage: storage.storage })} />);
+    expect(panelSizes()).toEqual(live);
   });
 });
