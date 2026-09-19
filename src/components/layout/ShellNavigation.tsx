@@ -4,7 +4,7 @@ import { useBadgeCount, useNavMetric } from '../../core/ShellAPI';
 import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import type { NavigationMetric, NavigationNode } from '../../core/types';
 import { MetricGlyph } from '../ui/MetricGlyph';
-import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
+import { resolveShellIcon } from '../ui/resolveShellIcon';
 
 /**
  * PANE 1'S ROWS: ONE BUTTON, ONE STORE-BOUND NODE, AND THE TREE OF THEM.
@@ -136,7 +136,7 @@ export function ShellNavButton({
           {icon === undefined ? (
             label.trim().slice(0, 1).toUpperCase()
           ) : (
-            <>{SHELL_ICONS.get(icon) ?? FALLBACK_ICON}</>
+            <>{resolveShellIcon(icon)}</>
           )}
         </span>
       ) : null}

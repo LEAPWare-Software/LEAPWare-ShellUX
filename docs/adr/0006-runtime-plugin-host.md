@@ -286,6 +286,28 @@ invisible to it, and still depends on review.
 > changes and the version does not move", "records the contract as it stands,
 > version included". Main cannot import `src/` (Amendment O decision 6), so how
 > step 3's check in main reads `HOST_API_VERSION` is step 3's to decide.
+>
+> **2026-09-19, step 3 landed — how main reads `HOST_API_VERSION`, and the rule as
+> built.** Main carries its own copy: `electron/main/plugins/hostContract.ts`
+> writes out `HOST_API_VERSION`, `EXTENSION_ID_PATTERN`, `RESERVED_IDS` and
+> `MAX_TEXT_LENGTH`, and a test holds all four to `src/sdk/api-surface.json` and
+> the version to the SDK's own export. Two routes were rejected. Importing the
+> baseline JSON into main puts a file outside `electron/tsconfig.json`'s
+> `rootDir` into its program and its emit, and `src/` is not shipped beside
+> `dist-electron/`, so the packaged app would have nothing to read at run time.
+> A build-time generated constant still has to be committed, because
+> `typecheck` runs on a fresh clone before any build; that is this mirror plus a
+> generator to keep in step, and the drift test is what makes either honest. The
+> mirror is a **guardrail**: edits to both sides together pass it. The manifest's
+> `hostApiVersion` is `major.minor`, the form `HOST_API_VERSION` has had since
+> step 2, not decision 1's `1.0.0`; a three-part value is refused, so the build
+> writes the SDK's constant as it is. A major that differs is incompatible in
+> **both** directions. The rule decides a state, not an install; what the store
+> does with an incompatible package is step 4's. *Tests:*
+> `electron/__tests__/pluginPackage.test.ts` — "marks a plugin incompatible when
+> its major differs", "marks a plugin incompatible when it needs a newer minor
+> than the host offers", "mirrors the SDK baseline's version, id pattern,
+> reserved ids and text bound".
 
 **Rejected:**
 
@@ -322,6 +344,21 @@ second is an honest-pinning test in `reflection.test.tsx`'s register, asserting 
 limit as expected behaviour. In `electron/__tests__/pluginScheme.test.ts`, "refuses to
 serve an entry changed on disk after install". **Until those exist, this section is a
 design statement and no document may cite the check as a property of the shell.**
+
+> **2026-09-19, step 3 — the install half is pinned; the serve half is not.**
+> `electron/main/plugins/pluginPackage.ts` refuses a package whose bundle does
+> not hash to its manifest `sha512`, and accepts one whose bundle and hash were
+> replaced together. *Tests:* `electron/__tests__/pluginPackage.test.ts` —
+> "refuses a package whose bundle does not match its manifest sha512", "accepts
+> a package whose bundle and manifest were altered together, because the hash
+> travels with the bundle". Nothing installs yet, so neither is a property of
+> the shell until step 4 calls the validator at install; the serve-time rehash
+> and its test are step 4's. The manifest-icon case decision 1 defers to this
+> step: `src/components/ui/resolveShellIcon.ts` is now the one lookup the rail,
+> the palette and a manifest icon share. *Tests:*
+> `electron/__tests__/pluginPackage.test.ts` — "resolves a manifest icon key the
+> host does not publish to the host fallback glyph, and keeps no icon when the
+> manifest gives none". Host chrome does not draw a manifest icon until step 9.
 
 **Rejected for 1.0 (owner, D-47):** signing packages (Ed25519 via `node:crypto`, key
 in CI). It is the one mechanism here that would make D-23 checkable at the URL door,
