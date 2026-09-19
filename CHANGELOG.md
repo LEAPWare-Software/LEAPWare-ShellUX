@@ -38,10 +38,13 @@ from so a reader can check it.
   entry (`hardcoded-hostname` only, these two files only) for the
   `github.com` / `code.claude.com` references the action's own
   configuration and doc comments name — GitHub Actions runner endpoints, not
-  hosts this codebase or its shipped product contacts. **Not done:** this
-  entry only records the workflows landing; whether the review job actually
-  runs and posts a comment was not known until its own PR ran it (see that
-  PR for the result).
+  hosts this codebase or its shipped product contacts. **Observed, not assumed:**
+  on its own PR the review job reported SUCCESS while the action skipped
+  ("Skipping action due to workflow validation", run 35408458019), so a green
+  check from it is not evidence of a review and it is never a required check.
+  Whether it reviews is proven only by the first PR after this merges. The
+  action is pinned to commit `4036a18` (tag v1); the plugin marketplace URL
+  cannot be pinned by that input and stays a moving third-party reference.
 - **The mission, and the documents that carry it.** The owner set the mission on
   2026-09-18: a best-in-class UI/UX shell that hosts application plugins (D-31).
   `README.md` is recast around it, in the order `leapware-sessionkeeper` uses for a

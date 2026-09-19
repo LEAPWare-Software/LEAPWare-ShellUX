@@ -40,7 +40,7 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@4036a180cf690f49529f5d8c79c998855287f590 # v1, pinned 2026-09-18: a moving tag would run new third-party code with this repository's tokens on its next push
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
