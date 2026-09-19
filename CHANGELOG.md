@@ -40,19 +40,27 @@ from so a reader can check it.
   `paneSizing.ts` (owned by W3-0, not edited here) is unchanged and remains a second,
   JS-side home for the number 48, kept equal by convention rather than by a check —
   the same limit W3-2 already accepted for `ROW_HEIGHT_COMFORTABLE`.
-  All six tokens `docs/design/WAVE3-PLAN.md` names for W3-3 are consumed:
+  All seven tokens `docs/design/WAVE3-PLAN.md` names for W3-3 are consumed:
   `--accent-subtle`, `--accent-text`, `--text-secondary` (the tooltip's own ink),
   `--border-subtle`, `--rail-w`, `--surface-overlay` and `--shadow-popover` (the
   tooltip's surface and elevation). *Tests:*
   `src/components/__tests__/ShellNavigationRail.test.tsx` — "fills the current node
   with the accent-subtle surface and names the ink explicitly", "hangs a child level
-  off a 1px border-subtle rule at the indent", "paints its own fixed fill and ink on
-  an icon-less collapsed row, independent of aria-current" and "wires a collapsed row
-  through a tooltip trigger that opens on focus, showing the title alone";
+  off a 1px border-subtle rule at the indent", "paints the same fixed fill and ink on
+  an icon-less collapsed row whether or not it is aria-current" and "wires a collapsed
+  row through a tooltip trigger that opens on focus, showing the title alone";
   `e2e/shell-layout.spec.ts` — "measures every rail target 32 by 32, fully inside the
   48px track", "paints the fallback identity tile with a filled background and a
   one-letter text node" and "shows an unclipped tooltip that owns its own centre point
-  on hover", all three mutation-probed on CI (see the PR body for the run URLs).
+  on hover", all three mutation-probed as a chain on `Browser tests (chromium)`: run
+  [35457577642](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35457577642/job/105935520995)
+  (probe 1, red on the 32px-target case), run
+  [35457746931](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35457746931/job/105935937068)
+  (probe 2, red on the fallback-tile case), run
+  [35457979186](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35457979186/job/105936550551)
+  (probe 3, red on the tooltip case) and run
+  [35458176461](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35458176461/job/105937085886)
+  (all three reverted, green, 76 passed) — PR #198 has the full table.
 
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,

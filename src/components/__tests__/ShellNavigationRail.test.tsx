@@ -127,22 +127,36 @@ describe('ShellNavigation — the child guide rule (W3-3)', () => {
 });
 
 describe('ShellNavigation — the fallback identity tile (R4, D-40)', () => {
-  it('paints its own fixed fill and ink on an icon-less collapsed row, independent of aria-current', async () => {
+  it('paints the same fixed fill and ink on an icon-less collapsed row whether or not it is aria-current', async () => {
     const user = userEvent.setup();
     render(<Harness blueprints={[makeBlueprint()]} />);
     await user.click(await screen.findByRole('button', { name: 'Sample Extension' }));
+    // Selected BEFORE collapsing, so `Root B` carries `aria-current="true"`
+    // once the rail renders — selection is a store write independent of the
+    // collapsed flag, and clicking after collapse would exercise the same
+    // handler with no more evidence for it.
+    await user.click(screen.getByRole('button', { name: 'Root B' }));
     await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
 
-    // `Root A` is current-eligible but not current here; `Root B` never is in
-    // this case either — both are asserted so the tile is shown NOT to depend
-    // on `aria-current`, which is the property the docblock states.
-    for (const name of ['Root A', 'Root B']) {
-      const row = screen.getByRole('button', { name: new RegExp(`^${name}\\b`) });
+    // `Root A` is current-eligible but is not the one selected; `Root B` IS
+    // `aria-current="true"` here. Both are asserted, with the current one's
+    // attribute checked directly, so the tile is shown to paint the same way
+    // in both states rather than merely on two rows that both happen not to
+    // be current.
+    const current = screen.getByRole('button', { name: /^Root B\b/ });
+    expect(current).toHaveAttribute('aria-current', 'true');
+    for (const row of [screen.getByRole('button', { name: /^Root A\b/ }), current]) {
       const tile = row.querySelector('[aria-hidden="true"]');
-      expect(tile, `${name} renders no aria-hidden tile`).not.toBeNull();
+      expect(tile, 'renders no aria-hidden tile').not.toBeNull();
       expect(tile).toHaveClass(TOKEN_CLASS.identityTileSurface);
       expect(tile).toHaveClass(TOKEN_CLASS.identityTileText);
-      expect(tile?.textContent).toBe(name.charAt(0));
+      // Each row's own initial — `makeBlueprint`'s two roots share a first
+      // letter ("Root A", "Root B"), which is why this reads the row's own
+      // `sr-only` label rather than asserting a hard-coded letter. The native
+      // `title` attribute is unavailable here: it is dropped in the collapsed
+      // state, which is the state under test.
+      const label = row.querySelector('.sr-only')?.textContent ?? '';
+      expect(tile?.textContent).toBe(label.charAt(0));
     }
   });
 
