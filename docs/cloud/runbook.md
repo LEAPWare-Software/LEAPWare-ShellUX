@@ -119,7 +119,7 @@ Each run does one unit of work, then exits.
    - open a PR.
 2. **Land this runbook and `.claude/agents/lw-*.md`** from branch `cloud/runbook`, as its own PR.
 3. The D-27 strike and reversal (plan step 1 and step 3 item), then the SECURITY.md reorder, the README move, and the #74/#103 raw API evidence.
-4. **Commit the gate-4 record** under `docs/design/gate4/`: the six screens as static HTML or PNG from the published canvas `https://claude.ai/code/artifact/c5ad2085-40fa-419c-b64b-f211c2f9c5d2`, plus the critique and how it was resolved. Then open a `needs-owner` issue asking the owner to approve them (C-24).
+4. **The gate-4 record is already on this branch** under `docs/design/gate4/`: the v4 canvas source, PNGs and a README. It lands with the runbook PR. After it lands, open a `needs-owner` issue with links to the PNGs on `main`, asking the owner to approve gate 4 (C-24).
 5. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
 6. Step 6c performance budgets (#62): budgets measurable in CI without a packaged launch (bundle size, dev-server palette open in Playwright), each labelled as not the packaged app. The packaged baseline is owner/VM.
 7. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also close #17, #16, #80, #23 and #95, each with evidence pasted from `main`.
