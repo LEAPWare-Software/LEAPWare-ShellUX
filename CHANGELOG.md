@@ -22,8 +22,10 @@ from so a reader can check it.
   keyboard ring drawn inside the row edge rather than on it. A new host primitive,
   `RowStatus` (`src/components/ui/RowStatus.tsx`, data in `rowStatusVocabulary.ts` — the same
   split `rowDelta.ts`/`RowMetric.tsx` use), draws the v4 row status vocabulary: a
-  mark (`aria-hidden`) beside a required `word`, so a status cannot render colour
-  alone. `DatabasePlugin.tsx` — the mock that models inventory — exercises all four
+  mark (`aria-hidden`) beside a required `word`, so a caller cannot omit the
+  sentence and still get the mark. A **guardrail**, narrowed to that after review:
+  `word: string` accepts `''`, so it holds against the honest omission and not
+  against an empty string. `DatabasePlugin.tsx` — the mock that models inventory — exercises all four
   statuses ("Below reorder point" from its existing stock check; "Delivered",
   "Delivery overdue" and "Awaiting supplier" from a new `supplyState` seeded once
   per record off the record's own id, not off the catalogue's shared random

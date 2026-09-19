@@ -16,11 +16,26 @@ import type { RowStatusKind } from './rowStatusVocabulary';
  * This component draws exactly two channels, in the shape `RowMetric` draws
  * `DELTA_MARK` + `DELTA_WORD`: a mark, `aria-hidden` because it is a picture,
  * and a word, which is what a screen reader — and a monochrome print — actually
- * reads. `word` is REQUIRED. There is no default and no fallback to the status
- * name, so a caller cannot render the mark without also saying, in the
- * operator's own words, what it means; a future status kind with no honest
- * sentence yet has nothing to render rather than a placeholder that looks
- * finished. See `rowStatusVocabulary.ts` for the WCAG 1.4.1 argument in full and for why
+ * reads. `word` is a REQUIRED prop: there is no default and no fallback to the
+ * status name, so a caller cannot *omit* the sentence and still get the mark,
+ * and a future status kind with no honest sentence yet has nothing to render
+ * rather than a placeholder that looks finished.
+ *
+ * **That is the whole of what the type enforces, and it is worth saying what it
+ * does not.** `word: string` accepts `''`, so `<RowStatus status="danger"
+ * word="" />` renders a mark with nothing beside it — colour alone, the thing
+ * this vocabulary exists to prevent. The type stops the honest omission; it
+ * does not stop an empty string, and no test here asserts that it does. So this
+ * is a **guardrail** in the repository's vocabulary rather than anything
+ * stronger: it closes the documented route and makes the honest mistake loud.
+ * The claim was narrowed to this after a review of #191 pointed out that a
+ * required `string` and a non-empty one are not the same guarantee — the
+ * earlier wording ("a caller cannot render the mark without also saying what it
+ * means") was true of a missing word and false of an empty one. Whether the
+ * component should refuse an empty word outright is an open question on that
+ * pull request, not a settled decision recorded here.
+ *
+ * See `rowStatusVocabulary.ts` for the WCAG 1.4.1 argument in full and for why
  * the frozen records live there rather than here.
  *
  * The word here is VISIBLE, not `sr-only` — unlike `RowMetric`'s delta, where

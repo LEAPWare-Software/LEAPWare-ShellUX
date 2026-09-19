@@ -22,9 +22,14 @@ import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
  * ("Below reorder point", "Delivered", "Delivery overdue", "Awaiting supplier")
  * are a fact about the inventory list, not about the status vocabulary itself —
  * a future caller with its own honest status says its own sentence. So `word` is
- * a required prop on `RowStatus`, not a lookup here: there is no way to render
- * the mark without one, which is what makes "never colour alone" true by
- * construction rather than by convention.
+ * a required prop on `RowStatus`, not a lookup here: a caller cannot omit the
+ * sentence and still get the mark.
+ *
+ * It is a **guardrail**, not the stronger thing an earlier draft of this
+ * docblock claimed. `word: string` accepts `''`, so "never colour alone" holds
+ * against the honest omission and not against an empty string, and nothing here
+ * asserts otherwise. `RowStatus.tsx`'s own banner records the review of #191
+ * that narrowed the claim, and the open question it left.
  *
  * *Tests:* `src/components/__tests__/RowStatus.test.tsx`.
  * ============================================================================
