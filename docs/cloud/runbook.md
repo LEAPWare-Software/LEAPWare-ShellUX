@@ -37,7 +37,7 @@ You start with no memory, so re-derive everything.
 - **Agents.** The `lw-*` roles are in `.claude/agents/` on `main` once lane C lands them. Until then, read `.claude/agents/lw-<role>.md` from `origin/cloud/runbook` and dispatch a general-purpose subagent with that file's instructions and its `model`.
 - **Deliverables go to files or comments, never only to your final message.** The run-log reader truncates final messages.
 - **Not doable in the cloud:** anything that launches the packaged Electron app. `desktop.yml` runs only on tags or a manual dispatch, never launches Electron, and has no Linux leg. That covers ADR-0006 step 10 (packaged end to end), the step 6c #62 baseline on the packaged app, and step 8's icon build-log check. These are **owner/VM items**. Prepare them, open a `needs-owner` issue, and move on.
-- **Gate 4 is not approved** (C-24 is unticked, and the owner does not recognise D-45). Anything that says "per the approved gate-4 wireframe" is **blocked**: ADR-0006 step 9 (plugin manager UI) and the wave-4 design. Lane C commits the gate-4 record to the repo so the owner can approve it. Until the owner approves, those items wait.
+- **Gate 4's approval is recorded twice, in opposite directions, and only the owner can settle it** (#189). `docs/plans/v1-production.md:139` ticks C-24 citing D-45, and `docs/DECISIONS.md` D-45 records an owner approval dated 2026-09-18; this runbook records that the owner did not recognise D-45 on 2026-09-19. Reversing a recorded owner approval is a boundary, so **no routine unticks C-24 or strikes D-45** — #189 carries the evidence and waits for the answer. **Until it is answered, treat gate 4 as unapproved**: anything that says "per the approved gate-4 wireframe" is **blocked**, meaning ADR-0006 step 9 (plugin manager UI) and the wave-4 design. Lane C commits the gate-4 record to the repo so the owner can review the screens and decide.
 
 ## 0. Hard rules (every routine)
 
@@ -143,7 +143,7 @@ Each run does one unit of work, then exits.
 5. **The gate-4 record is already on this branch** under `docs/design/gate4/`: the v4 canvas source, PNGs and a README. It lands with the runbook PR. After it lands, open a `needs-owner` issue with links to the PNGs on `main`, asking the owner to approve gate 4 (C-24).
 6. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
 7. Step 6c performance budgets (#62): budgets measurable in CI without a packaged launch (bundle size, dev-server palette open in Playwright), each labelled as not the packaged app. The packaged baseline is owner/VM.
-8. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also close #17, #16, #80, #23 and #95, each with evidence pasted from `main`.
+8. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also settle #17, #16, #80, #23 and #95, each with evidence pasted from `main`. (Deliberately not the word this list used to carry: GitHub's parser reads a closing keyword next to an issue number and shuts the issue, and §1 step 6 has conductors build PR bodies from these lines. §0 rule 3 and `docs/traps.md`.)
 
 **Lane A, plugin host:**
 1. ADR-0006 step 6. Decide #183 first and record the decision.

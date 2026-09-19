@@ -37,10 +37,16 @@ from so a reader can check it.
   nobody. This is a process document: it constrains routines, and it asserts nothing
   about the product's behaviour.
 - **The gate-4 v4 screens, recorded in the repository** (`docs/design/gate4/`, commit
-  `759af49`): the canvas source, eight screens as HTML and PNG, and a README. **Gate 4
-  is not approved** — C-24 is unticked and this change does not tick it. The record
-  exists so the owner can review it; until they do, every item that reads "per the
-  approved gate-4 wireframe" stays blocked.
+  `759af49`): the canvas source, nine artboards as HTML and PNG
+  (`ls docs/design/gate4/screens/*.dc.html | wc -l` → 9), and a README. **Gate 4's
+  approval is recorded twice, in opposite directions**, and this change settles neither:
+  `docs/plans/v1-production.md:139` ticks C-24 citing D-45 and `docs/DECISIONS.md` D-45
+  records an owner approval dated 2026-09-18, while the runbook records that the owner
+  did not recognise D-45 on 2026-09-19. Reversing a recorded owner approval is the
+  owner's call, so C-24 stays ticked, D-45 stays as written, and #189 carries the
+  evidence and waits for an answer. Until it is answered, routines treat gate 4 as
+  unapproved and every item reading "per the approved gate-4 wireframe" stays blocked.
+  The record exists so the owner can review the screens and decide.
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
   settings, read back as enabled (private vulnerability reporting re-proven on every

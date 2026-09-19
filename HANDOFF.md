@@ -37,7 +37,8 @@ with a merge queue.
 
 - Cloud routines build the plan in three lanes while the owner travels. The protocol is
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md); the shared state is issue #187.
-- Gate 4 is **not approved** (C-24). `docs/design/gate4/` is the record for review only.
+- Gate 4's approval is recorded both ways (C-24 ticked vs the runbook); #189 asks the
+  owner. Treated as unapproved meanwhile. `docs/design/gate4/` is the record to review.
 
 ## The next step
 
