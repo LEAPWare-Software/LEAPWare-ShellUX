@@ -12,9 +12,11 @@ them** (commands in section 1). If this file and the plan disagree, the plan and
 
 ## 0. Stop rules: read before doing anything
 
-1. **Start nothing until the owner says go.** The owner ended the last session with
-   "stop all work and wait for my instructions". A new session resumes only on a new
-   instruction.
+1. **Cloud routines are building ShellUX while the owner travels** (the owner's order of
+   2026-09-19, D-52). The protocol is `docs/cloud/runbook.md`, and the live state is on
+   issue #187. **A local session is one more worker, not the boss.** Read #187 first,
+   touch no item a lane has locked, and change lane state only through the owner's
+   `OWNER:` commands on #187.
 2. **v1.0.0 is not tagged until LEAPWare BuildCraft meets readiness bar R1 to R7**
    (D-39, [`docs/sdlc.md`](../sdlc.md)). Build everything up to that point; then stop.
    Plan steps 9b and 10 are blocked on it.

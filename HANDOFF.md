@@ -34,6 +34,8 @@ with a merge queue.
 
 ## In flight
 
+- **Start here:** [`docs/handoff/next-session.md`](docs/handoff/next-session.md) (the plan, done and not done) and issue #187 (the cloud run's live state).
+
 - Nothing. Work stops here for the owner's instructions.
 
 ## The next step
