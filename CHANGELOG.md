@@ -16,6 +16,31 @@ from so a reader can check it.
 
 ### Added
 
+- **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
+  `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
+  `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while
+  the owner travels: three conductor lanes with disjoint file ownership (rule 6), a
+  watchdog, a reviewer routine that is never a subagent of the author (rule 1), and the
+  boundaries a routine stops at — anything only the owner can do, the clean Windows VM,
+  BuildCraft, and anything needing a packaged Electron launch. The GitHub access it
+  records was measured from a cloud session on 2026-09-19 rather than recalled (rule 9):
+  GraphQL is blocked by the proxy there, so `gh pr create`, `gh pr merge`, `gh pr list`,
+  `gh pr edit` and `gh issue comment` fail and the GitHub MCP tools or REST are used
+  instead; a REST comment on #187 returned 201; pushing a new branch works, REST ref
+  deletion is 403, and `git push --delete` prints `unexpected disconnect` and exits 1
+  while deleting the ref anyway, so a routine reads `git ls-remote` rather than that exit
+  code. The browser lane cannot run in the cloud VM — Playwright 1.63 wants a chromium
+  build the proxy will not let it download — so the `Browser tests (chromium)` CI check is
+  the browser evidence there, and the config is not to be bent to suit the VM (ADR-0002).
+  Issue #187 is the shared ledger, because a routine starts each run with no memory. An owner command carries an `OWNER:` prefix and no Claude footer, because
+  routines post under the owner's own login and the login alone therefore identifies
+  nobody. This is a process document: it constrains routines, and it asserts nothing
+  about the product's behaviour.
+- **The gate-4 v4 screens, recorded in the repository** (`docs/design/gate4/`, commit
+  `759af49`): the canvas source, eight screens as HTML and PNG, and a README. **Gate 4
+  is not approved** — C-24 is unticked and this change does not tick it. The record
+  exists so the owner can review it; until they do, every item that reads "per the
+  approved gate-4 wireframe" stays blocked.
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
   settings, read back as enabled (private vulnerability reporting re-proven on every

@@ -7,20 +7,9 @@ disallowedTools: Edit, Write, NotebookEdit
 ---
 
 <!--
-  GLOBAL COPY (owner ruling C116, 2026-09-16, "make it global"), mirroring leapware-cpt's
-  .claude/agents/lw-explorer.md. Used only by a project with no project-local copy of its own; a
-  project's own file of the same name shadows this one, and is held to that project's own
-  .claude/model-routing.json. This copy is held to ~/.claude/model-routing.json instead.
--->
-
-<!--
-  Shipped by the LW-WATCHTOWER plugin. THIS FILE IS OVERWRITTEN ON PLUGIN UPDATE -
-  do not hand-edit it in place. To change it, copy it to ~/.claude/agents/ (or
-  the project's .claude/agents/) and edit the copy; a user or project file of
-  the same name shadows this one. See docs/roles.md.
-
-  EXAMPLE. Nothing in the plugin depends on this file; delete it if it does not
-  suit you.
+  A role the cloud routines dispatch; docs/cloud/runbook.md section 0 rule 4 says which job
+  each role takes. Adapted from the LW-WATCHTOWER plugin's example agent of the same name.
+  Tracked in this repository so a routine on a fresh clone has it with no local setup (ADR-0002).
 -->
 
 You find things. You are read-only by construction — you cannot modify the working tree.

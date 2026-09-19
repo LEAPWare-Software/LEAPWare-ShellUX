@@ -30,11 +30,14 @@ with a merge queue.
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1, the state primitives (#184).
 - Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
-- This change: proof rows C-38 to C-43 for work already built.
+- Proof rows C-38 to C-43 for work already built (#186).
+- This change: the cloud runbook, the `lw-*` roles and the gate-4 record (D-52).
 
 ## In flight
 
-- Nothing. Work stops here for the owner's instructions.
+- Cloud routines build the plan in three lanes while the owner travels. The protocol is
+  [`docs/cloud/runbook.md`](docs/cloud/runbook.md); the shared state is issue #187.
+- Gate 4 is **not approved** (C-24). `docs/design/gate4/` is the record for review only.
 
 ## The next step
 
