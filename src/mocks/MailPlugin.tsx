@@ -891,7 +891,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                   // reading, carried from banners to rows).
                   'flex w-full min-w-0 flex-row items-center gap-1 overflow-hidden rounded-sm px-2 ' +
                   'text-left text-[12px] leading-4 ' +
-                  `${TOKEN_CLASS.rowHeightComfortable} ` +
+                  `${TOKEN_CLASS.rowHeightComfortable} ${TOKEN_CLASS.rowHoverSurface} ` +
                   `${TOKEN_CLASS.navSelectedSurface} ${TOKEN_CLASS.rowFocusRingInset}`
                 }
                 onClick={() => {
@@ -909,7 +909,7 @@ function MailMessageList({ shell, context }: ExtensionViewProps): ReactElement {
                   <span
                     data-row-title=""
                     className={
-                      isUnread || isCurrent ? 'truncate font-semibold' : 'truncate'
+                      isUnread ? 'truncate font-semibold' : 'truncate'
                     }
                   >
                     {message.subject}
