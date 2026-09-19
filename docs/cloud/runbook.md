@@ -180,20 +180,26 @@ Each run does one unit of work, then exits.
 4. Step 6c keyboard work: `describeHotkey` and the focus-order specs.
 5. The step 6c heuristic benchmark review, done by the reviewer routine on opus, never by a lane that built the UI.
 
-## 5. BuildCraft review watcher (hourly)
+## 5. BuildCraft review watcher (hourly): every open BuildCraft PR
 
-1. Read `https://api.github.com/repos/LEAPWare-Software/LEAPWare-BuildCraft/pulls/27` and take its head SHA. If the PR is closed or merged, exit.
-2. If branch `reviews/buildcraft` of this repo already has `reviews/buildcraft/pr27-<head>.md`, exit.
-3. Otherwise, review that head adversarially. The brief:
-   - re-attack the previous blockers: the hooks.json timeout, and the `verifiable:false` exemption in `proof/*.json`;
-   - re-attack the two silent-failure paths: repo_facts raising, and an unreadable policy;
-   - sweep for every place code reads one field of a config, manifest or event and silently ignores a sibling that changes its meaning (timeout, matcher, mode, options, env, cwd, schema version), `matcher` in particular;
-   - check that the rule "I checked and found nothing" never shares a representation with "I could not check" is **enforced by a test**, not just stated;
-   - run the full pytest suite.
-4. Push the verdict file to branch `reviews/buildcraft`, path `reviews/buildcraft/pr27-<full head sha>.md`. Its content, in order:
+Owner order, 2026-09-19: peer reviews of LEAPWare-BuildCraft are always cloud jobs, and they cover every open PR. **Read BuildCraft only. Post nothing to it** (no comments, reviews, labels or pushes). Deliver only to this repository's branch `reviews/buildcraft`.
+
+1. List the open PRs: `GET https://api.github.com/repos/LEAPWare-Software/LEAPWare-BuildCraft/pulls?state=open`. Skip drafts. For each, take its number and full head SHA.
+2. A PR needs review when `reviews/buildcraft/pr<N>-<full head sha>.md` is **not** on branch `reviews/buildcraft`. Review up to **3** such PRs per run, oldest update first. Exit quickly if none.
+3. For each one, dispatch an `lw-verifier` subagent (opus) to review that head adversarially. **Wait for it.** The brief:
+   - Read the PR body, its `proof/<N>.json` if present, and BuildCraft's `reviews/README.md`.
+   - Try to make its checks pass while the thing it claims is broken.
+   - Hunt for the known defect shapes:
+     - a field read while its sibling that changes the meaning is ignored (timeout, matcher, mode, options, env, cwd, schema version);
+     - "I checked and found nothing" sharing a representation with "I could not check" (a swallowed exception, a silent allow);
+     - a `verifiable:false` exemption on output that is actually deterministic.
+   - Check that every rule the PR states is enforced by a test, not just a docstring.
+   - Run the full pytest suite.
+   - For PR #27 specifically, re-attack its two earlier blockers (the hooks.json timeout and the `verifiable:false` exemption) and the two silent-failure paths.
+4. Write `reviews/buildcraft/pr<N>-<full head sha>.md`, in this order:
    - first line `Verdict: AGREE|DISAGREE`;
    - the findings, each with its command and output;
    - `Not checked:`;
    - a JSON record in BuildCraft's `reviews/README.md` shape, with `reviewer_id` `shellux-cto-cloud-reviewer-2026-09-19`, `reviewer_was_dispatched_by_author: false` and the full `reviewed_commit`.
 
-   **Post nothing to BuildCraft.**
+   Commit it to `reviews/buildcraft` (create the branch from `main` if it is missing), push, and read the file back from `origin` before finishing.
