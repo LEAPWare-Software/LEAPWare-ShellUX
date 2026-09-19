@@ -130,11 +130,18 @@ describe('the proof-of-completion workflows (§3.4)', () => {
         assert.deepEqual(wf.permissions, { contents: 'read', 'pull-requests': 'read', actions: 'read', issues: 'read' });
       });
 
-      it('checks out full history and skips only inside a step', () => {
+      it('checks out full history, and skips only inside a step except pr-evidence.yml\'s own job-level filter for a non-PR issue comment', () => {
         const steps = wf.jobs[job].steps;
         const checkout = steps.find((s) => String(s.uses ?? '').startsWith('actions/checkout@'));
         assert.equal(checkout.with['fetch-depth'], 0);
-        assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
+        if (file === 'pr-evidence.yml') {
+          // issue_comment fires for a plain issue too, which carries no pull request to
+          // gate; this is the only job-level if: either workflow carries, and it never
+          // makes the "PR evidence" context itself skip on pull_request or merge_group.
+          assert.equal(wf.jobs[job].if, "github.event_name != 'issue_comment' || github.event.issue.pull_request != null");
+        } else {
+          assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
+        }
       });
 
       it('is required (rollout step 4, PR B)', () => {
@@ -194,8 +201,16 @@ describe('the proof-of-completion workflows (§3.4)', () => {
     assert.match(issue.if, fromMain);
   });
 
-  it('pr-evidence.yml keeps the per-ref group with cancellation', () => {
-    assert.deepEqual(workflows['pr-evidence.yml'].concurrency, { group: '${{ github.workflow }}-${{ github.ref }}', 'cancel-in-progress': true });
+  it('pr-evidence.yml keeps a per-pull-request group with cancellation, keyed off the PR/issue number so an issue_comment rerun cannot cancel a different PR\'s run', () => {
+    assert.deepEqual(workflows['pr-evidence.yml'].concurrency, {
+      group: "${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}",
+      'cancel-in-progress': true,
+    });
+  });
+
+  it('pr-evidence.yml also triggers on issue_comment (created), so a late claude[bot] review comment reruns the gate', () => {
+    const on = triggers(workflows['pr-evidence.yml']);
+    assert.deepEqual(on.issue_comment, { types: ['created'] });
   });
 
   it('claims.yml gives main runs 30 minutes and uploads claims-results on main events only', () => {

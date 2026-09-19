@@ -8,9 +8,19 @@ name: PR evidence
 #
 # Required check since rollout step 4 (.github/rulesets/main.json, PR B).
 # A guardrail against the honest mistake: the body is written by whoever merges.
+#
+# `issue_comment` (created) re-runs this check when a late comment lands — in particular
+# the claude[bot] review comment the gate now also requires (docs/cloud/runbook.md §4
+# lane C item 3) — so the PR is not left stuck on a check that only reruns on push. An
+# issue_comment event carries no `pull_request` payload and no useful `github.sha`
+# (`github.sha` there is the default branch, not the PR head — do not trust it), so the
+# PR number and head SHA are resolved explicitly below, the same way auto-queue.yml does
+# for its own issue_comment trigger.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited]
+  issue_comment:
+    types: [created]
   merge_group:
 
 permissions:
@@ -20,7 +30,10 @@ permissions:
   issues: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # An issue_comment event's `github.ref` is the default branch for every PR alike, so
+  # grouping on it would let one PR's re-run cancel another's; the PR/issue number keeps
+  # runs for different pull requests independent, as auto-queue.yml's group does.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,12 +41,36 @@ jobs:
     name: PR evidence
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Only a comment on a pull request (issue_comment fires for plain issues too).
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request != null
 
     steps:
+      - name: Resolve the pull request number and head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PR_NUMBER_DIRECT: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" = "issue_comment" ]; then
+            NUMBER="$ISSUE_NUMBER"
+          else
+            NUMBER="$PR_NUMBER_DIRECT"
+          fi
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          if [ -n "$NUMBER" ]; then
+            SHA="$(gh pr view "$NUMBER" --json headRefOid -q .headRefOid)"
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Falls back to github.sha (correct already for pull_request and merge_group);
+          # only issue_comment needs the explicit PR head resolved above.
+          ref: ${{ steps.pr.outputs.sha || github.sha }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -48,7 +85,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
           HEAD_REF: ${{ github.event.merge_group.head_ref }}
         run: |
           if [ "$EVENT" = "merge_group" ]; then

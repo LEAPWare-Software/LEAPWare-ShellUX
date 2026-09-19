@@ -9,7 +9,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { defaultRunner } from '../claims/lib.mjs';
-import { checkBody, gate, isGateFile, isVerifiedDependabot, parseArgs, registerSchemaChanged, sections } from '../claims/pr-evidence.mjs';
+import { checkBody, gate, hasBotMergeComment, isGateFile, isVerifiedDependabot, parseArgs, registerSchemaChanged, sections } from '../claims/pr-evidence.mjs';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const body = (overrides = {}) => {
@@ -128,6 +128,48 @@ describe('the Dependabot exemption', () => {
   });
 });
 
+describe('the claude[bot] merge comment (entry-point validation, not an integrity control)', () => {
+  const botComment = (overrides = {}) => ({
+    user: { login: 'claude[bot]' },
+    body: `Claude review: No findings\nReviewed SHA: ${SHA}\nVerdict: MERGE\n`,
+    ...overrides,
+  });
+
+  it('fails when there is no claude[bot] comment at all', () => {
+    assert.equal(hasBotMergeComment([], SHA), false);
+    assert.equal(hasBotMergeComment([{ user: { login: 'someone' }, body: 'unrelated' }], SHA), false);
+  });
+
+  it('fails a claude[bot] comment at a stale SHA', () => {
+    const stale = botComment({ body: `Claude review: No findings\nReviewed SHA: ${'f'.repeat(40)}\nVerdict: MERGE\n` });
+    assert.equal(hasBotMergeComment([stale], SHA), false);
+  });
+
+  it('fails a claude[bot] comment at the head SHA with Verdict: MERGE WITH FIXES, because only a clean MERGE opens the gate', () => {
+    const fixes = botComment({ body: `Claude review: one nit\nReviewed SHA: ${SHA}\nVerdict: MERGE WITH FIXES\n` });
+    assert.equal(hasBotMergeComment([fixes], SHA), false);
+  });
+
+  it('fails a comment with the right SHA and Verdict: MERGE when it is authored by LEAPWare-HQ impersonating the format, not claude[bot]', () => {
+    const impersonated = botComment({ user: { login: 'LEAPWare-HQ' } });
+    assert.equal(hasBotMergeComment([impersonated], SHA), false);
+  });
+
+  it('passes a genuine claude[bot] comment at the head SHA with a clean Verdict: MERGE', () => {
+    assert.equal(hasBotMergeComment([botComment()], SHA), true);
+  });
+
+  it('compares the SHA case-insensitively, like the body check', () => {
+    const upper = botComment({ body: `Claude review: No findings\nReviewed SHA: ${SHA.toUpperCase()}\nVerdict: MERGE\n` });
+    assert.equal(hasBotMergeComment([upper], SHA), true);
+  });
+
+  it('finds the genuine comment among other, unrelated comments', () => {
+    const other = { user: { login: 'someone' }, body: 'unrelated comment' };
+    assert.equal(hasBotMergeComment([other, botComment()], SHA), true);
+  });
+});
+
 describe('arguments', () => {
   it('requires an event it knows', () => {
     assert.deepEqual(parseArgs(['--event', 'pull_request', '--pr', '5']), { event: 'pull_request', pr: '5', headRef: null });
@@ -174,13 +216,19 @@ function project() {
   return clone;
 }
 
-function ghDouble({ bodyText, commits }) {
+const genuineMergeComment = [{ user: { login: 'claude[bot]' }, body: `Claude review: No findings\nReviewed SHA: ${SHA}\nVerdict: MERGE\n` }];
+
+function ghDouble({ bodyText, commits, comments = genuineMergeComment }) {
   return (cmd, args, opts) => {
     if (cmd !== 'gh') return defaultRunner(cmd, args, opts);
     if (args.at(-1).endsWith('/commits')) {
       // --paginate --slurp: one array per page. Split so the flatten is exercised.
       assert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);
       return { status: 0, stdout: JSON.stringify([commits.slice(0, 1), commits.slice(1)]), stderr: '' };
+    }
+    if (args.at(-1).endsWith('/comments')) {
+      assert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);
+      return { status: 0, stdout: JSON.stringify([comments]), stderr: '' };
     }
     return { status: 0, stdout: JSON.stringify({ head: { sha: SHA }, body: bodyText }), stderr: '' };
   };
@@ -211,6 +259,23 @@ describe('the gate end to end', () => {
     const lines = [];
     assert.equal(gate({ event: 'pull_request', pr: '7', repo: 'o/r', cwd, run: ghDouble({ bodyText: '', commits: bot }), log: (l) => lines.push(l) }), 0);
     assert.ok(lines.some((l) => /dependabot\[bot\].*skipped/.test(l)));
+  });
+
+  it('fails at the gate when the body is otherwise complete but no claude[bot] MERGE comment exists at the head', () => {
+    const cwd = project();
+    const text = body().replace('docs/plans/v1-production.md:108', 'docs/plans/p.md:2').replace('Rows reviewed: C-01, C-02', 'Rows reviewed: none').replace('scripts/claims/lib.mjs', 'scripts/claims/gate.mjs');
+    const lines = [];
+    const code = gate({ event: 'pull_request', pr: '7', repo: 'o/r', cwd, run: ghDouble({ bodyText: text, commits: human, comments: [] }), log: (l) => lines.push(l) });
+    assert.equal(code, 1);
+    assert.ok(lines.some((l) => /no comment authored by claude\[bot\]/.test(l)));
+  });
+
+  it('passes the gate end to end once the body and a genuine claude[bot] MERGE comment both hold', () => {
+    const cwd = project();
+    const text = body().replace('docs/plans/v1-production.md:108', 'docs/plans/p.md:2').replace('Rows reviewed: C-01, C-02', 'Rows reviewed: none').replace('scripts/claims/lib.mjs', 'scripts/claims/gate.mjs');
+    const lines = [];
+    const code = gate({ event: 'pull_request', pr: '7', repo: 'o/r', cwd, run: ghDouble({ bodyText: text, commits: human }), log: (l) => lines.push(l) });
+    assert.equal(code, 0, lines.join('\n'));
   });
 
   it('fails when a merge-queue ref names no pull request, and when a pull request number is missing', () => {

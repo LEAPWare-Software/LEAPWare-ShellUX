@@ -71,6 +71,21 @@ jobs:
             ALWAYS, post exactly one summary with `gh pr comment <number> --body ...`
             that starts with "Claude review:" and lists the findings, or says "No
             findings" and what you checked. Never finish without that summary.
+
+            That summary comment must ALSO always end with these two lines, in this
+            order, as the last thing in the comment:
+
+            Reviewed SHA: <full 40-character PR head SHA>
+            Verdict: MERGE | MERGE WITH FIXES | DO NOT MERGE
+
+            Get the head SHA yourself — do not guess it or reuse one from an earlier
+            comment — with `gh pr view ${{ github.event.pull_request.number }} --json
+            headRefOid -q .headRefOid` or the equivalent. Pick the verdict honestly from
+            what you actually found: MERGE when there is nothing blocking, DO NOT MERGE
+            when you found a real defect, MERGE WITH FIXES otherwise (a real but
+            non-blocking issue). This verdict feeds a downstream gate
+            (scripts/claims/pr-evidence.mjs) that only opens on a clean MERGE at the
+            current head, so get the SHA and the verdict right rather than convenient.
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options

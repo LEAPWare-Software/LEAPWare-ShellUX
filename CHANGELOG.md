@@ -16,6 +16,30 @@ from so a reader can check it.
 
 ### Added
 
+- **The independent review becomes part of the merge gate** (`.github/workflows/claude-code-review.yml`,
+  `.github/workflows/pr-evidence.yml`, `scripts/claims/pr-evidence.mjs`; D-53,
+  docs/cloud/runbook.md §4 lane C item 3). Until now `scripts/claims/pr-evidence.mjs`
+  read only the PR body, written by the same identity that also merges, so nothing
+  distinguished an independent review from the author's own say-so. The Claude Code
+  Review job's prompt now always ends its required summary comment with `Reviewed SHA:
+  <full head SHA>` and an honest `Verdict: MERGE | MERGE WITH FIXES | DO NOT MERGE`, and
+  the required `PR evidence` check now also fails unless a **comment** (not the body)
+  authored by GitHub login `claude[bot]` carries a `Reviewed SHA:` matching the current
+  head and exactly `Verdict: MERGE` (`hasBotMergeComment`, tested against a missing
+  comment, a stale SHA, a `MERGE WITH FIXES` verdict, and a `LEAPWare-HQ`-authored
+  comment impersonating the format — all five in
+  `scripts/__tests__/claims-pr-evidence.test.mjs`). `PR evidence` now also triggers on
+  `issue_comment` (created), so it re-runs once that comment lands rather than staying
+  stuck on the push-only trigger. **Stated precisely, because the obvious sentence
+  overclaims:** this is **entry-point validation**, not an integrity control — it is
+  real at the `PR evidence` check (a comment not authored by `claude[bot]`, at a stale
+  SHA, or without a clean `MERGE` verdict, is rejected there) and silent about every
+  other route a comment claiming that login could arrive by. Neither "cannot forge" nor
+  "cannot post as claude[bot]" is a claim this change is entitled to make, and no
+  comment or doc here makes it. `.github/workflows/claude-code-review.yml`'s existing
+  guards (the `if:` skip for Dependabot and fork PRs, the `concurrency` group with
+  `cancel-in-progress: true`, the `permissions` block, and `allowedTools` — D-49) are
+  unchanged.
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
   `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while

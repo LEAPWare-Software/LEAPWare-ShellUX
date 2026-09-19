@@ -13,6 +13,11 @@
  *   Gate changes:    every changed gate file, when there are any
  * HTML comments are removed first, so the template's own guidance satisfies nothing.
  *
+ * It also fails unless a PR **comment** (not the body) authored by `claude[bot]` carries
+ * `Reviewed SHA:` equal to the head and `Verdict: MERGE` (docs/cloud/runbook.md §4 lane C
+ * item 3). See hasBotMergeComment for exactly what that is worth: entry-point validation
+ * at this one check, not an integrity control.
+ *
  * Dependabot is exempt only when every commit on the pull request is authored by
  * dependabot[bot] and verified.
  *
@@ -172,6 +177,35 @@ export function ghJsonAllPages(apiPath, run = defaultRunner) {
   return JSON.parse(result.stdout).flat();
 }
 
+/** The comments on a pull request, via the issues endpoint (a pull request is an issue). */
+export function ghPullComments(repo, number, run = defaultRunner) {
+  return ghJsonAllPages(`repos/${repo}/issues/${number}/comments`, run);
+}
+
+/**
+ * Whether a comment authored by `claude[bot]` carries a clean `MERGE` verdict at the
+ * current head. Uses `field()` so a comment is parsed the same way the body is.
+ *
+ * This is **entry-point validation, not an integrity control**: it is real at this one
+ * door — a comment that is not authored by `claude[bot]`, that names a stale SHA, or
+ * that lacks an exact `Verdict: MERGE`, is rejected here — and it says nothing about
+ * any other route by which a comment claiming that login could arrive. Neither "cannot
+ * forge" nor "cannot post as claude[bot]" is a claim this function, or anything that
+ * calls it, is entitled to make: GitHub's API is the only source of `comment.user.login`
+ * this script reads, and nothing here measures how hard that field is to fake upstream.
+ * *Tests:* scripts/__tests__/claims-pr-evidence.test.mjs — "passes a genuine claude[bot]
+ * comment at the head SHA with a clean Verdict: MERGE".
+ */
+export function hasBotMergeComment(comments, headSha) {
+  return (Array.isArray(comments) ? comments : []).some((c) => {
+    if (c?.user?.login !== 'claude[bot]') return false;
+    const text = String(c?.body ?? '');
+    const sha = field(text, 'Reviewed SHA');
+    const verdict = field(text, 'Verdict');
+    return sha !== null && sha.toLowerCase() === String(headSha).toLowerCase() && verdict === 'MERGE';
+  });
+}
+
 /** Every commit authored by dependabot[bot] and verified. */
 export function isVerifiedDependabot(commits) {
   return (
@@ -212,6 +246,15 @@ export function gate({ event, pr, headRef, repo = DEFAULT_REPO, cwd = REPO_ROOT,
     deletedPlanFiles: diff.deletedPlanFiles,
     gateFiles,
   });
+
+  // Entry-point validation, not an integrity control (see hasBotMergeComment): this door
+  // opens only on a comment actually authored by claude[bot], at the current head, with a
+  // clean MERGE verdict — it says nothing about any other route such a comment could arrive by.
+  const comments = ghPullComments(repo, number, run);
+  if (!hasBotMergeComment(comments, headSha)) {
+    failures.push(`no comment authored by claude[bot] carries Reviewed SHA: ${headSha} and Verdict: MERGE`);
+  }
+
   log(`PR #${number} at ${headSha}: rows to name ${requiredRows.join(', ') || 'none'}; items removed or reworded ${diff.removedOrReworded.length}; gate files ${gateFiles.join(', ') || 'none'}`);
   for (const f of failures) log(annotation('error', f));
   log(failures.length ? `pr-evidence: ${failures.length} failure(s)` : 'pr-evidence: the body carries every required field');
