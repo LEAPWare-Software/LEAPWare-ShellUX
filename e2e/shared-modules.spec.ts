@@ -1,11 +1,17 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { RENDERER_CSP } from '../electron/main/rendererCsp';
 import { PREVIEW_URL } from '../playwright.config';
-import baseline from '../src/sdk/api-surface.json';
 
-/** The version the built `/shared/sdk.js` must report: the recorded one. */
-const HOST_API_VERSION = baseline.version;
+/**
+ * The version the built `/shared/sdk.js` must report: the recorded one. Read, not
+ * imported: Playwright loads this file as a native ES module, where a JSON
+ * import needs an import attribute the TypeScript config here does not emit.
+ */
+const HOST_API_VERSION = (
+  JSON.parse(readFileSync(new URL('../src/sdk/api-surface.json', import.meta.url), 'utf8')) as { version: string }
+).version;
 
 /**
  * ============================================================================
