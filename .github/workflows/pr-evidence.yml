@@ -60,7 +60,10 @@ jobs:
           fi
           echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
           if [ -n "$NUMBER" ]; then
-            SHA="$(gh pr view "$NUMBER" --json headRefOid -q .headRefOid)"
+            # --repo: this step runs before Checkout, so there is no git repository yet
+            # for `gh` to infer one from ("fatal: not a git repository", measured on
+            # #206's own first run of this step). Passing it explicitly needs no checkout.
+            SHA="$(gh pr view "$NUMBER" --repo "${GITHUB_REPOSITORY}" --json headRefOid -q .headRefOid)"
             echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           fi
 
