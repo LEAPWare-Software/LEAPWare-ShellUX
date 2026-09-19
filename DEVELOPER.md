@@ -2247,7 +2247,9 @@ open against the 1.1 milestone means it is scheduled for consideration after
 | [#66](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/66) | There is no `dir` attribute anywhere and no right-to-left support. If your extension needs RTL, the layout primitives you are handed (panes, navigation tree, context bar) do not account for it, and several physical, non-logical CSS properties are already frozen into the shell's own chrome. |
 | [#60](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/60) | No assistive technology has ever been run against this shell or against an extension inside it. The keyboard-operability gate (D-37) is real and tested; screen-reader behaviour for your views is unverified in both directions — by this project and by you, unless you test it yourself. |
 
+---
 
+## Where to go next
 
 | Document | Purpose |
 |---|---|

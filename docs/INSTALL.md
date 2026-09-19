@@ -83,10 +83,11 @@ relevant lines from this file.
 **The update feed is not live yet.** `electron-builder.yml` currently has no
 `publish` block at all — a placeholder host that this organization did not
 own was found and deliberately removed (see `docs/RELEASE.md` §1) — so a
-packaged build today reports the updater as unconfigured, and the command
-palette's "Check for updates" is honestly labelled rather than pointed at
-nothing. Plan step 8 wires `publish: { provider: github, ... }` up; once that
-lands and the first release ships, this is how updates will work:
+packaged build's real check against a nonexistent feed fails, and the command
+palette shows **"Check for updates — last check failed"** rather than
+pointing at nothing. Plan step 8 wires `publish: { provider: github, ... }`
+up; once that lands and the first release ships, this is how updates will
+work:
 
 - The application checks for an update on launch and every 6 hours
   (`electron/main/updater.ts`), through **electron-updater** against **GitHub
