@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `1248f02` (#148, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `818a7cd` (#149, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -19,18 +19,18 @@ with a merge queue.
 - #145: ADR-0006 Accepted, with ADR-0001 Amendment P (D-46 to D-48).
 - #147: the Claude review job gets the tools it needs to comment (D-49).
 - #148: charts repaired (#112, #113; #111 addressed); #146 filed.
-- This change: the review job may launch its subagents.
+- #149: the review job may launch its subagents.
+- This change: crash diagnostics log (#86, in part) and the Chromium build target (#85).
 
 ## In flight
 
-- **Landing next:** `fix/observability-build-target`. Each lands with its own review and `verify`.
-- **Proof of completion:** a register of claims with CI checks, drafted and under
-  adversarial audit before it is built.
+- **Proof of completion:** a register of claims with CI checks. Its design passed a
+  twelfth audit round with no Blocker; the document lands next, then its build.
 
 ## The next step
 
-1. Land hardening.
-2. Build the proof-of-completion protocol once its audit finds no Blocker.
+1. Land the protocol document; prove the review job comments.
+2. Build the protocol (its PR A), then roll it out step by step.
 3. Plan steps 3b to 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

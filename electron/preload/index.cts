@@ -135,6 +135,15 @@ const CHANNEL = {
   paletteRequest: 'shellux:panes:palette-request',
   /** Main → host chrome, "open the palette; another surface asked for it". */
   paletteOpen: 'shellux:panes:palette-open',
+  /**
+   * Renderer → main, one `window.onerror` or `unhandledrejection` report.
+   *
+   * GitHub issue #86. One-way, exactly as `updates.check` is: the renderer
+   * reports and never learns whether the write succeeded, because a reporting
+   * channel that could fail loudly back into the page it is reporting from is
+   * the wrong place to put a second failure.
+   */
+  diagnosticsReport: 'shellux:diagnostics:report',
 } as const;
 
 /** Mirrors `UpdateState` in electron/main/updater.ts. Structured-clone shaped. */
@@ -273,6 +282,20 @@ contextBridge.exposeInMainWorld('shelluxHost', {
       return () => {
         paletteListeners.delete(listener);
       };
+    },
+  },
+  /**
+   * The fault-report door. GitHub issue #86.
+   *
+   * One method, no return value, no acknowledgement — the same shape as
+   * `panes.setSplit`: the renderer states an intent and main decides what to do
+   * with it. `payload` crosses structured-clone as-is; main is the one that
+   * decides which fields it trusts, in `registerDiagnosticsChannel` in
+   * `electron/main/index.ts`.
+   */
+  diagnostics: {
+    report: (payload: unknown): void => {
+      ipcRenderer.send(CHANNEL.diagnosticsReport, payload);
     },
   },
   /** The replicated store's transport. See the block above this call. */

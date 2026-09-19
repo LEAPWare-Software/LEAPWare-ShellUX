@@ -67,6 +67,33 @@ export default defineConfig({
     port: 5173,
   },
   build: {
+    // ---------------------------------------------------------------------
+    // GITHUB ISSUE #85, THE ELECTRON HALF. THE SAFARI HALF IS MOOT FOR THIS
+    // APPLICATION AND IS NOT ADDRESSED HERE — see the commit message.
+    //
+    // No `build.target` and no `browserslist` meant the output syntax level
+    // was whatever esbuild's own default happened to be, and nothing in the
+    // repository recorded what runtime this bundle is built for. This
+    // application ships inside one Electron binary — `electron/main/index.ts`
+    // serves the renderer over a private scheme, never `file://` and never an
+    // arbitrary browser — so the correct target is not a browserslist guess,
+    // it is the exact Chromium that binary embeds.
+    //
+    // MEASURED, not recalled: `node_modules/electron/package.json` reports
+    // `"version": "43.2.0"`, and running that exact binary
+    // (`npx electron <script>` printing `process.versions`) reported
+    // `"chrome":"150.0.7871.129"`. `chrome150` is that measurement, not the
+    // Safari 15.4 floor `Object.hasOwn` at `src/core/ShellAPI.ts:1183` would
+    // need for a browser deployment — this repository has exactly one shipped
+    // runtime and this target is that runtime's.
+    // ---------------------------------------------------------------------
+    target: 'chrome150',
+    // GitHub issue #86: no `build.sourcemap` meant a production stack trace
+    // named minified symbols with nothing to de-minify them against.
+    // `electron-builder.yml`'s `files` list excludes every `*.map` from the
+    // packaged asar, so this is a build artefact for a developer reading a
+    // crash log locally, never something the shipped application carries.
+    sourcemap: true,
     rollupOptions: {
       // ---------------------------------------------------------------------
       // TWO DOCUMENTS, LISTED RATHER THAN DEFAULTED.

@@ -96,8 +96,11 @@ const BEFORE_INPUT_EVENT = /^before-input-event$/;
 const EMITTER_OCCURRENCES: Readonly<Record<string, Readonly<Record<string, number>>>> =
   Object.freeze({
     // The lifecycle: the split channel, the store relay, the palette routing,
-    // the window closing, macOS `activate`, and `window-all-closed`.
-    'main/index.ts': Object.freeze({ on: 6 }),
+    // the diagnostics-report channel, the window closing, macOS `activate`, and
+    // `window-all-closed` — plus the two process-level fault handlers GitHub
+    // issue #86 added: `process.on('uncaughtException', ...)` and
+    // `process.on('unhandledRejection', ...)`.
+    'main/index.ts': Object.freeze({ on: 9 }),
     // The escape hatch, and nothing else. Claim 3 pins it to this file.
     'main/paneKeyBridge.ts': Object.freeze({ on: 1 }),
     // The window and both views: two navigation rules, three diagnostics, the
