@@ -227,10 +227,23 @@ required" has an answer in the same place every other ruleset decision does.
 
 ## Bootstrap is owner-only
 
-Nothing in this repo — no script, no CI job, no agent — enables auto-merge
-on a PR, merges a PR, flips the repository from private to public, or picks
-a licence. Applying the ruleset and the repo settings above only makes
-squash + merge-queue + auto-merge *available*; turning auto-merge on for a
-specific PR, the first click that exercises the merge queue, the visibility
-flip (D-42), and the licence choice (D-43) are each the owner's own action,
-taken deliberately and separately from anything this file automates.
+Nothing in this repo — no script, no CI job, no agent — flips the repository
+from private to public or picks a licence: the visibility flip (D-42) and the
+licence choice (D-43) are each the owner's own action.
+
+One job does enable auto-merge: `.github/workflows/auto-queue.yml` adds a
+cloud-lane PR to the merge queue once `scripts/cloud/auto-queue.mjs` finds it
+ready (a lane label, `Verdict: MERGE` in the body, and the newest
+`shellux-cloud-reviewer` comment at the head, by `LEAPWare-HQ`, saying MERGE).
+The merge queue then re-runs every required check, so this adds no way past
+the ruleset. *Tests:* scripts/__tests__/auto-queue.test.mjs.
+
+It enqueues with the Actions secret `AUTO_QUEUE_TOKEN`, a classic `repo`-scope
+token the owner created and stored on 2026-09-19. The built-in `GITHUB_TOKEN`
+cannot do this job: GitHub starts no workflow for an event that token causes,
+so on #194 auto-merge set by `github-actions` left the PR out of the queue with
+every check green. When the token expires or is revoked, the job's
+`Require the AUTO_QUEUE_TOKEN secret` step fails and nothing merges until the
+owner stores a new one (Settings → Developer settings → Personal access tokens
+→ Tokens (classic), scope `repo`; then this repo's Settings → Secrets and
+variables → Actions).
