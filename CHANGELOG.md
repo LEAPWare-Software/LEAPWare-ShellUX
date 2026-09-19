@@ -16,15 +16,6 @@ from so a reader can check it.
 
 ### Added
 
-- **The proof-of-completion rollout, step 2, recorded** (`docs/claims-evidence/rollout-step2-2026-09-19.md`).
-  Eleven throwaway PRs (#157 to #168) each broke one rule and each failed for exactly
-  that reason: a tick without a row, a row whose box differs, an `expect` key printed
-  zero times or twice, a bound exceeded, a wrong heading count, an undisclosed rewording,
-  a missing review record, an undisclosed gate change, an ambiguous task item, and a
-  `repo` check that tried the network under the `unshare` restriction. Editing a failing
-  body re-ran the gate and passed it. Both jobs also ran on the merge queue for #156. Every
-  run id is in the file. **Not yet shown:** a two-entry queue group (case l).
-
 - **The proof-of-completion protocol, PR A** (D-50, plan step 0c). `docs/claims.json`
   holds 27 rows proving every ticked item in `docs/plans/v1-production.md`; the box
   linter (`scripts/claims/lint-boxes.mjs`) fails a tick without a row whose `box` equals
