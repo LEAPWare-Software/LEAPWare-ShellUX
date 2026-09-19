@@ -88,7 +88,9 @@ import type { PluginManifest, PluginPackageFs } from './pluginPackage.js';
  * It is renamed to `state.json.corrupt-<time>`, reported to the diagnostics log
  * (`report`) and to `warn`, and the store starts empty: every plugin is then
  * unlisted and unserved until it is reinstalled, and its directory stays on
- * disk. Every write of `state.json` is flushed (`fsyncFile`) before the rename
+ * disk. What the set-aside file held is not carried over: a reinstall records
+ * the plugin afresh, ENABLED, so a plugin the user had disabled comes back
+ * enabled, and a fault record it carried is gone. Every write of `state.json` is flushed (`fsyncFile`) before the rename
  * that publishes it. *Tests:* `electron/__tests__/pluginScheme.test.ts` —
  * "sets aside a state.json that is not UTF-8 JSON, reports it, and starts
  * empty", "flushes state.json to disk before renaming it into place".

@@ -226,7 +226,9 @@ main a renderer-supplied path).
 > with `JSON.parse` and validated. One that reads but fails is renamed to
 > `state.json.corrupt-<time>`, reported to the diagnostics log, and the store
 > starts empty — its plugins unlisted until reinstalled, their directories left
-> on disk; one that cannot be read at all refuses the operation. Every write is
+> on disk. A reinstall then records a plugin afresh: one the user had disabled
+> comes back enabled, and its fault record is lost. One that cannot be read at
+> all refuses the operation. Every write is
 > flushed before the rename that publishes it. `plugin.json` is `serializeManifest` of the
 > validated manifest, never the package's bytes — the step-3 invariant.
 > Transient `.staging-*` and `.retired-*` directories start with `.`, which no

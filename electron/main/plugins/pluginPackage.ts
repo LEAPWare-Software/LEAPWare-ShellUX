@@ -71,9 +71,10 @@ import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS }
  * refused: its size reads 0 and says nothing), then read into a buffer of its
  * stated size plus one byte — at most `MAX_PACKAGE_BYTES + 1` — so memory is
  * bounded by that buffer whatever the file does between the stat and the read. *Tests:*
- * `electron/__tests__/pluginPackage.test.ts` — "stops reading at the limit when
- * a file yields more than its stat said", "refuses a path that is not a regular
- * file".
+ * `electron/__tests__/pluginPackage.test.ts` — "stops reading one byte past its
+ * stat when a file yields more than its stat said", "never buffers more than
+ * the limit plus one byte, even for a file stated at the limit", "refuses a
+ * path that is not a regular file".
  * ============================================================================
  */
 
@@ -366,8 +367,9 @@ export type BoundedReadResult =
  * and the read stops one byte past the stated size, so a file that grows
  * between the stat and the read is refused without being buffered whole.
  * *Tests:* `electron/__tests__/pluginPackage.test.ts` — "allocates for the
- * file's size, not for the limit", "stops reading at the limit when a file
- * yields more than its stat said". A failure to open or read is a refusal, not a throw. `noun`
+ * file's size, not for the limit", "stops reading one byte past its stat when a
+ * file yields more than its stat said", "never buffers more than the limit plus
+ * one byte, even for a file stated at the limit". A failure to open or read is a refusal, not a throw. `noun`
  * names the file in the reason. The package reader below and the plugin store's
  * serve-time read (`pluginStore.ts`) share it, so the bound is one rule.
  */
