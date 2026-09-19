@@ -5,7 +5,7 @@
  * Written first, when the packaged smoke did not yet activate the Database
  * fixture and so drew no chart. The smoke now does (`scripts/csp-smoke.mjs`,
  * `driveFixtures`), and its strict-policy run is the application-level
- * measurement; this probe is kept as the isolated one, because it separates
+ * measurement; this probe is kept as the standalone one, because it separates
  * the two `style-src` sub-directives, which the smoke does not. It measures
  * directly: ECharts' own browser build, an axis-trigger tooltip shown with
  * `showTip`, in an Electron renderer with the shipping switches, served over a

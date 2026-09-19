@@ -28,7 +28,8 @@ from so a reader can check it.
   positive controls (an inline script and a `data:` image) were refused on every
   counter (`scripts/csp-smoke.mjs`, `docs/measurements/csp-2026-09-18.json`). *Tests:*
   `electron/__tests__/rendererCsp.test.ts` — "every HTML response the scheme serves
-  carries the policy", "puts the policy on a script and a stylesheet too". **What made
+  carries the policy", "puts the policy on a script and a stylesheet too", "puts the policy on
+  the 403 and 404 responses too, and warns for each". **What made
   the gap possible:** the scheme handler lived in a module that starts the app when it
   loads, so no test could reach it; it now lives in `electron/main/rendererCsp.ts`.
   **Not done:** `'unsafe-inline'` lets injected CSS apply (anything it loads is still
