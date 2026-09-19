@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `de252c9` (#154, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `06ec066` (#156, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -24,8 +24,9 @@ with a merge queue.
 - #151: the Claude review is a direct prompt that must post a summary.
 - #152: the proof-of-completion design (D-50); milestones v1.0.0 and 1.1 (D-51).
 - #154: a Content-Security-Policy on the packaged renderer (ADR-0006 step 1).
-- This change: proof-of-completion PR A (plan step 0c): register `docs/claims.json`,
-  box linter, prover, `npm run status`, and two workflows, not yet required.
+- #156: proof-of-completion PR A: register, box linter, prover, `npm run status`,
+  two workflows (not yet required); first main run 35421271000 green.
+- This change: `ShellLayout.tsx` split before wave 3 (part of #95).
 
 ## In flight
 
@@ -35,7 +36,7 @@ with a merge queue.
 ## The next step
 
 1. Roll the protocol out step by step (§5), then PR B makes both checks required.
-2. ADR-0006 steps 2 to 11 (runtime plugin host); wave 3 starts with the ShellLayout split.
+2. ADR-0006 steps 2 to 11 (runtime plugin host); wave 3 continues after the split.
 3. Plan steps 5 to 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

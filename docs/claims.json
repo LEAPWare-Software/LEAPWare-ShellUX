@@ -1398,6 +1398,53 @@
       },
       "provenOn": "2026-09-18",
       "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-29",
+      "box": "Before editing, decide whether #95 (splitting `ShellLayout.tsx`) goes first. Decided yes, and done first: the pane-size helpers, the navigation, the pane and the resize-handle components and the palette hook moved into five modules that `ShellLayout.tsx` imports, with no behaviour change, and the pane-size helpers have direct unit tests. The persistence-hook extraction #95 also argues for is not done; #95 stays open.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/shelllayout-split.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "split_modules_present",
+          "op": "==",
+          "value": 5
+        },
+        {
+          "key": "split_modules_imported",
+          "op": "==",
+          "value": 5
+        },
+        {
+          "key": "pieces_still_defined_in_shelllayout",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "pane_sizing_tests",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "move a component back into ShellLayout.tsx",
+        "edits": [
+          {
+            "file": "src/components/layout/ShellLayout.tsx",
+            "replace": [
+              "from './ShellResizeHandle'",
+              "from './ShellResizeHandle-missing'"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "wave 3 increment 1 (refactor/split-shelllayout)"
     }
   ],
   "retired": []

@@ -146,9 +146,9 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 - [x] Browser-lane cases, mutation-probed. Revert the fix and watch them go red. Whole-fix revert re-run at landing; result in the charts PR body. [C-16]
 - [x] Review → `verify` → merge (per D-30). Record and `VERIFY_EXIT` in the charts PR body. [C-17]
 
-## Step 5 — Redesign wave 3: the system  (0/4)  — `opus`
+## Step 5 — Redesign wave 3: the system  (1/4)  — `opus`
 - [ ] Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6).
-- [ ] Before editing, decide whether #95 (splitting the 1,133-line `ShellLayout.tsx`) goes first. Recommend yes if wave 3 touches more than two of its seven components, because that file hid both data-destroying defects.
+- [x] Before editing, decide whether #95 (splitting `ShellLayout.tsx`) goes first. Decided yes, and done first: the pane-size helpers, the navigation, the pane and the resize-handle components and the palette hook moved into five modules that `ShellLayout.tsx` imports, with no behaviour change, and the pane-size helpers have direct unit tests. The persistence-hook extraction #95 also argues for is not done; #95 stays open. [C-29]
 - [ ] Also fold in #23 (re-clamp the layout on window resize). It is user-visible in a resizable desktop window, and wave 3 owns that file.
 - [ ] Browser lane for every geometric claim. Review → `verify` → merge. **Owner looks at the packaged app** (rule 5; #61's point is that Chromium on the dev server is not the product).
 
