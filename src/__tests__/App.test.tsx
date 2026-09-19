@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../core/services/HydrationEngine';
@@ -130,7 +131,16 @@ describe('App', () => {
 
     function Probe(): null {
       const registry = useRegistry();
-      outcome = registry.register(makeBlueprint({ lifecycle: { onRelease: () => undefined } }));
+      // Registration mutates the registry's revision state on success
+      // (`bumpRevision()`), so it belongs in an effect, not in render — the
+      // same convention `capability.test.tsx`'s `MountingExtension` uses for
+      // a mount-time `registry.register()` call. It happens to be safe to
+      // call from render in THIS test only because this particular blueprint
+      // is refused before any state mutation is reached, which is incidental
+      // to what the test is checking, not a reason to write it this way.
+      useEffect(() => {
+        outcome = registry.register(makeBlueprint({ lifecycle: { onRelease: () => undefined } }));
+      }, [registry]);
       return null;
     }
 
@@ -141,11 +151,10 @@ describe('App', () => {
     );
 
     expect(outcome).not.toBeNull();
-    // Cast rather than a null-narrowing `if`, matching the convention
-    // `lifecycle.test.tsx` uses for a value a nested component assigns:
-    // `outcome` is captured by `Probe`'s closure, so TypeScript's control-flow
-    // analysis sees only the `= null` initializer at this point in the outer
-    // scope and would otherwise narrow the post-check type to `never`.
+    // Cast rather than a null-narrowing `if`: `outcome` is captured by
+    // `Probe`'s closure, so TypeScript's control-flow analysis sees only the
+    // `= null` initializer at this point in the outer scope and would
+    // otherwise narrow the post-check type to `never`.
     const result = outcome as unknown as RegistrationResult;
     expect(result.ok).toBe(false);
     if (result.ok) {
