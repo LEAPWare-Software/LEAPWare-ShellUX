@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `818a7cd` (#149, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `c62a3b5` (#150, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -20,7 +20,8 @@ with a merge queue.
 - #147: the Claude review job gets the tools it needs to comment (D-49).
 - #148: charts repaired (#112, #113; #111 addressed); #146 filed.
 - #149: the review job may launch its subagents.
-- This change: crash diagnostics log (#86, in part) and the Chromium build target (#85).
+- #150: crash diagnostics log (#86, in part) and the Chromium build target (#85).
+- This change: the Claude review is a direct prompt that must post a summary.
 
 ## In flight
 
