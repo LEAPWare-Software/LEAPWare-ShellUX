@@ -316,7 +316,7 @@ const ALLOWLIST = [
       'runs, or a path any tracked file assumes exists on the machine running `npm run ' +
       'verify`. Naming the concrete Windows Roaming-profile resolution is the whole ' +
       'point of the section; the symbolic `app.getPath(\'logs\')` form used elsewhere ' +
-      '(`docs/adr/0006-runtime-plugin-host.md`) would not tell an operator where to look. ' +
+      '(`electron/main/diagnosticsLog.ts`, `electron/main/index.ts`) would not tell an operator where to look. ' +
       'Scoped to this one file and to environment-home-reference only; every other rule, ' +
       'including hostname and other path rules, still applies here.',
   },
