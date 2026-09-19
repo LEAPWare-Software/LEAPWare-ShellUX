@@ -16,6 +16,20 @@ from so a reader can check it.
 
 ### Added
 
+- **A way to force a failure on main, for proof-of-completion rollout step 3.**
+  `claims.yml` takes a `workflow_dispatch` with an `inject` choice: `failing-row`
+  records one synthetic failed row beside every real row (the issue job files), and
+  `crash` stops the prover before it writes results (the run fails, `npm run status`
+  renders FAILING RUN, the issue job files). The prover refuses any injection on a
+  pull request, the merge queue, a push or the schedule, and any dispatch from a ref
+  other than `main`; a dispatch run is named "Prove claims (dispatch)", so it can never
+  create, skip or satisfy the required "Prove claims" check. A `workflow_dispatch` run on
+  `main` now counts as a reference run for `npm run status`. All of this is a guardrail.
+  *Tests:* "refuses an injection on pull_request, merge_group, push and schedule, and a
+  dispatch from any ref but main"; "claims.yml names a dispatch run "Prove claims
+  (dispatch)", so a dispatch never produces the required context". **Not done:** no
+  dispatch has run yet; that is step 3 itself, after this lands.
+
 - **Proof-of-completion rollout step 2 is complete** (plan step 0c item 3, row C-30).
   Thirteen cases, each as designed: eleven throwaway PRs (#157 to #168, not #160) each
   broke one rule and failed for exactly that reason, a failing body re-ran the gate on

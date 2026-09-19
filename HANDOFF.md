@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `f3ab4d9` (#170, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `16a1178` (#171, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -19,7 +19,8 @@ with a merge queue.
 - Proof of completion: design (#152, D-50), PR A (#156), rollout step 2 (#169).
 - ADR-0006 Accepted (#145); steps 1 CSP (#154) and 2 SDK (#170).
 - Charts (#148), crash log and build target (#150), ShellLayout split (#160).
-- This change: plan step 0c item 3 ticked (row C-30 re-reads every case's run).
+- Rollout step 2 complete (#171, row C-30).
+- This change: the dispatch harness for rollout step 3 (forced failing row and crash).
 
 ## In flight
 
