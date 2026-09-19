@@ -132,8 +132,17 @@ from so a reader can check it.
   #188, #190, #196 had all landed since). It is the first thing every session — human or
   cloud lane — reads, so a stale pointer there misleads at the door. Updated to `713c97b`
   (#196), and the "What landed" list re-trimmed to the 3000-byte cap (row C-08: a trim
-  there is by design, not a defect) rather than appended, dropping the two oldest,
-  least load-bearing landmarks and adding #190, #194 and #196.
+  there is by design, not a defect) rather than appended, adding #190, #194 and #196.
+  **Five bullets were dropped, not two as an earlier draft of this entry undercounted**
+  (caught by `Claude Code Review` on the PR, citing rule 2): `#141`/`#151` (public,
+  Apache-2.0, ruleset and merge queue), `#148`/`#150`/`#160` (charts, crash log,
+  ShellLayout split), `#178` (operator install guide, known limits) and `#179` (PR B,
+  proof-of-completion checks) — plus, initially missed and the more load-bearing one,
+  `#152`/`#156`/`#169` (proof of completion: design, PR A, rollout 2). That thread is
+  not lost: #190's new entry two lines below is the current chapter of the same
+  proof-of-completion effort (the audit that corrected 3 false, 11 weak and 17
+  underproven rows), so the active record survives even though the founding landmark's
+  own line did not fit the cap.
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast
