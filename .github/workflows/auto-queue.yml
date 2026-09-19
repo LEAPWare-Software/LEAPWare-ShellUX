@@ -9,9 +9,11 @@ name: Auto-queue
 # Every trigger runs the DEFAULT BRANCH's code, never the pull request's. The decision is
 # in scripts/cloud/auto-queue.mjs, tested by scripts/__tests__/auto-queue.test.mjs: open,
 # lane label, MERGE in the body, and the newest LEAPWare-HQ reviewer comment at the head
-# saying MERGE. The enqueue is pinned to the head commit. The merge queue then re-runs
-# every required check, so this job cannot merge anything the ruleset would refuse.
-# A guardrail.
+# saying MERGE. The enqueue is pinned to the head commit, and a queue entry made this way
+# does get the required checks run on it before anything merges (measured on #190; see
+# docs/maintainers/repository-settings.md, "Bootstrap is owner-only"). A guardrail, not an
+# integrity control: it closes the documented route and makes the honest mistake loud, and
+# enforces nothing against deliberate action.
 on:
   workflow_run:
     workflows: ['PR evidence']
