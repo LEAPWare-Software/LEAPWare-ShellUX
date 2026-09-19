@@ -406,8 +406,9 @@ from so a reader can check it.
   which, so three SUCCESS runs gave no signal either way. The prompt now reviews against
   `CLAUDE.md` and ADR-0003 and must always end with one `Claude review:` summary
   comment. The plugin marketplace URL, which could not be pinned, is gone. **What made
-  it possible:** a job that can succeed silently was treated as a reviewer. **Not proven
-  here:** the next PR shows whether it comments.
+  it possible:** a job that can succeed silently was treated as a reviewer. **Proven on
+  the next PR** (#152, run 35416928233): it posted a summary and two inline findings, both
+  valid and fixed there.
 - **Chart titles overprinted the plot and ignored the theme; the chart contrast rows
   were measured on a background nothing painted** (GitHub #112, #113; #111 addressed).
   The title is no longer drawn into the ECharts canvas: the `<figcaption>` is the
