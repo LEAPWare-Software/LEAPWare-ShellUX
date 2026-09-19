@@ -5,11 +5,15 @@
  * Every test below injects its own `runGh` — a plain function of
  * (argv, input) => {status, stdout, stderr} — in place of `defaultGhRunner`.
  * `run()` (and the smaller functions it calls) take that function as a
- * parameter for exactly this reason: `test:scripts` runs on every CI leg,
- * this repository is currently private, and a test that shelled out for real
- * would either need a live GitHub token in CI or would silently no-op on one.
- * Neither is acceptable for a script whose whole job is the ordering check
- * before a mutating API call.
+ * parameter for exactly this reason: `test:scripts` runs on every CI leg, and a
+ * test that shelled out for real would either need a live GitHub token in CI or
+ * would silently no-op on one. Neither is acceptable for a script whose whole
+ * job is the ordering check before a mutating API call.
+ *
+ * That sentence used to carry a third clause, "this repository is currently
+ * private". It is public now (D-43), so that clause is gone — and it was never
+ * the reason anyway: the token is, and the token holds whatever the visibility
+ * is. Named here rather than silently deleted, so nobody reinstates it.
  *
  * The merge-settings ordering guard (`checkMergeSettingsOrDie`) is the part
  * worth the most coverage: it is the one thing this script does that

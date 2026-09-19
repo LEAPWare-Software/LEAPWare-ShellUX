@@ -9,13 +9,23 @@ LEAPWare-SessionKeeper's own `docs/maintainers/repository-settings.md`, with
 the CI job names, repo name and one review-count justification changed to
 this repository's own.
 
-**This ruleset is NOT yet applied.** The repository is currently private
-(D-42/D-43, licence and public visibility, are still open owner decisions),
-and `gh api repos/{owner}/{repo}/rulesets` on a private repo without the
-right plan/permissions can behave differently from a public one — the safe
-order is: repo goes public, THEN this file's script runs. Applying it is the
-owner's own action; nothing in CI or in this script does it automatically.
-See "Bootstrap is owner-only" below.
+**This ruleset is applied, and the decisions behind it are answered.** Measured
+2026-09-19 against the live repository: `gh api
+repos/LEAPWare-Software/LEAPWare-ShellUX --jq '{visibility, license:
+.license.spdx_id}'` returns `public` and `Apache-2.0`, and `gh api
+repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets` returns exactly one ruleset —
+`main`, id `23685990`, `enforcement: active` — whose seven
+`required_status_checks` entries each carry `integration_id: 15368`. D-42 (the
+Apache-2.0 licence) and D-43 (public visibility) were both answered by the owner
+on 2026-09-18; neither is open.
+
+The ordering that got it here, kept because re-applying repeats it: `gh api
+repos/{owner}/{repo}/rulesets` on a private repo without the right
+plan/permissions can behave differently from a public one, so the repo went
+public first and this file's script ran second. Applying or re-applying is the
+owner's/integrator's own action; nothing in CI or in this script does it
+automatically. See "Bootstrap is owner-only" below, and "Applying rollout step 4
+(PR B) and reading it back" for the read-back's pass condition.
 
 ## What `main.json` enforces
 
@@ -227,10 +237,62 @@ required" has an answer in the same place every other ruleset decision does.
 
 ## Bootstrap is owner-only
 
-Nothing in this repo — no script, no CI job, no agent — enables auto-merge
-on a PR, merges a PR, flips the repository from private to public, or picks
-a licence. Applying the ruleset and the repo settings above only makes
-squash + merge-queue + auto-merge *available*; turning auto-merge on for a
-specific PR, the first click that exercises the merge queue, the visibility
-flip (D-42), and the licence choice (D-43) are each the owner's own action,
-taken deliberately and separately from anything this file automates.
+No script, CI job or agent in this repository *decides* to flip the repository
+from private to public or to pick a licence. Both were owner calls — **D-43**
+(the repository goes public) and **D-42** (the licence is Apache-2.0), each
+answered 2026-09-18 — and both have since been carried out. D-43's own row
+records how: the owner directed the CTO agent to make the repository public
+under that day's delegation, and the agent did so. So "owner-only" here means
+the decision is the owner's and an agent acts only on a delegation the decision
+names; it does not mean no agent has ever touched the setting.
+
+One job does enable auto-merge: `.github/workflows/auto-queue.yml` adds a
+cloud-lane PR to the merge queue once `scripts/cloud/auto-queue.mjs` finds it
+ready (a lane label, `Verdict: MERGE` in the body, and the newest
+`shellux-cloud-reviewer` comment at the head, by `LEAPWare-HQ`, saying MERGE).
+A queue entry this job makes does get the required checks run on it before
+anything merges — measured, not assumed: the `Auto-queue` run at
+`2026-09-19T16:30:23Z` logged `auto-queue: #190 queued at 9ee3f218…`, and the
+queue branch `gh-readonly-queue/main/pr-190-39bf3502…` then ran `CI`, `Browser`,
+`Claims` and `PR evidence`, all four `success` (`gh api
+repos/{owner}/{repo}/actions/runs?event=merge_group`).
+
+That readiness check is a **guardrail, not an integrity control** — the same
+standing as `Prove claims` and `PR evidence` above, and the same word
+`scripts/cloud/auto-queue.mjs`'s own docblock uses. It closes the documented
+route and makes the honest mistake loud; it enforces nothing against deliberate
+action. Every cloud routine posts under the owner's login, so the comment the
+script reads proves a review exists at the head, not which routine wrote it,
+and whoever can edit `auto-queue.yml`, the script, or the secret changes what
+gets queued.
+*Tests:* `scripts/__tests__/auto-queue.test.mjs` — *Test:* "ignores a forged
+review comment from any other account", *Test:* "refuses a review comment made
+at an older head" and *Test:* "calls gh pr merge --squash --auto pinned to the
+head only when ready" pin the readiness rules and the head-pinned enqueue.
+Those tests run `readiness()` and the script's `main()` against an injected
+fake `gh`; **no test in this repository asserts that the merge queue re-runs
+required checks**, which is GitHub's own behaviour and rests on the
+measurement above alone.
+
+It enqueues with the Actions secret `AUTO_QUEUE_TOKEN`, a classic `repo`-scope
+token the owner creates and stores. **No creation or expiry date is recorded
+here**: a date in this file goes stale silently the first time the token is
+rotated, and nothing in CI reads one back. The secret's own last-updated date
+is on this repo's Settings → Secrets and variables → Actions, and the token's
+expiry on the owner's Tokens (classic) page; those two are the only current
+answers.
+
+The built-in `GITHUB_TOKEN` cannot do this job: GitHub starts no workflow for
+an event that token causes, so on #194 auto-merge set by `github-actions` left
+the PR out of the queue with every check green. The two ways the secret can
+stop working fail in different places, and only one of them is loud:
+
+- **Unset or emptied** — the job's `Require the AUTO_QUEUE_TOKEN secret` step
+  compares `secrets.AUTO_QUEUE_TOKEN != ''` and exits 1 with an `::error::`.
+- **Present but expired or revoked** — that step passes, and the failure lands
+  in `Queue the pull request if it is ready`, as whatever `gh` reports for a
+  rejected credential. The step name says nothing about it.
+
+Either way nothing merges until the owner stores a new token (Settings →
+Developer settings → Personal access tokens → Tokens (classic), scope `repo`;
+then this repo's Settings → Secrets and variables → Actions).

@@ -27,10 +27,17 @@
 // `gh api ... PATCH` command that fixes it, and applies nothing. Ported
 // verbatim from LEAPWare-SessionKeeper's own LWS-D0 finding.
 //
-// This repository is PRIVATE (D-42/D-43 open), so an actual `--repo`
-// invocation against it would 403 today — that is expected, not a bug in
-// this script, and is why `--dry-run` is how this file is exercised before
-// the repo goes public.
+// Visibility is no longer why this script is not run for real here. D-42
+// (the Apache-2.0 licence) and D-43 (the repository goes public) are both
+// answered, the repository is public, and the ruleset is applied — see
+// `docs/maintainers/repository-settings.md`, which carries the measured
+// read-back. What a real `--repo` invocation still needs is for whatever
+// account `gh` is authenticated as to be allowed to write rulesets on the
+// repo; this script does not check that, and no CI job supplies it.
+// `--dry-run` is how this file is exercised in `test:scripts`, and the unit
+// tests drive the mutating paths through an injected fake `gh` runner, so
+// neither needs a token. Applying for real stays the owner's or
+// integrator's own action.
 
 import { spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
