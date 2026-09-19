@@ -31,6 +31,7 @@ with a merge queue.
 - Wave-3 W3-1, the state primitives (#184).
 - Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
 - Proof rows C-38 to C-43 for work already built.
+- Cloud lanes can merge (auto-queue workflow, runbook lane C item 0a).
 - This change: wave-3 W3-2, list rows at 32px (D-29).
 
 ## In flight
