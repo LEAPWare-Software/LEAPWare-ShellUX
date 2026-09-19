@@ -1,14 +1,16 @@
 # Wave 3 plan — the system
 
-**Status: PLAN.** Written 2026-09-19 against `main` at `a2bba77`. Nothing below is built
-except increment W3-0, which lands in the same change as this file. Every other row is
-planned, and says so. This is plan step 5, item 1 in `docs/plans/v1-production.md`:
+**Status: PLAN, in progress.** Written 2026-09-19 against `main` at `a2bba77`. W3-0
+landed in the same change as this file, and W3-1 has since landed (PR #184). Every other
+row is planned, and says so — see each increment's own heading for its current state, the
+single source of truth for what is built. This is plan step 5, item 1 in
+`docs/plans/v1-production.md`:
 "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables,
 forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6)."
 
 Sources, in the order they win when they disagree:
 
-1. **The approved gate-4 screens, revision 4** (D-45): *Shell at rest* (light and dark),
+1. **The gate-4 screens, revision 4** (D-45; the owner answered #189 on 2026-09-19 approving gate 4, but that answer names six screens against a record of nine and is not yet in a decision row — see #189): *Shell at rest* (light and dark),
    *Command palette*, *Palette states*, *Plugin manager*, *States*, *Collapsed rail and
    selection toolbar*, *Notifications*, *After Reverse movement: undo strip*. Revision 4
    is the one with the independent critique resolved on the canvas. The canvas is a

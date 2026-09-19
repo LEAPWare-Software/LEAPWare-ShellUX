@@ -18,7 +18,13 @@ const E2E_TITLES = [
   'narrow, drag the second divider, widen, reload: pane 1 keeps the width the user chose',
   'opened narrow on a stored layout, drag divider 2, widen and reload: pane 1 keeps the stored width',
 ];
-console.log(`pane_refit_e2e_titles=${E2E_TITLES.filter((t) => e2e.includes(`test('${t}'`)).length}`);
+// A skipped, fixme'd or .only-ed case still contains its title string, so counting
+// titles alone can pass a suite that never actually runs one of them (or runs only
+// one, leaving the rest silently unexecuted under .only). Zero the count outright if
+// any such marker appears anywhere in the file.
+const hasSkipLikeMarker = /\.(skip|fixme|only)\s*\(/.test(e2e);
+console.log(`pane_refit_e2e_skip_fixme_only=${hasSkipLikeMarker ? 1 : 0}`);
+console.log(`pane_refit_e2e_titles=${hasSkipLikeMarker ? 0 : E2E_TITLES.filter((t) => e2e.includes(`test('${t}'`)).length}`);
 const unit = 'src/components/__tests__/ShellLayoutRefit.test.tsx';
 console.log(`pane_refit_unit_file=${existsSync(unit) ? 1 : 0}`);
 
