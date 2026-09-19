@@ -52,7 +52,11 @@ import type { ExtensionViewProps, LEAPExtensionBlueprintInput } from '../core/ty
  * badge counts, navigation metrics, `when` expressions, hotkey chords and
  * selection-scoped commands. All are documented in `DEVELOPER.md`, and all are
  * demonstrated by the two verification remotes — which are the right thing to
- * read *second*.
+ * read *second*. Nor does it declare the optional `lifecycle` hooks or call
+ * `setNavigationTree` and `clearBadge` (host contract 1.1): an extension with no
+ * timer, connection or user-created folder has nothing to put in them, and an
+ * empty hook would teach the wrong reflex. `DEVELOPER.md`, "Lifecycle hooks",
+ * shows them in use.
  * ============================================================================
  */
 

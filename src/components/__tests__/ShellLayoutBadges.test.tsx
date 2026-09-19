@@ -106,6 +106,34 @@ afterEach(() => {
 });
 
 describe('ShellLayout — navigation badges', () => {
+  it('renders the tree an extension set at runtime, and a cleared badge falls back to the declared count', async () => {
+    const { shell } = await renderActivated();
+    expect(screen.getByRole('button', { name: 'Root A badge 3' })).toBeInTheDocument();
+
+    // ADR-0006 decision 8, #16: a folder added and one renamed, with no
+    // unregister and no re-activation — the same handle keeps working.
+    act(() => {
+      shell.setNavigationTree([
+        { id: 'root-a', label: 'Renamed A', badgeCount: 3 },
+        { id: 'root-c', label: 'Added C' },
+      ]);
+    });
+    expect(screen.getByRole('button', { name: 'Renamed A badge 3' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Added C' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Root B' })).toBeNull();
+
+    // #80: a store badge overrides the declared 3; clearing it deletes the
+    // entry, so the declared count shows again rather than a zero.
+    act(() => {
+      shell.setBadgeCount('root-a', 9);
+    });
+    expect(screen.getByRole('button', { name: 'Renamed A badge 9' })).toBeInTheDocument();
+    act(() => {
+      shell.clearBadge('root-a');
+    });
+    expect(screen.getByRole('button', { name: 'Renamed A badge 3' })).toBeInTheDocument();
+  });
+
   it('renders the blueprint badge for a node the store has never been written for', async () => {
     await renderActivated();
     // The fallback half of the override rule, and the behaviour that existed

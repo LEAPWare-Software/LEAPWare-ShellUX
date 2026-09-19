@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "1.1",
   "exports": {
     "values": [
       "HOST_API_VERSION",
@@ -10,6 +10,7 @@
     ],
     "types": [
       "Command",
+      "ExtensionLifecycle",
       "ExtensionViewProps",
       "IShellAPI",
       "LEAPExtensionBlueprintInput",
@@ -31,11 +32,13 @@
     ],
     "optional": [
       "commands",
+      "lifecycle",
       "ribbonActions"
     ]
   },
   "shellApi": {
     "required": [
+      "clearBadge",
       "getBadgeCount",
       "getContext",
       "getNavMetric",
@@ -47,6 +50,7 @@
       "setBadgeCount",
       "setContextKey",
       "setNavMetric",
+      "setNavigationTree",
       "setSelectedItem",
       "setSelectedItems",
       "subscribePayload"

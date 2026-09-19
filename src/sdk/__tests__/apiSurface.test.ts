@@ -49,6 +49,11 @@ describe('the SDK contract baseline, src/sdk/api-surface.json', () => {
 });
 
 describe('the bump rule', () => {
+  // Relative to whatever the baseline records, so moving `HOST_API_VERSION` does
+  // not rewrite these cases. They were literal `1.0`/`1.1` until 1.1 shipped.
+  const parsed = parseHostApiVersion(baseline.version)!;
+  const nextMinor = `${parsed.major}.${parsed.minor + 1}`;
+
   it('fails when the contract changes and the version does not move', () => {
     const current = changed({
       exports: { ...baseline.exports, values: [...baseline.exports.values, 'newHelper'] },
@@ -62,18 +67,18 @@ describe('the bump rule', () => {
 
   it('fails a major change when only the minor moved', () => {
     const { required, optional } = baseline.shellApi;
-    const current = changed({ version: '1.1', shellApi: { required: required.slice(1), optional } });
+    const current = changed({ version: nextMinor, shellApi: { required: required.slice(1), optional } });
     const problems = assessContract(baseline, current);
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('it needs a major bump from 1.0');
+    expect(problems[0]).toContain(`it needs a major bump from ${baseline.version}`);
     expect(problems[0]).toContain(`[major] IShellAPI: "${required[0]!}" was removed`);
   });
 
   it('accepts the bump, then asks for the baseline to be re-recorded, and passes once it is', () => {
-    const current = changed({ version: '1.1', hotkeyKeys: [...baseline.hotkeyKeys, 'escape'] });
+    const current = changed({ version: nextMinor, hotkeyKeys: [...baseline.hotkeyKeys, 'escape'] });
     const problems = assessContract(baseline, current);
     expect(problems).toHaveLength(1);
-    expect(problems[0]).toContain('does not record the contract as it stands (version 1.1)');
+    expect(problems[0]).toContain(`does not record the contract as it stands (version ${nextMinor})`);
     // The message carries the description to record, and recording it passes.
     const recorded: unknown = JSON.parse(problems[0]!.slice(problems[0]!.indexOf('{')));
     expect(recorded).toEqual(canonicalSurface(current));
@@ -181,12 +186,12 @@ describe('the bump each change requires, one row of the table at a time', () => 
     ['an IShellAPI member removed', { shellApi: { required: api.required.slice(1), optional: api.optional } }, 'major'],
     [
       'a required IShellAPI member added',
-      { shellApi: { required: [...api.required, 'clearBadge'], optional: api.optional } },
+      { shellApi: { required: [...api.required, 'openPalette'], optional: api.optional } },
       'minor',
     ],
     [
       'an optional IShellAPI member added',
-      { shellApi: { required: api.required, optional: [...api.optional, 'clearBadge'] } },
+      { shellApi: { required: api.required, optional: [...api.optional, 'openPalette'] } },
       'minor',
     ],
     [

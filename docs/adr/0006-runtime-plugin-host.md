@@ -654,6 +654,62 @@ registered plugins. **That is collision-resistance, not a bound on the store**:
 `useShellStore()` is public and names any scope, which is #80's scope-count half, and a
 store-level `MAX_SCOPES` is the step-5 entry-point validation for it.
 
+> **2026-09-19, step 5 landed — the three changes as built, and where they differ
+> from the text above.** `HOST_API_VERSION` moved **1.0 → 1.1**, one minor step,
+> and the baseline was re-recorded: blueprint optional key `lifecycle`, `IShellAPI`
+> members `clearBadge` and `setNavigationTree`, SDK type `ExtensionLifecycle`, all
+> additive; `electron/main/plugins/hostContract.ts` mirrors the new number.
+>
+> *#17.* `lifecycle` is read once at `register` into a frozen host-owned copy; each
+> hook must be a function or absent. `onActivate` fires only when the foreground
+> actually moves to the extension, **after** the foreground is published (so a
+> context key it writes survives the handover's clear). A throw returns
+> `ok: false` with a new code, `LIFECYCLE_HOOK_THREW`, runs `onRelease`, revokes
+> the handle and drops the foreground; "marked crashed" is step 6's, and reaches
+> it through a new `ShellHostProvider` prop, `onLifecycleFault`, which
+> `onDeactivate` and `onRelease` throws also report to. `onRelease` on the
+> **unregister** path needs the handle alive, and the handle dies the moment the
+> registry drops the record, so the registry gained `onBeforeUnregister`, which
+> the provider subscribes to from a layout effect and which runs inside
+> `unregister` before the delete. **Named gap:** an unregister made before that
+> subscription exists — a descendant's layout effect in the first commit — gets
+> the old sweep's revocation without `onRelease` or the purge. *Tests:*
+> `src/core/__tests__/lifecycle.test.tsx` — "calls onRelease before revocation,
+> and revokes even when it throws", "a throwing onActivate leaves a healthy
+> sibling fully usable", "still replaces a stale entry when activate runs before
+> the provider subscribed".
+>
+> *#16 — the record is NOT swapped, and this is the difference from the text
+> above.* Record identity is the liveness token (`isLive` in
+> `src/core/ActivationContext.tsx`; `capability.test.tsx` — "re-registering an id
+> does not resurrect the previous handle"), so swapping the record would revoke
+> the caller's own handle. The replacement tree is instead normalised
+> by `normalizeNavigationTree` — the function `register` now calls too — and held
+> deep-frozen by the shell store under the extension's scope, which pane 1 renders
+> in place of the declared tree. #16's three properties hold; the registry's
+> record keeps the declared tree. Consequence: host chrome learns of a new tree
+> through the replicated store (a new `set-navigation-tree` operation), not
+> through an updated `ExtensionManifest` — no manifest crosses yet (decision 6),
+> and the manifest built from the record would be stale, which step 6 must read
+> the store for. *Tests:* `src/core/__tests__/navigationTree.test.tsx` —
+> "setNavigationTree re-normalises the whole tree at the door".
+>
+> *#80.* `clearBadge` deletes the entry. The purge runs inside `unregister`,
+> whether or not the extension was ever activated, over badges, metrics, context
+> keys and the replacement tree. The store-level bound is
+> `STORE_LIMITS.MAX_SCOPES` = 1024 in `src/core/ShellAPI.ts`, deliberately **not**
+> in `REGISTRY_LIMITS`: that object is the recorded contract and bounds what a
+> blueprint declares, and a bound added there is a major under decision 3. The
+> judgement — which review should check — is that this is not a contract
+> narrowing, because a plug-in's own facade names only its own scope and reaches
+> the bound only as one of more than 1023 extensions registered and writing at
+> once. It is entry-point validation, spendable by anything holding the public
+> store (`SECURITY.md`). *Tests:* `src/core/__tests__/lifecycle.test.tsx` —
+> "unregister purges the scope's badges and context keys";
+> `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
+> MAX_SCOPES through the public store, and frees one on purge", "clearBadge
+> deletes the entry rather than writing zero".
+
 **#91 — decided as a 1.0 limit, not fixed.** `VirtualizedList` is **not** in the SDK
 barrel, so no packaged plugin can import it, and it has zero production consumers
 today. #91's defect — a list that cannot be told the host cleared selection — cannot

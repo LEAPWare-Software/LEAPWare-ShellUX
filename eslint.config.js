@@ -155,6 +155,13 @@ export default tseslint.config(
             // narrower one. The accepted cost is unchanged: this file already
             // triggers a full dev reload because of `validateBlueprint`.
             'clampMetricValue',
+            // `normalizeNavigationTree` is the seventh, for `clampMetricValue`'s
+            // reason exactly: a navigation tree is reached by TWO doors — `register`
+            // and `IShellAPI.setNavigationTree` (ADR-0006 decision 8) — and the
+            // decision is that the second runs the first's validator, bounds
+            // included, rather than a copy of it. It reports through this file's
+            // `describeType` and walks with its private `normalizeNavigationNode`.
+            'normalizeNavigationTree',
           ],
         },
       ],

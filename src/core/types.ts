@@ -872,6 +872,68 @@ export interface ExtensionViews {
 }
 
 /**
+ * The optional lifecycle hooks a blueprint may declare. ADR-0006 decision 8,
+ * GitHub issue #17.
+ *
+ * Every hook is plug-in code the host calls, so each is held to the registry's
+ * posture towards untrusted fields: the `lifecycle` object is read ONCE at
+ * `register`, each member must be a function or absent, and the host calls the
+ * function it copied then — replacing a hook on your own blueprint afterwards
+ * changes nothing. Each is called with no `this`.
+ *
+ * **What a throw does is contained to your own registration.** That is error
+ * containment, not isolation: every plug-in runs in one realm and there is no
+ * boundary between them (ADR-0001 Amendment E).
+ *
+ * There is deliberately **no `onRegister`**: activation mints the handle
+ * (ADR-0001 Amendment C), so a hook at registration would have nothing to act
+ * through. A never-activated extension still cannot publish an opening badge —
+ * a named 1.0 limit.
+ */
+export interface ExtensionLifecycle {
+  /**
+   * Called when the extension TAKES the foreground — `activate` moving the
+   * foreground to it, not re-activating an extension that already holds it —
+   * after the foreground is published, with the extension's live scoped handle.
+   * The context it reads is already its own, so context keys and badges written
+   * here stay written.
+   *
+   * **A throw fails the activation for this extension only.** `activate`
+   * returns `ok: false` with `LIFECYCLE_HOOK_THREW` and the thrown message in
+   * words, the extension's handle is released (`onRelease` runs, then the handle
+   * is revoked) and the foreground is dropped. Its registration and every other
+   * extension's handle are untouched. *Tests:*
+   * `src/core/__tests__/lifecycle.test.tsx` — "a throwing onActivate leaves a
+   * healthy sibling fully usable".
+   */
+  readonly onActivate?: (shell: IShellAPI) => void;
+  /**
+   * Called when the extension LOSES the foreground to another extension or to
+   * `blur`, before the new foreground is published. The handle stays live:
+   * foreground loss is not revocation. Not called when the extension is
+   * released or unregistered — `onRelease` is.
+   *
+   * A throw is reported to the host (`ShellHostProvider`'s `onLifecycleFault`,
+   * or `console.error`) and the handover continues: one extension's hook cannot
+   * stop another from taking the foreground.
+   */
+  readonly onDeactivate?: () => void;
+  /**
+   * Called immediately BEFORE the extension's handle is revoked — on `release`,
+   * on `unregister` (so on disable and remove), and when `onActivate` threw.
+   * Synchronous: the handle is still live inside it, so this is where to flush,
+   * cancel timers and persist. Not called for an extension that was never
+   * activated, because it holds no handle to revoke.
+   *
+   * **Revocation happens whatever it does.** A throw is reported to the host
+   * and the handle is revoked anyway. *Tests:*
+   * `src/core/__tests__/lifecycle.test.tsx` — "calls onRelease before
+   * revocation, and revokes even when it throws".
+   */
+  readonly onRelease?: () => void;
+}
+
+/**
  * The manifest object a plugin module exports. This is the entire contract a
  * plugin has with the host; nothing outside this shape is read.
  *
@@ -903,6 +965,13 @@ export interface LEAPExtensionBlueprint {
   /** The extension's commands. The identical array object as `ribbonActions`. */
   readonly commands: readonly Command[];
   readonly views: ExtensionViews;
+  /**
+   * Optional lifecycle hooks. Present on the normalised record only when the
+   * blueprint declared them, as a frozen host-owned copy of the object the
+   * plug-in wrote; the functions inside are the plug-in's own and are not
+   * frozen, exactly as `views` and each command's callbacks are not.
+   */
+  readonly lifecycle?: ExtensionLifecycle;
 }
 
 /**
@@ -1181,6 +1250,58 @@ export interface IShellAPI {
    */
   getBadgeCount(nodeId: string): number | undefined;
   /**
+   * Remove the badge for one of YOUR navigation nodes. ADR-0006 decision 8,
+   * GitHub issue #80.
+   *
+   * **It deletes the entry rather than writing zero**, so `getBadgeCount`
+   * answers `undefined` afterwards and pane 1 falls back to the `badgeCount`
+   * the blueprint declared for the node, if any. Writing `0` is still the way to
+   * show "none" over a declared count. Clearing a badge that was never set
+   * changes nothing and notifies nobody.
+   *
+   * Scoped by the same closure as `setBadgeCount`: collision-resistance, not
+   * confinement. *Tests:* `src/core/__tests__/navigationTree.test.tsx` —
+   * "clearBadge deletes the entry rather than writing zero".
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is removed;
+   *   `INVALID_ID` when `nodeId` is not a registry-valid identifier;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the entry is
+   *   removed.
+   */
+  clearBadge(nodeId: string): void;
+  /**
+   * Replace YOUR whole navigation tree. ADR-0006 decision 8, GitHub issue #16.
+   *
+   * **The whole tree, through the validator `register` uses.** `nodes` is read
+   * once and re-normalised exactly as a blueprint's `navigationTree` is — every
+   * id against `EXTENSION_ID_PATTERN`, every label, icon, badge and metric, the
+   * depth bound and the node-count bound — into a fresh, deep-frozen host-owned
+   * tree. A tree the registry would refuse is refused here with the same code,
+   * and nothing is stored. The array you passed is never retained: mutating it
+   * afterwards changes nothing. *Tests:*
+   * `src/core/__tests__/navigationTree.test.tsx` — "setNavigationTree
+   * re-normalises the whole tree at the door".
+   *
+   * **The registered blueprint record does not change**; the replacement is
+   * held by the shell store under your scope, and pane 1 renders it in place of
+   * the declared tree until you are unregistered. `activeNavNodeId`, badges and
+   * metrics keyed on a node you removed are left as they are.
+   *
+   * Scoped by the closure, like `setBadgeCount`: collision-resistance, not
+   * confinement.
+   *
+   * @throws {ShellUXError} `REVOKED` when this handle's extension has been
+   *   released or unregistered — checked first, so nothing is stored; every code
+   *   `register` raises for a bad `navigationTree` (`INVALID_FIELD`,
+   *   `MISSING_FIELD`, `INVALID_ID`, `RESERVED_ID`, `DUPLICATE_ID`,
+   *   `PAYLOAD_TOO_LARGE`), with the field path rooted at `nodes`;
+   *   `PAYLOAD_TOO_LARGE` when the store's scope bound refuses a new scope;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the tree is
+   *   stored.
+   */
+  setNavigationTree(nodes: readonly NavigationNode[]): void;
+  /**
    * Set the live metric value for one of YOUR navigation nodes.
    *
    * **This member exists because `badgeCount` already made the opposite mistake
@@ -1442,7 +1563,12 @@ export type ShellUXErrorCode =
    * cascade exceeded the depth the store will follow. Listeners are a signal to
    * re-read, not a place to write; see `createShellStateStore`.
    */
-  | 'REENTRANT_NOTIFY';
+  | 'REENTRANT_NOTIFY'
+  /**
+   * An extension's `lifecycle.onActivate` threw, so its activation failed. The
+   * message carries what was thrown, in words. See `ExtensionLifecycle`.
+   */
+  | 'LIFECYCLE_HOOK_THREW';
 
 /**
  * Exhaustiveness pin for `SHELL_UX_ERROR_CODES`.
@@ -1462,6 +1588,7 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
   PAYLOAD_TOO_LARGE: true,
   REVOKED: true,
   REENTRANT_NOTIFY: true,
+  LIFECYCLE_HOOK_THREW: true,
 });
 
 /**

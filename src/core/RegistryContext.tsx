@@ -4,6 +4,7 @@ import type {
   Command,
   CommandCategory,
   CommandSurface,
+  ExtensionLifecycle,
   ExtensionView,
   Hotkey,
   LEAPExtensionBlueprint,
@@ -483,6 +484,8 @@ function validateViewComponent(value: unknown, path: string): void {
 interface NavWalkState {
   readonly seenIds: Set<string>;
   visited: number;
+  /** The field the whole tree arrived under — `navigationTree` or `nodes`. */
+  readonly root: string;
 }
 
 /** Builder shape for a normalised node; frozen into a `NavigationNode`. */
@@ -840,8 +843,8 @@ function normalizeNavigationNode(
   if (state.visited > REGISTRY_LIMITS.MAX_NAV_NODES) {
     throw new ShellUXError(
       'PAYLOAD_TOO_LARGE',
-      `Field "navigationTree" exceeds the maximum of ${REGISTRY_LIMITS.MAX_NAV_NODES} nodes.`,
-      'navigationTree',
+      `Field "${state.root}" exceeds the maximum of ${REGISTRY_LIMITS.MAX_NAV_NODES} nodes.`,
+      state.root,
     );
   }
 
@@ -928,6 +931,76 @@ function normalizeNavigationNode(
   }
 
   return Object.freeze(node);
+}
+
+/**
+ * Normalise a WHOLE navigation tree into a fresh, deep-frozen host-owned array.
+ *
+ * **The one validator for a tree, at both doors.** `register` runs it over a
+ * blueprint's `navigationTree`, and `IShellAPI.setNavigationTree` runs it over
+ * every replacement (ADR-0006 decision 8, GitHub issue #16), so a tree cannot be
+ * held to a weaker rule after registration than at it. `root` is the field name
+ * the caller's rejection messages are rooted at — `navigationTree` at
+ * registration, `nodes` at the runtime door.
+ *
+ * The array is read once: its length captured, each element read exactly once.
+ * The node-count bound applies to what is normalised rather than to a `length`
+ * the payload can revise afterwards, and the depth bound to every path. Nothing
+ * of the caller's is retained. *Tests:*
+ * `src/core/__tests__/navigationTree.test.tsx` — "setNavigationTree re-normalises
+ * the whole tree at the door".
+ *
+ * @throws {ShellUXError} `INVALID_FIELD`, `MISSING_FIELD`, `INVALID_ID`,
+ *   `RESERVED_ID`, `DUPLICATE_ID` or `PAYLOAD_TOO_LARGE`, exactly as `register`
+ *   raises them for a bad tree.
+ */
+export function normalizeNavigationTree(candidate: unknown, root: string): readonly NavigationNode[] {
+  if (!isArrayValue(candidate)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${root}" must be an array; received ${describeType(candidate)}.`,
+      root,
+    );
+  }
+  const count = candidate.length;
+  const state: NavWalkState = { seenIds: new Set<string>(), visited: 0, root };
+  const nodes: NavigationNode[] = [];
+  for (let index = 0; index < count; index += 1) {
+    nodes.push(normalizeNavigationNode(candidate[index], `${root}[${index}]`, 1, state));
+  }
+  return Object.freeze(nodes);
+}
+
+/** The three hook names `ExtensionLifecycle` declares, in the order they are read. */
+const LIFECYCLE_HOOKS = ['onActivate', 'onDeactivate', 'onRelease'] as const;
+
+/**
+ * Normalise a blueprint's optional `lifecycle` into a frozen host-owned object.
+ *
+ * Each hook is read ONCE and must be a function or absent; the host calls the
+ * function it copied here, so replacing a hook on the plug-in's own object
+ * afterwards changes nothing. The functions themselves are the plug-in's and are
+ * not frozen, for the reason `views` are not. Unknown keys are ignored, as they
+ * are everywhere else in a blueprint. ADR-0006 decision 8, GitHub issue #17.
+ */
+function normalizeLifecycle(value: unknown): ExtensionLifecycle {
+  if (!isRecord(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "lifecycle" must be an object; received ${describeType(value)}.`,
+      'lifecycle',
+    );
+  }
+  const lifecycle: { -readonly [K in keyof ExtensionLifecycle]: ExtensionLifecycle[K] } = {};
+  for (const hook of LIFECYCLE_HOOKS) {
+    const declared = value[hook];
+    if (declared === undefined) {
+      continue;
+    }
+    validateFunction(declared, `lifecycle.${hook}`);
+    lifecycle[hook] = declared as never;
+  }
+  return Object.freeze(lifecycle);
 }
 
 /**
@@ -1210,25 +1283,10 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
     REGISTRY_LIMITS.MAX_VERSION_LENGTH,
   );
 
-  const navigationTree = requireField(candidate, 'navigationTree', 'navigationTree');
-  if (!isArrayValue(navigationTree)) {
-    throw new ShellUXError(
-      'INVALID_FIELD',
-      `Field "navigationTree" must be an array; received ${describeType(navigationTree)}.`,
-      'navigationTree',
-    );
-  }
-  // Captured once. The total node count is bounded by `navState.visited`, which
-  // counts the nodes actually normalised — so the bound applies to what is
-  // stored, not to a `length` the payload can revise afterwards.
-  const navCount = navigationTree.length;
-  const navState: NavWalkState = { seenIds: new Set<string>(), visited: 0 };
-  const nodes: NavigationNode[] = [];
-  for (let index = 0; index < navCount; index += 1) {
-    nodes.push(
-      normalizeNavigationNode(navigationTree[index], `navigationTree[${index}]`, 1, navState),
-    );
-  }
+  const nodes = normalizeNavigationTree(
+    requireField(candidate, 'navigationTree', 'navigationTree'),
+    'navigationTree',
+  );
 
   // ONE COLLECTION, TWO POSSIBLE NAMES, AND BOTH TOGETHER IS A REJECTION.
   //
@@ -1317,6 +1375,11 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
   const pane3 = requireField(views, 'pane3', 'views.pane3');
   validateViewComponent(pane3, 'views.pane3');
 
+  // Optional, and read exactly once like every other untrusted field.
+  const declaredLifecycle: unknown = candidate['lifecycle'];
+  const lifecycle =
+    declaredLifecycle === undefined ? undefined : normalizeLifecycle(declaredLifecycle);
+
   // ONE frozen array, referenced twice. `record.commands === record.ribbonActions`
   // is a property callers may rely on, and it is what makes "two names, one
   // collection" true of the stored record rather than merely intended.
@@ -1325,10 +1388,11 @@ function normalizeBlueprint(candidate: unknown): NormalizedRegistration {
     id,
     name,
     version,
-    navigationTree: Object.freeze(nodes),
+    navigationTree: nodes,
     ribbonActions: commands,
     commands,
     views: Object.freeze({ pane2: pane2 as ExtensionView, pane3: pane3 as ExtensionView }),
+    ...(lifecycle === undefined ? {} : { lifecycle }),
   });
 
   return { record, id, source: candidate };
@@ -1526,6 +1590,27 @@ export interface ExtensionRegistry {
   getExtension(id: string): LEAPExtensionBlueprint | undefined;
   /** Every registered record, in insertion order. Same guarantees as above. */
   listExtensions(): readonly LEAPExtensionBlueprint[];
+  /**
+   * Run `listener` inside every later `unregister` of a registered id, BEFORE the
+   * record is removed, with the id and the record being removed. Returns the
+   * disposer. ADR-0006 decision 8.
+   *
+   * **Why before, and why here.** A handle minted for an extension is revoked
+   * the moment the registry stops holding its record — the facade re-asks the
+   * registry on every call. So "immediately before revocation" on the unregister
+   * path can only mean inside `unregister`, before the delete. `ShellHostProvider`
+   * subscribes here to call the extension's `lifecycle.onRelease` while its
+   * handle still works, revoke it, and purge its store scope.
+   *
+   * **Host-internal by convention, not by enforcement.** `useRegistry` is not
+   * severed at `ExtensionHostBoundary`, so plug-in code can subscribe too, which
+   * gives it nothing it lacked: it can already call `unregister` itself. A
+   * listener's throw is caught and reported to `console.error`, and the
+   * unregister completes anyway — one listener cannot keep a record registered.
+   * *Tests:* `src/core/__tests__/lifecycle.test.tsx` — "unregister completes
+   * when a before-unregister listener throws".
+   */
+  onBeforeUnregister(listener: (id: string, record: LEAPExtensionBlueprint) => void): () => void;
 }
 
 /**
@@ -1629,15 +1714,68 @@ export function ExtensionRegistryProvider({
     }
   }, [store]);
 
+  // A `Set` of listeners, held in a ref for the provider's lifetime. See
+  // `onBeforeUnregister`.
+  const unregisterListenersRef = useRef<Set<(id: string, record: LEAPExtensionBlueprint) => void> | null>(
+    null,
+  );
+  unregisterListenersRef.current ??= new Set();
+  const unregisterListeners = unregisterListenersRef.current;
+
   const unregister = useCallback(
     (id: string): boolean => {
-      const removed = store.delete(id);
-      if (removed) {
+      const entry = store.get(id);
+      if (entry === undefined) {
+        return false;
+      }
+      // Before the delete, so a handle minted against this record is still live
+      // inside each listener — which is what lets `onRelease` run before
+      // revocation. A snapshot, so a listener that subscribes or unsubscribes
+      // mid-pass changes the next unregister and not this one.
+      for (const listener of Array.from(unregisterListeners)) {
+        try {
+          listener(id, entry.record);
+        } catch (error) {
+          try {
+            console.error(
+              `ExtensionRegistry: a before-unregister listener threw while "${id}" was being unregistered. The unregister completed anyway.`,
+              error,
+            );
+          } catch {
+            // Reporting is best-effort. Completing the unregister is not.
+          }
+        }
+      }
+      // Compared by identity, because a listener is plug-in-reachable code and
+      // may itself have unregistered — or unregistered and re-registered — this
+      // id. Only the record this call was asked to remove is removed.
+      if (store.get(id) === entry) {
+        store.delete(id);
         bumpRevision();
       }
-      return removed;
+      return true;
     },
-    [store],
+    [store, unregisterListeners],
+  );
+
+  const onBeforeUnregister = useCallback(
+    (listener: (id: string, record: LEAPExtensionBlueprint) => void): (() => void) => {
+      if (typeof listener !== 'function') {
+        throw new ShellUXError(
+          'INVALID_FIELD',
+          `onBeforeUnregister: "listener" must be a function; received ${describeType(listener)}.`,
+          'listener',
+        );
+      }
+      // Wrapped, so the same function subscribed twice is two subscriptions
+      // and each disposer removes exactly its own.
+      const entry = (id: string, record: LEAPExtensionBlueprint): void => listener(id, record);
+      unregisterListeners.add(entry);
+      return (): void => {
+        unregisterListeners.delete(entry);
+      };
+    },
+    [unregisterListeners],
   );
 
   const getExtension = useCallback(
@@ -1651,8 +1789,8 @@ export function ExtensionRegistryProvider({
   );
 
   const api = useMemo<ExtensionRegistry>(
-    () => ({ register, unregister, getExtension, listExtensions }),
-    [register, unregister, getExtension, listExtensions],
+    () => ({ register, unregister, getExtension, listExtensions, onBeforeUnregister }),
+    [register, unregister, getExtension, listExtensions, onBeforeUnregister],
   );
 
   return (

@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { useRegistry, useRegistryRevision } from './RegistryContext';
 import {
@@ -304,6 +312,39 @@ export interface ShellHostProviderProps {
    * `StrictMode`, and an effect-time `connect` would open the port twice.
    */
   readonly store?: ShellStateStore | undefined;
+  /**
+   * Told when an extension's `lifecycle.onDeactivate` or `lifecycle.onRelease`
+   * throws, or when its `onActivate` throws and its activation fails. ADR-0006
+   * decision 9 names a throwing hook a tier-1 fault; this is where the loader
+   * (step 6) learns of one to mark the plug-in crashed. Defaults to
+   * `console.error`. A reporter that throws is ignored: the lifecycle step that
+   * was running completes either way.
+   */
+  readonly onLifecycleFault?: ((fault: LifecycleFault) => void) | undefined;
+}
+
+/** A lifecycle hook, by name. See `ExtensionLifecycle` in `./types`. */
+export type LifecycleHookName = 'onActivate' | 'onDeactivate' | 'onRelease';
+
+/** One lifecycle hook that threw. */
+export interface LifecycleFault {
+  /** The extension whose hook threw. */
+  readonly extensionId: string;
+  readonly hook: LifecycleHookName;
+  /** Whatever was thrown, untouched. It is plug-in data; inspect it guardedly. */
+  readonly error: unknown;
+}
+
+/**
+ * What was thrown, in words, without trusting it: an `Error`'s message, or the
+ * value's string form, or — when reading either throws — its type.
+ */
+function describeThrown(error: unknown): string {
+  try {
+    return error instanceof Error ? String(error.message) : String(error);
+  } catch {
+    return `a value of type "${typeof error}" that could not be read`;
+  }
 }
 
 /**
@@ -316,6 +357,7 @@ export interface ShellHostProviderProps {
 export function ShellHostProvider({
   children,
   store: suppliedStore,
+  onLifecycleFault,
 }: ShellHostProviderProps): ReactElement {
   const registry = useRegistry();
   const revision = useRegistryRevision();
@@ -507,6 +549,110 @@ export function ShellHostProvider({
     publishForeground(held !== undefined && held.active === current ? current : null);
   }, [live, publishForeground]);
 
+  // Kept in a ref so the controller's identity does not move with the prop; read
+  // at the moment of the fault. Assigned in a layout effect rather than during
+  // render, so a render React throws away cannot install a reporter.
+  const faultReporter = useRef(onLifecycleFault);
+  useLayoutEffect(() => {
+    faultReporter.current = onLifecycleFault;
+  }, [onLifecycleFault]);
+
+  /**
+   * Report a lifecycle hook that threw. Never throws: `console` is not the
+   * host's object (see the sweep effect's note), and the lifecycle step that was
+   * running has to complete either way.
+   */
+  const reportFault = useCallback((fault: LifecycleFault): void => {
+    try {
+      const report = faultReporter.current;
+      if (report !== undefined) {
+        report(fault);
+        return;
+      }
+      console.error(
+        `ShellHostProvider: extension "${fault.extensionId}" threw from lifecycle.${fault.hook}. The shell contained it to that extension's registration and carried on.`,
+        fault.error,
+      );
+    } catch {
+      // Reporting is best-effort. Completing the lifecycle step is not.
+    }
+  }, []);
+
+  /**
+   * Call `hook` on `entry`'s extension, if it declared one, containing a throw.
+   * Called with no `this`: a local binding, not a method call on the frozen
+   * `lifecycle` object.
+   */
+  const runHook = useCallback(
+    (entry: LiveEntry, hook: 'onDeactivate' | 'onRelease'): void => {
+      const declared = entry.active.blueprint.lifecycle?.[hook];
+      if (declared === undefined) {
+        return;
+      }
+      try {
+        declared();
+      } catch (error) {
+        reportFault({ extensionId: entry.active.id, hook, error });
+      }
+    },
+    [reportFault],
+  );
+
+  /**
+   * End one extension's liveness: `onRelease`, then revocation. ADR-0006
+   * decision 8, GitHub issue #17.
+   *
+   * **Out of the live map FIRST**, before any plug-in code runs, so an
+   * `onRelease` that re-enters — unregistering itself, say — finds nothing left
+   * to release and cannot run a second time. The handle does not consult this
+   * map, so it still works inside the hook: that is what "before revocation"
+   * buys the extension.
+   *
+   * **Revocation in a `finally`.** `runHook` contains a throw, so nothing should
+   * escape it; the `finally` makes "revokes even when it throws" a property of
+   * this function's shape rather than of that one's. *Tests:*
+   * `src/core/__tests__/lifecycle.test.tsx` — "calls onRelease before
+   * revocation, and revokes even when it throws".
+   */
+  const endLiveness = useCallback(
+    (id: string, entry: LiveEntry): void => {
+      live.delete(id);
+      try {
+        runHook(entry, 'onRelease');
+      } finally {
+        entry.revoke();
+        // The bookkeeping half of a teardown: a released extension's channels go
+        // with its handle. Leaving them would mean a scope that outlives the
+        // extension it belongs to, and a re-registration under the same id
+        // inheriting the previous vendor's published data.
+        payloads.clearScope(id);
+      }
+    },
+    [live, payloads, runHook],
+  );
+
+  /**
+   * Tell the extension leaving the foreground, if it is still the live one.
+   * `next` is what is about to be published: republishing the current
+   * foreground is not a loss, and a foreground whose live entry has gone or been
+   * replaced — an id unregistered and registered again in one handler — has no
+   * live handle left to be told through.
+   */
+  const deactivateOutgoing = useCallback(
+    (next: ActiveExtension | null): void => {
+      const previous = foreground.current;
+      if (previous === null || previous === next) {
+        return;
+      }
+      const outgoing = live.get(previous.id);
+      if (outgoing === undefined || outgoing.active !== previous) {
+        return;
+      }
+      runHook(outgoing, 'onDeactivate');
+    },
+    [live, runHook],
+  );
+
   const activate = useCallback(
     (id: string): ActivationResult => {
       const requested: unknown = id;
@@ -539,9 +685,14 @@ export function ShellHostProvider({
         // else registered under its id. Same key, different extension.
         //
         // Reached when no commit has separated the re-registration from this call
-        // — both inside one event handler, say — so the sweep effect below has not
-        // run yet. Without this the cached entry was returned and the host would
-        // render the OLD version's view components after a successful upgrade.
+        // AND this provider did not hear the unregister — which, since the
+        // before-unregister subscription below releases the entry itself, means
+        // one made before that subscription existed: a descendant's layout effect
+        // in the first commit. Without this the cached entry was returned and the
+        // host would render the OLD version's view components after a successful
+        // upgrade. *Tests:* `src/core/__tests__/lifecycle.test.tsx` — "still
+        // replaces a stale entry when activate runs before the provider
+        // subscribed".
         entry.revoke();
         live.delete(requested);
         payloads.clearScope(requested);
@@ -606,16 +757,59 @@ export function ShellHostProvider({
       // Re-activation reuses the entry, so an extension that is brought back to
       // the foreground gets the SAME handle it had before. A new one would
       // silently invalidate every reference the extension is holding.
+      const taking = foreground.current !== entry.active;
+      deactivateOutgoing(entry.active);
       publishForeground(entry.active);
+      // `onActivate` AFTER the publish, so the context the extension reads is
+      // already its own and a context key it writes is not wiped by the
+      // handover's clear. Only when the foreground actually moved to it.
+      const onActivate = taking ? blueprint.lifecycle?.onActivate : undefined;
+      if (onActivate !== undefined) {
+        try {
+          onActivate(entry.active.shell);
+        } catch (error) {
+          // CONTAINED to this extension's registration: its handle is released
+          // (`onRelease`, then revocation) and the foreground it had just taken
+          // is dropped. Its registration and every other extension's handle are
+          // untouched. The live-map check is for an `onActivate` that already
+          // ended its own liveness — unregistering itself — before it threw.
+          if (live.get(requested) === entry) {
+            endLiveness(requested, entry);
+          }
+          reportFault({ extensionId: requested, hook: 'onActivate', error });
+          reconcileForeground();
+          return {
+            ok: false,
+            error: new ShellUXError(
+              'LIFECYCLE_HOOK_THREW',
+              `activate: extension "${requested}" threw from lifecycle.onActivate, so its activation failed and its handle was released. It threw: ${describeThrown(error)}`,
+              'lifecycle.onActivate',
+            ),
+          };
+        }
+      }
       return { ok: true, active: entry.active };
     },
-    [isLive, live, payloads, publishForeground, registry, store, themes],
+    [
+      deactivateOutgoing,
+      endLiveness,
+      isLive,
+      live,
+      payloads,
+      publishForeground,
+      reconcileForeground,
+      registry,
+      reportFault,
+      store,
+      themes,
+    ],
   );
 
   const blur = useCallback((): void => {
     // Foreground only. Liveness is untouched, on purpose.
+    deactivateOutgoing(null);
     publishForeground(null);
-  }, [publishForeground]);
+  }, [deactivateOutgoing, publishForeground]);
 
   const release = useCallback(
     (id: string): boolean => {
@@ -647,17 +841,12 @@ export function ShellHostProvider({
       if (entry === undefined) {
         return false;
       }
-      entry.revoke();
-      live.delete(requested);
-      // The bookkeeping half of a teardown: a released extension's channels go
-      // with its handle. Leaving them would mean a scope that outlives the
-      // extension it belongs to, and a re-registration under the same id
-      // inheriting the previous vendor's published data.
-      payloads.clearScope(requested);
+      // `onRelease`, then revocation, then the channels. See `endLiveness`.
+      endLiveness(requested, entry);
       reconcileForeground();
       return true;
     },
-    [live, payloads, reconcileForeground],
+    [endLiveness, live, reconcileForeground],
   );
 
   const getActive = useCallback((): ActiveExtension | null => {
@@ -673,6 +862,43 @@ export function ShellHostProvider({
     }
     return current;
   }, [isLive]);
+
+  /**
+   * Inside every `unregister`, BEFORE the registry removes the record: release
+   * the extension if it is live against that record — so `onRelease` runs while
+   * its handle still works — and purge its store scope. ADR-0006 decision 8,
+   * GitHub issues #17 and #80.
+   *
+   * **Why here and not in the sweep below.** The handle is revoked the moment
+   * the registry stops holding the record, so the sweep, which runs after the
+   * commit, is too late to call anything "before revocation"; and purging in the
+   * sweep would wipe what a NEW registration under the same id had already
+   * written in the same commit. The purge runs whether or not the extension was
+   * ever activated: a never-activated scope can still hold state written through
+   * the public store.
+   *
+   * **A layout effect**, because every layout effect in a commit runs before any
+   * passive one — so this is subscribed before a descendant's mount-time
+   * `useEffect` can register, activate and unregister. A descendant doing that
+   * from a LAYOUT effect would run first and get only the sweep's revocation,
+   * without `onRelease` or the purge; nothing in this repository does. The
+   * disposer makes StrictMode's simulated remount a clean unsubscribe and
+   * resubscribe.
+   *
+   * *Tests:* `src/core/__tests__/lifecycle.test.tsx` — "unregister purges the
+   * scope's badges and context keys".
+   */
+  useLayoutEffect(
+    () =>
+      registry.onBeforeUnregister((id, record): void => {
+        const entry = live.get(id);
+        if (entry !== undefined && entry.active.blueprint === record) {
+          endLiveness(id, entry);
+        }
+        store.purgeScope(id);
+      }),
+    [endLiveness, live, registry, store],
+  );
 
   /**
    * Unregistering an extension ends its liveness — this is the BOOKKEEPING half.
