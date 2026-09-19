@@ -132,12 +132,13 @@ describe('App', () => {
     function Probe(): null {
       const registry = useRegistry();
       // Registration mutates the registry's revision state on success
-      // (`bumpRevision()`), so it belongs in an effect, not in render — the
+      // (`bumpRevision()`), so it runs in an effect, not in render — the
       // same convention `capability.test.tsx`'s `MountingExtension` uses for
-      // a mount-time `registry.register()` call. It happens to be safe to
-      // call from render in THIS test only because this particular blueprint
-      // is refused before any state mutation is reached, which is incidental
-      // to what the test is checking, not a reason to write it this way.
+      // a mount-time `registry.register()` call. Calling it from render
+      // instead would risk "Cannot update a component while rendering a
+      // different component"; an earlier revision of this test did exactly
+      // that, and it went unnoticed only because this specific blueprint is
+      // refused before the mutation is reached.
       useEffect(() => {
         outcome = registry.register(makeBlueprint({ lifecycle: { onRelease: () => undefined } }));
       }, [registry]);
