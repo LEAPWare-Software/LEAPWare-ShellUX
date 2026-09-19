@@ -35,14 +35,55 @@ console.log(`entry_point_validation_named=${/ENTRY-POINT VALIDATION/.test(pkg) ?
 // (`${argv} exited ${status}: ${stderr.slice(0, 400)}`). A first attempt wrote the same
 // diagnostic to stderr while still exiting 0, and it reached no log at all. So the most
 // useful 400 characters come first, and the volume goes after them.
+// A zero exit is NOT enough, and taking it as enough is how this check passed vacuously
+// for two review rounds. `vitest run <file> -t <title>` with a title that matches nothing
+// skips every test in the file and still exits 0. Measured on 2026-09-19 against this
+// tree:
+//
+//   $ node node_modules/vitest/vitest.mjs run electron/__tests__/pluginPackage.test.ts \
+//       -t 'THIS-TITLE-DOES-NOT-EXIST-XYZ'
+//   Tests  32 skipped (32)          exit 0
+//
+// So renaming or deleting either named test left this row green with its evidence gone —
+// the same shape as the vacuous-citation trap in `docs/traps.md`, one layer further out.
+// `--passWithNoTests=false` does not close it (measured: still exit 0, still 32 skipped);
+// it governs finding no test FILES, not finding no matching title.
+//
+// The signal that does distinguish the cases is the JSON reporter's own count. Same two
+// runs, measured: a matching title gives `numPassedTests: 1`, a non-matching one gives
+// `numPassedTests: 0` with `numPendingTests: 32`. So the row now requires that the named
+// test actually RAN and PASSED, not merely that vitest was content.
 const vitestJs = path.join('node_modules', 'vitest', 'vitest.mjs');
 const failures = [];
+/** The JSON reporter's summary object, or null when the output is not parseable. */
+function summaryOf(stdout) {
+  const brace = (stdout ?? '').indexOf('{');
+  if (brace < 0) return null;
+  try {
+    return JSON.parse((stdout ?? '').slice(brace));
+  } catch {
+    return null;
+  }
+}
 function runNamedTest(file, title) {
-  const result = spawnSync(process.execPath, [vitestJs, 'run', file, '-t', title], {
-    encoding: 'utf8',
-    timeout: 120_000,
-  });
-  if (result.status === 0) return true;
+  const result = spawnSync(
+    process.execPath,
+    [vitestJs, 'run', file, '-t', title, '--reporter=json'],
+    { encoding: 'utf8', timeout: 120_000 },
+  );
+  const summary = summaryOf(result.stdout);
+  const passed = Number(summary?.numPassedTests ?? 0);
+  const failed = Number(summary?.numFailedTests ?? 0);
+  if (result.status === 0 && summary && passed >= 1 && failed === 0) return true;
+  if (result.status === 0 && summary && passed === 0) {
+    failures.push(
+      `${path.basename(file)}: no test matched ${JSON.stringify(title)} — ` +
+        `numPassedTests=0, numTotalTests=${summary.numTotalTests ?? '?'}, ` +
+        `numPendingTests=${summary.numPendingTests ?? '?'}. The named test was renamed, ` +
+        `deleted or moved; vitest exits 0 when a -t filter matches nothing.`,
+    );
+    return false;
+  }
   const firstError = (text) =>
     (text ?? '')
       .split(/\r?\n/)

@@ -24,19 +24,24 @@ from so a reader can check it.
 
   The enqueue is pinned to that head commit. The workflow also fires on a late reviewer comment and on a lane label, and it always runs the default branch's code. The queue then re-runs every required check. It is a guardrail: every routine posts under the owner's login, so the comment proves a review exists at that head, not which routine wrote it. *Tests:* "ignores a forged review comment from any other account", "lets a later rejection at the same head win over an earlier MERGE", "refuses a head that moved since the triggering run", "calls gh pr merge --squash --auto pinned to the head only when ready". **Not proven yet:** that a merge-queue entry made by the workflow's own token gets its checks run. The first live cloud PR proves it or refutes it.
 
-- **Gate 4 is approved, and the approval is recorded where a routine cannot have written
-  it** (D-53; register row C-24; the question was #189). D-45 recorded an owner approval
-  of the six gate-4 screens on 2026-09-18 which the owner did not recognise on
-  2026-09-19. A gate sign-off and the reversal of an owner decision row are both
-  owner-only, so no routine settled it either way: the conflict was filed as #189 and
-  gate 4 was treated as unapproved meanwhile, which blocked ADR-0006 step 9 and redesign
-  wave 4. The owner answered #189 on 2026-09-19 and approved the screens. **D-53 carries
-  that answer and is the row the approval now rests on**; D-45 stands as written, because
-  the answer confirmed it rather than contradicting it. C-24 is restored from the retired
-  rows and now checks D-53 as well as D-45 — that D-53 exists, that its caller is the
-  owner, and that it names the issue the answer arrived on — so the tick can no longer
-  rest on D-45 alone. Both ADR-0006 step 9 and wave 4 are unblocked by the answer, each
-  still subject to its own sequencing.
+- **Gate 4's approval is recorded on #189 and is NOT yet in the ledger, because the
+  answer does not say which screens it covers** (the question was #189; register row C-24
+  is unchanged by this change). D-45 recorded an owner approval of "the six gate-4
+  screens" on 2026-09-18 which the owner did not recognise on 2026-09-19. A gate sign-off
+  and the reversal of an owner decision row are both owner-only, so no routine settled it
+  either way: the conflict was filed as #189. The owner answered there on 2026-09-19 and
+  approved gate 4 — and the answer names *six* screens while
+  `docs/design/gate4/screens/canvas.json` numbers *nine* pages, published a day after
+  D-45 with the resolved critique and the D-48 state added, and not six screens plus
+  three state sheets. That discrepancy was raised on #189 at 14:24Z with three ways to
+  resolve it and is unanswered. **So this change writes no decision row, leaves C-24 and
+  D-45 exactly as they stand on `main`, and leaves ADR-0006 step 9 and redesign wave 4
+  blocked** — the answer's own ordering puts the row before the unblocking, and a row
+  that cannot name the screens it approves is not a row worth citing. An earlier draft of
+  this change added D-53 and re-cited C-24 to it; that was removed here rather than
+  landed, because it would have released blocked design work on a scope nobody has
+  settled. `docs/cloud/runbook.md` lane C item 5 owns finishing it: settle the count on
+  #189, then write the row naming the screens, then C-24 cites it, then the unblocking.
 
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security

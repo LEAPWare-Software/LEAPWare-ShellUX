@@ -16,7 +16,13 @@ useDefault = true
 # Scoped narrowly on purpose: only this one file, and only the exact
 # `key": "<identifier>"` shape the rule flags — so a real secret added anywhere else
 # in docs/claims.json, or under a different key spelling, still fails the scan.
+# `condition = "AND"` is load-bearing, not decoration. gitleaks' documented default for
+# an allowlist with several criteria is OR: without this line, `paths` alone would
+# allowlist EVERY finding in docs/claims.json, including a real secret that matched none
+# of the regexes. With AND, a finding is allowlisted only when it is in that file AND
+# matches the expectation-key shape — which is the narrow scope the comment above claims.
 [allowlist]
 description = "docs/claims.json 'key' field names are register expectation keys, not secrets"
+condition = "AND"
 paths = ['''^docs/claims\.json$''']
 regexes = ['''key":\s*"[A-Za-z0-9_.-]+"''']

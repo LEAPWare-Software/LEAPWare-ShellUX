@@ -37,8 +37,9 @@ with a merge queue.
 - **Start here:** [`docs/handoff/next-session.md`](docs/handoff/next-session.md) (the plan, done and not done) and issue #187 (the cloud run's live state).
 
 - Three cloud lanes run unattended under `docs/cloud/runbook.md` (on branch
-  `cloud/runbook` until #188 lands). Gate 4 is approved (D-53, the owner's answer on
-  #189), so ADR-0006 step 9 and wave 4 are no longer blocked on it.
+  `cloud/runbook` until #188 lands). Gate 4: the owner answered #189, but the answer
+  names six screens against a record of nine, so no row is written and step 9 and wave 4
+  stay blocked.
 
 ## The next step
 

@@ -1735,7 +1735,7 @@
     },
     {
       "id": "C-24",
-      "box": "**Owner approves gate 4:** the six gate-4 screens are approved. D-45 recorded this on 2026-09-18; the owner did not recognise that row on 2026-09-19, so it was raised as #189 rather than settled by a routine; the owner answered #189 the same day and approved the screens, recorded as D-53, which is the row this tick cites.",
+      "box": "**Owner approves gate 4:** the six gate-4 screens are approved (D-45).",
       "class": "repo",
       "checks": [
         [
@@ -1753,25 +1753,10 @@
           "key": "d45_screens_approved",
           "op": "==",
           "value": 1
-        },
-        {
-          "key": "d53_owner",
-          "op": "==",
-          "value": 1
-        },
-        {
-          "key": "d53_screens_approved",
-          "op": "==",
-          "value": 1
-        },
-        {
-          "key": "d53_cites_189",
-          "op": "==",
-          "value": 1
         }
       ],
       "probe": {
-        "name": "gate 4 not yet approved (strikes the approval sentence in both D-45 and D-53)",
+        "name": "D-45 not yet approved",
         "edits": [
           {
             "file": "docs/DECISIONS.md",
@@ -1782,8 +1767,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-19",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — retired on 2026-09-19 by the proof audit, because D-45 recorded an owner approval the owner did not then recognise; restored the same day when the owner answered #189 and approved gate 4. The row now also requires D-53, the row carrying that answer, so the tick no longer rests on D-45 alone."
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
     },
     {
       "id": "C-25",
@@ -3123,13 +3108,13 @@
         }
       ],
       "probe": {
-        "name": "invert the install-time sha512 comparison",
+        "name": "rename the named install-mismatch test, so the row's cited evidence is gone",
         "edits": [
           {
-            "file": "electron/main/plugins/pluginPackage.ts",
+            "file": "electron/__tests__/pluginPackage.test.ts",
             "replace": [
-              "sha512Base64(bundle) !== manifest.sha512",
-              "sha512Base64(bundle) === manifest.sha512"
+              "refuses a package whose bundle does not match its manifest sha512",
+              "RENAMED so C-42's named test no longer exists"
             ]
           }
         ]

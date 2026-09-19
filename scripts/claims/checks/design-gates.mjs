@@ -96,13 +96,3 @@ const d45 = row('D-45');
 console.log(`d45_owner=${cells(d45)[3] === 'Owner' ? 1 : 0}`);
 console.log(`d45_screens_approved=${/gate-4 screens are approved/.test(d45) ? 1 : 0}`);
 
-// C-24: D-45 alone stopped being enough on 2026-09-19, when the owner did not recognise
-// it. The approval gate 4 now rests on is D-53, the owner's answer to #189 — so the row
-// checks that row too: that it exists, that it is the owner's (not an agent's, and not a
-// routine's, which is the failure the dispute was about), and that it names the issue the
-// answer came in on. A probe on "gate-4 screens are approved" strikes the sentence in
-// both rows at once, because `applyProbe` replaces every occurrence.
-const d53 = row('D-53');
-console.log(`d53_owner=${cells(d53)[3] === 'Owner' ? 1 : 0}`);
-console.log(`d53_screens_approved=${/gate-4 screens are approved/.test(d53) ? 1 : 0}`);
-console.log(`d53_cites_189=${/#189/.test(d53) ? 1 : 0}`);

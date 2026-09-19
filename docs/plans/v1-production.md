@@ -137,7 +137,7 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 - [x] **Gate 3:** write `DESIGN.md` with impeccable, from real `design/generate.mjs` output. It covers type scale, spacing, planes, states and motion, and no hand-written colour: every colour literal (hex, `rgb()`, `hsl()`, `oklch()`) also appears in the generated stylesheet, and every colour bound to a named CSS custom property in the body matches that property's generated value exactly. [C-23]
 - [ ] **Gate 4:** wireframe every 1.0 surface as a `design` canvas published as an artifact, using real token values: shell at rest, the pane-1 nav and rail, the pane-2 list with Direction B instrument rows, pane-3 detail with charts and the docked composer, the palette, the context bar and floating toolbar, empty/loading/error/crashed-plugin states, **the plugin manager (Step 6b)**, and each theme. Include benchmark side-by-sides against VS Code, Linear, Raycast and Outlook/Teams.
 - [ ] Impeccable critique pass on the wireframes by an agent that did not draw them (D3). Findings resolved on the canvas, not in code.
-- [x] **Owner approves gate 4:** the six gate-4 screens are approved. D-45 recorded this on 2026-09-18; the owner did not recognise that row on 2026-09-19, so it was raised as #189 rather than settled by a routine; the owner answered #189 the same day and approved the screens, recorded as D-53, which is the row this tick cites. [C-24]
+- [x] **Owner approves gate 4:** the six gate-4 screens are approved (D-45). [C-24]
 - [ ] Steps 4–6 and 6b's UI implement the approved wireframes, and a live impeccable pass on the running app checks the result against them.
 
 ## Step 4 — Redesign wave 2: charts  (4/4)  — `opus`, design discovery

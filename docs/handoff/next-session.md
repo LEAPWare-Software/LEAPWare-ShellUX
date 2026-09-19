@@ -56,7 +56,7 @@ nothing else counts.
 | 1 Record the decisions | 1/2 | strike D-27 in `docs/DECISIONS.md` with its reversal written; then item 1 can be ticked (it is currently false on that clause only) | agent |
 | 2 Context-file caps | 4/5 | the "jsdom is blind" body still has to move from `CLAUDE.md` to `docs/traps.md`, leaving a pointer behind. It is the half of C-09 the proof audit split off and left unticked, and the plan file heads this step `(4/5)` for it | agent |
 | 3 Go public | 11/15 | (a) the D-27 reversal write-up (same edit as step 1); (b) `SECURITY.md` reordered as the item says, with "1.x: latest release only"; (c) paste raw API responses on #74 and #103; (d) README top matter, long body moved to `docs/` | agent |
-| 3b Design gates 3 and 4 | 3/6 | the owner approved gate 4 on 2026-09-19 (answer on #189, recorded as D-53), so that item is ticked. What is left: the gate-4 wireframes and the critique exist as a published artifact but are **not recorded in the repo**, so neither can be ticked — PR #188 lands the canvas source, the PNGs and a README under `docs/design/gate4/`, and the rows follow it. The live impeccable pass on the running app comes after the UI steps | agent, owner looks |
+| 3b Design gates 3 and 4 | 3/6 | the owner approved gate 4 on 2026-09-19 (answer on #189), but the answer names six screens against a record of nine, so no decision row is written and that item is **not** ticked on the strength of it — #189 owns settling the count. What is left: the gate-4 wireframes and the critique exist as a published artifact but are **not recorded in the repo**, so neither can be ticked — PR #188 lands the canvas source, the PNGs and a README under `docs/design/gate4/`, and the rows follow it. The live impeccable pass on the running app comes after the UI steps | agent, owner looks |
 | 4 Charts | 4/4 | nothing | |
 | 5 Wave 3 | 3/4 | W3-2 to W3-8 (table below), then **the owner looks at the packaged app** | agent, owner |
 | 6 Wave 4 instrument layer | 0/3 | per-row series with threshold bands, list minimap, overview state; browser cases and `tokens:check`; owner views the packaged build | agent, owner |
@@ -79,7 +79,7 @@ nothing else counts.
 | 4 Plugin store, `/plugins/` route, sender-checked IPC | done (#182) | |
 | 5 Lifecycle hooks, `setNavigationTree`, `clearBadge`, scope purge; contract 1.1 | done (#185) | |
 | 6 Surface loader, fault reports, crash attribution, crash-loop breaker | **next** | decide first which document owns a plugin's hooks (#183); main cannot read a runtime nav tree yet (the store facade lacks `getNavigationTree`) |
-| 7 Move the three plugins to `plugins/*`, delete `FIXTURE_EXTENSIONS` | open | also resolves #153 (mocks in the packaged bundle) |
+| 7 Move the three plugins to `plugins/*`, delete `FIXTURE_EXTENSIONS` | open | also settles #153 (mocks in the packaged bundle) — deliberately not the closing keyword, because conductors copy these lines into PR bodies and GitHub's parser would shut an open issue |
 | 8 `plugin:check` and its CI job (#57) | open | |
 | 9 Plugin manager in host chrome, five states (D-48) | open | follow the approved gate-4 screen |
 | 10 Packaged-app end to end | open | install, appears, disable, gone, crash shows *crashed*, shell survives |
@@ -160,7 +160,7 @@ Two independent `lw-verifier` agents audited all 43 ticked rows at `904e8bc` on 
 - Items 15–32 (the underproven rows, the C-22 CTO wording, the C-24 and D-45 gate-4 question, and the gitleaks triage) were in progress when the laptop shut down. Their work in progress is committed on the same branch, **unverified**.
 - **The cloud lane C conductor finishes them first:** the item list is in `docs/cloud/runbook.md`.
 - #172 was milestoned v1.0.0.
-- C-24: the owner did not recognise the gate-4 approval recorded in D-45 on 2026-09-19, so it was raised as #189 rather than settled by a routine. **The owner answered #189 the same day and approved gate 4**; the answer is recorded as D-53 and C-24 is ticked citing it. ADR-0006 step 9 and redesign wave 4 are unblocked by that answer, each still subject to its own sequencing.
+- C-24: the owner did not recognise the gate-4 approval recorded in D-45 on 2026-09-19, so it was raised as #189 rather than settled by a routine. **The owner answered #189 the same day and approved gate 4** — but the answer names *six* screens while `docs/design/gate4/screens/canvas.json` numbers *nine* pages, and that discrepancy, raised on #189 at 14:24Z, is unanswered. So no decision row is written, C-24 and D-45 stand exactly as they are on `main`, and **ADR-0006 step 9 and redesign wave 4 stay blocked**. `docs/cloud/runbook.md` lane C item 5 owns finishing it.
 
 ## 6. How to report status
 
