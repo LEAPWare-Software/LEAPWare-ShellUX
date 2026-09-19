@@ -179,6 +179,125 @@ test.describe('pane 1 collapse to the icon rail', () => {
   });
 });
 
+/**
+ * ============================================================================
+ * W3-3 — THE 48px RAIL: 32px TARGETS, THE FALLBACK IDENTITY TILE, THE TOOLTIP.
+ * ============================================================================
+ * `docs/design/WAVE3-PLAN.md`'s W3-3 row. All three are geometric or painted
+ * facts a real browser has to measure: a target's real box against the real
+ * 48px track it must stay inside, a filled background colour, and whether a
+ * portalled tooltip survives the two `overflow-hidden` ancestors between the
+ * rail and the shell root. Mail's own tree (`src/mocks/MailPlugin.tsx`) is the
+ * fixture: its blueprint declares no `icon`, and neither does any of its four
+ * nodes, so every rail target here takes the fallback identity tile — this is
+ * the one existing e2e helper extension where that branch is the ONLY branch,
+ * with nothing to accidentally pass by exercising the icon branch instead.
+ * ============================================================================
+ */
+test.describe('the rail — 32px targets, the fallback identity tile and the tooltip', () => {
+  test('measures every rail target 32 by 32, fully inside the 48px track', async ({ page }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+    await page.getByRole('button', { name: 'Collapse navigation' }).click();
+
+    const track = page.locator('[data-shell-region="nav-track"]');
+    await expect(track).toBeVisible();
+    const trackBox = await track.boundingBox();
+    expect(trackBox).not.toBeNull();
+    expect(trackBox?.width).toBe(48);
+    const bounds = trackBox as { x: number; width: number };
+
+    // The extension row ("Mail") plus the four top-level nav nodes; the rail
+    // hides depth, so Archive's two children are never rendered here at all.
+    const targets = track.getByRole('button');
+    const count = await targets.count();
+    expect(count).toBeGreaterThanOrEqual(5);
+
+    for (let index = 0; index < count; index += 1) {
+      const target = targets.nth(index);
+      const label = (await target.textContent())?.trim() || `target ${index}`;
+      const box = await target.boundingBox();
+      expect(box, `"${label}" has no box`).not.toBeNull();
+      const measured = box as { x: number; width: number; height: number };
+
+      // Measured, not read off a class — `h-8 w-8` is a real Tailwind scale
+      // step and this is the check that it still resolves to 32px in a
+      // compiled stylesheet rather than only in the class list.
+      expect(measured.width, `"${label}" is not 32px wide`).toBeCloseTo(32, 0);
+      expect(measured.height, `"${label}" is not 32px tall`).toBeCloseTo(32, 0);
+
+      // Fully inside the 48px track, not merely a 32px box somewhere on the
+      // page — a target could measure 32px and still overhang the track's own
+      // edge if the surrounding padding were wrong.
+      expect(measured.x, `"${label}" starts left of the track`).toBeGreaterThanOrEqual(bounds.x);
+      expect(
+        measured.x + measured.width,
+        `"${label}" overhangs the track's trailing edge`,
+      ).toBeLessThanOrEqual(bounds.x + bounds.width);
+    }
+  });
+
+  test('paints the fallback identity tile with a filled background and a one-letter text node', async ({
+    page,
+  }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+    await page.getByRole('button', { name: 'Collapse navigation' }).click();
+
+    const track = page.locator('[data-shell-region="nav-track"]');
+    // `Sent` carries no badge and no children, so its accessible name is
+    // exactly its label and nothing else in its row can be mistaken for the
+    // tile — unlike `Inbox`, whose name also carries a seeded badge count.
+    const sent = track.getByRole('button', { name: 'Sent', exact: true });
+    await expect(sent).toBeVisible();
+
+    const tile = sent.locator('[aria-hidden="true"]').first();
+    await expect(tile).toBeVisible();
+    expect((await tile.textContent())?.trim()).toBe('S');
+
+    const painted = await tile.evaluate((node: Element) => {
+      const style = window.getComputedStyle(node);
+      return { backgroundColor: style.backgroundColor };
+    });
+    // A real fill. `rgba(0, 0, 0, 0)` is what a transparent background
+    // resolves to in every engine Playwright runs — Chromium included — and
+    // is exactly what the bare monogram span painted before this change: no
+    // background of its own, only whatever the button underneath it had.
+    expect(painted.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
+  test('shows an unclipped tooltip that owns its own centre point on hover', async ({ page }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+    await page.getByRole('button', { name: 'Collapse navigation' }).click();
+
+    const track = page.locator('[data-shell-region="nav-track"]');
+    const sent = track.getByRole('button', { name: 'Sent', exact: true });
+    await sent.hover();
+
+    // The track (48px) and the shell root above it are both `overflow-hidden`
+    // — see `ShellLayout.tsx`'s outer `<div>` and decision 2 — so an
+    // in-place tooltip has nowhere to paint. Radix's own default is
+    // `position: fixed` inside a `document.body` portal, which is what
+    // `clipReportOf` below is measuring the survival of.
+    const tooltip = page.getByRole('tooltip', { name: 'Sent' });
+    await expect(tooltip).toBeVisible();
+
+    const report = await clipReportOf(tooltip);
+    expect(report.visible.width, "the tooltip's visible box is empty").toBeGreaterThan(0);
+    expect(report.visible.height, "the tooltip's visible box is empty").toBeGreaterThan(0);
+    expect(report.ownsItsCentre, `a pointer aimed at the tooltip reached ${report.centreHit}`).toBe(
+      true,
+    );
+
+    // And it says nothing false: step 6c has not landed, so there is no
+    // shortcut text to read, and none is printed. `describeHotkey`'s output
+    // is always non-empty for a real chord, so an em dash or a blank line
+    // would be the honest absence and neither appears either.
+    expect(await tooltip.textContent()).toBe('Sent');
+  });
+});
+
 test.describe('layout persistence across a real reload', () => {
   test('brings back a pane size the user dragged', async ({ page }) => {
     await openShell(page);

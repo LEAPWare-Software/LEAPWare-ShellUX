@@ -152,7 +152,7 @@ under its probe is not a guard and is rewritten or deleted.
   mark and its word and the word clears 4.5:1 on the row in all three themes (probe:
   drop the mark).
 
-### W3-3 — Navigation tree and the 48px rail. Planned. Serialised on `ShellLayout.tsx`.
+### W3-3 — Navigation tree and the 48px rail. **BUILT.** Serialised on `ShellLayout.tsx`.
 
 - R4. Current node: `--text-primary` on `--accent-subtle`; children indent with a 1px
   guide rule. The rail: 32px square targets, a tooltip with the plugin title and its
@@ -166,6 +166,24 @@ under its probe is not a guard and is rewritten or deleted.
   the track's `overflow-hidden`).
 - The tooltip's shortcut text comes from `describeHotkey`, which is step 6c's first
   item. Until 6c lands the tooltip shows the title alone, and says nothing false.
+- **Built as planned, with one deviation recorded rather than silently taken.**
+  `REDESIGN-SPEC.md` finding #10 asks for `navSelectedBorder` — the row's full 1px
+  outline — to be dropped alongside the fill move, carrying W3-2's reading of R7 ("no
+  side stripe, no outline") from list rows to the tree; this row's own text does not
+  say so, so it is recorded here as an interpretation rather than a quotation, the
+  same way W3-2 flagged its own outline removal. The badge and the metric glyph are
+  unchanged by this increment — decisions 7 and 8 in `ShellLayout.tsx`'s banner
+  already governed them and neither needed a new token. `@radix-ui/react-tooltip`
+  (a dependency with zero consumers before this change) is the tooltip's mechanism,
+  portalled to `document.body` for the same reason `ContextBar.tsx`'s overflow menu
+  already is: the rail track and the shell root above it are both `overflow-hidden`.
+  The 48px track's width moved from an inline style to `TOKEN_CLASS.railWidth`
+  (`--rail-w`); `PANE_PX.navCollapsed` in `paneSizing.ts` (owned by W3-0) is
+  unchanged and is now a second, JS-side home for the number 48, kept equal by
+  convention and not by a check — the same limit W3-2 already accepted for
+  `ROW_HEIGHT_COMFORTABLE`. `design/check-contrast.mjs`'s `--accent-subtle` entry in
+  `UNBUILT_BACKGROUNDS` is removed, since this is the change that gives it its first
+  shipped consumer; see `CHANGELOG.md` for the full test citations.
 
 ### W3-4 — Pane headers and the focused-region rule. Planned. Serialised on `ShellLayout.tsx`.
 
