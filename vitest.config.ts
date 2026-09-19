@@ -75,6 +75,12 @@ export default defineConfig({
         // bump rule. A widening: plugin-facing code is gated from the commit
         // that creates it.
         'src/sdk/**/*.{ts,tsx}',
+        // ADR-0006 step 3: the package validator and the `hostApiVersion`
+        // rule. The first `electron/**` root under the gate, and a widening:
+        // every main-process module that reads a plugin is gated from the
+        // commit that creates it. Its tests live in `electron/__tests__/`,
+        // outside this root, so no exclude is needed.
+        'electron/main/plugins/**/*.ts',
       ],
       exclude: [
         'src/core/**/__tests__/**',

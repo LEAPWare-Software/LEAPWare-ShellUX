@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import type { ReactElement } from 'react';
 import type { CommandEntry } from '../../core/commands/CommandRegistry';
 import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
-import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
+import { resolveShellIcon } from '../ui/resolveShellIcon';
 
 /**
  * ============================================================================
@@ -115,7 +115,7 @@ export interface CommandRowProps {
 export function CommandRowContent({ entry }: { readonly entry: CommandEntry }): ReactElement {
   return (
     <>
-      {SHELL_ICONS.get(entry.icon) ?? FALLBACK_ICON}
+      {resolveShellIcon(entry.icon)}
       <span className="truncate">{entry.label}</span>
     </>
   );
