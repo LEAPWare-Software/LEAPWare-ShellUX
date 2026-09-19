@@ -5,9 +5,12 @@
  * Every test below injects its own `runGh` — a plain function of
  * (argv, input) => {status, stdout, stderr} — in place of `defaultGhRunner`.
  * `run()` (and the smaller functions it calls) take that function as a
- * parameter for exactly this reason: `test:scripts` runs on every CI leg,
- * this repository is currently private, and a test that shelled out for real
- * would either need a live GitHub token in CI or would silently no-op on one.
+ * parameter for exactly this reason: `test:scripts` runs on every CI leg, and a
+ * test that shelled out for real would either need a live GitHub token in CI or
+ * would silently no-op on one. (The original reason given here was that the
+ * repository is private. It is public now — D-43 — so that reason is gone and
+ * the real one is stated instead: this script's whole job is the ordering check
+ * before a mutating API call, and a test of it must not depend on a token.)
  * Neither is acceptable for a script whose whole job is the ordering check
  * before a mutating API call.
  *
