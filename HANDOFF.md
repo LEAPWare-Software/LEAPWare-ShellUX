@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `cfeed0a` (#190, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `713c97b` (#196, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -27,6 +27,7 @@ with a merge queue.
 - Cloud lanes can merge: the auto-queue workflow (#192, lane C item 0a).
 - The cloud runbook, the `lw-*` roles and the gate-4 record (#188, D-52).
 - The proof audit: false claims corrected, checks tightened (#190).
+- Auto-queue enables auto-merge with the AUTO_QUEUE_TOKEN secret (#196).
 - This change: D-54, plugin lifecycle-hook ownership enforced at the registry
   door (`runsPluginCode`), ADR-0006 decision 6 amendment, issue #183, lane A.
 
