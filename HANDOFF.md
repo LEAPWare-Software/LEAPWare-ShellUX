@@ -49,7 +49,8 @@ with a merge queue.
 
 - **v1.0.0 waits for LEAPWare BuildCraft** (D-39): readiness bar R1 to R7 in
   [`docs/sdlc.md`](docs/sdlc.md). There is no 1.0 date.
-- Steps run one at a time: every landing edits this file and `CHANGELOG.md`.
+- Steps run one at a time (cloud lanes excepted, D-52): every landing edits this file
+  and `CHANGELOG.md`.
 - Merge with `gh pr merge <n> --squash --auto`; it enters the queue.
 - One git writer in the main tree. Throwaway worktrees go in a `.workspaces/`
   directory beside the repository.
