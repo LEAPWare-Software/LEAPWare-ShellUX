@@ -209,6 +209,62 @@ describe('the store scope bound', () => {
     expect(refusal(() => store.setBadgeCount('two-more', 'node', 1))[0]).toBe('PAYLOAD_TOO_LARGE');
   });
 
+  it("refuses a new scope through an extension's own handle once 1024 are held", () => {
+    const { result } = renderHook(
+      (): Harness => ({
+        registry: useRegistry(),
+        activation: useActivation(),
+        store: useShellStore(),
+      }),
+      { wrapper: Providers },
+    );
+    // The documented channel only: MAX_SCOPES registered extensions, each
+    // writing one badge through the handle activation minted for it.
+    const handles: ActiveExtension[] = [];
+    act(() => {
+      for (let index = 0; index <= STORE_LIMITS.MAX_SCOPES; index += 1) {
+        const id = `ext-${index}`;
+        expect(result.current.registry.register(makeBlueprint({ id })).ok).toBe(true);
+        const outcome = result.current.activation.activate(id);
+        if (!outcome.ok) {
+          throw outcome.error;
+        }
+        handles.push(outcome.active);
+      }
+      for (const active of handles.slice(0, STORE_LIMITS.MAX_SCOPES)) {
+        active.shell.setBadgeCount('root-a', 1);
+      }
+    });
+    const last = handles[STORE_LIMITS.MAX_SCOPES]!;
+
+    // The 1025th extension's first write is refused, at every door that can
+    // create a scope, and stores nothing.
+    expect(refusal(() => last.shell.setBadgeCount('root-a', 1))).toEqual(['PAYLOAD_TOO_LARGE', 'extensionId']);
+    expect(refusal(() => last.shell.setNavMetric('root-a', 0.5))).toEqual(['PAYLOAD_TOO_LARGE', 'extensionId']);
+    expect(refusal(() => last.shell.setContextKey('ready', true))).toEqual(['PAYLOAD_TOO_LARGE', 'extensionId']);
+    expect(refusal(() => last.shell.setNavigationTree([]))).toEqual(['PAYLOAD_TOO_LARGE', 'extensionId']);
+    expect(last.shell.getBadgeCount('root-a')).toBeUndefined();
+
+    // Unregistering one frees its scope, and the refused extension can write.
+    act(() => {
+      result.current.registry.unregister('ext-0');
+      last.shell.setBadgeCount('root-a', 2);
+    });
+    expect(last.shell.getBadgeCount('root-a')).toBe(2);
+  });
+
+  it("lets any holder of the store purge another extension's scope, across the wire too", () => {
+    const { host, active } = activated();
+    act(() => {
+      active.shell.setBadgeCount('root-a', 4);
+    });
+    // Not mail-ext's handle: the public store, naming mail-ext's scope.
+    act(() => {
+      host.current.store.purgeScope('mail-ext');
+    });
+    expect(active.shell.getBadgeCount('root-a')).toBeUndefined();
+  });
+
   it('purgeScope notifies once when it removed something, and not at all when it did not', () => {
     const store = createShellStateStore();
     const listener = vi.fn();

@@ -266,12 +266,18 @@ repository *claims* otherwise is genuinely valuable — see below.
   that names 1024 made-up scopes through the public `useShellStore()` fills it,
   after which a scope that holds nothing yet — a newly registered extension's
   first badge, say — is refused until something is purged, and any holder can
-  also `purgeScope` a sibling's scope. Through an extension's own facade only its
-  own scope is reachable, and `unregister` frees it, so the documented channel
-  cannot reach the bound unless more than 1023 extensions are registered and
-  writing at once. *Tests:* `src/core/__tests__/navigationTree.test.tsx` —
-  "refuses a scope beyond MAX_SCOPES through the public store, and frees one on
-  purge".
+  also `purgeScope` a sibling's scope, in one renderer or over the replicated
+  store's wire. Through an extension's own facade only its own scope is
+  reachable, and `unregister` frees it, so the documented channel reaches the
+  bound only when more than 1023 extensions are registered and writing at once —
+  and then the 1025th extension's own `setBadgeCount`, `setNavMetric`,
+  `setContextKey` and `setNavigationTree` are refused. *Tests:*
+  `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
+  MAX_SCOPES through the public store, and frees one on purge", "refuses a new
+  scope through an extension's own handle once 1024 are held" and "lets any
+  holder of the store purge another extension's scope, across the wire too";
+  `src/core/ipc/__tests__/replicaStore.test.ts` — "lets any holder of the store
+  purge another extension's scope, across the wire too".
 - **`unregister` has no authorisation model.** Any holder of the registry can
   remove any extension, including one it did not register. This is an accepted
   scope decision (ADR-0001 Amendment B), not an oversight: an extension motivated

@@ -709,6 +709,51 @@ store-level `MAX_SCOPES` is the step-5 entry-point validation for it.
 > `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
 > MAX_SCOPES through the public store, and frees one on purge", "clearBadge
 > deletes the entry rather than writing zero".
+>
+> **2026-09-19, step 5 review fixes.**
+>
+> *Why the scope bound stays a minor.* It is observable through an extension's
+> own handle: the first write of the 1025th extension to hold state is refused
+> with `PAYLOAD_TOO_LARGE` by `setBadgeCount`, `setNavMetric`, `setContextKey`
+> (1.0 members) and `setNavigationTree`, now documented on each. That is a new
+> error path on existing members, and decision 3's rule has **no row for error
+> codes** — `apiSurface.ts` compares names, keys, allowlists and
+> `REGISTRY_LIMITS`, so the baseline did not and would not catch this; review
+> did. It stays 1.1 on a judgement: reaching it through the documented channel
+> needs more than 1023 extensions registered and writing at once, against three
+> first-party plugins under D-23. *Tests:*
+> `src/core/__tests__/navigationTree.test.tsx` — "refuses a new scope through an
+> extension's own handle once 1024 are held".
+>
+> *Re-entry is refused, not deferred.* While any lifecycle hook runs, the
+> controller's `activate` returns `LIFECYCLE_REENTRY` and `blur`/`release` throw
+> it; a deferred call would be answered with a result it did not get.
+> `registry.unregister` is not refused (it is not the controller, and a plug-in
+> unregistering itself is ordinary), so `activate` re-checks liveness after
+> `onDeactivate` and after `onActivate` and returns `REVOKED` instead of `ok` for
+> an extension a hook unregistered. *Tests:* `src/core/__tests__/lifecycle.test.tsx`
+> — "refuses an activate made from inside onDeactivate, and the outer handover
+> completes", "does not report ok for an extension whose onActivate unregistered
+> it", "does not publish an extension that the outgoing onDeactivate
+> unregistered".
+>
+> *Async hooks are reported, not awaited.* Hooks stay typed `=> void`, which an
+> `async` function satisfies; a returned object with a callable `then` gets a
+> rejection handler that reports through `onLifecycleFault`. A late rejection
+> changes no activation result and delays no revocation. *Tests:*
+> `src/core/__tests__/lifecycle.test.tsx` — "reports an async hook's rejection
+> through the fault path, without awaiting it".
+>
+> *The pre-subscription gap, narrowed and its remainder stated.* The sweep now
+> purges the scope of a stale live entry whose id is no longer registered.
+> What remains: such an extension gets no `onRelease`; a scope written only
+> through the public store for an extension never activated is not purged, stays
+> held and counts toward `MAX_SCOPES`; and when the id is registered again in the
+> same commit, the new registration inherits the old scope's badges, metrics,
+> context keys and tree. *Tests:* `src/core/__tests__/lifecycle.test.tsx` —
+> "purges late, in the sweep, for an unregister made before the provider
+> subscribed", "leaves the scope to a same-id re-registration made before the
+> provider subscribed, which inherits it".
 
 **#91 — decided as a 1.0 limit, not fixed.** `VirtualizedList` is **not** in the SDK
 barrel, so no packaged plugin can import it, and it has zero production consumers

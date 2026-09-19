@@ -378,6 +378,21 @@ describe('ReplicaStore — property 3 preface: echo suppression', () => {
     expect(board.violations).toEqual([]);
   });
 
+  it("lets any holder of the store purge another extension's scope, across the wire too", () => {
+    const board = shell();
+    const paneTwo = board.pane('pane2');
+    const paneThree = board.pane('pane3');
+    // Pane 2's extension writes its badge; pane 3 — any other holder — purges
+    // that scope, and main and pane 2 apply it. Nothing checks who owns a scope.
+    paneTwo.store.setBadgeCount('mail', 'inbox', 7);
+    board.settle();
+    paneThree.store.purgeScope('mail');
+    board.settle();
+    expect(board.main.getBadgeCount('mail', 'inbox')).toBeUndefined();
+    expect(paneTwo.store.getBadgeCount('mail', 'inbox')).toBeUndefined();
+    expect(board.violations).toEqual([]);
+  });
+
   it('posts the normalised tree it kept, not the caller’s array', () => {
     const pane = loneReplica();
     const nodes = [{ id: 'inbox', label: 'Inbox', stray: 'dropped' }];

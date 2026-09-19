@@ -885,6 +885,14 @@ export interface ExtensionViews {
  * containment, not isolation: every plug-in runs in one realm and there is no
  * boundary between them (ADR-0001 Amendment E).
  *
+ * **Hooks are synchronous calls.** A hook that returns a promise (an `async`
+ * function) is not awaited; a rejection is reported to the host like a throw,
+ * after the fact. A hook that reaches the host's activation controller and calls
+ * `activate`, `blur` or `release` is refused with `LIFECYCLE_REENTRY`. *Tests:*
+ * `src/core/__tests__/lifecycle.test.tsx` — "reports an async hook's rejection
+ * through the fault path, without awaiting it" and "refuses an activate made
+ * from inside onDeactivate, and the outer handover completes".
+ *
  * There is deliberately **no `onRegister`**: activation mints the handle
  * (ADR-0001 Amendment C), so a hook at registration would have nothing to act
  * through. A never-activated extension still cannot publish an opening badge —
@@ -1178,8 +1186,15 @@ export interface IShellAPI {
    *   `INVALID_ID` when `key` is not a registry-valid identifier;
    *   `INVALID_FIELD` when `value` is not a finite `number`, `string`, `boolean`
    *   or `null`; `PAYLOAD_TOO_LARGE` when a `string` value is too long or the key
-   *   would be one too many; `REENTRANT_NOTIFY` from the notification cascade,
-   *   after the key is committed.
+   *   would be one too many, and `PAYLOAD_TOO_LARGE`, since host contract 1.1, when this is the first write
+   *   under your scope and the shell store already holds state for
+   *   `STORE_LIMITS.MAX_SCOPES` (1024) scopes — reachable through your own handle
+   *   only when that many other scopes are held, e.g. as one of more than 1023
+   *   extensions registered and writing, and pinned by "refuses a new scope
+   *   through an extension's own handle once 1024 are held" in
+   *   `src/core/__tests__/navigationTree.test.tsx`; nothing is written then;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the key is
+   *   committed.
    */
   setContextKey(key: string, value: ContextKeyValue): void;
   /**
@@ -1212,8 +1227,14 @@ export interface IShellAPI {
    * @throws {ShellUXError} `REVOKED` when this handle's extension has been
    *   released or unregistered — checked first, so nothing is written; `INVALID_ID`
    *   when `nodeId` is not a registry-valid identifier; `INVALID_FIELD` when
-   *   `count` is not a non-negative safe integer; `REENTRANT_NOTIFY` when a
-   *   listener writes back to the store hard enough to run the notification
+   *   `count` is not a non-negative safe integer; `PAYLOAD_TOO_LARGE`, since host contract 1.1, when this is the first write
+   *   under your scope and the shell store already holds state for
+   *   `STORE_LIMITS.MAX_SCOPES` (1024) scopes — reachable through your own handle
+   *   only when that many other scopes are held, e.g. as one of more than 1023
+   *   extensions registered and writing, and pinned by "refuses a new scope
+   *   through an extension's own handle once 1024 are held" in
+   *   `src/core/__tests__/navigationTree.test.tsx`; nothing is written then;
+   *   `REENTRANT_NOTIFY` when a listener writes back to the store hard enough to run the notification
    *   cascade into its limit — raised AFTER the badge is committed, so this one
    *   rejection does not mean nothing happened. Pinned by "raises
    *   REENTRANT_NOTIFY from setBadgeCount, with the badge already committed" in
@@ -1296,7 +1317,8 @@ export interface IShellAPI {
    *   `register` raises for a bad `navigationTree` (`INVALID_FIELD`,
    *   `MISSING_FIELD`, `INVALID_ID`, `RESERVED_ID`, `DUPLICATE_ID`,
    *   `PAYLOAD_TOO_LARGE`), with the field path rooted at `nodes`;
-   *   `PAYLOAD_TOO_LARGE` when the store's scope bound refuses a new scope;
+   *   `PAYLOAD_TOO_LARGE` when the store's scope bound refuses a new scope, as
+   *   for `setBadgeCount`;
    *   `REENTRANT_NOTIFY` from the notification cascade, after the tree is
    *   stored.
    */
@@ -1331,9 +1353,16 @@ export interface IShellAPI {
    * @throws {ShellUXError} `REVOKED` when this handle's extension has been
    *   released or unregistered — checked first, so nothing is written;
    *   `INVALID_ID` when `nodeId` is not a registry-valid identifier;
-   *   `INVALID_FIELD` when `value` is not a finite number; `REENTRANT_NOTIFY`
-   *   when a listener drives the notification cascade into its limit — raised
-   *   AFTER the value is committed, the same asymmetry `setBadgeCount` has.
+   *   `INVALID_FIELD` when `value` is not a finite number; `PAYLOAD_TOO_LARGE`, since host contract 1.1, when this is the first write
+   *   under your scope and the shell store already holds state for
+   *   `STORE_LIMITS.MAX_SCOPES` (1024) scopes — reachable through your own handle
+   *   only when that many other scopes are held, e.g. as one of more than 1023
+   *   extensions registered and writing, and pinned by "refuses a new scope
+   *   through an extension's own handle once 1024 are held" in
+   *   `src/core/__tests__/navigationTree.test.tsx`; nothing is written then;
+   *   `REENTRANT_NOTIFY` when a listener drives the notification cascade into its
+   *   limit — raised AFTER the value is committed, the same asymmetry
+   *   `setBadgeCount` has.
    *   Pinned by "raises REENTRANT_NOTIFY from setNavMetric, with the value
    *   already committed" in `src/core/__tests__/navMetric.test.tsx`.
    */
@@ -1568,7 +1597,12 @@ export type ShellUXErrorCode =
    * An extension's `lifecycle.onActivate` threw, so its activation failed. The
    * message carries what was thrown, in words. See `ExtensionLifecycle`.
    */
-  | 'LIFECYCLE_HOOK_THREW';
+  | 'LIFECYCLE_HOOK_THREW'
+  /**
+   * `activate`, `blur` or `release` was called from inside a running lifecycle
+   * hook, and was refused. See `ShellHostProvider`'s `callHook`.
+   */
+  | 'LIFECYCLE_REENTRY';
 
 /**
  * Exhaustiveness pin for `SHELL_UX_ERROR_CODES`.
@@ -1589,6 +1623,7 @@ const SHELL_UX_ERROR_CODE_MEMBERS: Readonly<Record<ShellUXErrorCode, true>> = Ob
   REVOKED: true,
   REENTRANT_NOTIFY: true,
   LIFECYCLE_HOOK_THREW: true,
+  LIFECYCLE_REENTRY: true,
 });
 
 /**

@@ -339,8 +339,9 @@ export interface ShellStateStore {
    *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
    *   `INVALID_FIELD` when `count` is not a non-negative safe integer;
-   *   `REENTRANT_NOTIFY` from the notification cascade, after the badge is
-   *   committed.
+   *   `PAYLOAD_TOO_LARGE` when `extensionId` would be a scope beyond
+   *   `STORE_LIMITS.MAX_SCOPES`; `REENTRANT_NOTIFY` from the notification
+   *   cascade, after the badge is committed.
    */
   setBadgeCount(extensionId: string, nodeId: string, count: number): void;
   /**
@@ -377,8 +378,10 @@ export interface ShellStateStore {
    * `src/core/__tests__/navMetric.test.tsx`.
    *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
-   *   `INVALID_FIELD` when `value` is not a finite number; `REENTRANT_NOTIFY`
-   *   from the notification cascade, after the value is committed.
+   *   `INVALID_FIELD` when `value` is not a finite number; `PAYLOAD_TOO_LARGE`
+   *   when `extensionId` would be a scope beyond `STORE_LIMITS.MAX_SCOPES`;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the value is
+   *   committed.
    */
   setNavMetric(extensionId: string, nodeId: string, value: number): void;
   /**
@@ -452,8 +455,9 @@ export interface ShellStateStore {
    *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `key`;
    *   `INVALID_FIELD` when `value` is not a finite number, string, boolean or
-   *   `null`; `PAYLOAD_TOO_LARGE` when a string value is too long or the key
-   *   would exceed `REGISTRY_LIMITS.MAX_CONTEXT_KEYS`; `REENTRANT_NOTIFY` from
+   *   `null`; `PAYLOAD_TOO_LARGE` when a string value is too long, the key
+   *   would exceed `REGISTRY_LIMITS.MAX_CONTEXT_KEYS`, or `extensionId` would be
+   *   a scope beyond `STORE_LIMITS.MAX_SCOPES`; `REENTRANT_NOTIFY` from
    *   the notification cascade, after the key is committed.
    */
   setContextKey(extensionId: string, key: string, value: ContextKeyValue): void;

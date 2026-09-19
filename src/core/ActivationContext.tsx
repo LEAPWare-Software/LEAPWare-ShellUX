@@ -206,8 +206,15 @@ export interface ActivationController {
    * listener registered by plugin code runs inside that write; if it throws — or
    * if it writes back to the store hard enough to trip `REENTRANT_NOTIFY` — the
    * throw propagates out of here. The same is true of `blur` and `release`. A
-   * host that treats listeners as untrusted should guard the call; the honest
-   * statement is that this method invents no failure of its own.
+   * host that treats listeners as untrusted should guard the call.
+   *
+   * **Lifecycle hooks (host contract 1.1) add three failures, all returned, none
+   * thrown:** `LIFECYCLE_HOOK_THREW` when the extension's `onActivate` threw;
+   * `REVOKED` when a hook — its own `onActivate` or the outgoing extension's
+   * `onDeactivate` — unregistered it, so `ok` is never returned for a handle that
+   * is already dead; and `LIFECYCLE_REENTRY` when this is called from inside a
+   * running hook. A hook that throws is otherwise contained; see
+   * `ExtensionLifecycle`.
    */
   activate(id: string): ActivationResult;
   /**
@@ -219,6 +226,9 @@ export interface ActivationController {
    * Not total, for the same reason `activate` is not: dropping the foreground is a
    * store write, the store notifies synchronously, and `subscribe` is public — so a
    * plugin listener that throws comes straight back out of here. Pinned by a test.
+   *
+   * @throws {ShellUXError} `LIFECYCLE_REENTRY` when called from inside a running
+   *   lifecycle hook — refused before anything moves.
    */
   blur(): void;
   /**
@@ -237,6 +247,8 @@ export interface ActivationController {
    *
    * @returns `true` when an extension was live under `id`, `false` when there
    *   was nothing to release — including when `id` is not a string.
+   * @throws {ShellUXError} `LIFECYCLE_REENTRY` when called from inside a running
+   *   lifecycle hook — refused before anything is released.
    */
   release(id: string): boolean;
   /**
@@ -345,6 +357,21 @@ function describeThrown(error: unknown): string {
   } catch {
     return `a value of type "${typeof error}" that could not be read`;
   }
+}
+
+/**
+ * The failure `activate` returns when the extension it was activating stopped
+ * being live while a hook ran — its own `onActivate`, or the outgoing
+ * extension's `onDeactivate`, unregistered it. *Tests:*
+ * `src/core/__tests__/lifecycle.test.tsx` — "does not report ok for an extension
+ * whose onActivate unregistered it".
+ */
+function endedDuringActivation(id: string, hook: LifecycleHookName): ShellUXError {
+  return new ShellUXError(
+    'REVOKED',
+    `activate: extension "${id}" was unregistered while lifecycle.${hook} ran, so it was not activated and its handle is revoked.`,
+    'id',
+  );
 }
 
 /**
@@ -579,9 +606,83 @@ export function ShellHostProvider({
   }, []);
 
   /**
+   * How many lifecycle hooks are running right now. While it is above zero,
+   * `activate`, `blur` and `release` refuse with `LIFECYCLE_REENTRY` — see
+   * `callHook`.
+   */
+  const hookDepth = useRef(0);
+
+  /**
+   * Call one lifecycle hook with no `this`, counting it in `hookDepth`, and
+   * watch what it returns. A SYNCHRONOUS throw propagates to the caller, which
+   * decides what it costs; everything else is decided here.
+   *
+   * **Re-entry is refused, not deferred.** A hook that reaches the controller —
+   * which a plug-in is not handed, but host code or a reflective walk can be —
+   * and calls `activate`, `blur` or `release` would otherwise run a second
+   * handover inside the first: `activate` could recurse through two extensions'
+   * `onDeactivate`, or return `ok` for an extension that is no longer in the
+   * foreground. Deferring the call would hand it a result it asked for and did
+   * not get. So it is refused with a named error at the call, in the hook's own
+   * frame. `registry.unregister` is not refused — the registry is not this
+   * controller, and a plug-in calling it on itself is ordinary — and `activate`
+   * re-checks liveness after each hook instead. *Tests:*
+   * `src/core/__tests__/lifecycle.test.tsx` — "refuses an activate made from
+   * inside onDeactivate, and the outer handover completes".
+   *
+   * **An async hook is not awaited, and its rejection is not lost.** The hooks
+   * are typed `=> void`, which an `async` function satisfies, so a returned
+   * thenable is expected rather than exotic. When the value returned is an
+   * object with a callable `then`, a rejection handler is attached that reports
+   * through `reportFault` like a synchronous throw; reading `then` or calling it
+   * throwing is reported the same way. Nothing waits: an `onActivate` that
+   * rejects later does not un-fail or fail an activation already returned, and
+   * an `onRelease` that rejects later does not delay the revocation. *Tests:*
+   * `src/core/__tests__/lifecycle.test.tsx` — "reports an async hook's rejection
+   * through the fault path, without awaiting it".
+   */
+  const callHook = useCallback(
+    (extensionId: string, hook: LifecycleHookName, invoke: () => unknown): void => {
+      hookDepth.current += 1;
+      let returned: unknown;
+      try {
+        returned = invoke();
+      } finally {
+        hookDepth.current -= 1;
+      }
+      if (typeof returned !== 'object' || returned === null) {
+        return;
+      }
+      const onRejected = (error: unknown): void => {
+        reportFault({ extensionId, hook, error });
+      };
+      try {
+        const then: unknown = (returned as { then?: unknown }).then;
+        if (typeof then === 'function') {
+          (then as (fulfilled: undefined, rejected: (error: unknown) => void) => unknown).call(
+            returned,
+            undefined,
+            onRejected,
+          );
+        }
+      } catch (error) {
+        onRejected(error);
+      }
+    },
+    [reportFault],
+  );
+
+  /** The named refusal for a controller call made from inside a hook. */
+  function reentryError(method: string): ShellUXError {
+    return new ShellUXError(
+      'LIFECYCLE_REENTRY',
+      `${method}: called from inside an extension's lifecycle hook. A hook may not start another activation, blur or release while one is running; the call was refused and changed nothing.`,
+      null,
+    );
+  }
+
+  /**
    * Call `hook` on `entry`'s extension, if it declared one, containing a throw.
-   * Called with no `this`: a local binding, not a method call on the frozen
-   * `lifecycle` object.
    */
   const runHook = useCallback(
     (entry: LiveEntry, hook: 'onDeactivate' | 'onRelease'): void => {
@@ -590,12 +691,12 @@ export function ShellHostProvider({
         return;
       }
       try {
-        declared();
+        callHook(entry.active.id, hook, () => declared());
       } catch (error) {
         reportFault({ extensionId: entry.active.id, hook, error });
       }
     },
-    [reportFault],
+    [callHook, reportFault],
   );
 
   /**
@@ -655,6 +756,9 @@ export function ShellHostProvider({
 
   const activate = useCallback(
     (id: string): ActivationResult => {
+      if (hookDepth.current > 0) {
+        return { ok: false, error: reentryError('activate') };
+      }
       const requested: unknown = id;
       if (typeof requested !== 'string') {
         // Reported by type alone. The value is not stringified — a non-string id
@@ -759,14 +863,22 @@ export function ShellHostProvider({
       // silently invalidate every reference the extension is holding.
       const taking = foreground.current !== entry.active;
       deactivateOutgoing(entry.active);
+      if (live.get(requested) !== entry) {
+        // The outgoing extension's `onDeactivate` unregistered THIS one. Nothing
+        // live is left to publish; the outgoing extension was told it lost the
+        // foreground, so it loses it.
+        publishForeground(null);
+        return { ok: false, error: endedDuringActivation(requested, 'onDeactivate') };
+      }
       publishForeground(entry.active);
       // `onActivate` AFTER the publish, so the context the extension reads is
       // already its own and a context key it writes is not wiped by the
       // handover's clear. Only when the foreground actually moved to it.
       const onActivate = taking ? blueprint.lifecycle?.onActivate : undefined;
       if (onActivate !== undefined) {
+        const shell = entry.active.shell;
         try {
-          onActivate(entry.active.shell);
+          callHook(requested, 'onActivate', () => onActivate(shell));
         } catch (error) {
           // CONTAINED to this extension's registration: its handle is released
           // (`onRelease`, then revocation) and the foreground it had just taken
@@ -787,10 +899,17 @@ export function ShellHostProvider({
             ),
           };
         }
+        if (live.get(requested) !== entry) {
+          // `onActivate` returned normally after unregistering its own extension:
+          // the handle it was given is revoked, so `ok` would be a lie.
+          reconcileForeground();
+          return { ok: false, error: endedDuringActivation(requested, 'onActivate') };
+        }
       }
       return { ok: true, active: entry.active };
     },
     [
+      callHook,
       deactivateOutgoing,
       endLiveness,
       isLive,
@@ -806,6 +925,9 @@ export function ShellHostProvider({
   );
 
   const blur = useCallback((): void => {
+    if (hookDepth.current > 0) {
+      throw reentryError('blur');
+    }
     // Foreground only. Liveness is untouched, on purpose.
     deactivateOutgoing(null);
     publishForeground(null);
@@ -833,6 +955,9 @@ export function ShellHostProvider({
       // reports an unusable id rather than throwing for it. Pinned by "reports
       // false for a non-string id, without coercing it" in
       // `src/core/__tests__/dataflow.test.tsx`.
+      if (hookDepth.current > 0) {
+        throw reentryError('release');
+      }
       const requested: unknown = id;
       if (typeof requested !== 'string') {
         return false;
@@ -880,8 +1005,10 @@ export function ShellHostProvider({
    * **A layout effect**, because every layout effect in a commit runs before any
    * passive one — so this is subscribed before a descendant's mount-time
    * `useEffect` can register, activate and unregister. A descendant doing that
-   * from a LAYOUT effect would run first and get only the sweep's revocation,
-   * without `onRelease` or the purge; nothing in this repository does. The
+   * from a LAYOUT effect would run first and get only the sweep: revocation
+   * without `onRelease`, and a late purge only when the id is not registered
+   * again — a same-id re-registration inherits the old scope. Nothing in this
+   * repository does that; ADR-0006's step-5 review note states the remainder. The
    * disposer makes StrictMode's simulated remount a clean unsubscribe and
    * resubscribe.
    *
@@ -971,6 +1098,7 @@ export function ShellHostProvider({
     // DO NOT remove it from the dependencies because it looks unused — that
     // silently turns this sweep into a mount-only effect and an unregistered
     // extension keeps a live handle.
+    const purges: string[] = [];
     for (const [id, entry] of live) {
       // `isLive` itself, so the sweep's question and the facade's question cannot
       // drift apart. They used to differ because `isLive` also consulted a
@@ -981,6 +1109,16 @@ export function ShellHostProvider({
       entry.revoke();
       live.delete(id);
       payloads.clearScope(id);
+      // Normally the before-unregister listener has already purged this scope
+      // and this entry is not here. It is here when the unregister came before
+      // that listener was subscribed (see its note), and then the scope is purged
+      // late — unless the id is registered again, in which case the scope is the
+      // new registration's and is left alone. *Tests:*
+      // `src/core/__tests__/lifecycle.test.tsx` — "purges late, in the sweep, for
+      // an unregister made before the provider subscribed".
+      if (registry.getExtension(id) === undefined) {
+        purges.push(id);
+      }
     }
     // **Guarded, and this is the one call site a host cannot guard for itself.**
     // `reconcileForeground` publishes through the store, the store notifies
@@ -1011,19 +1149,29 @@ export function ShellHostProvider({
     // guard is one `try`, which is cheaper than the argument for omitting it.
     // Nothing is attempted in the handler: there is no second reporting channel
     // that is any more the host's than `console` is.
-    try {
-      reconcileForeground();
-    } catch (error) {
+    // Each store write guarded on its own, so one listener's throw neither skips
+    // the next purge nor the foreground re-publication.
+    const guarded = (work: () => void): void => {
       try {
-        console.error(
-          'ShellHostProvider: a shell store listener threw while the foreground was being re-published after a registry change. The registry sweep completed and the shell is still running; fix the listener. A listener is a signal to re-read the context, not a place to work in.',
-          error,
-        );
-      } catch {
-        // Reporting is best-effort. Staying mounted is not.
+        work();
+      } catch (error) {
+        try {
+          console.error(
+            'ShellHostProvider: a shell store listener threw while the foreground was being re-published after a registry change. The registry sweep completed and the shell is still running; fix the listener. A listener is a signal to re-read the context, not a place to work in.',
+            error,
+          );
+        } catch {
+          // Reporting is best-effort. Staying mounted is not.
+        }
       }
+    };
+    for (const id of purges) {
+      guarded(() => {
+        store.purgeScope(id);
+      });
     }
-  }, [isLive, live, payloads, reconcileForeground, revision]);
+    guarded(reconcileForeground);
+  }, [isLive, live, payloads, reconcileForeground, registry, revision, store]);
 
   const controller = useMemo<ActivationController>(
     () => ({ activate, blur, release, getActive }),

@@ -495,6 +495,152 @@ describe('onActivate and onDeactivate', () => {
   });
 });
 
+describe('re-entry and async hooks', () => {
+  it('refuses an activate made from inside onDeactivate, and the outer handover completes', () => {
+    const host = mountHost();
+    const inner: string[] = [];
+    register(
+      host,
+      makeBlueprint({
+        id: 'mail-ext',
+        lifecycle: {
+          onDeactivate: (): void => {
+            // Host code reaching the controller from inside a hook.
+            const outcome = host.current.activation.activate('mail-ext');
+            inner.push(outcome.ok ? 'ok' : outcome.error.code);
+            inner.push(codeOf(() => host.current.activation.blur()));
+            inner.push(codeOf(() => host.current.activation.release('db-ext')));
+          },
+        },
+      }),
+    );
+    register(host, makeBlueprint({ id: 'db-ext' }));
+    activate(host, 'mail-ext');
+    const db = activate(host, 'db-ext');
+
+    expect(inner).toEqual(['LIFECYCLE_REENTRY', 'LIFECYCLE_REENTRY', 'LIFECYCLE_REENTRY']);
+    // The outer activation is what happened, and nothing the refused calls asked for.
+    expect(host.current.activation.getActive()).toBe(db);
+    expect(() => db.shell.getContext()).not.toThrow();
+    // The guard is released once the hook returns.
+    expect(activate(host, 'mail-ext').id).toBe('mail-ext');
+  });
+
+  it('does not report ok for an extension whose onActivate unregistered it', () => {
+    const host = mountHost();
+    const onRelease = vi.fn();
+    let given: IShellAPI | null = null;
+    register(
+      host,
+      makeBlueprint({
+        id: 'mail-ext',
+        lifecycle: {
+          onActivate: (shell: IShellAPI): void => {
+            given = shell;
+            host.current.registry.unregister('mail-ext');
+          },
+          onRelease,
+        },
+      }),
+    );
+    let outcome: ReturnType<ActivationController['activate']> | null = null;
+    act(() => {
+      outcome = host.current.activation.activate('mail-ext');
+    });
+    const result = outcome as unknown as ReturnType<ActivationController['activate']>;
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : [result.error.code, result.error.field]).toEqual(['REVOKED', 'id']);
+    expect(onRelease).toHaveBeenCalledTimes(1);
+    expect(codeOf(() => (given as IShellAPI).getContext())).toBe('REVOKED');
+    expect(host.current.activation.getActive()).toBeNull();
+    expect(host.current.store.getContext().activeExtensionId).toBeNull();
+  });
+
+  it('does not publish an extension that the outgoing onDeactivate unregistered', () => {
+    const host = mountHost();
+    register(
+      host,
+      makeBlueprint({
+        id: 'mail-ext',
+        lifecycle: {
+          onDeactivate: (): void => {
+            host.current.registry.unregister('db-ext');
+          },
+        },
+      }),
+    );
+    register(host, makeBlueprint({ id: 'db-ext' }));
+    // db-ext is live before the handover, so the incoming entry is the one killed.
+    activate(host, 'db-ext');
+    activate(host, 'mail-ext');
+    let code: string | null = null;
+    act(() => {
+      const outcome = host.current.activation.activate('db-ext');
+      code = outcome.ok ? 'ok' : outcome.error.code;
+    });
+    expect(code).toBe('REVOKED');
+    expect(host.current.activation.getActive()).toBeNull();
+    expect(host.current.store.getContext().activeExtensionId).toBeNull();
+  });
+
+  it("reports an async hook's rejection through the fault path, without awaiting it", async () => {
+    const faults: LifecycleFault[] = [];
+    const host = mountHost((fault) => {
+      faults.push(fault);
+    });
+    const unreadableThen = Object.defineProperty({}, 'then', {
+      get(): never {
+        throw new Error('then getter');
+      },
+    });
+    register(
+      host,
+      makeBlueprint({
+        id: 'mail-ext',
+        lifecycle: {
+          onActivate: async (): Promise<void> => {
+            await Promise.resolve();
+            throw new Error('late activate');
+          },
+          onDeactivate: (): unknown => unreadableThen,
+          onRelease: (): unknown => ({ then: 'not callable' }),
+        },
+      }),
+    );
+    register(
+      host,
+      makeBlueprint({
+        id: 'db-ext',
+        lifecycle: {
+          onActivate: async (): Promise<void> => undefined,
+          onRelease: (): unknown => ({
+            then(): never {
+              throw new Error('then call');
+            },
+          }),
+        },
+      }),
+    );
+    const mail = activate(host, 'mail-ext');
+    // Not awaited: the activation succeeded and stays succeeded.
+    expect(host.current.activation.getActive()).toBe(mail);
+    activate(host, 'db-ext');
+    act(() => {
+      host.current.activation.release('mail-ext');
+      host.current.activation.release('db-ext');
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(faults.map((fault) => [fault.extensionId, fault.hook, (fault.error as Error).message])).toEqual([
+      ['mail-ext', 'onDeactivate', 'then getter'],
+      ['db-ext', 'onRelease', 'then call'],
+      ['mail-ext', 'onActivate', 'late activate'],
+    ]);
+  });
+});
+
 describe('the scope purge on unregister', () => {
   it("unregister purges the scope's badges and context keys", () => {
     const host = mountHost();
@@ -613,6 +759,69 @@ describe('before the provider subscribes', () => {
     expect(codeOf(() => handles[0]!.getContext())).toBe('REVOKED');
     expect(() => handles[1]!.getContext()).not.toThrow();
     expect(onRelease).not.toHaveBeenCalled();
+  });
+});
+
+describe('purging late', () => {
+  it('purges late, in the sweep, for an unregister made before the provider subscribed', () => {
+    let store: ShellStateStore | null = null;
+    function Early(): null {
+      const registry = useRegistry();
+      const activation = useActivation();
+      store = useShellStore();
+      useLayoutEffect(() => {
+        registry.register(makeBlueprint({ id: 'mail-ext' }));
+        const outcome = activation.activate('mail-ext');
+        if (outcome.ok) {
+          outcome.active.shell.setBadgeCount('root-a', 6);
+        }
+        registry.unregister('mail-ext');
+      }, [activation, registry]);
+      return null;
+    }
+    render(
+      <ExtensionRegistryProvider>
+        <ShellHostProvider>
+          <Early />
+        </ShellHostProvider>
+      </ExtensionRegistryProvider>,
+    );
+    expect((store as unknown as ShellStateStore).getBadgeCount('mail-ext', 'root-a')).toBeUndefined();
+  });
+});
+
+describe('the pre-subscription remainder', () => {
+  it('leaves the scope to a same-id re-registration made before the provider subscribed, which inherits it', () => {
+    let store: ShellStateStore | null = null;
+    let stale: IShellAPI | null = null;
+    function Early(): null {
+      const registry = useRegistry();
+      const activation = useActivation();
+      store = useShellStore();
+      useLayoutEffect(() => {
+        registry.register(makeBlueprint({ id: 'mail-ext', name: 'Vendor A' }));
+        const outcome = activation.activate('mail-ext');
+        if (outcome.ok) {
+          stale = outcome.active.shell;
+          stale.setBadgeCount('root-a', 6);
+        }
+        registry.unregister('mail-ext');
+        registry.register(makeBlueprint({ id: 'mail-ext', name: 'Vendor B' }));
+      }, [activation, registry]);
+      return null;
+    }
+    render(
+      <ExtensionRegistryProvider>
+        <ShellHostProvider>
+          <Early />
+        </ShellHostProvider>
+      </ExtensionRegistryProvider>,
+    );
+    // The stale handle is dead, but its badge is now vendor B's: the documented
+    // remainder of the gap (ADR-0006 step-5 review note), pinned so that closing
+    // it is a change somebody makes on purpose.
+    expect(codeOf(() => (stale as unknown as IShellAPI).getContext())).toBe('REVOKED');
+    expect((store as unknown as ShellStateStore).getBadgeCount('mail-ext', 'root-a')).toBe(6);
   });
 });
 

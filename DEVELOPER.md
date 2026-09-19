@@ -947,14 +947,14 @@ interface IShellAPI {
 | Member | Behaviour |
 |---|---|
 | `setSelectedItem(id)` | Sets — or clears, with `null` — the currently selected item, which surfaces as `RibbonContext.selectedItemId`. **This one throws.** The value is opaque to the host — it is your own item identifier, not a registry key, so it is *not* held to `EXTENSION_ID_PATTERN` and may be a GUID, a path or a number-as-string. Its **type** is enforced: anything that is neither a `string` nor `null` raises `ShellUXError` with code `INVALID_FIELD` and field `"id"`, and the context is left unchanged. |
-| `setBadgeCount(nodeId, count)` | Sets the badge count for one of your navigation nodes, **in your own scope** — see property 2 above. **This one throws.** It raises `ShellUXError` with code `INVALID_ID` when `nodeId` is not a string, or does not match the same allowlist and reserved-word rules the registry applied to your node ids, and code `INVALID_FIELD` when `count` is not a non-negative safe integer. Call it with values you control, or wrap it. **Since issue #12 it is also RENDERED.** The value used to reach no renderer at all — pane 1 drew the frozen blueprint field and nothing else — so a write appeared to do nothing. It now changes the sidebar for as long as your extension holds the foreground, in the expanded pane and in the collapsed 48px icon track alike, and it does so without a re-render of any other row. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a setBadgeCount write through a live IShellAPI change what the sidebar renders" and "shows a runtime badge in the collapsed 48px icon track too". |
+| `setBadgeCount(nodeId, count)` | Sets the badge count for one of your navigation nodes, **in your own scope** — see property 2 above. **This one throws.** It raises `ShellUXError` with code `INVALID_ID` when `nodeId` is not a string, or does not match the same allowlist and reserved-word rules the registry applied to your node ids, and code `INVALID_FIELD` when `count` is not a non-negative safe integer. Call it with values you control, or wrap it. **Since host contract 1.1 it can also raise `PAYLOAD_TOO_LARGE` for the scope bound:** the shell store holds state for at most 1024 extension scopes at once, and your first write is refused when that many are already held — which through your own handle means you are one of more than 1023 extensions registered and writing, or something filled the public store. *Test:* `src/core/__tests__/navigationTree.test.tsx` — "refuses a new scope through an extension's own handle once 1024 are held". **Since issue #12 it is also RENDERED.** The value used to reach no renderer at all — pane 1 drew the frozen blueprint field and nothing else — so a write appeared to do nothing. It now changes the sidebar for as long as your extension holds the foreground, in the expanded pane and in the collapsed 48px icon track alike, and it does so without a re-render of any other row. *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "lets a setBadgeCount write through a live IShellAPI change what the sidebar renders" and "shows a runtime badge in the collapsed 48px icon track too". |
 | `setSelectedItems(ids)` | Replaces the **whole** selection, which surfaces as `RibbonContext.selectedItemIds`; `selectedItemId` is recomputed from the last element in the same patch. **This one throws.** `ids` must be an array of distinct strings, at most `REGISTRY_LIMITS.MAX_SELECTED_ITEMS` of them; each element is opaque and type-checked exactly as `setSelectedItem`'s `id` is. **A repeated id is rejected, not deduplicated** — a selection holding the same row twice is your bug, and quietly returning a shorter selection than you asked for would hide it. The array is read once and stored as a frozen host-owned copy, so editing the array you passed afterwards changes nothing. `INVALID_FIELD` for a bad shape or a repeat, `PAYLOAD_TOO_LARGE` for the bound. *Tests:* `src/core/__tests__/shellApi.test.ts` — the "setSelectedItems validates its argument" group. |
 | `setActiveNavNode(nodeId)` | Sets — or clears, with `null` — the selected pane-1 navigation node, which surfaces as `RibbonContext.activeNavNodeId`. **This one throws.** Before issue #15 your extension could not navigate at all: the field was writable only by the host's own pane-1 click handler. Unlike `setSelectedItem`'s `id`, `nodeId` **is** a host lookup key and is held to the same allowlist and reserved words the registry applied to your node ids — `INVALID_ID` otherwise. It is **not** checked against your own tree, deliberately: name a node you do not own and you get a field none of your own rendering will match, which is the same posture `setSelectedItem` takes. *Tests:* `src/core/__tests__/shellApi.test.ts` — "setActiveNavNode validates its argument". |
 | `getBadgeCount(nodeId)` | Reads back the badge count for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure `setBadgeCount` is scoped by, so it reads back exactly what this handle can write and offers no parameter through which to name another extension's scope. Before issue #12 you could write a badge and had no way to read one, so a module wanting to increment its own count had to keep a shadow copy. *Test:* `src/core/__tests__/dataflow.test.tsx` — "reads back only its own scope, and offers no parameter to name another". |
 | `clearBadge(nodeId)` | **New in 1.1.** Removes the runtime badge for one of your nodes. It **deletes** the entry rather than writing `0`, so `getBadgeCount` answers `undefined` afterwards and pane 1 falls back to the `badgeCount` your blueprint declared, if any; write `0` when you mean "show none". Clearing a badge you never set changes nothing and notifies nobody. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped exactly as `setBadgeCount` is. *Tests:* `src/core/__tests__/navigationTree.test.tsx` — "clearBadge deletes the entry rather than writing zero"; `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the tree an extension set at runtime, and a cleared badge falls back to the declared count". |
 | `setNavigationTree(nodes)` | **New in 1.1.** Replaces your **whole** pane-1 tree at runtime — add a folder, remove one, rename one, reorder — without unregistering, so you keep your handle, the foreground and your mounted panes. **This one throws.** `nodes` goes through the same validator `register` runs over `navigationTree`, bounds included (512 nodes, 8 deep), and a tree `register` would refuse is refused here with the same code, the field path rooted at `nodes` (`nodes[0].children[1].id`); a refused tree leaves the previous one in place. What is stored is a deep-frozen copy; the array you passed is not kept. Your registered blueprint record does **not** change — the replacement is held by the shell store under your scope, and it is dropped when you are unregistered. `activeNavNodeId`, badges and metrics on a node you removed are left as they are: clear them yourself if they should go. Send the whole tree every time; there is no per-node add or rename, by decision (ADR-0006 decision 8). *Tests:* `src/core/__tests__/navigationTree.test.tsx` — "setNavigationTree re-normalises the whole tree at the door"; pane 1 drawing it, as DOM text only: `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the tree an extension set at runtime, and a cleared badge falls back to the declared count". Not verified in a browser. |
-| `setContextKey(key, value)` | Publishes one named primitive fact about your extension, which surfaces as `RibbonContext.contextKeys[key]` for your own predicates to branch on. **This one throws.** See "Context keys" below — it is a mechanism rather than a field, and it is worth reading before you reach for it. |
-| `setNavMetric(nodeId, value)` | Sets the live value of the metric glyph beside one of your navigation nodes, **in your own scope**, exactly as `setBadgeCount` is scoped. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid, `INVALID_FIELD` for a value that is not a finite number. `value` is **clamped** to `[0, 1]` and a non-finite one is **refused**: `1.4` is a scaling mistake with an obviously right answer, and `NaN` has none. It exists because a `NavigationMetric` declared in your blueprint is frozen at registration and could otherwise never move — the same defect issue #12 filed against badges. It overrides the declared `value` and **nothing else**, so a write to a node that declared no `metric` at all is stored, readable, and drawn by nobody: the host will not invent a `kind` or a `description` for you. *Tests:* `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "lets a setNavMetric write through a live IShellAPI change the glyph the sidebar draws" and "draws nothing for a runtime metric on a node that declared none". |
+| `setContextKey(key, value)` | Publishes one named primitive fact about your extension, which surfaces as `RibbonContext.contextKeys[key]` for your own predicates to branch on. **This one throws**, and the scope bound applies to it exactly as it does to `setBadgeCount`. See "Context keys" below — it is a mechanism rather than a field, and it is worth reading before you reach for it. |
+| `setNavMetric(nodeId, value)` | Sets the live value of the metric glyph beside one of your navigation nodes, **in your own scope**, exactly as `setBadgeCount` is scoped. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid, `INVALID_FIELD` for a value that is not a finite number. `value` is **clamped** to `[0, 1]` and a non-finite one is **refused**: `1.4` is a scaling mistake with an obviously right answer, and `NaN` has none. It exists because a `NavigationMetric` declared in your blueprint is frozen at registration and could otherwise never move — the same defect issue #12 filed against badges. It overrides the declared `value` and **nothing else**, so a write to a node that declared no `metric` at all is stored, readable, and drawn by nobody: the host will not invent a `kind` or a `description` for you. The scope bound applies here exactly as it does to `setBadgeCount`. *Tests:* `src/components/__tests__/ShellLayoutMetrics.test.tsx` — "lets a setNavMetric write through a live IShellAPI change the glyph the sidebar draws" and "draws nothing for a runtime metric on a node that declared none". |
 | `getNavMetric(nodeId)` | Reads back the clamped metric value for one of your navigation nodes, or `undefined` when none was ever set. **This one throws** — `INVALID_ID` for a `nodeId` that is not registry-valid. Scoped by the same closure the write half is, for the reason `getBadgeCount` gives: a scoped write with an unscoped read is not a scope. *Test:* `src/core/__tests__/navMetric.test.tsx` — "reads back only its own scope through getNavMetric". |
 | `publishPayload(channel, kind, data)` | Publishes one block of **structured** data on one of your channels, for your other pane to read. **This one throws.** This is the answer to "a context key can only hold a primitive" and it does not reverse that rule — see ADR-0001 Amendment L. The host takes a **deep copy** into null-prototype records and frozen arrays, so nothing of your object graph is retained and mutating what you passed afterwards changes nothing; your getters run exactly once, here. Leaves are `string | number | boolean | null`. Bounds: depth 6, 4096 nodes, 262144 host-accounted bytes, 32 channels per extension. **A cycle is rejected, never truncated.** `INVALID_ID` for a channel name that is not registry-valid, `INVALID_FIELD` for a bad `kind`, a non-primitive leaf, a cycle or a value that refuses to be read, `PAYLOAD_TOO_LARGE` for any bound. A rejected publish leaves the channel exactly as it was. |
 | `readPayload(channel)` | Reads the current payload on one of your channels, or `null`. **This one throws** — `INVALID_ID` for a bad channel. The returned object is the host's frozen copy and its **identity is stable** until the channel is republished, which is what makes it safe as a `useSyncExternalStore` snapshot. Compare `revision`, never the object: an identical republish DOES bump the revision and DOES notify, because the host does not deep-compare payloads. |
@@ -1097,7 +1097,22 @@ lifecycle: {
 | `onDeactivate()` | You lose the foreground to another extension or to `blur()`, before the new foreground is published. Not called on release. | Reported to the host; the handover continues — your hook cannot stop another extension taking the foreground. |
 | `onRelease()` | Immediately **before** your handle is revoked: on `release`, on `unregister` (so on disable and remove), and after a throwing `onActivate`. Synchronous. Not called if you were never activated, since you then hold no handle. | Reported to the host, and your handle is revoked anyway. *Test:* `src/core/__tests__/lifecycle.test.tsx` — "calls onRelease before revocation, and revokes even when it throws". |
 
-Four things to know:
+Six things to know:
+
+- **A hook may not start another activation.** If code inside a hook calls the
+  host's `activate`, `blur` or `release`, the call is refused with
+  `LIFECYCLE_REENTRY` and changes nothing. If your `onActivate` unregisters your
+  own extension, `activate` reports `REVOKED` rather than `ok`. *Tests:*
+  `src/core/__tests__/lifecycle.test.tsx` — "refuses an activate made from inside
+  onDeactivate, and the outer handover completes" and "does not report ok for an
+  extension whose onActivate unregistered it".
+- **An `async` hook is not awaited.** It satisfies the `=> void` type, and a
+  rejection of the promise it returns is reported to the host like a synchronous
+  throw — but after the fact: it cannot fail an activation that already
+  succeeded, and it does not delay revocation. Put the work that must finish
+  before your handle dies at the synchronous start of `onRelease`. *Test:*
+  `src/core/__tests__/lifecycle.test.tsx` — "reports an async hook's rejection
+  through the fault path, without awaiting it".
 
 - **"Contained" means contained to your own registration, not isolated.** Every
   extension runs in one page and there is no boundary between extensions (see
@@ -2032,6 +2047,10 @@ import { vi } from 'vitest';
 // Relative to src/extensions/my-ext/__tests__/ — three levels up is src/.
 import { deepFreeze } from '../../../core/ShellAPI';
 import type { IShellAPI, RibbonContext } from '../../../core/types';
+import type { ResolvedTheme } from '../../../core/theme/normalizeTheme';
+
+// Your own fixture: the resolved token set your views should see in tests.
+declare const theme: ResolvedTheme;
 
 const context: Readonly<RibbonContext> = Object.freeze({
   activeExtensionId: 'my-ext',
@@ -2048,22 +2067,34 @@ export function makeShellStub(): IShellAPI {
     setSelectedItem: vi.fn(),
     setSelectedItems: vi.fn(),
     setActiveNavNode: vi.fn(),
+    setContextKey: vi.fn(),
     setBadgeCount: vi.fn(),
     getBadgeCount: vi.fn(() => undefined),
-    setContextKey: vi.fn(),
+    clearBadge: vi.fn(),
+    setNavigationTree: vi.fn(),
+    setNavMetric: vi.fn(),
+    getNavMetric: vi.fn(() => undefined),
+    publishPayload: vi.fn(),
+    readPayload: vi.fn(() => null),
+    subscribePayload: vi.fn(() => () => undefined),
+    getTheme: vi.fn(() => theme),
+    onThemeChange: vi.fn(() => () => undefined),
     getContext: vi.fn(() => context),
   });
 }
 ```
 
-> **This stub grew with the contract, and that is the mechanism working rather
-> than a breaking change to apologise for.** `IShellAPI` went from three members
-> to seven in ADR-0001 Amendment K. Because the stub is typed as `IShellAPI`
-> rather than as a structural literal, the compiler failed on the old
-> three-member version the moment the interface widened — which is exactly the
-> signal the paragraph above promises, arriving exactly when it was supposed to.
-> If you copied the old stub, the four members to add are the four in the snippet
-> that are not `setSelectedItem`, `setBadgeCount` or `getContext`.
+> **This stub has all sixteen members of `IShellAPI` as of host contract 1.1,
+> and it grows with the contract on purpose.** The object literal is passed to
+> `deepFreeze<IShellAPI>`, so it is checked against `IShellAPI` itself: when the
+> interface gains a required member, a stub that lacks it fails to compile with
+> "property … is missing", which is the signal the paragraph above promises. That
+> has happened four times (three members → seven → nine → fourteen → sixteen);
+> this snippet itself sat at seven members through two of them, which is why its
+> member list is now pinned by a test that reads this file — *Test:*
+> `src/examples/__tests__/developerGuideStub.test.ts` — "lists exactly the
+> members a real IShellAPI has". That test compares names only; the snippet's
+> types are not compiled by this repository.
 
 If you prefer a real implementation over spies, `createShellStateStore()` and
 `createShellAPI(store)` from `src/core/ShellAPI.ts` build a working, deep-frozen
