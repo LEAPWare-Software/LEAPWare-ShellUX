@@ -37,8 +37,8 @@ with a merge queue.
 
 - Cloud routines build the plan in three lanes while the owner travels. The protocol is
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md); the shared state is issue #187.
-- Gate 4's approval is recorded both ways (C-24 ticked vs the runbook); #189 asks the
-  owner. Treated as unapproved meanwhile. `docs/design/gate4/` is the record to review.
+- Gate 4: #189 carries an `OWNER: gate 4 approved` answer. Its decision row and C-24's
+  citation are still to do, so step 9 and wave 4 wait. Record: `docs/design/gate4/`.
 
 ## The next step
 

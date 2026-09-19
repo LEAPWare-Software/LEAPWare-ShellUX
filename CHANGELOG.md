@@ -38,15 +38,18 @@ from so a reader can check it.
   about the product's behaviour.
 - **The gate-4 v4 screens, recorded in the repository** (`docs/design/gate4/`, commit
   `759af49`): the canvas source, nine artboards as HTML and PNG
-  (`ls docs/design/gate4/screens/*.dc.html | wc -l` → 9), and a README. **Gate 4's
-  approval is recorded twice, in opposite directions**, and this change settles neither:
+  (`ls docs/design/gate4/screens/*.dc.html | wc -l` → 9), and a README. The nine PNGs are
+  2,323,134 bytes (`stat -c '%s' docs/design/gate4/png/*.png | awk '{s+=$1} END {print s}'`),
+  which every clone now carries and no review can diff. **Gate 4's approval was recorded
+  twice, in opposite directions**, and this change settles neither side of it:
   `docs/plans/v1-production.md:139` ticks C-24 citing D-45 and `docs/DECISIONS.md` D-45
   records an owner approval dated 2026-09-18, while the runbook records that the owner
-  did not recognise D-45 on 2026-09-19. Reversing a recorded owner approval is the
-  owner's call, so C-24 stays ticked, D-45 stays as written, and #189 carries the
-  evidence and waits for an answer. Until it is answered, routines treat gate 4 as
-  unapproved and every item reading "per the approved gate-4 wireframe" stays blocked.
-  The record exists so the owner can review the screens and decide.
+  did not recognise D-45 on 2026-09-19. The conflict was filed as #189, where an
+  `OWNER: gate 4 approved` comment was posted at 2026-09-19T13:23Z asking for a new
+  decision row to supersede D-45 and for C-24 to cite it. **That ledger work is not in
+  this change**: no decision row is written, C-24's citation is untouched, and so nothing
+  yet builds "per the approved gate-4 wireframe" — ADR-0006 step 9 and wave 4 wait for the
+  row, which is the order the answer itself sets out.
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
   settings, read back as enabled (private vulnerability reporting re-proven on every
