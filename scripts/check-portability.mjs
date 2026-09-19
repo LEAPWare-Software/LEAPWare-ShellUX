@@ -277,6 +277,19 @@ const ALLOWLIST = [
       'convention expects. Neither is an endpoint anything in this repository contacts, ' +
       'and neither file is code. Every other rule still applies to both.',
   },
+  {
+    files: ['.github/workflows/claude.yml', '.github/workflows/claude-code-review.yml'],
+    rules: ['hardcoded-hostname'],
+    reason:
+      'Decision D-49 wires the Claude GitHub App into this repo via ' +
+      'anthropics/claude-code-action. The hosts these files name — github.com, in a ' +
+      'documentation comment and in the code-review plugin_marketplaces source, and ' +
+      'code.claude.com, in a documentation comment pointing at the action\'s own docs — ' +
+      'are GitHub Actions runner endpoints, not a host this codebase or its shipped ' +
+      'product contacts at runtime; DOCUMENTED_ENDPOINTS stays empty per the invented-host ' +
+      'finding recorded above it, so this does not reopen that. Scoped to these two files ' +
+      'and to hardcoded-hostname only; every other rule still applies to both.',
+  },
 ];
 
 // ---------------------------------------------------------------------------

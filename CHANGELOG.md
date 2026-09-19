@@ -16,6 +16,32 @@ from so a reader can check it.
 
 ### Added
 
+- **Claude GitHub Actions, guarded for a public repo (D-49).**
+  `.github/workflows/claude.yml` runs Claude on an `@claude` mention (issue
+  comment, PR review comment, PR review, or issue body/title), gated to
+  `author_association` of `OWNER`, `MEMBER` or `COLLABORATOR` — the repo went
+  public, and without that gate any GitHub user could spend the owner's
+  Claude subscription (`CLAUDE_CODE_OAUTH_TOKEN`, a repo secret) and inject
+  prompts into a run holding repo-scoped tokens.
+  `.github/workflows/claude-code-review.yml` runs the `code-review` plugin
+  against every non-draft PR, skipping Dependabot PRs and fork PRs
+  (`github.actor != 'dependabot[bot]'` and the head repo must equal this
+  repo) because neither gets the secret and the job would otherwise fail red
+  on every occurrence; a per-PR `concurrency` group with
+  `cancel-in-progress: true` stops a push storm from queuing duplicate
+  reviews. The review plugin already reads the repo's own `CLAUDE.md` files
+  and checks compliance against them (`plugins/code-review/commands/code-review.md`
+  in `anthropics/claude-code`, steps 2 and 4) — verified from the plugin
+  source rather than duplicated in the prompt. Both workflows run on the
+  owner's own subscription-backed token, not a shared org token.
+  `scripts/check-portability.mjs` gained one narrowly-scoped `ALLOWLIST`
+  entry (`hardcoded-hostname` only, these two files only) for the
+  `github.com` / `code.claude.com` references the action's own
+  configuration and doc comments name — GitHub Actions runner endpoints, not
+  hosts this codebase or its shipped product contacts. **Not done:** this
+  entry only records the workflows landing; whether the review job actually
+  runs and posts a comment was not known until its own PR ran it (see that
+  PR for the result).
 - **The mission, and the documents that carry it.** The owner set the mission on
   2026-09-18: a best-in-class UI/UX shell that hosts application plugins (D-31).
   `README.md` is recast around it, in the order `leapware-sessionkeeper` uses for a

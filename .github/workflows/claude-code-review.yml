@@ -10,13 +10,19 @@ on:
     #   - "src/**/*.js"
     #   - "src/**/*.jsx"
 
+concurrency:
+  group: claude-code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Secrets (CLAUDE_CODE_OAUTH_TOKEN included) are not passed to workflow runs
+    # triggered from a fork PR, and Dependabot PRs carry no meaningful review
+    # surface for this action either — both would otherwise fail this job red
+    # on every occurrence. Skip both rather than let them report a false failure.
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     runs-on: ubuntu-latest
     permissions:
