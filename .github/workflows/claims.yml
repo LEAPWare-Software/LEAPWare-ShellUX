@@ -53,12 +53,10 @@ concurrency:
 
 jobs:
   prove:
-    name: Prove claims
-    # The one job-level if: always true on pull_request, merge_group, push and schedule,
-    # so the required check is never skipped. A dispatch from any ref but refs/heads/main
-    # (a branch, or a tag named main) is skipped, not failed, and a skipped run is never
-    # a reference run for `npm run status`.
-    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    # A dispatch run carries a different check-run name, so it can never produce, skip or
+    # satisfy the required context `Prove claims` on any commit. A dispatch from any ref
+    # but refs/heads/main fails in the prover; a failing "(dispatch)" check gates nothing.
+    name: ${{ github.event_name == 'workflow_dispatch' && 'Prove claims (dispatch)' || 'Prove claims' }}
     runs-on: ubuntu-24.04
     # Queue-bound runs must fit the merge queue's 10-minute response window; main runs are
     # not queue-bound and may take the whole register plus every probe.

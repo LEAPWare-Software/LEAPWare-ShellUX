@@ -28,9 +28,21 @@ const requiredContexts = ruleset.rules
   .find((r) => r.type === 'required_status_checks')
   .parameters.required_status_checks.map((c) => c.context);
 
-/** The check-run names a job produces: its `name`, with `${{ matrix.k }}` expanded. */
+/**
+ * A name of the one form `${{ github.event_name == 'workflow_dispatch' && 'A' || 'B' }}`
+ * resolves to B, the name on every event but a dispatch (the events required checks see).
+ * Any other expression is left as written, so it maps to no required context.
+ */
+const DISPATCH_NAME = /^\$\{\{ github\.event_name == 'workflow_dispatch' && '([^']+)' \|\| '([^']+)' \}\}$/;
+export function nameOnEvent(name, event) {
+  const m = DISPATCH_NAME.exec(name);
+  if (!m) return name;
+  return event === 'workflow_dispatch' ? m[1] : m[2];
+}
+
+/** The check-run names a job produces on a change event: its `name`, with `${{ matrix.k }}` expanded. */
 export function jobContexts(jobId, job) {
-  const name = job.name ?? jobId;
+  const name = nameOnEvent(job.name ?? jobId, 'pull_request');
   const matrix = job.strategy?.matrix ?? {};
   const keys = Object.keys(matrix).filter((k) => Array.isArray(matrix[k]));
   let names = [name];
@@ -88,7 +100,7 @@ describe('the proof-of-completion workflows (§3.4)', () => {
 
       it(`exists, with job "${name}"`, () => {
         assert.ok(wf, `${file} is missing`);
-        assert.equal(wf.jobs[job].name, name);
+        for (const event of ['pull_request', 'merge_group', 'push', 'schedule']) assert.equal(nameOnEvent(wf.jobs[job].name, event), name, event);
       });
 
       it('triggers on pull_request (opened, synchronize, reopened, edited) and merge_group, unfiltered', () => {
@@ -107,12 +119,7 @@ describe('the proof-of-completion workflows (§3.4)', () => {
         const steps = wf.jobs[job].steps;
         const checkout = steps.find((s) => String(s.uses ?? '').startsWith('actions/checkout@'));
         assert.equal(checkout.with['fetch-depth'], 0);
-        if (file === 'claims.yml') {
-          // The single exception, pinned whole: it cannot skip a change run or a main run.
-          assert.equal(wf.jobs[job].if, "github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'");
-        } else {
-          assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
-        }
+        assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
       });
 
       it('is not required yet (rollout step 1)', () => {
@@ -154,6 +161,14 @@ describe('the proof-of-completion workflows (§3.4)', () => {
     for (const event of ['pull_request', 'merge_group', 'push']) {
       assert.equal(on[event]?.inputs, undefined, `${event} carries no inputs`);
     }
+  });
+
+  it('claims.yml names a dispatch run "Prove claims (dispatch)", so a dispatch never produces the required context', () => {
+    const { name } = workflows['claims.yml'].jobs.prove;
+    assert.equal(name, "${{ github.event_name == 'workflow_dispatch' && 'Prove claims (dispatch)' || 'Prove claims' }}");
+    assert.equal(nameOnEvent(name, 'workflow_dispatch'), 'Prove claims (dispatch)');
+    assert.equal(nameOnEvent(name, 'pull_request'), 'Prove claims');
+    assert.equal(nameOnEvent('Verify', 'workflow_dispatch'), 'Verify', 'a plain name is the same on every event');
   });
 
   it('claims.yml uploads and files issues for a workflow_dispatch run only from main', () => {

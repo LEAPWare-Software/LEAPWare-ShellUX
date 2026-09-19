@@ -18,7 +18,8 @@ const ticked = plans.flatMap((t) => t.split('\n').filter((l) => /^\s*[-*+] \[[xX
 
 console.log(`claims_scripts_present=${scripts.filter((s) => existsSync(`scripts/claims/${s}.mjs`)).length}`);
 console.log(`status_wired=${existsSync('scripts/status.mjs') && pkg.scripts?.status === 'node scripts/status.mjs' ? 1 : 0}`);
-console.log(`claims_workflow=${/^ {4}name: Prove claims$/m.test(read('.github/workflows/claims.yml')) ? 1 : 0}`);
+// The job is `Prove claims` on every event but a dispatch, which is `Prove claims (dispatch)`.
+console.log(`claims_workflow=${/^ {4}name: (Prove claims|\$\{\{ github\.event_name == 'workflow_dispatch' && 'Prove claims \(dispatch\)' \|\| 'Prove claims' \}\})$/m.test(read('.github/workflows/claims.yml')) ? 1 : 0}`);
 console.log(`evidence_workflow=${/^ {4}name: PR evidence$/m.test(read('.github/workflows/pr-evidence.yml')) ? 1 : 0}`);
 console.log(`new_checks_required=${['Prove claims', 'PR evidence'].filter((c) => ruleset.includes(`"${c}"`)).length}`);
 console.log(`register_schema_version=${register.schemaVersion}`);

@@ -182,10 +182,13 @@ and a correction of its stale "CI runs fewer steps than `verify`" paragraph.
   the prover refuses any `--inject` but `none` on `pull_request`, `merge_group`, `push`
   and `schedule`. `failing-row` records one extra failed synthetic row `S-injected` while
   every real row runs as normal; `crash` exits non-zero before the result file exists.
-  `Prove claims` carries one job-level `if`,
-  `github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'`: true on
-  every other event, so the check is never skipped; a dispatch from any other ref (a
-  branch, or a tag named `main`) is skipped rather than failed.
+  The required check `Prove claims` is never skipped; a dispatch run carries a different
+  name, `Prove claims (dispatch)`, so a dispatch on a PR branch or a queue ref can never
+  produce, skip or satisfy the required context. The job has no job-level `if`.
+  Limit: the runs API records a dispatch by `head_branch` alone; that a dispatch from a
+  tag named `main` would be told apart from `refs/heads/main` is not measured. Such a run
+  fails in the prover and, if its `head_branch` reads `main`, renders `FAILING RUN` until
+  the next successful main run.
   A guardrail against the honest mistake: whoever can edit `claims.yml` can remove it.
   *Tests:* scripts/__tests__/claims-prove.test.mjs — "refuses an injection on pull_request, merge_group, push and schedule, and a dispatch from any ref but main".
 - skip only inside a step that exits 0 and prints its reason;
