@@ -90,14 +90,18 @@ See "Bootstrap is owner-only" below.
   the case for every response captured against this repo so far — **because
   the ruleset has never had the field set, not because the caller lacks
   write access.** An authenticated call against a ruleset that
-  carries `integration_id` is expected to return it (not yet measured here, because
-  the field has never been set; the post-apply read-back is the measurement); the exclusion is keyed on the field's
+  carries `integration_id` returns it, and so does an unauthenticated one (**measured
+  2026-09-19 after the apply**, both returned all 7 entries with `integration_id: 15368`);
+  the exclusion is keyed on the field's
   presence in the response, not on the token's permissions (`bypass_actors`,
   above, is the one that is genuinely access-gated). Concretely: **the
   post-apply read-back's pass condition is `integration_id: 15368` present on
   all 7 entries**, not merely 7 matching contexts — see "Applying rollout
-  step 4" below. If CI's own read-only `Prove claims` token still shows the
-  field as absent after a real apply, that is a blind spot, not a non-issue:
+  step 4" below. Because the field is now returned even without a token, CI's
+  read-only `Prove claims` compares it, and `S-ruleset` would report a dropped pin.
+  The paragraph that follows is kept as the reasoning behind that check, and applies
+  only if GitHub ever stopped returning the field. If CI's own read-only token showed
+  the field as absent after a real apply, that would be a blind spot, not a non-issue:
   `S-ruleset` cannot then detect someone dropping the pin (removing
   `integration_id` from the live ruleset, or replacing a workflow-posted
   check with an API-posted status of the same name) — the comparison would
