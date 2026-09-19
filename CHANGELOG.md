@@ -187,7 +187,10 @@ from so a reader can check it.
   filesystem. A separate rule, `module-case-collision`, now reports two tracked
   module sources in one directory whose basenames collide once the extension is
   stripped; the checker's count goes 20 rules to 21, and it reports 0 violations
-  over the 374 tracked files. It is a **guardrail** — it closes the documented
+  over the whole tracked tree (405 files on the day this landed — a count that
+  moves with every commit, so it is dated here rather than stated as a standing
+  fact; the rule's result, 0 violations, is what does not move).
+  It is a **guardrail** — it closes the documented
   route and makes the honest mistake loud; it enforces nothing against a pair added
   deliberately, and it is scoped to one directory and to a fixed extension list, so
   a collision reached through a path alias or a barrel re-export is outside it.
