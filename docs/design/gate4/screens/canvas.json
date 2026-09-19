@@ -1,0 +1,146 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "1. Shell at rest, light"
+    },
+    {
+      "id": "page-2",
+      "name": "2. Command palette"
+    },
+    {
+      "id": "page-3",
+      "name": "3. Plugin manager"
+    },
+    {
+      "id": "page-4",
+      "name": "4. States"
+    },
+    {
+      "id": "page-5",
+      "name": "5. Shell at rest, dark"
+    },
+    {
+      "id": "page-6",
+      "name": "6. Collapsed rail and selection toolbar"
+    },
+    {
+      "id": "page-7",
+      "name": "7. Palette states"
+    },
+    {
+      "id": "page-8",
+      "name": "8. Notifications"
+    },
+    {
+      "id": "page-9",
+      "name": "9. After Reverse movement: undo strip"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Shell at rest, light",
+      "expand": "fill",
+      "page": "page-1"
+    },
+    {
+      "file": "Palette.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Command palette",
+      "expand": "fill",
+      "page": "page-2"
+    },
+    {
+      "file": "PluginManager.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Plugin manager",
+      "expand": "fill",
+      "page": "page-3"
+    },
+    {
+      "file": "States.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "States",
+      "expand": "fill",
+      "page": "page-4"
+    },
+    {
+      "file": "ShellDark.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Shell at rest, dark",
+      "expand": "fill",
+      "page": "page-5"
+    },
+    {
+      "file": "RailToolbar.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Collapsed rail and selection toolbar",
+      "expand": "fill",
+      "page": "page-6"
+    },
+    {
+      "file": "PaletteStates.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Palette states",
+      "expand": "fill",
+      "page": "page-7"
+    },
+    {
+      "file": "Notifications.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "Notifications",
+      "expand": "fill",
+      "page": "page-8"
+    },
+    {
+      "file": "UndoStrip.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 2160,
+      "h": 1350,
+      "title": "After Reverse movement: undo strip",
+      "expand": "fill",
+      "page": "page-9"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "gate4",
+      "page": "page-1",
+      "x": 0,
+      "y": -300,
+      "w": 1100,
+      "text": "Gate 4 of the ShellUX redesign, revision 4: the independent critique resolved on the canvas (plan step 3b), plus the D-48 \"Files changed\" plugin state. Drawn from DESIGN.md (The Operator’s Instrument) and the generated LEAPWare Light and Dark tokens. Shown at 150% of real size; the app itself renders at 100%. One screen per page: use the pages menu to move between them.\nOwner calls applied: plugin titles and icons from the manifest (no machine IDs, no type chips); type stays 11 to 13px; full keyboard palette; runtime plugin manager.\nApprove, or mark what to change, before any of this becomes component code."
+    }
+  ],
+  "launch": {
+    "view": "focused",
+    "file": "Main.dc.html"
+  }
+}

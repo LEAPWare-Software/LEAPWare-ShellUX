@@ -57,6 +57,47 @@ from so a reader can check it.
   band is out of scope and untouched; the trailing slot is exactly what `RowMetric`
   already drew.
 
+- **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
+  `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
+  `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while
+  the owner travels: three conductor lanes with disjoint file ownership (rule 6), a
+  watchdog, a reviewer routine that is never a subagent of the author (rule 1), and the
+  boundaries a routine stops at — anything only the owner can do, the clean Windows VM,
+  BuildCraft, and anything needing a packaged Electron launch. The GitHub access it
+  records was measured from a cloud session on 2026-09-19 rather than recalled (rule 9):
+  GraphQL is blocked by the proxy there, so `gh pr create`, `gh pr merge`, `gh pr list`,
+  `gh pr edit` and `gh issue comment` fail and the GitHub MCP tools or REST are used
+  instead; a REST comment on #187 returned 201; pushing a new branch works, REST ref
+  deletion is 403, and `git push --delete` prints `unexpected disconnect` and exits 1
+  while deleting the ref anyway, so a routine reads `git ls-remote` rather than that exit
+  code. The browser lane cannot run in the cloud VM — Playwright 1.63 wants a chromium
+  build the proxy will not let it download — so the `Browser tests (chromium)` CI check is
+  the browser evidence there, and the config is not to be bent to suit the VM (ADR-0002).
+  Issue #187 is the shared ledger, because a routine starts each run with no memory. An owner command carries an `OWNER:` prefix and no Claude footer, because
+  routines post under the owner's own login and the login alone therefore identifies
+  nobody. This is a process document: it constrains routines, and it asserts nothing
+  about the product's behaviour.
+- **The gate-4 v4 screens, recorded in the repository** (`docs/design/gate4/`, commit
+  `759af49`): the canvas source, nine artboards as HTML and PNG
+  (`ls docs/design/gate4/screens/*.dc.html | wc -l` → 9), and a README. The nine PNGs are
+  2,323,134 bytes (`stat -c '%s' docs/design/gate4/png/*.png | awk '{s+=$1} END {print s}'`),
+  which every clone now carries and no review can diff. **Gate 4's approval was recorded
+  twice, in opposite directions**, and this change settles neither side of it:
+  `docs/plans/v1-production.md:139` ticks C-24 citing D-45 and `docs/DECISIONS.md` D-45
+  records an owner approval dated 2026-09-18, while the runbook records that the owner
+  did not recognise D-45 on 2026-09-19. The conflict was filed as #189, where an
+  `OWNER: gate 4 approved` comment was posted at 2026-09-19T13:23Z asking for a new
+  decision row to supersede D-45 and for C-24 to cite it. **That ledger work is not in
+  this change**: no decision row is written, C-24's citation is untouched, and so nothing
+  yet builds "per the approved gate-4 wireframe" — ADR-0006 step 9 and wave 4 wait for the
+  row, which is the order the answer itself sets out. **The counts also disagree and this
+  change does not reconcile them:** D-45 approves "the six gate-4 screens" on 2026-09-18,
+  while this record is the v4 set of **nine** numbered pages published 2026-09-19, adding
+  the resolved critique and the D-48 plugin state; the nine are not six screens plus three
+  state sheets, since `canvas.json` numbers all nine as pages. D-45 may therefore be about
+  an earlier artefact rather than a mislaid approval of this one, and #189's answer repeats
+  the ambiguity by reading "the six gate-4 screens (v4, `docs/design/gate4/`)". The
+  decision row, when someone writes it, should name the screens it approves.
 - **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
   - the pull request is open and not a draft;
   - it carries a `lane-*` label;
@@ -64,6 +105,25 @@ from so a reader can check it.
   - the **newest** `Reviewer: shellux-cloud-reviewer` comment at the exact head is from `LEAPWare-HQ` and says `Verdict: MERGE`. A later rejection wins, and a comment from any other account is ignored, because the repository is public.
 
   The enqueue is pinned to that head commit. The workflow also fires on a late reviewer comment and on a lane label, and it always runs the default branch's code. The queue then re-runs every required check. It is a guardrail: every routine posts under the owner's login, so the comment proves a review exists at that head, not which routine wrote it. *Tests:* "ignores a forged review comment from any other account", "lets a later rejection at the same head win over an earlier MERGE", "refuses a head that moved since the triggering run", "calls gh pr merge --squash --auto pinned to the head only when ready". **Not proven yet:** that a merge-queue entry made by the workflow's own token gets its checks run. The first live cloud PR proves it or refutes it.
+
+- **Gate 4's approval is recorded on #189 and is NOT yet in the ledger, because the
+  answer does not say which screens it covers** (the question was #189; register row C-24
+  is unchanged by this change). D-45 recorded an owner approval of "the six gate-4
+  screens" on 2026-09-18 which the owner did not recognise on 2026-09-19. A gate sign-off
+  and the reversal of an owner decision row are both owner-only, so no routine settled it
+  either way: the conflict was filed as #189. The owner answered there on 2026-09-19 and
+  approved gate 4 — and the answer names *six* screens while
+  `docs/design/gate4/screens/canvas.json` numbers *nine* pages, published a day after
+  D-45 with the resolved critique and the D-48 state added, and not six screens plus
+  three state sheets. That discrepancy was raised on #189 at 14:24Z with three ways to
+  resolve it and is unanswered. **So this change writes no decision row, leaves C-24 and
+  D-45 exactly as they stand on `main`, and leaves ADR-0006 step 9 and redesign wave 4
+  blocked** — the answer's own ordering puts the row before the unblocking, and a row
+  that cannot name the screens it approves is not a row worth citing. An earlier draft of
+  this change added D-53 and re-cited C-24 to it; that was removed here rather than
+  landed, because it would have released blocked design work on a scope nobody has
+  settled. `docs/cloud/runbook.md` lane C item 5 owns finishing it: settle the count on
+  #189, then write the row naming the screens, then C-24 cites it, then the unblocking.
 
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
@@ -139,6 +199,47 @@ from so a reader can check it.
   handle once 1024 are held". **Not done:** pane 1 rendering a replaced tree is checked
   in jsdom only, not in a browser (no shipped extension calls it yet); which document
   owns a plugin's hooks is left to step 6 (#183).
+
+### Fixed
+
+- **`verify` could not run the register's C-08 row in CI, and the failure looked like a
+  real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
+  clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast
+  original by reading `git show 5b3a6ff~1:HANDOFF.md`, and a depth-1 clone does not carry
+  that commit, so `test:scripts` failed on all three runners while passing on every full
+  clone — including `claims.yml`, which already took `fetch-depth: 0` for its own reason.
+  Reproduced with `git clone --depth 1` before the fix. The checkout now takes full
+  history. **What made it possible:** the check conflated "I compared them and they
+  differ" with "I could not compare them" — both printed `0` — so the message named a
+  mismatch in a tree where nothing had changed, and no environment difference was
+  visible. The unreadable case now prints `unreadable:no-5b3a6ff-in-history`, which is
+  still red but says which of the two happened, and two cases pin both branches.
+  *Tests:* "prints 1 on this tree, where the pre-recast commit is readable",
+  "names the unreadable history instead of reporting a mismatch".
+
+- **Proof audit: three false claims corrected (C-09, C-25, C-32), eleven checks
+  tightened (C-07, C-10, C-12, C-14, C-18, C-23, C-29, C-30, C-33, C-41, C-42).** C-09
+  claimed the "jsdom is blind" body had moved to `docs/traps.md`; it had not, and the
+  claim is split so only the true "Traps" half is ticked. C-25 claimed every open issue
+  was milestoned; #172 was not, and the row is now a live GitHub search-API check
+  instead of dated evidence. C-32 embedded a built-increment count that went stale the
+  moment W3-1 landed. Of the tightened checks: C-14's CODEOWNERS check read the first
+  matching line, not GitHub's own last-match rule; C-10's caps-lint check passed on a
+  gutted test file; C-12's code-of-conduct check missed a stale "GitHub Issues, once
+  published" route now that the repository is public; C-18's ADR-0006 check covered 3
+  of its 9 clauses; C-07's D-50 check matched only the decision id, not its content;
+  C-33's pane-refit check could not detect a `.skip(`/`.fixme(`/`.only(`; C-23's
+  DESIGN.md colour check did not bind a hex to its named token and missed 3/8-digit hex
+  and `rgb()`/`hsl()`/`oklch()`; C-29's redefinition scan matched inside comments and
+  missed `const`/`class` forms; C-41 did not catch a job-level `if:`; C-42 grepped a
+  test title instead of running the test. Each tightened check was probed red on the
+  defect it now catches, then green after the fix. `docs/claims.json` and
+  `scripts/claims/checks/*` carry the detail.
+
+- **`SECURITY.md` said private vulnerability reporting did not exist here.** It was
+  true while the repository was private; after it went public the form was enabled
+  (`{"enabled":true}`, read 2026-09-19) and the file was not updated. It now names the
+  form beside the email address, and the old note is in the past tense.
 
 - **Wave-3 state primitives** (W3-1, `docs/design/WAVE3-PLAN.md` R6 and R7). A
   `Button` (primary and quiet: hover, a pressed state one step past hover, a two-tone

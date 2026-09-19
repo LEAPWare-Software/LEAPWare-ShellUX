@@ -12,7 +12,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, rmSync, rmdirSync, symlinkSync, writeFileSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, rmdirSync, symlinkSync, writeFileSync, unlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -130,8 +130,20 @@ const GH_API_PATHS = [
   /^repos\/[\w.-]+\/[\w.-]+\/(commits|git\/commits)\/[0-9a-f]{7,40}$/,
   /^repos\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/,
   /^repos\/[\w.-]+\/[\w.-]+\/rulesets\/\d+$/,
+  /^repos\/[\w.-]+\/[\w.-]+\/milestones\/\d+$/,
   // The repository's own single-object settings resources, not a list or search endpoint.
   /^repos\/[\w.-]+\/[\w.-]+\/private-vulnerability-reporting$/,
+  // C-25 needs one live count: open issues with no milestone. Every other search and list
+  // endpoint stays rejected (a bare `search/issues` with any other query, or a different
+  // repo, matches none of these and is refused below); this is GET-only, like every path
+  // here, and pinned to this repository's own exact query so it cannot become a general
+  // search escape hatch.
+  /^search\/issues\?q=repo:LEAPWare-Software\/LEAPWare-ShellUX\+is:issue\+is:open\+no:milestone$/,
+  // C-31 (proof audit item 27) needs one live list: the comments on the one issue the
+  // crash-dispatch rollout case (rollout step 3) filed. A general issues/comments list
+  // endpoint stays rejected for every other issue number and repo; pinned to this
+  // repository's own #174 so it cannot become a general list escape hatch.
+  /^repos\/LEAPWare-Software\/LEAPWare-ShellUX\/issues\/174\/comments$/,
 ];
 
 /** The first git argument after the subcommand that is not an allowed flag, or null. */
@@ -532,7 +544,24 @@ function unlinkLink(linked) {
  */
 export function runProbe(row, { commit, cwd = REPO_ROOT, run = defaultRunner, restrict = { restricted: false }, now = Date.now } = {}) {
   const started = now();
-  const dir = mkdtempSync(path.join(os.tmpdir(), 'claims-probe-'));
+  // Beside the repository, never inside it and never in the system temp directory. Two
+  // reasons, and the first is the repository's own written convention (HANDOFF.md,
+  // docs/plans/v1-production.md: "Throwaway worktrees go in a `.workspaces/` directory
+  // beside the repository, never inside it"), which this function did not follow.
+  //
+  // The second is measured. `node_modules` below is a junction to the real one, and on
+  // Windows the system temp directory is on C: while the checkout is on D:. Vitest
+  // started fine across that junction but could not COLLECT a suite through it — C-42
+  // failed only on windows-latest, only in the probe's scratch tree and never at the
+  // repository root, with `Failed Suites 1 | FAIL electron/__tests__/pluginPackage.test.ts`
+  // and `entry_exists=true`, with a cwd under the runner's own temp directory on the
+  // other drive (run 35449300854). A sibling directory puts the scratch tree and its
+  // node_modules on one volume, which is the difference the other two runners already
+  // had. The failing cwd is not quoted here: check:portability rejects a Windows drive
+  // path in a tracked file, and it is right to.
+  const workspaces = path.join(path.dirname(cwd), '.workspaces');
+  mkdirSync(workspaces, { recursive: true });
+  const dir = mkdtempSync(path.join(workspaces, 'claims-probe-'));
   rmSync(dir, { recursive: true, force: true });
   git(['worktree', 'add', '--detach', '--quiet', dir, commit], { cwd, run });
   const linked = path.join(dir, 'node_modules');

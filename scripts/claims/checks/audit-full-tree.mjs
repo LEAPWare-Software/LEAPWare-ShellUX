@@ -33,3 +33,9 @@ console.log(`audit_all_job=${auditAllBlock ? 1 : 0}`);
 // begins with `#`, not `run:`, so it cannot satisfy this.
 console.log(`audit_all_step_runs_script=${/^\s*run:\s*npm run audit:all\s*$/m.test(auditAllBlock) ? 1 : 0}`);
 console.log(`audit_all_full_tree=${/^npm audit --audit-level=high$/.test(auditAll.trim()) ? 1 : 0}`);
+// The box claims the job runs as its own job. A job-level `if:` can silently skip it
+// under conditions this row cannot see ahead of time — not only a literal `if: false`,
+// which is one case among many equally capable of quietly disabling the job. Chosen
+// here: fail on ANY job-level `if:` at all, not only the literal-false form, so the
+// row does not have to enumerate every way to write a condition that never runs.
+console.log(`audit_all_job_has_if=${/^\s{4}if:/m.test(auditAllBlock) ? 1 : 0}`);

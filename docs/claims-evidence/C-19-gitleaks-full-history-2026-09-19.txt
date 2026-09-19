@@ -1,0 +1,68 @@
+# Evidence for register row C-19: re-scan of the published history, 2026-09-19
+# (proof audit item 23). Supersedes docs/claims-evidence/C-19-gitleaks-full-history-2026-09-18.txt.
+# origin/main HEAD at scan time (after `git fetch origin main`): see `git rev-list` below.
+# Tool: gitleaks 8.30.1 (same version as the superseded 2026-09-18 evidence file), a
+# standalone binary run once, not a tracked dependency (ADR-0002).
+
+$ git rev-list origin/main --count
+98
+$ git rev-list origin/main --no-merges --count
+84
+
+## Triage: 3 generic-api-key false positives found before the allowlist
+
+Before adding .gitleaks.toml, `gitleaks git --log-opts=origin/main --redact --no-color .`
+found 3 leaks, all rule `generic-api-key`, all in `docs/claims.json`, all from commit
+`06ec066` (the register's own introduction in PR A). Re-run without --redact to confirm
+what they actually are (raw output, safe to show — these are register field names, not
+secrets):
+
+    key": "pr126_medium_fixed"
+    key": "pr148_verdict_merge"
+    key": "d40_gate_points"
+
+Each is the JSON shape `"key": "<expect-entry-name>"` from a register row's `expect`
+list — exactly the shape the `generic-api-key` heuristic flags, and never a credential.
+`.gitleaks.toml` now allowlists this exact shape, scoped to `docs/claims.json` only
+(see that file's comments for the reasoning), so a real secret added anywhere else in
+the file, or under a different shape, is still caught.
+
+## Full-history scan of `main`, with the allowlist — RAW OUTPUT
+
+$ gitleaks git --log-opts=origin/main --redact --no-color --config .gitleaks.toml .
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+8:36AM INF 84 commits scanned.
+8:36AM INF scanned ~6166223 bytes (6.17 MB) in 559ms
+8:36AM INF no leaks found
+PUBLISHED_HISTORY_EXIT=0
+
+## Lockfile scan — RAW OUTPUT
+
+`.gitattributes` marks package-lock.json `-diff`, so `gitleaks git` carries no patch
+for it across history; the lockfile as it stands on origin/main is scanned directly
+with `gitleaks dir`, as in the 2026-09-18 evidence.
+
+$ git show origin/main:package-lock.json > lock-main.json && gitleaks dir --redact --no-color lock-main.json
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+8:36AM INF scanned ~354485 bytes (354.48 KB) in 43.5ms
+8:36AM INF no leaks found
+LOCKFILE_EXIT=0
+
+## Conclusion
+
+No leaks found in either scan, after the 3 generic-api-key matches in docs/claims.json
+were triaged as false positives and allowlisted by exact shape and path. Any hit found
+in a future re-run of this row is a rotation, not a history rewrite (see the box text
+this row proves).
