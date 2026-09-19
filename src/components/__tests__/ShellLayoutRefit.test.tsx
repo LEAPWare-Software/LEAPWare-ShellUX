@@ -396,4 +396,16 @@ describe('ShellLayout — re-fitting the panes on a width change, as arithmetic 
     expect(stored.pane1).toBeCloseTo(17.6, 5);
     expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
   });
+  it('re-expands an untouched shell on the pixel intent at the live width, not the mount width', async () => {
+    measureAt(1000);
+    const user = userEvent.setup();
+    render(<Harness engine={createHydrationEngine({ storage: null })} />);
+    resizeTo(1200);
+    expect(panelSizes()).toEqual([20, 30, 50]);
+
+    await user.click(screen.getByRole('button', { name: 'Collapse navigation' }));
+    await user.click(screen.getByRole('button', { name: 'Expand navigation' }));
+    // 240/1200 and 360/1200, not the 24 / 36 of the 1000px mount.
+    expect(panelSizes()).toEqual([20, 30, 50]);
+  });
 });

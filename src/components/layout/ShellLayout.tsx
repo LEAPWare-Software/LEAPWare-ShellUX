@@ -171,8 +171,11 @@ import { useHostPalette } from './useHostPalette';
  *    on overflow above says; and a runtime with no `ResizeObserver` never
  *    re-fits, because its band width never moves. (A pane re-added after a
  *    collapse used to be listed here, shown at its mount-time `defaultSize`;
- *    `defaultSize` now reads the record as it stands, so the rebuild the library
- *    performs on re-registration is the record itself.)
+ *    `defaultSize` now reads the record as it stands, fitted at the live band
+ *    width, so the rebuild the library performs on re-registration is the
+ *    record itself — or, for an untouched shell, `PANE_PX` at the live width.
+ *    *Test:* "re-expands an untouched shell on the pixel intent at the live
+ *    width, not the mount width".)
  *
  *    **The record is the user's intent; bands are applied when it is read.** It
  *    is never clamped at the width it is written at, so it can hold a pane
@@ -962,8 +965,8 @@ export function ShellLayout({
   // #114), and on the extension surface it is in another document.
   const paneOneIsInGroup = showChrome && !isNavCollapsed;
   const bands = paneBandsAt(bandWidth);
-  // The layout a panel is REGISTERED at: the record, or `PANE_PX` at the
-  // measured width when nothing was chosen, held to the live bands.
+  // The layout a panel is REGISTERED at: the record, or `PANE_PX` at the live
+  // band width when nothing was chosen, held to the live bands.
   // `intentFromRecord` and `fitPaneLayout` carry the arithmetic and the reasons
   // for it — the rebase of a stored pane-2 share, pane 3 as the remainder, and
   // the pane-1 term that is zero when pane 1 is not in the group — and the
@@ -983,7 +986,7 @@ export function ShellLayout({
   // back as the starting point of the drag that wrote it — the concern decision
   // 6 raises about binding it live.
   const registrationLayout = fitPaneLayout(
-    intentFromRecord(engine.getState().paneSizes, paneOneIsInGroup, width),
+    intentFromRecord(engine.getState().paneSizes, paneOneIsInGroup, bandWidth),
     bands,
     paneOneIsInGroup,
   );
