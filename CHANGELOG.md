@@ -72,6 +72,32 @@ from so a reader can check it.
 
 ### Fixed
 
+- **Two module files whose names differed only in case were one module to `tsc` on
+  macOS and Windows, and `verify` could not see it.** `src/components/ui/RowStatus.tsx`
+  and `src/components/ui/rowStatus.ts` landed together in the change above. On a
+  case-sensitive filesystem they are two modules and every gate passed — locally and
+  on `Verify (ubuntu-latest)`. On the case-insensitive filesystems the other two CI
+  legs run on, TypeScript resolved both names to one file and `typecheck` exited 2
+  with `TS2305` ("has no exported member 'RowStatus'") and `TS1149` ("differs from
+  already included file name ... only in casing"), in run 35446002489. The data module
+  is renamed `rowStatusVocabulary.ts`; no exported symbol changed.
+  **Why `verify` was blind:** the `case-collision` rule in
+  `scripts/check-portability.mjs` compares whole tracked paths, and
+  `rowstatus.tsx` ≠ `rowstatus.ts`, so it was right not to fire — those two files
+  really can coexist on one filesystem. The collision is one level up, in module
+  resolution: an import of `./rowStatus` is resolved by trying extensions, so a
+  basename that differs only in case is one module to `tsc` and two to the
+  filesystem. A separate rule, `module-case-collision`, now reports two tracked
+  module sources in one directory whose basenames collide once the extension is
+  stripped; the checker's count goes 20 rules to 21, and it reports 0 violations
+  over the 371 tracked files. It is a **guardrail** — it closes the documented
+  route and makes the honest mistake loud; it enforces nothing against a pair added
+  deliberately, and it is scoped to one directory and to a fixed extension list, so
+  a collision reached through a path alias or a barrel re-export is outside it.
+  Recorded in full in `docs/traps.md`.
+  *Tests:* `scripts/__tests__/check-portability.test.mjs` — "reports two module
+  sources whose basenames collide once the extension is stripped".
+
 - **`SECURITY.md` said private vulnerability reporting did not exist here.** It was
   true while the repository was private; after it went public the form was enabled
   (`{"enabled":true}`, read 2026-09-19) and the file was not updated. It now names the
