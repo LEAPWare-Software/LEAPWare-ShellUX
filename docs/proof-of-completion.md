@@ -89,8 +89,13 @@ Row = `{ id, box, class, checks?, expect?, probe?, evidence?, provenOn, addedBy 
   - `repo`: reads the tree only. `probe` required: a named mutation, applied in a
     scratch worktree, that must turn a check red; a row whose probe leaves it green is
     rejected as vacuous.
-  - `github`: reads named GitHub objects, one object per command, by number or SHA; list
-    and search endpoints are rejected.
+  - `github`: reads named GitHub objects, one object per command, by number or SHA. List
+    and search endpoints are rejected **except for two paths pinned literally in
+    `scripts/claims/lib.mjs`'s `GH_API_PATHS`**, each admitted for one row and written out
+    in full so it cannot generalise: C-25's `search/issues?q=repo:LEAPWare-Software/
+    LEAPWare-ShellUX+is:issue+is:open+no:milestone`, and C-31's comments list on this
+    repository's issue #174. Any other query, repository or issue number matches neither
+    regex and is refused. Both are GET-only, like every path in that list.
   - `manual`: `evidence` names a committed file of raw output; `provenOn` its date; never
     re-run; its `expect` values render as `STATED`, never as checked.
 - `rowHash` (computed, not stored): sha256 of the canonical JSON of `box`, `class`,
@@ -113,7 +118,10 @@ Row = `{ id, box, class, checks?, expect?, probe?, evidence?, provenOn, addedBy 
   `-X`, `--method` other than GET, `-f`, `-F`, `--field`, `--raw-field`, `--input`,
   `--paginate`, and the path `graphql`, in joined and split forms (`-XPOST`,
   `--method=POST`). Also `gh pr view <n>`, `gh run view <id>`, `gh issue view <n>`, each
-  with `--json`/`--jq` only.
+  with `--json`/`--jq` only. The `<path>` must match one of `GH_API_PATHS` in
+  `scripts/claims/lib.mjs` — single-object paths, plus the two literally pinned
+  list/search paths named under `class` above. That list is the allowlist; this prose
+  describes it and does not define it.
 - Any argv containing `verify`, `test:coverage` or `test:browser` is rejected.
 
 **Network restriction for `repo` rows** (a guardrail): on the Linux runner they run as

@@ -50,6 +50,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history, not actions/checkout's default depth-1 clone. `verify`'s
+          # test:scripts stage runs every `repo`-class register row against this tree,
+          # and C-08's check reads `git show 5b3a6ff~1:HANDOFF.md` to compare the
+          # archived §2-§12 body against the pre-recast original. A depth-1 clone does
+          # not have that commit, so the check could not run and the row went red on all
+          # three runners while passing on every full clone. Reproduced with
+          # `git clone --depth 1`; `claims.yml` already takes fetch-depth: 0 for its own
+          # reason (it needs the merge base).
+          fetch-depth: 0
 
       # node-version-file, not a literal: .nvmrc is tracked so that a laptop and
       # CI agree by construction instead of by someone remembering to edit both.
