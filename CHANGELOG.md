@@ -21,10 +21,11 @@ from so a reader can check it.
   settings, read back as enabled; #74 and #103 closed; the full-tree audit job; and the
   plugin bundle's sha512, refused at install and re-checked on every serve, each half
   pinned by a named test. Each row's check was probed red, and a review tightened two
-  that could pass vacuously (a stubbed applier, a wrong ruleset target, or a
-  commented-out audit step now fail). Four plan items mixed a true fact with an unmet
-  one; each is split, so the true half is ticked and the rest stays open as its own
-  item: the D-27 reversal write-up, SECURITY.md's reorder, the README's move to
+  that could pass on an honest mistake (a wrong ruleset target, an applier that never
+  calls `gh api`, or a commented-out audit step now fail; a deliberate fake can still
+  pass them, so they are guardrails). Three plan items mixed true facts with unmet
+  ones; each is split, so the true part is ticked and four remainders stay open as
+  their own items: the D-27 reversal write-up, SECURITY.md's reorder, the README's move to
   `docs/`, and pasted API evidence on #74 and #103. The ruleset item's claim that it
   matches sessionkeeper's shape was dropped, because no check can decide it.
 
