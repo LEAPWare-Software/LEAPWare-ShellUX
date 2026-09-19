@@ -34,9 +34,9 @@ with a merge queue.
 
 ## The next step
 
-1. Prove the review job comments (this PR is its first run as a direct prompt).
-2. Roll the protocol out step by step (§5), then PR B makes both checks required.
-3. Plan steps 3b to 9; the 1.0 tag waits for BuildCraft.
+1. Roll the protocol out step by step (§5), then PR B makes both checks required.
+2. ADR-0006 steps 2 to 11 (runtime plugin host); wave 3 starts with the ShellLayout split.
+3. Plan steps 5 to 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 
