@@ -11,6 +11,8 @@ import {
 import { canonicalSurface } from '../apiSurface';
 import type { ApiSurface } from '../apiSurface';
 import { HOST_API_VERSION } from '../index';
+import * as sharedJsxRuntime from '../shared/react-jsx-runtime';
+import * as sharedReact from '../shared/react';
 
 /**
  * ============================================================================
@@ -20,7 +22,8 @@ import { HOST_API_VERSION } from '../index';
  * this one produces the current one. Names and keys come from the TypeScript
  * checker over the real source — the SDK barrel's exports, and the members of
  * `LEAPExtensionBlueprintInput` and `IShellAPI` — because types erase and no
- * runtime reflection can see them. The allowlists, the pattern and the bounds are
+ * runtime reflection can see them. The shared modules' names are read from the
+ * modules' namespaces, which is what a plugin's `import` receives. The allowlists, the pattern and the bounds are
  * read from the running modules, because they are values and the value is what
  * the registry enforces.
  *
@@ -61,7 +64,9 @@ function resolveAlias(checker: ts.TypeChecker, symbol: ts.Symbol): ts.Symbol {
  * whether a property is optional. A union's keys are the ones every member has,
  * and a key optional in any member counts as optional — which is how
  * `LEAPExtensionBlueprintInput`'s "exactly one of `commands` and `ribbonActions`"
- * reads here: both optional. The exclusivity is not in the description.
+ * reads here: both optional. The exclusivity is not in the description, and a
+ * key that only SOME members of a union carry is not in it at all — today no
+ * such key exists on either type.
  */
 function keysOf(checker: ts.TypeChecker, types: ts.SourceFile, name: string): { required: string[]; optional: string[] } {
   const symbol = moduleExports(checker, types).find((candidate) => candidate.name === name);
@@ -96,13 +101,18 @@ export function deriveApiSurface(): ApiSurface {
     const isValue = (resolveAlias(checker, exported).flags & ts.SymbolFlags.Value) !== 0;
     (isValue ? values : typeNames).push(exported.name);
   }
-  const shellApi = keysOf(checker, types, 'IShellAPI');
 
   return canonicalSurface({
     version: HOST_API_VERSION,
     exports: { values, types: typeNames },
     blueprint: keysOf(checker, types, 'LEAPExtensionBlueprintInput'),
-    shellApi: [...shellApi.required, ...shellApi.optional],
+    shellApi: keysOf(checker, types, 'IShellAPI'),
+    // Read off the modules themselves, as a plugin's import sees them.
+    sharedModules: {
+      react: Object.keys(sharedReact),
+      'react-jsx-runtime': Object.keys(sharedJsxRuntime),
+      reactMajor: Number(sharedReact.version.split('.')[0]),
+    },
     hotkeyKeys: [...HOTKEY_KEYS],
     hotkeyModifierRequiredKeys: [...HOTKEY_MODIFIER_REQUIRED_KEYS],
     extensionIdPattern: EXTENSION_ID_PATTERN.source,

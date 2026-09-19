@@ -16,11 +16,16 @@
  * |---|---|---|
  * | SDK exports (values, types) | a name removed | a name added |
  * | Blueprint keys | a key removed, a new required key, an optional key made required | a new optional key, a required key made optional |
- * | `IShellAPI` members | a member removed | a member added |
+ * | `IShellAPI` members | a member removed, a required member made optional | a member added, an optional member made required |
+ * | Shared modules (`/shared/react.js`, `/shared/react-jsx-runtime.js`) | a name removed, React's major changed | a name added |
  * | `HOTKEY_KEYS` (an allowlist) | a key removed | a key added |
  * | `HOTKEY_MODIFIER_REQUIRED_KEYS`, `RESERVED_IDS` (denylists) | an entry added | an entry removed |
  * | `EXTENSION_ID_PATTERN` | any change to its source | — |
  * | `REGISTRY_LIMITS` | a bound added or lowered | a bound removed or raised |
+ *
+ * `IShellAPI` runs the other way from the blueprint: the host PROVIDES it and a
+ * plugin consumes it, so a member a plugin could rely on becoming optional is
+ * the break, and an optional member becoming required only promises more.
  *
  * A pattern change is always a major because two regular expressions cannot be
  * compared for "accepts less" by looking at their text; the conservative answer
@@ -51,8 +56,18 @@ export interface ApiSurface {
   readonly exports: { readonly values: readonly string[]; readonly types: readonly string[] };
   /** `LEAPExtensionBlueprintInput`'s top-level keys. */
   readonly blueprint: { readonly required: readonly string[]; readonly optional: readonly string[] };
-  /** `IShellAPI`'s member names. */
-  readonly shellApi: readonly string[];
+  /** `IShellAPI`'s members, split by whether the host must provide each. */
+  readonly shellApi: { readonly required: readonly string[]; readonly optional: readonly string[] };
+  /**
+   * What each shared module stands in for exports, by name, and the React major
+   * behind them. A plugin compiled against one React major is not promised the
+   * next, so a React major is a host-contract major.
+   */
+  readonly sharedModules: {
+    readonly react: readonly string[];
+    readonly 'react-jsx-runtime': readonly string[];
+    readonly reactMajor: number;
+  };
   readonly hotkeyKeys: readonly string[];
   readonly hotkeyModifierRequiredKeys: readonly string[];
   /** `EXTENSION_ID_PATTERN.source`. */
@@ -128,6 +143,28 @@ function blueprintChanges(before: ApiSurface['blueprint'], after: ApiSurface['bl
   return changes;
 }
 
+/**
+ * The changes to `IShellAPI`, which the host provides and a plugin consumes: the
+ * blueprint's rule with the direction of the required/optional move reversed.
+ */
+function shellApiChanges(before: ApiSurface['shellApi'], after: ApiSurface['shellApi']): ContractChange[] {
+  const beforeAll = new Set([...before.required, ...before.optional]);
+  const afterAll = new Set([...after.required, ...after.optional]);
+  const changes: ContractChange[] = [];
+  for (const key of added(before.optional, after.optional)) {
+    const was = beforeAll.has(key) ? 'a required member made optional' : 'a new optional member';
+    changes.push({ bump: beforeAll.has(key) ? 'major' : 'minor', reason: `IShellAPI: "${key}" is ${was}` });
+  }
+  for (const key of added(before.required, after.required)) {
+    const was = beforeAll.has(key) ? 'an optional member made required' : 'a new required member';
+    changes.push({ bump: 'minor', reason: `IShellAPI: "${key}" is ${was}` });
+  }
+  for (const key of beforeAll) {
+    if (!afterAll.has(key)) changes.push({ bump: 'major', reason: `IShellAPI: "${key}" was removed` });
+  }
+  return changes;
+}
+
 function limitChanges(
   before: Readonly<Record<string, number>>,
   after: Readonly<Record<string, number>>,
@@ -155,7 +192,14 @@ export function diffSurface(before: ApiSurface, after: ApiSurface): ContractChan
     ...listChanges('exports (value)', before.exports.values, after.exports.values, 'minor'),
     ...listChanges('exports (type)', before.exports.types, after.exports.types, 'minor'),
     ...blueprintChanges(before.blueprint, after.blueprint),
-    ...listChanges('IShellAPI', before.shellApi, after.shellApi, 'minor'),
+    ...shellApiChanges(before.shellApi, after.shellApi),
+    ...listChanges('/shared/react.js', before.sharedModules.react, after.sharedModules.react, 'minor'),
+    ...listChanges(
+      '/shared/react-jsx-runtime.js',
+      before.sharedModules['react-jsx-runtime'],
+      after.sharedModules['react-jsx-runtime'],
+      'minor',
+    ),
     ...listChanges('HOTKEY_KEYS', before.hotkeyKeys, after.hotkeyKeys, 'minor'),
     ...listChanges(
       'HOTKEY_MODIFIER_REQUIRED_KEYS',
@@ -166,6 +210,12 @@ export function diffSurface(before: ApiSurface, after: ApiSurface): ContractChan
     ...listChanges('RESERVED_IDS', before.reservedIds, after.reservedIds, 'major'),
     ...limitChanges(before.registryLimits, after.registryLimits),
   ];
+  if (before.sharedModules.reactMajor !== after.sharedModules.reactMajor) {
+    changes.push({
+      bump: 'major',
+      reason: `React major: ${before.sharedModules.reactMajor} → ${after.sharedModules.reactMajor}`,
+    });
+  }
   if (before.extensionIdPattern !== after.extensionIdPattern) {
     changes.push({
       bump: 'major',
@@ -190,7 +240,12 @@ export function canonicalSurface(surface: ApiSurface): ApiSurface {
     version: surface.version,
     exports: { values: sorted(surface.exports.values), types: sorted(surface.exports.types) },
     blueprint: { required: sorted(surface.blueprint.required), optional: sorted(surface.blueprint.optional) },
-    shellApi: sorted(surface.shellApi),
+    shellApi: { required: sorted(surface.shellApi.required), optional: sorted(surface.shellApi.optional) },
+    sharedModules: {
+      react: sorted(surface.sharedModules.react),
+      'react-jsx-runtime': sorted(surface.sharedModules['react-jsx-runtime']),
+      reactMajor: surface.sharedModules.reactMajor,
+    },
     hotkeyKeys: sorted(surface.hotkeyKeys),
     hotkeyModifierRequiredKeys: sorted(surface.hotkeyModifierRequiredKeys),
     extensionIdPattern: surface.extensionIdPattern,
@@ -205,7 +260,8 @@ export function canonicalSurface(surface: ApiSurface): ApiSurface {
  * Every reason `current` may not stand against `baseline`; empty when it may.
  *
  * In order: both versions must be `major.minor`; the version must not go
- * backwards; it must move by at least what `diffSurface` requires; and once it
+ * backwards; it may move by one step only — `M.m` to `M+1.0` or `M.m+1`, so a
+ * skipped number or a major that keeps its minor is refused; it must move by at least what `diffSurface` requires; and once it
  * has, the baseline must be re-recorded — the last message carries the
  * description to record, so the honest path is one paste. A baseline that
  * matches the source exactly, version included, is the only passing state.
@@ -223,7 +279,20 @@ export function assessContract(baseline: ApiSurface, current: ApiSurface): strin
   }
   const changes = diffSurface(baseline, current);
   const needed = requiredBump(changes);
-  const moved: Bump = to.major > from.major ? 'major' : to.minor > from.minor ? 'minor' : 'none';
+  const moved: Bump | null =
+    to.major === from.major && to.minor === from.minor
+      ? 'none'
+      : to.major === from.major + 1 && to.minor === 0
+        ? 'major'
+        : to.major === from.major && to.minor === from.minor + 1
+          ? 'minor'
+          : null;
+  if (moved === null) {
+    return [
+      `HOST_API_VERSION moved from ${baseline.version} to ${current.version}, which is not one step: ` +
+        `the next major is ${from.major + 1}.0 and the next minor is ${from.major}.${from.minor + 1}.`,
+    ];
+  }
   if (RANK[moved] < RANK[needed]) {
     return [
       `The contract changed and HOST_API_VERSION did not move by what the change requires: ` +

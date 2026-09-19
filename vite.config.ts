@@ -72,13 +72,15 @@ const SHARED_PREFIX = 'shared/';
  * Each `/shared/*` URL, and the source module that answers it.
  *
  * One table for both servers: the build inputs below are named from it, and the
- * dev-server route serves from it, so the two cannot list different modules.
+ * dev-server route serves from it, so the two cannot list different modules. A
+ * `Map`, not an object literal: the name in the lookup comes from a request URL,
+ * and `/shared/constructor.js` must not find `Object.prototype.constructor`.
  */
-const SHARED_MODULES: Readonly<Record<string, string>> = Object.freeze({
-  react: 'src/sdk/shared/react.ts',
-  'react-jsx-runtime': 'src/sdk/shared/react-jsx-runtime.ts',
-  sdk: 'src/sdk/index.ts',
-});
+const SHARED_MODULES: ReadonlyMap<string, string> = new Map([
+  ['react', 'src/sdk/shared/react.ts'],
+  ['react-jsx-runtime', 'src/sdk/shared/react-jsx-runtime.ts'],
+  ['sdk', 'src/sdk/index.ts'],
+]);
 
 /**
  * Serve `/shared/<name>.js` on the DEV SERVER, from the source module that
@@ -99,7 +101,7 @@ function serveSharedModules(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
         const match = /^\/shared\/([a-z-]+)\.js(?:\?.*)?$/.exec(req.url ?? '');
-        const source = match?.[1] === undefined ? undefined : SHARED_MODULES[match[1]];
+        const source = match?.[1] === undefined ? undefined : SHARED_MODULES.get(match[1]);
         if (source !== undefined) req.url = `/${source}`;
         next();
       });
@@ -191,7 +193,7 @@ export default defineConfig({
         // entry has none to keep.
         // -------------------------------------------------------------------
         ...Object.fromEntries(
-          Object.entries(SHARED_MODULES).map(([name, source]) => [
+          [...SHARED_MODULES].map(([name, source]) => [
             `${SHARED_PREFIX}${name}`,
             fileURLToPath(new URL(source, import.meta.url)),
           ]),

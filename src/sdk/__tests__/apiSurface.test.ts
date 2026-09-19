@@ -61,11 +61,12 @@ describe('the bump rule', () => {
   });
 
   it('fails a major change when only the minor moved', () => {
-    const current = changed({ version: '1.1', shellApi: baseline.shellApi.slice(1) });
+    const { required, optional } = baseline.shellApi;
+    const current = changed({ version: '1.1', shellApi: { required: required.slice(1), optional } });
     const problems = assessContract(baseline, current);
     expect(problems).toHaveLength(1);
     expect(problems[0]).toContain('it needs a major bump from 1.0');
-    expect(problems[0]).toContain(`[major] IShellAPI: removed "${baseline.shellApi[0]}"`);
+    expect(problems[0]).toContain(`[major] IShellAPI: "${required[0]!}" was removed`);
   });
 
   it('accepts the bump, then asks for the baseline to be re-recorded, and passes once it is', () => {
@@ -80,7 +81,10 @@ describe('the bump rule', () => {
   });
 
   it('accepts a major bump for a minor change', () => {
-    const current = changed({ version: '2.0', shellApi: [...baseline.shellApi, 'newMember'] });
+    const current = changed({
+      version: '2.0',
+      shellApi: { ...baseline.shellApi, required: [...baseline.shellApi.required, 'newMember'] },
+    });
     expect(assessContract(baseline, current)).toEqual([expect.stringContaining('(version 2.0)')]);
   });
 
@@ -99,6 +103,28 @@ describe('the bump rule', () => {
     ]);
     expect(assessContract(ahead, changed({ version: '2.9' }))).toEqual([
       expect.stringContaining('went backwards'),
+    ]);
+  });
+
+  it.each([
+    ['1.3', '2.3'],
+    ['1.0', '7.0'],
+    ['1.0', '1.2'],
+    ['1.3', '2.1'],
+  ])('refuses %s → %s, which is not one step', (from, to) => {
+    const current = changed({ version: to, hotkeyKeys: [...baseline.hotkeyKeys, 'escape'] });
+    expect(assessContract(changed({ version: from }), current)).toEqual([
+      expect.stringContaining(`moved from ${from} to ${to}, which is not one step`),
+    ]);
+  });
+
+  it.each([
+    ['1.3', '2.0'],
+    ['1.3', '1.4'],
+  ])('accepts %s → %s as one step', (from, to) => {
+    const current = changed({ version: to, hotkeyKeys: [...baseline.hotkeyKeys, 'escape'] });
+    expect(assessContract(changed({ version: from }), current)).toEqual([
+      expect.stringContaining(`(version ${to})`),
     ]);
   });
 
@@ -128,6 +154,8 @@ describe('the bump rule', () => {
 describe('the bump each change requires, one row of the table at a time', () => {
   const { values, types } = baseline.exports;
   const { required, optional } = baseline.blueprint;
+  const api = baseline.shellApi;
+  const shared = baseline.sharedModules;
   const firstLimit = Object.keys(baseline.registryLimits)[0]!;
   const firstLimitValue = baseline.registryLimits[firstLimit]!;
 
@@ -150,8 +178,34 @@ describe('the bump each change requires, one row of the table at a time', () => 
     ],
     ['a required blueprint key removed', { blueprint: { required: required.slice(1), optional } }, 'major'],
     ['an optional blueprint key removed', { blueprint: { required, optional: optional.slice(1) } }, 'major'],
-    ['an IShellAPI member removed', { shellApi: baseline.shellApi.slice(1) }, 'major'],
-    ['an IShellAPI member added', { shellApi: [...baseline.shellApi, 'clearBadge'] }, 'minor'],
+    ['an IShellAPI member removed', { shellApi: { required: api.required.slice(1), optional: api.optional } }, 'major'],
+    [
+      'a required IShellAPI member added',
+      { shellApi: { required: [...api.required, 'clearBadge'], optional: api.optional } },
+      'minor',
+    ],
+    [
+      'an optional IShellAPI member added',
+      { shellApi: { required: api.required, optional: [...api.optional, 'clearBadge'] } },
+      'minor',
+    ],
+    [
+      'a required IShellAPI member made optional',
+      { shellApi: { required: api.required.slice(1), optional: [...api.optional, api.required[0]!] } },
+      'major',
+    ],
+    [
+      'a name removed from /shared/react.js',
+      { sharedModules: { ...shared, react: shared.react.filter((name) => name !== 'useId') } },
+      'major',
+    ],
+    ['a name added to /shared/react.js', { sharedModules: { ...shared, react: [...shared.react, 'use'] } }, 'minor'],
+    [
+      'a name removed from /shared/react-jsx-runtime.js',
+      { sharedModules: { ...shared, 'react-jsx-runtime': shared['react-jsx-runtime'].slice(1) } },
+      'major',
+    ],
+    ['the React major changed', { sharedModules: { ...shared, reactMajor: shared.reactMajor + 1 } }, 'major'],
     ['a hotkey key removed from the allowlist', { hotkeyKeys: baseline.hotkeyKeys.slice(1) }, 'major'],
     ['a hotkey key added to the allowlist', { hotkeyKeys: [...baseline.hotkeyKeys, 'escape'] }, 'minor'],
     [
@@ -204,6 +258,14 @@ describe('the bump each change requires, one row of the table at a time', () => 
     expect(requiredBump([minor, minor])).toBe('minor');
   });
 
+  it('treats an optional IShellAPI member made required as a minor: the host promises more', () => {
+    const before = changed({ shellApi: { required: ['a'], optional: ['b'] } });
+    const after = changed({ shellApi: { required: ['a', 'b'], optional: [] } });
+    expect(diffSurface(before, after)).toEqual([
+      { bump: 'minor', reason: 'IShellAPI: "b" is an optional member made required' },
+    ]);
+  });
+
   it('names what changed in each reason', () => {
     expect(
       diffSurface(baseline, changed({ blueprint: { required: [...required, optional[0]!], optional: optional.slice(1) } })),
@@ -211,6 +273,9 @@ describe('the bump each change requires, one row of the table at a time', () => 
     expect(diffSurface(baseline, changed({ extensionIdPattern: 'x' }))).toEqual([
       { bump: 'major', reason: `EXTENSION_ID_PATTERN: /${baseline.extensionIdPattern}/ → /x/` },
     ]);
+    expect(
+      diffSurface(baseline, changed({ sharedModules: { ...baseline.sharedModules, reactMajor: 19 } })),
+    ).toEqual([{ bump: 'major', reason: `React major: ${baseline.sharedModules.reactMajor} → 19` }]);
     expect(diffSurface(baseline, changed({ reservedIds: [...baseline.reservedIds, 'shell'] }))).toEqual([
       { bump: 'major', reason: 'RESERVED_IDS: added "shell"' },
     ]);

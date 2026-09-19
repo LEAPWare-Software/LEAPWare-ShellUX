@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { RENDERER_CSP } from '../electron/main/rendererCsp';
 import { PREVIEW_URL } from '../playwright.config';
+import baseline from '../src/sdk/api-surface.json';
+
+/** The version the built `/shared/sdk.js` must report: the recorded one. */
+const HOST_API_VERSION = baseline.version;
 
 /**
  * ============================================================================
@@ -25,7 +29,7 @@ import { PREVIEW_URL } from '../playwright.config';
  * of that module is that same object — which is what is compared.
  *
  * **"A module importing".** The importer is a real ES module with a static
- * `import` of `/shared/react.js`, served same-origin under `/__e2e__/` by
+ * `import` of each of the three `/shared/` modules, served same-origin under `/__e2e__/` by
  * `page.route` — the shape of a rewritten plugin bundle — not an expression
  * evaluated in the page.
  *
@@ -48,11 +52,25 @@ interface Observation {
   readonly sharedVersion: string;
   readonly rendererVersions: readonly string[];
   readonly violations: readonly string[];
+  /** `HOST_API_VERSION`, and whether `useChannelPayload` and `RowMetric` are functions, from `/shared/sdk.js`. */
+  readonly sdk: { readonly version: string; readonly functions: readonly boolean[] };
+  /** Whether `jsx` from `/shared/react-jsx-runtime.js` makes a React element. */
+  readonly jsxMakesElement: boolean;
 }
 
-/** The module standing in for a rewritten plugin bundle. */
+/**
+ * The module standing in for a rewritten plugin bundle: one static import of
+ * each shared module, as `react`, `react/jsx-runtime` and `@shellux/sdk` become
+ * after the rewrite.
+ */
 const IMPORTER_PATH = '/__e2e__/plugin.js';
-const IMPORTER_SOURCE = "import * as React from '/shared/react.js';\nexport default React;\n";
+const IMPORTER_SOURCE = [
+  "import * as React from '/shared/react.js';",
+  "import * as JsxRuntime from '/shared/react-jsx-runtime.js';",
+  "import * as Sdk from '/shared/sdk.js';",
+  'export default React;',
+  'export { JsxRuntime, Sdk };',
+].join('\n');
 
 /**
  * Installed before any page script. A devtools hook with only what React DOM
@@ -101,6 +119,8 @@ async function observe(page: Page, origin: string): Promise<Observation> {
         version: string;
         __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED: { ReactCurrentDispatcher: unknown };
       };
+      JsxRuntime: { jsx: (type: string, props: object) => { $$typeof?: unknown } };
+      Sdk: { HOST_API_VERSION: string; useChannelPayload: unknown; RowMetric: unknown };
     };
     const shared = imported.default;
     const renderers = probe['__e2eRenderers'] as ReadonlyArray<{ currentDispatcherRef: unknown; version: string }>;
@@ -114,6 +134,11 @@ async function observe(page: Page, origin: string): Promise<Observation> {
       sharedVersion: shared.version,
       rendererVersions: renderers.map((renderer) => renderer.version),
       violations: [...(probe['__e2eViolations'] as readonly string[])],
+      sdk: {
+        version: imported.Sdk.HOST_API_VERSION,
+        functions: [typeof imported.Sdk.useChannelPayload, typeof imported.Sdk.RowMetric].map((t) => t === 'function'),
+      },
+      jsxMakesElement: imported.JsxRuntime.jsx('div', {}).$$typeof === Symbol.for('react.element'),
     };
   }, `${origin}${IMPORTER_PATH}`);
 }
@@ -124,6 +149,9 @@ function expectOneReact(observed: Observation): void {
   expect(observed.sameDispatcher).toEqual([true]);
   expect(observed.rendererVersions).toEqual([observed.sharedVersion]);
   expect(observed.violations).toEqual([]);
+  // The other two shared modules load beside it and are what they claim to be.
+  expect(observed.sdk).toEqual({ version: HOST_API_VERSION, functions: [true, true] });
+  expect(observed.jsxMakesElement).toBe(true);
 }
 
 test.describe('the built application, previewed under the renderer CSP', () => {
@@ -149,7 +177,7 @@ test.describe('the dev server', () => {
     expectOneReact(await observe(page, baseURL ?? ''));
   });
 
-  test('serves each of the three /shared/ modules as script, and no other name under /shared/', async ({
+  test('serves each of the three /shared/ modules as script, and no other name under /shared/, prototype names included', async ({
     request,
   }) => {
     for (const name of ['react', 'react-jsx-runtime', 'sdk']) {
@@ -160,7 +188,11 @@ test.describe('the dev server', () => {
     // Vite's SPA fallback answers an unknown path with the HTML shell and a 200,
     // so "not served" reads as "not served as script": a module import of it
     // fails on the MIME type.
-    const unknown = await request.get('/shared/react-dom.js');
-    expect(unknown.headers()['content-type']).not.toContain('javascript');
+    // `constructor` and `toString` are names an object-literal lookup would have
+    // found on `Object.prototype`; the table is a `Map` so they find nothing.
+    for (const name of ['react-dom', 'constructor', 'toString']) {
+      const unknown = await request.get(`/shared/${name}.js`);
+      expect(unknown.headers()['content-type'], name).not.toContain('javascript');
+    }
   });
 });

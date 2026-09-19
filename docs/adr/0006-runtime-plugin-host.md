@@ -261,17 +261,26 @@ invisible to it, and still depends on review.
 
 > **2026-09-19, step 2 landed — what the baseline records, as built.**
 > `HOST_API_VERSION` is `'1.0'`, exported by `src/sdk/index.ts`. The rule is
-> `src/sdk/apiSurface.ts`; `src/sdk/api-surface.json` is its baseline. Two parts
-> beyond this decision's list are recorded, both named above as major triggers
-> but not listed: `IShellAPI`'s member names, and `HOTKEY_MODIFIER_REQUIRED_KEYS`
-> (a denylist, so an entry added is a narrowing). `REGISTRY_LIMITS` compares by
+> `src/sdk/apiSurface.ts`; `src/sdk/api-surface.json` is its baseline. Three parts
+> beyond this decision's list are recorded. `IShellAPI`'s members, split required
+> and optional — the host provides that interface, so a required member made
+> optional is a major and the reverse a minor, the blueprint's rule reversed.
+> `HOTKEY_MODIFIER_REQUIRED_KEYS`, a denylist, so an entry added is a narrowing.
+> And the shared modules: the names `/shared/react.js` and
+> `/shared/react-jsx-runtime.js` export, read from their module namespaces, under
+> the same add/remove rule, plus React's major — a React major change is a host
+> major. The version moves one step only: `M.m` to `M+1.0` or `M.m+1`; `1.3 → 2.3`
+> and `1.0 → 7.0` are refused. `REGISTRY_LIMITS` compares by
 > value: a bound added or lowered is a major, removed or raised a minor.
 > `EXTENSION_ID_PATTERN` changing at all is a major, since two patterns cannot be
 > compared for "accepts less" by their text. The limit is wider than stated
 > above: the description is **top-level only** — a new required key on `Command`
 > or `NavigationNode`, or a changed parameter type on an `IShellAPI` member, is
 > invisible — and it records `commands` and `ribbonActions` as two optional keys,
-> not as "exactly one of". It is a **guardrail**: a baseline edited by hand to
+> not as "exactly one of". Keys come from the checker's `getPropertiesOfType`,
+> which for a union reports only the keys **every** member carries: a key only
+> one branch declares would be absent from the description, and adding or
+> removing it would move nothing. Neither type has such a key today. It is a **guardrail**: a baseline edited by hand to
 > match defeats it, and review of that file's diff is what catches that.
 > *Tests:* `src/sdk/__tests__/apiSurface.test.ts` — "fails when the contract
 > changes and the version does not move", "records the contract as it stands,
@@ -413,6 +422,11 @@ one the plugin imports — is step 2's browser-lane case to write.
 > build case fails on that comparison. **Not measured:** the packaged app
 > serving `/shared/*.js` from its asar under the `shellux:` scheme, and a plugin
 > component actually rendering — no plugin loads before step 6.
+>
+> **A cost, measured:** with five inputs sharing chunks, the build splits more.
+> `<link rel="modulepreload">` tags went from 1 to 4 in `dist/index.html` and
+> from 1 to 5 in `dist/paneview.html` (`vite build` at `de252c9` and after); the
+> total emitted JavaScript is about the same size. Load time was not measured.
 
 **Renderer switches are unchanged.** `contextIsolation: true`, `sandbox: true`,
 `nodeIntegration: false` stay on both views, as ADR-0004 decision 4 fixes them.
