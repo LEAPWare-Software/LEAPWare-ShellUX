@@ -16,6 +16,15 @@ from so a reader can check it.
 
 ### Added
 
+- **The proof-of-completion protocol is complete and in force** (plan step 0c, 5 of 5,
+  row C-37). After PR B (#179) merged, the ruleset was applied and read back: ruleset
+  23685990 requires seven contexts, "Prove claims" and "PR evidence" among them, each
+  pinned to the GitHub Actions app, and `compare-ruleset.mjs` reports no drift. The one
+  main run between the merge and the apply reported the drift and filed #180, exactly
+  as the settings doc predicted; the next run passed. The read-back also settled a
+  question the doc had left open: GitHub returns `integration_id` even to an
+  unauthenticated call, so the daily comparison would catch a dropped pin.
+
 - **The proof-of-completion checks become required** (rollout step 4, PR B).
   `.github/rulesets/main.json` adds "Prove claims" and "PR evidence" to the required
   status checks, and pins all seven required contexts to the GitHub Actions app

@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `b990712` (#178, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `4a80a6c` (#179, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -25,17 +25,17 @@ with a merge queue.
 - #23 re-fit (W3-0) and the wave-3 plan (#176); plan step 5 items 1 and 3 ticked.
 - The `.lwplugin` validator, ADR-0006 step 3 (#177).
 - Operator install guide and 1.0 known limits, plan step 7 (#178).
-- This change: PR B, both proof-of-completion checks required (applied after merge).
+- PR B (#179): both proof-of-completion checks required, applied and read back.
+- This change: plan step 0c complete (5/5, row C-37).
 
 ## In flight
 
-- **Proof of completion, PR B** (plan step 0c item 5): make both checks required.
+- ADR-0006 step 4 (plugin store) and wave-3 W3-1 (state primitives), each reviewed.
 
 ## The next step
 
-1. Roll the protocol out step by step (§5), then PR B makes both checks required.
-2. ADR-0006 steps 2 to 11 (runtime plugin host); wave 3 continues after the split.
-3. Plan steps 5 to 9; the 1.0 tag waits for BuildCraft.
+1. Land ADR-0006 step 4 and W3-1; then ADR-0006 steps 5 to 11 and W3-2 onward.
+2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 

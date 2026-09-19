@@ -2082,6 +2082,59 @@
       },
       "provenOn": "2026-09-19",
       "addedBy": "plan step 7 docs (docs/step7-limits-install)"
+    },
+    {
+      "id": "C-37",
+      "box": "PR B: both checks required with `integration_id: 15368`, applied and read back. Merged as #179 and applied with `scripts/apply-rulesets.mjs`; ruleset 23685990 now requires seven contexts, including \"Prove claims\" and \"PR evidence\", each pinned to the GitHub Actions app, and `compare-ruleset.mjs` reports no drift.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "api",
+          "repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990",
+          "--jq",
+          ".rules[] | select(.type == \"required_status_checks\") | .parameters.required_status_checks | \"required_contexts=\\(length)\", \"pinned_to_actions=\\(map(select(.integration_id == 15368)) | length)\", \"prove_claims_required=\\(map(select(.context == \"Prove claims\")) | length)\", \"pr_evidence_required=\\(map(select(.context == \"PR evidence\")) | length)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "179",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr_b_state=\\(.state)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "required_contexts",
+          "op": "==",
+          "value": 7
+        },
+        {
+          "key": "pinned_to_actions",
+          "op": "==",
+          "value": 7
+        },
+        {
+          "key": "prove_claims_required",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr_evidence_required",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr_b_state",
+          "op": "==",
+          "value": "MERGED"
+        }
+      ],
+      "provenOn": "2026-09-19",
+      "addedBy": "PR B applied (docs/pr-b-applied)"
     }
   ],
   "retired": []
