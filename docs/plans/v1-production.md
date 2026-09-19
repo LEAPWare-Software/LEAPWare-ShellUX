@@ -78,7 +78,7 @@ Measured today:
 
 ---
 
-## Step 0 — Land what is in flight  (6/6)
+## Step 0 — Land what is in flight  (5/6)
 - [x] Adversarial review of PR #115 (rule 1), by an `lw-verifier` (sonnet) that did not write it. Verdict MERGE AFTER FIXES; record on the PR, 2026-09-18. [C-01]
 - [x] Fix the findings (`899fa66`, three prose findings). Gates on the fix: `check:portability` and `check:citations` exit 0; CI 5 of 5 green. The full `verify` was not re-run for a two-file prose change. [C-02]
 - [x] Merge #115: merged as `148217b`. **HANDOFF §1 was NOT updated in that landing**; it is carried into the docs-recast change instead, which is a rule-3 miss recorded rather than hidden. [C-03]
