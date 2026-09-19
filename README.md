@@ -64,7 +64,7 @@ influences are in [`docs/overview.md`](docs/overview.md).
 | Tool | Requirement |
 |---|---|
 | **Node.js** | `^22.13.0 \|\| >=24`, declared as `engines` and enforced by the tracked `.npmrc` (`engine-strict=true`). `.nvmrc` carries the major version CI uses |
-| **npm** | 11.16.0, pinned as `packageManager`. npm 10.9.8 has been measured crashing on this lockfile during `npm update` |
+| **npm** | 11.16.0, pinned as `packageManager`. Use that version: npm 10.9.8 has crashed on an earlier state of this lockfile (`docs/traps.md`) |
 | **git** | any recent version |
 
 Why the Node floor is exactly that range, arm by arm, is in
