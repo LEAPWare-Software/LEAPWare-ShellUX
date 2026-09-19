@@ -38,6 +38,7 @@ jobs:
         github.event.workflow_run.event == 'pull_request' &&
         github.event.workflow_run.pull_requests[0].number) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        github.event.comment.user.login == 'LEAPWare-HQ' &&
         startsWith(github.event.comment.body, 'Reviewer: shellux-cloud-reviewer')) ||
       (github.event_name == 'pull_request_target' &&
         startsWith(github.event.label.name, 'lane-'))
