@@ -84,18 +84,19 @@ const FAIL = 'FAIL';
  * is a decision, not an oversight: the row stays in the manifest because the
  * pair is reviewed ahead of the UI that will paint it. Remove the entry in the
  * change that builds that UI — STALE EXEMPTION makes that the only option.
+ *
+ * Empty since wave-3 increment W3-1 (`docs/design/WAVE3-PLAN.md`), which built
+ * the primary button (`--accent-solid`, `--accent-solid-hover`), the two-tone
+ * focus ring (`--focus-ring-offset`) and the four banners (the four
+ * `--status-*-subtle` washes). **`--accent-subtle` left the list for a weaker
+ * reason, stated rather than hidden:** W3-1 declares every `TOKEN_CLASS` role
+ * the wave needs, and `navCurrentSurface`, `identityTileSurface` and
+ * `paletteActiveRow` name it, so the painter scan above sees a reference. No
+ * rendered element uses those roles until W3-3 and W3-6 land. That is the
+ * "a reference in dead code satisfies it" limit this file's banner already
+ * names for UNPAINTED, met here in the other direction.
  */
-const UNBUILT_BACKGROUNDS = Object.freeze({
-  '--accent-solid': 'The primary-button fill. No primary button is built yet.',
-  '--accent-solid-hover': 'The primary-button hover fill. No primary button is built yet.',
-  '--accent-subtle': 'The accent wash behind a current item. Not built yet.',
-  '--status-danger-subtle': 'The tinted background of a danger block. Not built yet.',
-  '--status-warning-subtle': 'The tinted background of a warning block. Not built yet.',
-  '--status-success-subtle': 'The tinted background of a success block. Not built yet.',
-  '--status-info-subtle': 'The tinted background of an info block. Not built yet.',
-  '--focus-ring-offset':
-    'The inner half of the two-tone focus ring. tailwind.config.js maps it as the default ring-offset colour, and no ring-offset utility is used yet.',
-});
+const UNBUILT_BACKGROUNDS = Object.freeze({});
 
 /** The text of every file under `src/` that can paint: not generated, not a test. */
 function paintingSources() {

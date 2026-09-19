@@ -156,3 +156,99 @@ test.describe('focus visibility across the shell', () => {
     ).toBe(true);
   });
 });
+
+/**
+ * ============================================================================
+ * W3-1: ONE FOCUS MECHANISM, ON `:focus-visible` ONLY.
+ * ============================================================================
+ * The brief's §8 "cut to one": the two-tone ring (`--focus-ring`, its offset in
+ * `--focus-ring-offset`) on keyboard focus, and nothing on a mouse click. Driven
+ * against `states.html` (`src/dev/StatesFixture.tsx`), because the button that
+ * carries the ring has no consumer in the shell yet.
+ *
+ * The ring is two box-shadow layers, and Chromium may serialise their colours
+ * as `oklch()`, so each colour is painted through a canvas to an 8-bit triple
+ * and compared with what the same canvas makes of the token itself.
+ * ============================================================================
+ */
+
+/** Split a computed `box-shadow` into its layers, at commas outside parentheses. */
+function shadowLayers(value: string): string[] {
+  const layers: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of value) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      layers.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  layers.push(current.trim());
+  return layers;
+}
+
+interface PaintedRing {
+  readonly ring: number[];
+  readonly offset: number[];
+  readonly layers: { readonly rgb: number[]; readonly spread: string | undefined }[];
+}
+
+test.describe('the W3-1 focus ring', () => {
+  test('paints no ring on a mouse click and the two-tone ring on a Tab', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/states.html');
+    const button = page.locator('#fixture-quiet');
+    await expect(button).toBeVisible();
+
+    const shadowOf = (): Promise<string> =>
+      button.evaluate((node) => window.getComputedStyle(node).boxShadow);
+    const atRest = await shadowOf();
+
+    await button.click();
+    await expect(button).toBeFocused();
+    expect(await shadowOf(), 'a mouse click painted a focus ring').toBe(atRest);
+
+    // Away and back by keyboard, so the focus being measured is a keyboard one.
+    await page.keyboard.press('Tab');
+    await expect(button).not.toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(button).toBeFocused();
+    const focused = await shadowOf();
+    expect(focused, 'a Tab painted no focus ring').not.toBe(atRest);
+
+    // Two tones: the offset in the surface colour out to 1px, then the ring
+    // colour out to 3px, which is 2px of ring past the 1px offset.
+    const painted: PaintedRing = await page.evaluate((layers: string[]) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (context === null) throw new Error('e2e: no 2d context');
+      const paint = (colour: string): number[] => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = colour;
+        context.fillRect(0, 0, 1, 1);
+        return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3));
+      };
+      const root = window.getComputedStyle(document.documentElement);
+      return {
+        ring: paint(root.getPropertyValue('--focus-ring').trim()),
+        offset: paint(root.getPropertyValue('--focus-ring-offset').trim()),
+        layers: layers.map((layer) => ({
+          rgb: paint(/^(?:[a-z]+\([^)]*\)|#[0-9a-f]+|[a-z]+)/i.exec(layer)?.[0] ?? ''),
+          spread: /(-?[\d.]+)px\s*$/.exec(layer)?.[1],
+        })),
+      };
+    }, shadowLayers(focused));
+    const ringLayer = painted.layers.find((layer) => layer.spread === '3');
+    const offsetLayer = painted.layers.find((layer) => layer.spread === '1');
+    expect(ringLayer, `no 3px ring layer in ${focused}`).toBeDefined();
+    expect(offsetLayer, `no 1px offset layer in ${focused}`).toBeDefined();
+    expect(ringLayer?.rgb).toEqual(painted.ring);
+    expect(offsetLayer?.rgb).toEqual(painted.offset);
+  });
+});

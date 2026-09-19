@@ -141,6 +141,15 @@ describe('TOKEN_CLASS', () => {
       'navSelectedRule',
       'rowSelectedRule',
       'listFocusRing',
+      // Wave 3: two more elevations, and four dimensions. The layout tokens
+      // are not in the colour contract, so these name their token through a
+      // `tailwind.config.js` utility and are pinned to it exactly below.
+      'tooltipElevation',
+      'paletteElevation',
+      'rowHeightComfortable',
+      'railWidth',
+      'paneHeaderHeight',
+      'contextBarHeight',
     ]);
     for (const [role, className] of Object.entries(TOKEN_CLASS)) {
       if (structural.has(role)) {
@@ -154,6 +163,12 @@ describe('TOKEN_CLASS', () => {
     expect(TOKEN_CLASS.controlRestBorder).toBe('border-transparent');
     expect(TOKEN_CLASS.navSelectedRule).toContain('var(--border-selected)');
     expect(TOKEN_CLASS.rowSelectedRule).toContain('var(--border-selected)');
+    expect(TOKEN_CLASS.tooltipElevation).toBe('shadow-popover');
+    expect(TOKEN_CLASS.paletteElevation).toBe('shadow-overlay');
+    expect(TOKEN_CLASS.rowHeightComfortable).toBe('h-row-comfortable');
+    expect(TOKEN_CLASS.railWidth).toBe('w-rail');
+    expect(TOKEN_CLASS.paneHeaderHeight).toBe('h-pane-header');
+    expect(TOKEN_CLASS.contextBarHeight).toBe('h-context-bar');
   });
 
   it('spells every value as a complete class, variant prefix included', () => {
