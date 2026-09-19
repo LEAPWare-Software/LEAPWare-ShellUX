@@ -16,6 +16,45 @@ from so a reader can check it.
 
 ### Added
 
+- **Wave-3 list rows at 32px** (W3-2, D-29, `docs/design/WAVE3-PLAN.md`). The
+  comfortable row height, hover grey on pointer rest (the primary list had none
+  before this), selected grey with no outline and a heavier title weight, and the
+  keyboard ring drawn inside the row edge rather than on it. A new host primitive,
+  `RowStatus` (`src/components/ui/RowStatus.tsx`, data in `rowStatus.ts` — the same
+  split `rowDelta.ts`/`RowMetric.tsx` use), draws the v4 row status vocabulary: a
+  mark (`aria-hidden`) beside a required `word`, so a status cannot render colour
+  alone. `DatabasePlugin.tsx` — the mock that models inventory — exercises all four
+  statuses ("Below reorder point" from its existing stock check; "Delivered",
+  "Delivery overdue" and "Awaiting supplier" from a new `supplyState` seeded once
+  per record off the record's own id, not off the catalogue's shared random
+  sequence, so no existing badge or stock figure outside this change moved).
+  `MailPlugin.tsx` renders no status line: its only real state axis, read/unread,
+  is not one of the four words, so its rows keep their sender/time second line
+  instead of inventing one. `VirtualizedList.tsx` gains an exported
+  `ROW_HEIGHT_COMFORTABLE` and the same hover/ring token roles on its own row, with
+  a recorded limit below. Failure mode this closes: a selected or focused row could
+  not be told apart from a merely-hovered one without an outline, and a low-vision
+  reader had no non-colour channel for "this needs attention" in a dense list.
+  *Tests:* `src/components/__tests__/RowStatus.test.tsx` — "pairs the %s mark with
+  the word, in the status ink", "draws a mark with no text of its own, so a screen
+  reader is not told about a decoration" and "resolves every status kind to a
+  non-empty mark, so a typo cannot leave one blank"; `e2e/list-rows.spec.ts` —
+  "measures a row 32px tall", "changes the painted background when a pointer rests
+  on a row", "draws a selected row with no outline and a heavier title weight",
+  "keeps the current row's keyboard focus ring inside the list's clip" and "renders
+  the warning status line's mark and word, clearing 4.5:1 in every theme" (one such
+  case per status). **Not done:** the browser cases are written and reviewed but
+  not run in this environment — the sandbox's Playwright build is pinned below what
+  `playwright.config.ts` wants and the proxy blocks the newer download
+  (`docs/cloud/runbook.md`); the PR's `Browser tests (chromium)` check is the
+  evidence. `VirtualizedList.tsx`'s own row never itself matches `:focus-visible`
+  under its one-tab-stop, `aria-activedescendant` architecture, so the ring token
+  applied there does not yet paint — recorded as a limit in that file's own comment
+  rather than claimed; nothing in the shipped shell mounts it with real content
+  today, so there is no browser route to it either way. Step 6's per-row instrument
+  band is out of scope and untouched; the trailing slot is exactly what `RowMetric`
+  already drew.
+
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
   settings, read back as enabled (private vulnerability reporting re-proven on every
