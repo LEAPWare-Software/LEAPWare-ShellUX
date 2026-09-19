@@ -8,9 +8,10 @@
  *   2. Local structure first. A ticked item without exactly one tag, whose row is not in
  *      `active`, or whose `box` differs from its text renders UNPROVEN whatever any run
  *      says, because a run can only speak for the rows it ran.
- *   3. The reference run: a `schedule` or `push` run of claims.yml on `main`, from this
- *      repository, completed, not cancelled or skipped, highest run_number. Pull-request
- *      and merge-queue runs are never candidates.
+ *   3. The reference run: a `schedule`, `push` or `workflow_dispatch` run of claims.yml on
+ *      `main`, from this repository, completed, not cancelled or skipped, highest
+ *      run_number. Pull-request and merge-queue runs are never candidates. A dispatch is
+ *      one so that a forced crash (rollout step 3) renders FAILING RUN, as a real one must.
  *   4. Render each row by the first rule that matches (renderRow below).
  *
  * It never reports an item as settled on its own authority: the strongest word it prints
@@ -27,16 +28,19 @@ import { checkStructure, readWorkingTree } from './claims/lint-boxes.mjs';
 
 export const STALE_MS = 48 * 60 * 60 * 1000;
 export const WORKFLOW = 'claims.yml';
+/** Events whose runs on main may be the reference run (§3.6 step 3). */
+export const MAIN_EVENTS = ['schedule', 'push', 'workflow_dispatch'];
 
 /**
  * Pick the reference run from a runs-API list (§3.6 step 3), and the newest completed
  * main run (which may be cancelled; rule 3 needs it).
  * *Tests:* scripts/__tests__/status.test.mjs — "never takes a pull-request or merge-queue run as the reference run".
+ * *Tests:* scripts/__tests__/status.test.mjs — "takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch".
  */
 export function pickRuns(runs, repoId) {
   const main = (runs ?? []).filter(
     (r) =>
-      (r.event === 'schedule' || r.event === 'push') &&
+      MAIN_EVENTS.includes(r.event) &&
       r.head_branch === 'main' &&
       r.head_repository?.id === repoId &&
       r.status === 'completed',

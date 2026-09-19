@@ -125,15 +125,38 @@ describe('the proof-of-completion workflows (§3.4)', () => {
   it('claims.yml keeps change runs per ref with cancellation, and main runs in one uncancelled group', () => {
     const { group, 'cancel-in-progress': cancel } = workflows['claims.yml'].concurrency;
     const evaluate = (event) => {
-      const main = event === 'push' || event === 'schedule';
-      assert.match(group, /github\.event_name == 'push' \|\| github\.event_name == 'schedule'\) && 'claims-main' \|\| format\('\{0\}-\{1\}', github\.workflow, github\.ref\)/);
+      const main = event === 'push' || event === 'schedule' || event === 'workflow_dispatch';
+      assert.match(group, /github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'\) && 'claims-main' \|\| format\('\{0\}-\{1\}', github\.workflow, github\.ref\)/);
       assert.match(cancel, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'/);
       return { group: main ? 'claims-main' : 'per-ref', cancel: !main };
     };
     assert.deepEqual(evaluate('push'), { group: 'claims-main', cancel: false });
     assert.deepEqual(evaluate('schedule'), { group: 'claims-main', cancel: false });
+    assert.deepEqual(evaluate('workflow_dispatch'), { group: 'claims-main', cancel: false });
     assert.deepEqual(evaluate('pull_request'), { group: 'per-ref', cancel: true });
     assert.deepEqual(evaluate('merge_group'), { group: 'per-ref', cancel: true });
+  });
+
+  it('claims.yml takes a workflow_dispatch with an inject choice, and passes it to the prover on that event only', () => {
+    const on = triggers(workflows['claims.yml']);
+    const inject = on.workflow_dispatch.inputs.inject;
+    assert.equal(inject.type, 'choice');
+    assert.deepEqual(inject.options, ['none', 'failing-row', 'crash']);
+    assert.equal(inject.default, 'none');
+    const step = workflows['claims.yml'].jobs.prove.steps.find((s) => s.name === 'Prove claims');
+    assert.equal(step.env.INJECT, "${{ github.event_name == 'workflow_dispatch' && inputs.inject || 'none' }}");
+    assert.match(step.run, /--inject "\$INJECT"/);
+    for (const event of ['pull_request', 'merge_group', 'push']) {
+      assert.equal(on[event]?.inputs, undefined, `${event} carries no inputs`);
+    }
+  });
+
+  it('claims.yml uploads and files issues for a workflow_dispatch run only from main', () => {
+    const { prove, 'file-issue': issue } = workflows['claims.yml'].jobs;
+    const upload = prove.steps.find((s) => String(s.uses ?? '').startsWith('actions/upload-artifact@'));
+    const fromMain = /\(github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'\)/;
+    assert.match(upload.if, fromMain);
+    assert.match(issue.if, fromMain);
   });
 
   it('pr-evidence.yml keeps the per-ref group with cancellation', () => {

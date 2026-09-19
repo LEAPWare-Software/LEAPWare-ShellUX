@@ -49,6 +49,14 @@ describe('choosing the reference run (§3.6 step 3)', () => {
     assert.equal(pickRuns(runs, REPO_ID).reference.id, 3);
   });
 
+  it('takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch', () => {
+    const crashed = run({ id: 8, run_number: 30, event: 'workflow_dispatch', conclusion: 'failure' });
+    const runs = [run({ id: 6, run_number: 20 }), crashed, run({ id: 9, run_number: 31, event: 'workflow_dispatch', head_branch: 'feature' })];
+    const { reference } = pickRuns(runs, REPO_ID);
+    assert.equal(reference.id, 8);
+    assert.equal(renderRow(repoRow, base({ newest: reference, reference })).state, 'FAILING RUN 8');
+  });
+
   it('skips other branches, forks, incomplete, cancelled and skipped runs, and takes the highest run_number', () => {
     const runs = [
       run({ id: 1, run_number: 90, head_branch: 'feature' }),
