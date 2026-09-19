@@ -536,7 +536,9 @@ describe('ShellLayout — pane 1 collapse', () => {
 
     const track = container.querySelector('[data-shell-region="nav-track"]');
     expect(track).not.toBeNull();
-    expect((track as HTMLElement).style.width).toBe('48px');
+    // Wave 3, W3-3: `TOKEN_CLASS.railWidth`, not an inline style — see the
+    // other case in this file for the reasoning.
+    expect((track as HTMLElement).className).toContain(TOKEN_CLASS.railWidth);
     // Collapse is a different tree, not a small panel: pane 1's panel and the
     // divider beside it have left the group.
     expect(container.querySelector('[data-panel-id="pane1"]')).toBeNull();
@@ -650,9 +652,15 @@ describe('ShellLayout — pane 1 collapse', () => {
     // from the group, and the two survivors holding exactly the share the
     // pixel intent asks for — not whatever an abandoned gesture last computed,
     // and not a pair the library had to scale back up to 100.
+    //
+    // Wave 3, W3-3: the width moved from an inline style to
+    // `TOKEN_CLASS.railWidth` (`--rail-w`), so what jsdom can assert about it
+    // is the class rather than a resolved pixel value — jsdom does not compute
+    // CSS custom properties, and `e2e/shell-layout.spec.ts` still measures the
+    // rendered box in a real browser.
     expect(
-      (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).style.width,
-    ).toBe('48px');
+      (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).className,
+    ).toContain(TOKEN_CLASS.railWidth);
     expect(container.querySelector('[data-panel-id="pane1"]')).toBeNull();
     expect(screen.getAllByRole('separator')).toHaveLength(1);
     expect(panelSizes(container)).toEqual([36, 64]);
@@ -970,7 +978,9 @@ const STATE_MARKERS: ReadonlyMap<string, string> = new Map([
   // `EmptyPane`, which only a pane with no extension renders.
   ['no extension active', 'leading-5'],
   // The navigation tree's child indent, which needs an active extension.
-  ['extension active', 'pl-2'],
+  // Wave 3, W3-3: `pl-3`, not `pl-2` — the indent widened to make room for
+  // the 1px guide rule beside it.
+  ['extension active', 'pl-3'],
   // `PaneWrapper`'s drawer slot.
   ['utility drawer open', 'w-40'],
   // The 32px collapsed navigation square.
@@ -1325,19 +1335,26 @@ describe('ShellLayout — contrast and target size', () => {
     // The fill stays but cannot be the indicator: no fill reaches the 3:1 WCAG
     // 1.4.11 asks of a non-text state indicator without going dark enough to
     // read as a different control entirely.
-    expect(selected).toHaveClass(TOKEN_CLASS.navSelectedSurface);
+    //
+    // Wave 3, W3-3: the fill is `navCurrentSurface` (`--accent-subtle`), not
+    // `navSelectedSurface` (`--surface-selected`) — the current-node treatment
+    // `docs/design/WAVE3-PLAN.md`'s W3-3 row asks for — and the ink is named
+    // explicitly through `navCurrentText` rather than left to inherit.
+    expect(selected).toHaveClass(TOKEN_CLASS.navCurrentSurface);
+    expect(selected).toHaveClass(TOKEN_CLASS.navCurrentText);
     // What actually carries it: a 2px leading rule at `--border-selected`, plus
-    // a semibold label. Two channels, neither of them the fill.
+    // a semibold label. Two channels, neither of them the fill. Unmoved by
+    // W3-3: the rule and the weight were already clearing WCAG 1.4.11 without
+    // the outline this case used to also assert.
     expect(selected).toHaveClass(TOKEN_CLASS.navSelectedRule);
     expect(selected).toHaveClass('aria-[current]:font-semibold');
 
-    // The rule and the outline are DIFFERENT tokens, which is the part a
-    // constant-versus-constant assertion can still prove. Before this change
-    // both were `neutral-200`-family values and the outline was as heavy as the
-    // rule; `design/README.md` flags the split and declines to resolve it, and
-    // it is resolved as decoration-versus-indicator here.
-    expect(TOKEN_CLASS.navSelectedRule).not.toEqual(TOKEN_CLASS.navSelectedBorder);
-    expect(selected).toHaveClass(TOKEN_CLASS.navSelectedBorder);
+    // The full outline is GONE, carrying the W3-2 reading of R7 ("no side
+    // stripe, no outline") from list rows to the navigation tree —
+    // `docs/design/REDESIGN-SPEC.md` names it directly: "deleted. The full
+    // outline is what makes a selected row read as a text field". The rule
+    // above is the only border-shaped affordance left on this row.
+    expect(selected).not.toHaveClass(TOKEN_CLASS.navSelectedBorder);
   });
 
   it('draws the dividers from the control tier rather than from the border tier', () => {

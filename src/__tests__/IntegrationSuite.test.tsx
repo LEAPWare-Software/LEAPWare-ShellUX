@@ -12,6 +12,7 @@ import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext'
 import type { ExtensionRegistry } from '../core/RegistryContext';
 import { useShellContext, useShellStore } from '../core/ShellAPI';
 import type { ShellStateStore } from '../core/ShellAPI';
+import { TOKEN_CLASS } from '../core/theme/tokenClasses';
 import { SCHEMA_VERSION, STORAGE_KEY, createHydrationEngine } from '../core/services/HydrationEngine';
 import type { HydrationEngine, ShellStorage } from '../core/services/HydrationEngine';
 import type {
@@ -949,9 +950,12 @@ describe('navigation badges, written at runtime by an operational module', () =>
     fireEvent.click(document.querySelector('[data-mail-action="mark-read"]') as Element);
 
     click('Collapse navigation');
+    // Wave 3, W3-3: `TOKEN_CLASS.railWidth` (`--rail-w`), not an inline style;
+    // jsdom does not compute custom properties, so the class is what a jsdom
+    // case can assert — `e2e/shell-layout.spec.ts` still measures the box.
     expect(
-      (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).style.width,
-    ).toBe('48px');
+      (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).className,
+    ).toContain(TOKEN_CLASS.railWidth);
     expect(screen.getByRole('button', { name: 'Inbox badge 4' })).toBeInTheDocument();
   });
 
@@ -1517,9 +1521,9 @@ describe('persistence across a simulated reload', () => {
     injected.engine = second;
     const reloaded = render(<Harness blueprints={[remotes.mail]} engine={second} />);
     expect(
-      (reloaded.container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).style
-        .width,
-    ).toBe('48px');
+      (reloaded.container.querySelector('[data-shell-region="nav-track"]') as HTMLElement)
+        .className,
+    ).toContain(TOKEN_CLASS.railWidth);
     expect(screen.getByRole('button', { name: 'Expand navigation' })).toBeInTheDocument();
   });
 
