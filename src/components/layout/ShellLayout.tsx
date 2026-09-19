@@ -42,7 +42,7 @@ import { useHostPalette } from './useHostPalette';
 
 /**
  * ============================================================================
- * THE THREE-PANE SHELL. SEVEN DECISIONS WORTH ARGUING WITH BEFORE CHANGING.
+ * THE THREE-PANE SHELL. EIGHT DECISIONS WORTH ARGUING WITH BEFORE CHANGING.
  * ============================================================================
  *
  * WHERE THE PARTS LIVE, SINCE GITHUB ISSUE #95. This banner governs the whole
