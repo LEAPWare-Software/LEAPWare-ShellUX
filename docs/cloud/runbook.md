@@ -23,6 +23,13 @@ You start with no memory, so re-derive everything.
 - **Environment.**
   - `gh` is not preinstalled. Install it first: `(sudo apt-get install -y -qq gh || apt-get install -y -qq gh)`. `GH_TOKEN` is set, and git pushes go through a proxy.
   - Use `npx -y npm@11.16.0 ci`, because the VM's npm is 10.x.
+  - **GitHub access from the cloud, measured by probe v2 on 2026-09-19:**
+    - **GraphQL is blocked by the proxy**, so `gh pr create`, `gh pr merge`, `gh pr list`, `gh pr edit` and `gh issue comment` fail.
+    - **Use the GitHub MCP tools** (`mcp__github__*`: create a pull request, update a pull request, add an issue comment, read issues). They are the one connector you may use, and only for this repository.
+    - Otherwise use the REST API: `gh api repos/...`, or `curl` with `-H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json"`. A REST comment on #187 returned 201.
+    - **Auto-merge:** use the proxy's CCR route, `PUT /repos/{owner}/{repo}/pulls/{n}/ccr/auto_merge`. The proxy's own 403 message names the CCR routes for auto-merge, review threads and draft state. If that fails, comment `ready to merge: <sha>` on the PR and record it in your lane comment; the watchdog lists it for the owner.
+    - `git push` of a new branch works. **Deleting a branch does not**, over git or REST, so never create throwaway branches.
+    - Commits are authored as `Claude <noreply@anthropic.com>`. Comments appear under the owner's login `LEAPWare-HQ`, which is why owner commands need the `OWNER:` prefix.
   - **Run every long command in the FOREGROUND.** A backgrounded command is killed when the session ends, and its result is lost.
 - **Agents.** The `lw-*` roles are in `.claude/agents/` on `main` once lane C lands them. Until then, read `.claude/agents/lw-<role>.md` from `origin/cloud/runbook` and dispatch a general-purpose subagent with that file's instructions and its `model`.
 - **Deliverables go to files or comments, never only to your final message.** The run-log reader truncates final messages.
@@ -32,7 +39,7 @@ You start with no memory, so re-derive everything.
 ## 0. Hard rules (every routine)
 
 1. **Stop at the boundaries:** anything only the owner can do, the clean Windows VM (plan step 9), and BuildCraft (steps 9b and 10). Never tag, publish a release, or change repository settings or rulesets. Never merge any way except the merge queue. When you reach a boundary, open or update a `needs-owner` issue and move to the next item.
-2. **Never handle secrets.** Use no connectors (Microsoft 365, Docs and the like), even though they may be attached. Never post outside LEAPWare-Software/LEAPWare-ShellUX, except that a BuildCraft review writes files only to this repo's `reviews/buildcraft` branch.
+2. **Never handle secrets.** Use no connectors except the GitHub MCP tools for this repository. Microsoft 365, Docs and the like are forbidden, even when attached. Never post outside LEAPWare-Software/LEAPWare-ShellUX, except that a BuildCraft review writes files only to this repo's `reviews/buildcraft` branch.
 3. **Nothing is done until it is proven.** Tick a plan box only with a `docs/claims.json` row whose checks prove every clause, with a probe that turns the row red (see `docs/proof-of-completion.md`). No closing keywords next to issue numbers.
 4. **Use only the appropriate agent for each job:**
 
