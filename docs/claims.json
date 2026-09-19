@@ -1961,6 +1961,132 @@
       },
       "provenOn": "2026-09-19",
       "addedBy": "wave 3 W3-0 landing (feat/wave3-plan-and-resize)"
+    },
+    {
+      "id": "C-34",
+      "box": "Contract items not covered by Step 6b ship as documented limits (D-35, now narrowed to exclude #16, #17, #28, #32, #57, #68 and #80). The one remaining, #91, is named in `DEVELOPER.md`'s \"Known limits at 1.0\".",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/step7-docs.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "known_limits_section",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "known_limits_names_d35_remainder",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "drop the known-limits heading",
+        "edits": [
+          {
+            "file": "DEVELOPER.md",
+            "replace": [
+              "## Known limits at 1.0",
+              "## Limits"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 7 docs (docs/step7-limits-install)"
+    },
+    {
+      "id": "C-35",
+      "box": "`DEVELOPER.md` gets a \"Known limits at 1.0\" section that names each deferred issue. `README.md`/`PRODUCT.md` state accessibility honestly: WCAG target withdrawn, no assistive technology ever run (#60). The section names #91, #65, #55, #61, #66 and #60 and promises no 1.1 fix; README and PRODUCT already said the rest and are unchanged.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/step7-docs.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "known_limits_issues",
+          "op": "==",
+          "value": 6
+        },
+        {
+          "key": "known_limits_promises_nothing",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "readme_screen_reader_not_done",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "product_wcag_1_1",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "product_no_at_run",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "drop #60 from the known limits",
+        "edits": [
+          {
+            "file": "DEVELOPER.md",
+            "replace": [
+              "[#60](",
+              "[#6O]("
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 7 docs (docs/step7-limits-install)"
+    },
+    {
+      "id": "C-36",
+      "box": "`docs/INSTALL.md` for operators: install per-user, the SmartScreen \"More info → Run anyway\" path for an unsigned build, where the logs live, and how updates arrive (partly covers #43). Written with those sections plus uninstalling, and linked from the README; the update section says the feed is not live yet.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/step7-docs.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "install_sections",
+          "op": "==",
+          "value": 5
+        },
+        {
+          "key": "install_linked_from_readme",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "drop the SmartScreen section",
+        "edits": [
+          {
+            "file": "docs/INSTALL.md",
+            "replace": [
+              "## 3. The unsigned-build warning (SmartScreen)",
+              "## 3. Warnings"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 7 docs (docs/step7-limits-install)"
     }
   ],
   "retired": []
