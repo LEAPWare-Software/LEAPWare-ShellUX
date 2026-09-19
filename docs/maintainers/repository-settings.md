@@ -235,15 +235,49 @@ One job does enable auto-merge: `.github/workflows/auto-queue.yml` adds a
 cloud-lane PR to the merge queue once `scripts/cloud/auto-queue.mjs` finds it
 ready (a lane label, `Verdict: MERGE` in the body, and the newest
 `shellux-cloud-reviewer` comment at the head, by `LEAPWare-HQ`, saying MERGE).
-The merge queue then re-runs every required check, so this adds no way past
-the ruleset. *Tests:* scripts/__tests__/auto-queue.test.mjs.
+A queue entry this job makes does get the required checks run on it before
+anything merges — measured, not assumed: the `Auto-queue` run at
+`2026-09-19T16:30:23Z` logged `auto-queue: #190 queued at 9ee3f218…`, and the
+queue branch `gh-readonly-queue/main/pr-190-39bf3502…` then ran `CI`, `Browser`,
+`Claims` and `PR evidence`, all four `success` (`gh api
+repos/{owner}/{repo}/actions/runs?event=merge_group`).
+
+That readiness check is a **guardrail, not an integrity control** — the same
+standing as `Prove claims` and `PR evidence` above, and the same word
+`scripts/cloud/auto-queue.mjs`'s own docblock uses. It closes the documented
+route and makes the honest mistake loud; it enforces nothing against deliberate
+action. Every cloud routine posts under the owner's login, so the comment the
+script reads proves a review exists at the head, not which routine wrote it,
+and whoever can edit `auto-queue.yml`, the script, or the secret changes what
+gets queued.
+*Tests:* `scripts/__tests__/auto-queue.test.mjs` — *Test:* "ignores a forged
+review comment from any other account", *Test:* "refuses a review comment made
+at an older head" and *Test:* "calls gh pr merge --squash --auto pinned to the
+head only when ready" pin the readiness rules and the head-pinned enqueue.
+Those tests run `readiness()` and the script's `main()` against an injected
+fake `gh`; **no test in this repository asserts that the merge queue re-runs
+required checks**, which is GitHub's own behaviour and rests on the
+measurement above alone.
 
 It enqueues with the Actions secret `AUTO_QUEUE_TOKEN`, a classic `repo`-scope
-token the owner created and stored on 2026-09-19. The built-in `GITHUB_TOKEN`
-cannot do this job: GitHub starts no workflow for an event that token causes,
-so on #194 auto-merge set by `github-actions` left the PR out of the queue with
-every check green. When the token expires or is revoked, the job's
-`Require the AUTO_QUEUE_TOKEN secret` step fails and nothing merges until the
-owner stores a new one (Settings → Developer settings → Personal access tokens
-→ Tokens (classic), scope `repo`; then this repo's Settings → Secrets and
-variables → Actions).
+token the owner creates and stores. **No creation or expiry date is recorded
+here**: a date in this file goes stale silently the first time the token is
+rotated, and nothing in CI reads one back. The secret's own last-updated date
+is on this repo's Settings → Secrets and variables → Actions, and the token's
+expiry on the owner's Tokens (classic) page; those two are the only current
+answers.
+
+The built-in `GITHUB_TOKEN` cannot do this job: GitHub starts no workflow for
+an event that token causes, so on #194 auto-merge set by `github-actions` left
+the PR out of the queue with every check green. The two ways the secret can
+stop working fail in different places, and only one of them is loud:
+
+- **Unset or emptied** — the job's `Require the AUTO_QUEUE_TOKEN secret` step
+  compares `secrets.AUTO_QUEUE_TOKEN != ''` and exits 1 with an `::error::`.
+- **Present but expired or revoked** — that step passes, and the failure lands
+  in `Queue the pull request if it is ready`, as whatever `gh` reports for a
+  rejected credential. The step name says nothing about it.
+
+Either way nothing merges until the owner stores a new token (Settings →
+Developer settings → Personal access tokens → Tokens (classic), scope `repo`;
+then this repo's Settings → Secrets and variables → Actions).
