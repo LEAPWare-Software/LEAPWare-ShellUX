@@ -16,6 +16,27 @@ from so a reader can check it.
 
 ### Added
 
+- **A Content-Security-Policy on every response the packaged renderer's scheme serves**
+  (ADR-0006 step 1). `default-src 'self'; script-src 'self'; object-src 'none';
+  base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'
+  'unsafe-inline'; img-src 'self'; font-src 'self'`, on documents, assets, 403 and 404
+  alike. Scripts run from `'self'` only, with no `'unsafe-eval'` and no network origin.
+  The style exception is measured, not assumed: under `style-src 'self'` the packaged app
+  raised 21 `style-src-attr` and 1 `style-src-elem` violations with the Mail and Database
+  fixtures driven (tooltip and divider drag included), and 1 in host chrome with the
+  palette open; with the shipped policy it raised 0 on each surface, while both
+  positive controls (an inline script and a `data:` image) were refused on every
+  counter (`scripts/csp-smoke.mjs`, `docs/measurements/csp-2026-09-18.json`). *Tests:*
+  `electron/__tests__/rendererCsp.test.ts` — "every HTML response the scheme serves
+  carries the policy", "puts the policy on a script and a stylesheet too", "puts the policy on
+  the 403 and 404 responses too, and warns for each". **What made
+  the gap possible:** the scheme handler lived in a module that starts the app when it
+  loads, so no test could reach it; it now lives in `electron/main/rendererCsp.ts`.
+  **Not done:** `'unsafe-inline'` lets injected CSS apply (anything it loads is still
+  limited to `'self'`); only Windows was measured; the dev server sends no policy. The
+  smoke found that the packaged extension surface does ship the two mock plugins, which
+  `electron/main/index.ts` decision 4 says it does not; filed as #153.
+
 - **The proof-of-completion protocol, as a design** (D-50,
   `docs/proof-of-completion.md`). "Done" is to be recorded only as a ticked plan item
   citing a register row whose check passes; every row is re-run on main and daily; a

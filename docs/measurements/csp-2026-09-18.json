@@ -1,0 +1,556 @@
+{
+  "what": "ADR-0006 implementation step 1: CSP violations measured on the packaged app (scripts/csp-smoke.mjs) and for an ECharts axis tooltip (scripts/csp-echarts-probe.mjs).",
+  "date": "2026-09-18",
+  "electron": "43.2.0",
+  "platform": "win32",
+  "packagedFrom": "npm run verify:desktop -> release/win-unpacked",
+  "runs": {
+    "1-packaged-style-src-self": {
+      "note": "First measurement, with style-src 'self'. Run by an earlier revision of csp-smoke.mjs whose second control was a style attribute (not a data: image) and whose Log filter matched /^Refused to/. The one chrome-surface violation appeared after the palette opened (paletteOpen: true); first load recorded none.",
+      "output": {
+        "ok": false,
+        "summary": [
+          {
+            "surface": "extension",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true
+          },
+          {
+            "surface": "chrome",
+            "headerPresent": true,
+            "violations": 2,
+            "controlsRegistered": true
+          }
+        ],
+        "results": [
+          {
+            "surface": "extension",
+            "url": "shellux://renderer/paneview.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "paletteOpen": null
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "styleAttribute": {
+                "raised": 1
+              }
+            }
+          },
+          {
+            "surface": "chrome",
+            "url": "shellux://renderer/index.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [
+                {
+                  "directive": "style-src-elem",
+                  "blocked": "inline",
+                  "sample": ""
+                }
+              ],
+              "logRefusals": [],
+              "auditIssues": 1,
+              "paletteOpen": true
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "styleAttribute": {
+                "raised": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "2-echarts-tooltip-probe": {
+      "note": "One shown axis tooltip, ECharts dist build, per candidate policy.",
+      "output": [
+        {
+          "policy": "default-src 'self'; style-src 'self'",
+          "tooltipShown": true,
+          "violations": 13,
+          "byDirective": {
+            "style-src-attr": 13
+          }
+        },
+        {
+          "policy": "default-src 'self'; style-src 'self'; style-src-elem 'self' 'unsafe-inline'",
+          "tooltipShown": true,
+          "violations": 13,
+          "byDirective": {
+            "style-src-attr": 13
+          }
+        },
+        {
+          "policy": "default-src 'self'; style-src 'self' 'unsafe-inline'",
+          "tooltipShown": true,
+          "violations": 0,
+          "byDirective": {}
+        }
+      ]
+    },
+    "3-packaged-final-policy": {
+      "note": "The committed policy and the committed csp-smoke.mjs, run against the same package. SUPERSEDED as evidence by runs 4 and 5: this run did not activate the fixtures, and its note that the extension surface was empty was wrong — PaneViewShell registers Mail and Database; they were only not activated.",
+      "output": {
+        "ok": true,
+        "summary": [
+          {
+            "surface": "extension",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true
+          },
+          {
+            "surface": "chrome",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true
+          }
+        ],
+        "results": [
+          {
+            "surface": "extension",
+            "url": "shellux://renderer/paneview.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "paletteOpen": null
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "raised": 1
+              }
+            }
+          },
+          {
+            "surface": "chrome",
+            "url": "shellux://renderer/index.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "paletteOpen": true
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "raised": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "4-packaged-driven-style-src-self": {
+      "note": "Review fix F1: a package built with style-src 'self' (no unsafe-inline), smoke activating Mail and Database, hovering the Database chart until its tooltip showed, and dragging a divider. Controls now check all three counters. violations sums the three counters, so each refusal is counted up to three times.",
+      "output": {
+        "ok": false,
+        "summary": [
+          {
+            "surface": "extension",
+            "headerPresent": true,
+            "violations": 66,
+            "controlsRegistered": true,
+            "driven": {
+              "mail": {
+                "found": true,
+                "ok": true
+              },
+              "mailText": "List\n\nINBOX — 8 MESSAGES\n\nQ3 shipping forecast needs your sign-off\nPriya Raman — 09:14 — unread\nthread activity over 8 d",
+              "mailCanvas": 1,
+              "database": {
+                "found": true,
+                "ok": true
+              },
+              "databaseText": "List\n\nALL CATEGORIES — 280 RECORDS\n\nFST-1001\nHex bolt 13mm\n1 in stock against a reorder level of 9\n1\n▼\n-8\ndown\nlow\nFST-1",
+              "canvases": 1,
+              "tooltipShown": true,
+              "handleFound": true,
+              "dragged": true
+            }
+          },
+          {
+            "surface": "chrome",
+            "headerPresent": true,
+            "violations": 3,
+            "controlsRegistered": true,
+            "driven": {
+              "paletteOpen": true
+            }
+          }
+        ],
+        "results": [
+          {
+            "surface": "extension",
+            "url": "shellux://renderer/paneview.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-attr",
+                  "blocked": "inline",
+                  "sample": ""
+                },
+                {
+                  "directive": "style-src-elem",
+                  "blocked": "inline",
+                  "sample": ""
+                }
+              ],
+              "logRefusals": [
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-bVQ1qZaj5/CzDwbjviFi6TwwN8gOIzClb3k9BS+rOWY='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-bVQ1qZaj5/CzDwbjviFi6TwwN8gOIzClb3k9BS+rOWY='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-43wp6iIDS9JO7B06QKjFHEsbu+BgUppz2x6VWLNeOIE='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-ktSs1t+t2aSvSmh01cNAlQOoe3+7sQ1KAJ22qrEjdww='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-bVQ1qZaj5/CzDwbjviFi6TwwN8gOIzClb3k9BS+rOWY='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-bVQ1qZaj5/CzDwbjviFi6TwwN8gOIzClb3k9BS+rOWY='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-twcSN/uhd+aVSfAVDgm6znMkIppv0KZOst8A3OP9zwE='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-p8m68F1t+2d3RC0CJaZlClfszPDgqtrzCjyZx3lwecQ='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-e6UK/9tKwjgnK7TWWq9x8Cgx0GeKBjpkaF+hAnQ67Us='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-ktSs1t+t2aSvSmh01cNAlQOoe3+7sQ1KAJ22qrEjdww='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-bVQ1qZaj5/CzDwbjviFi6TwwN8gOIzClb3k9BS+rOWY='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-R4f76giMgmuxad7bLK/Ovg4Vts6Qgfkj5vpl3YX3lgU='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-p8m68F1t+2d3RC0CJaZlClfszPDgqtrzCjyZx3lwecQ='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-e6UK/9tKwjgnK7TWWq9x8Cgx0GeKBjpkaF+hAnQ67Us='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-YFOIjkCvZnAH6R5z1ZjUI/Zgf7uslK5vN80+lsdvYss='), or a nonce ('nonce-...') is required to enable inline execution. Note that hashes do not apply to event handlers, style attributes and javascript: navigations unless the 'unsafe-hashes' keyword is present. The action has been blocked.",
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+              ],
+              "auditIssues": 22,
+              "driven": {
+                "mail": {
+                  "found": true,
+                  "ok": true
+                },
+                "mailText": "List\n\nINBOX — 8 MESSAGES\n\nQ3 shipping forecast needs your sign-off\nPriya Raman — 09:14 — unread\nthread activity over 8 d",
+                "mailCanvas": 1,
+                "database": {
+                  "found": true,
+                  "ok": true
+                },
+                "databaseText": "List\n\nALL CATEGORIES — 280 RECORDS\n\nFST-1001\nHex bolt 13mm\n1 in stock against a reorder level of 9\n1\n▼\n-8\ndown\nlow\nFST-1",
+                "canvases": 1,
+                "tooltipShown": true,
+                "handleFound": true,
+                "dragged": true
+              }
+            },
+            "controls": {
+              "inlineScript": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1
+              }
+            }
+          },
+          {
+            "surface": "chrome",
+            "url": "shellux://renderer/index.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [
+                {
+                  "directive": "style-src-elem",
+                  "blocked": "inline",
+                  "sample": ""
+                }
+              ],
+              "logRefusals": [
+                "Applying inline style violates the following Content Security Policy directive 'style-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-nzTgYzXYDNe6BAHiiI7NNlfK8n/auuOAhh2t92YvuXo='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+              ],
+              "auditIssues": 1,
+              "driven": {
+                "paletteOpen": true
+              }
+            },
+            "controls": {
+              "inlineScript": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "5-packaged-driven-final-policy": {
+      "note": "The committed policy, the committed csp-smoke.mjs, same driven steps as run 4.",
+      "output": {
+        "ok": true,
+        "summary": [
+          {
+            "surface": "extension",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true,
+            "driven": {
+              "mail": {
+                "found": true,
+                "ok": true
+              },
+              "mailText": "List\n\nINBOX — 8 MESSAGES\n\nQ3 shipping forecast needs your sign-off\nPriya Raman — 09:14 — unread\nthread activity over 8 d",
+              "mailCanvas": 1,
+              "database": {
+                "found": true,
+                "ok": true
+              },
+              "databaseText": "List\n\nALL CATEGORIES — 280 RECORDS\n\nFST-1001\nHex bolt 13mm\n1 in stock against a reorder level of 9\n1\n▼\n-8\ndown\nlow\nFST-1",
+              "canvases": 1,
+              "tooltipShown": true,
+              "handleFound": true,
+              "dragged": true
+            }
+          },
+          {
+            "surface": "chrome",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true,
+            "driven": {
+              "paletteOpen": true
+            }
+          }
+        ],
+        "results": [
+          {
+            "surface": "extension",
+            "url": "shellux://renderer/paneview.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "driven": {
+                "mail": {
+                  "found": true,
+                  "ok": true
+                },
+                "mailText": "List\n\nINBOX — 8 MESSAGES\n\nQ3 shipping forecast needs your sign-off\nPriya Raman — 09:14 — unread\nthread activity over 8 d",
+                "mailCanvas": 1,
+                "database": {
+                  "found": true,
+                  "ok": true
+                },
+                "databaseText": "List\n\nALL CATEGORIES — 280 RECORDS\n\nFST-1001\nHex bolt 13mm\n1 in stock against a reorder level of 9\n1\n▼\n-8\ndown\nlow\nFST-1",
+                "canvases": 1,
+                "tooltipShown": true,
+                "handleFound": true,
+                "dragged": true
+              }
+            },
+            "controls": {
+              "inlineScript": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1
+              }
+            }
+          },
+          {
+            "surface": "chrome",
+            "url": "shellux://renderer/index.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "driven": {
+                "paletteOpen": true
+              }
+            },
+            "controls": {
+              "inlineScript": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "events": 1,
+                "logRefusals": 1,
+                "auditIssues": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

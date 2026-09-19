@@ -92,6 +92,11 @@ Amendment E requires, before the change ships.
   `Content-Security-Policy`, `csp` and `onHeadersReceived`: zero hits. Spike case E
   shows Electron printing its "Insecure Content-Security-Policy" warning against
   exactly this state.
+  > **2026-09-18, step 1 landed — this bullet is a measurement of the tree before
+  > it.** Every response from the scheme now carries a policy, built in
+  > `electron/main/rendererCsp.ts`. *Tests:* `electron/__tests__/rendererCsp.test.ts`
+  > — "every HTML response the scheme serves carries the policy". What the policy
+  > is, and the measurements behind its `style-src`, are in decision 5's note.
 - **`main` cannot import `src/`.** Amendment O decision 6: `electron/tsconfig.json`
   is `NodeNext`, `src/` imports are extensionless, and every relative import fails
   `TS2835`. Anything main and the renderer must agree on has to live where both can
@@ -330,6 +335,33 @@ not list. `connect-src 'self'` means **no plugin reaches the network in 1.0**; o
 an origin is a deployment-wide CSP change, which is the honest shape of a permission in
 one document. The dev server (`npm run dev`, `dev.html`) sets no CSP and is not
 covered; stated, not fixed.
+
+> **2026-09-18, step 1 — the measured `style-src`.** The policy shipped is the six
+> directives above plus `style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'`.
+> `'unsafe-inline'` is **measured necessary, for styles only**, and the reading above
+> ("Radix and ECharts set styles through the CSSOM") was half wrong:
+>
+> - With `style-src 'self'`, the packaged app raised one `style-src-elem` violation
+>   when the palette opened. Attributed by reading the bundle, not by the report
+>   (which carries no sample): Radix Dialog's scroll lock inserts a `<style>` element
+>   whose text carries a measured scrollbar width, so no hash can name it.
+> - An ECharts axis tooltip writes HTML with `style="…"` attributes. The packaged
+>   extension surface registers the Mail and Database fixtures
+>   (`src/paneview/PaneViewShell.tsx`) though nothing in the packaged app activates
+>   them; the smoke activates both, hovers the Database chart until its tooltip
+>   shows, and drags a divider. Under `style-src 'self'` that raised 21
+>   `style-src-attr` and 1 `style-src-elem` violation on the extension surface. In
+>   a standalone probe against ECharts' own build: 13 `style-src-attr` for one tooltip, 13
+>   with only `style-src-elem` relaxed, 0 with `style-src 'self' 'unsafe-inline'`.
+> - With the shipped policy, the same driven run recorded **0 violations on each
+>   surface**, and both positive controls — an inline `<script>`, a `data:` image —
+>   were refused on both, each raising exactly one entry in each of the smoke's three
+>   counters.
+>
+> Runs: `scripts/csp-smoke.mjs` and `scripts/csp-echarts-probe.mjs`; output committed
+> in `docs/measurements/csp-2026-09-18.json`. Neither is in `npm run verify`: the
+> smoke needs a packaged app. Not measured: row selection, commands, the drawer, a
+> theme switch, or macOS or Linux.
 
 **Shared modules by build-time rewrite, not an import map.** The plugin build marks
 `react`, `react/jsx-runtime` and `@shellux/sdk` external and rewrites them to

@@ -5,7 +5,8 @@ import type { PaneWindow } from './paneViews.js';
 import type { PaneSurfaceId } from './surfaces.js';
 import { nodeDiagnosticsFs, writeDiagnosticsEntry } from './diagnosticsLog.js';
 import type { DiagnosticsEntry } from './diagnosticsLog.js';
-import { join, sep } from 'node:path';
+import { createRendererHandler, RENDERER_ENTRY } from './rendererCsp.js';
+import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /**
@@ -262,9 +263,6 @@ const APP_SCHEME = 'shellux';
 /** Origin of the packaged renderer. Also the navigation allowlist of decision 5. */
 const APP_ORIGIN = `${APP_SCHEME}://renderer`;
 
-/** Host chrome's document, and what the bare path under the scheme resolves to. */
-const RENDERER_ENTRY = 'index.html';
-
 /**
  * The extension surface's document — panes 2 and 3, in ONE document.
  *
@@ -402,46 +400,23 @@ function registerDiagnosticsChannel(): void {
 }
 
 /**
- * The absolute path a request under `APP_SCHEME` names, or `null` when it names
- * something outside the renderer root.
+ * Decision 3. Serves `dist/` over `APP_SCHEME`, and says so when it cannot.
  *
- * The containment test is `startsWith(root + separator)`, not a prefix test on
- * the root alone: `dist-extra` starts with `dist` and is a different directory.
- * `join` normalises `..` away before the comparison, so a traversal attempt is
- * compared in its resolved form rather than its written one.
+ * The handler itself — path containment, the 403 and 404 bodies, and the
+ * Content-Security-Policy on every response (ADR-0006 decision 5) — is built in
+ * electron/main/rendererCsp.ts, because this file runs `app.whenReady()` at
+ * import time and so cannot be imported by a test. What stays here is the one
+ * part that needs Electron: `net.fetch` over `file:`.
  */
-function resolveRendererFile(requestUrl: string): string | null {
-  let pathname: string;
-  try {
-    pathname = decodeURIComponent(new URL(requestUrl).pathname);
-  } catch {
-    // A malformed URL or a malformed percent-escape. Neither names a file.
-    return null;
-  }
-  const relative = pathname.replace(/^\/+/, '');
-  const target = join(RENDERER_ROOT, relative === '' ? RENDERER_ENTRY : relative);
-  if (target !== RENDERER_ROOT && !target.startsWith(RENDERER_ROOT + sep)) return null;
-  return target;
-}
-
-/** Decision 3. Serves `dist/` over `APP_SCHEME`, and says so when it cannot. */
 function registerRendererProtocol(): void {
-  protocol.handle(APP_SCHEME, async (request) => {
-    const target = resolveRendererFile(request.url);
-    if (target === null) {
-      warn(`refused a request that resolves outside the renderer root: ${request.url}`);
-      return new Response('Forbidden', { status: 403, headers: { 'content-type': 'text/plain' } });
-    }
-    try {
-      return await net.fetch(pathToFileURL(target).toString());
-    } catch (error) {
-      // The white-screen case: the document loaded and one of its assets did
-      // not. No load-failure event fires for this, so this line is the only
-      // place it is ever visible.
-      warn(`renderer asset not found: ${request.url} (${describeError(error)})`);
-      return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
-    }
-  });
+  protocol.handle(
+    APP_SCHEME,
+    createRendererHandler({
+      root: RENDERER_ROOT,
+      fetchFile: (target) => net.fetch(pathToFileURL(target).toString()),
+      warn,
+    }),
+  );
 }
 
 function describeError(error: unknown): string {
