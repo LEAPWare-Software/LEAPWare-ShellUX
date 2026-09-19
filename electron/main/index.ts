@@ -6,6 +6,10 @@ import type { PaneSurfaceId } from './surfaces.js';
 import { nodeDiagnosticsFs, writeDiagnosticsEntry } from './diagnosticsLog.js';
 import type { DiagnosticsEntry } from './diagnosticsLog.js';
 import { createRendererHandler, RENDERER_ENTRY } from './rendererCsp.js';
+import { createPluginStore, nodePluginStoreFs } from './plugins/pluginStore.js';
+import type { PluginStore } from './plugins/pluginStore.js';
+import { createPluginRoute } from './plugins/pluginRoute.js';
+import { registerPluginIpc } from './plugins/pluginIpc.js';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -408,15 +412,59 @@ function registerDiagnosticsChannel(): void {
  * import time and so cannot be imported by a test. What stays here is the one
  * part that needs Electron: `net.fetch` over `file:`.
  */
-function registerRendererProtocol(): void {
+function registerRendererProtocol(plugins: PluginStore): void {
   protocol.handle(
     APP_SCHEME,
     createRendererHandler({
       root: RENDERER_ROOT,
       fetchFile: (target) => net.fetch(pathToFileURL(target).toString()),
       warn,
+      servePlugin: createPluginRoute(plugins, warn),
     }),
   );
+}
+
+/**
+ * ============================================================================
+ * THE PLUGIN STORE (ADR-0006 STEP 4).
+ * ============================================================================
+ * `<userData>/plugins/`, per user, as decision 2 fixes. The store, the
+ * `/plugins/` route and the management channels are in
+ * `electron/main/plugins/`, each testable because each takes its filesystem,
+ * its picker and its `ipcMain` as arguments; what stays here is the three real
+ * ones. `app.getPath('userData')` is read inside `whenReady`, where it is valid.
+ * ============================================================================
+ */
+function openPluginStore(): PluginStore {
+  return createPluginStore({ root: join(app.getPath('userData'), 'plugins'), fs: nodePluginStoreFs, warn });
+}
+
+/**
+ * Decision 2's picker, opened by main. The renderer asks for it through
+ * `shellux:plugins:install` and never supplies a path; the path this returns is
+ * the only one the store is given.
+ */
+async function pickPluginPackage(): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = {
+    title: 'Install a plugin',
+    properties: ['openFile'],
+    filters: [{ name: 'LEAPWare plugin', extensions: ['lwplugin'] }],
+  };
+  const result =
+    paneWindow === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(paneWindow.window, options);
+  const [path] = result.filePaths;
+  return result.canceled || path === undefined ? null : path;
+}
+
+/** Decision 6's sender check, over the live window. See `electron/main/plugins/pluginIpc.ts`. */
+function registerPluginChannels(plugins: PluginStore): void {
+  registerPluginIpc({
+    ipc: ipcMain,
+    hostChrome: () => paneWindow?.contentsOf('chrome') ?? null,
+    store: plugins,
+    pickPackage: pickPluginPackage,
+    warn,
+  });
 }
 
 function describeError(error: unknown): string {
@@ -590,7 +638,9 @@ function openShellWindow(): void {
 app
   .whenReady()
   .then(() => {
-    registerRendererProtocol();
+    const plugins = openPluginStore();
+    registerRendererProtocol(plugins);
+    registerPluginChannels(plugins);
     registerSplitChannel();
     registerStoreRelay();
     registerPaletteRouting();
