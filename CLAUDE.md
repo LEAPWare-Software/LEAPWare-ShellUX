@@ -190,6 +190,7 @@ Citation markers checker recognise: `*Tests:*`, `*Test:*`, `pinned by`.
 | The plan to 1.0, and what "best in class" is measured by | `docs/plans/v1-production.md` |
 | What is decided and what is open | `docs/DECISIONS.md` |
 | How work moves through stages, under BuildCraft | `docs/sdlc.md` |
+| How "done" is proven before BuildCraft enforces it (design, D-50) | `docs/proof-of-completion.md` |
 | The visual system every UI change follows | `DESIGN.md` |
 | Every trap in full, and two corrected surprises | `docs/traps.md` |
 | Writing an extension | `src/examples/HelloExtension.tsx` first (the whole contract in ~100 lines), then `DEVELOPER.md`; not `src/mocks/` |

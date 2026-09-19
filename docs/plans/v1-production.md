@@ -92,6 +92,14 @@ Measured today:
 ## Step 0b — Withdrawn
 The BuildCraft pilot is not part of this plan (D-44). The 1.0 tag still waits for BuildCraft (D-39).
 
+## Step 0c — Proof of completion, before BuildCraft  (1/5)
+Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until its PR B lands, a tick here is recorded under the old convention.
+- [x] Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50.
+- [ ] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items.
+- [ ] Rollout step 2: every throwaway-PR case shown with its run id.
+- [ ] Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue.
+- [ ] PR B: both checks required with `integration_id: 15368`, applied and read back.
+
 ## Step 1 — Record the decisions before acting on them  (0/2)
 - [ ] In `docs/DECISIONS.md`, add D-31 through D-34 (one per row above, "Called by: Owner, 2026-09-18"). Strike through the superseded D-09, D-11 (as the v1 gate), D-12 and D-27, and rewrite §3 as the new line of sight: this plan's steps. Add D-35: **contract gaps ship as documented limits** (#16, #17, #28, #32, #57, #80, #91). This is consistent with D-23 (no third parties). #65 is re-scoped to the 1.1 milestone.
 - [ ] Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it. Everything else goes to **1.1** or stays on Phase 2. The milestone then *is* the gate, and it can be counted.
@@ -201,7 +209,7 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 ---
 
 ## Deliberately NOT in 1.0 (stated per rule 8)
-#65 and its friction-log fixes (owner call) · screen-reader support: WCAG 2.2 AA and NVDA (#60), moved to 1.1 and labelled · React 19 (#106) · react-resizable-panels 4 (#120) · macOS (D-26) · signing (D-25, vendor kept) · assistive-technology testing (#60), with the ADR-0005 arm B kept `Proposed` · performance budget (#62) · docs issues #41–#54 except what Step 7 touches.
+#65 and its friction-log fixes (owner call) · screen-reader support: WCAG 2.2 AA and NVDA (#60), moved to 1.1 and labelled · React 19 (#106) · react-resizable-panels 4 (#120) · macOS (D-26) · signing (D-25, vendor kept) · assistive-technology testing (#60), with the ADR-0005 arm B kept `Proposed` · docs issues #41–#54 except what Step 7 touches.
 
 ## Verification (every step)
 - `npm run verify`, all stages (11 once Step 2 adds the caps check), with the exit code read directly. `npm run test:browser` for anything geometric, visual or focus-related.

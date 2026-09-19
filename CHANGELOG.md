@@ -16,6 +16,14 @@ from so a reader can check it.
 
 ### Added
 
+- **The proof-of-completion protocol, as a design** (D-50,
+  `docs/proof-of-completion.md`). "Done" is to be recorded only as a ticked plan item
+  citing a register row whose check passes; every row is re-run on main and daily; a
+  PR carries evidence, "Not done" and a review record bound to its head SHA; and
+  `npm run status` renders each tick from the latest main run, never "proven". Audited
+  in twelve adversarial rounds until one found no Blocker. **Nothing is built yet:**
+  plan step 0c tracks the build. Its threat model is the honest mistake; it states
+  plainly that a writer can defeat any in-repository gate until BuildCraft R4.
 - **A crash now leaves a report someone can read, and the bundle declares its target**
   (GitHub #86, #85; Electron half). `electron/main/diagnosticsLog.ts` writes a rotating
   log (1 MiB, two backups) under `app.getPath('logs')`; main records
@@ -398,8 +406,9 @@ from so a reader can check it.
   which, so three SUCCESS runs gave no signal either way. The prompt now reviews against
   `CLAUDE.md` and ADR-0003 and must always end with one `Claude review:` summary
   comment. The plugin marketplace URL, which could not be pinned, is gone. **What made
-  it possible:** a job that can succeed silently was treated as a reviewer. **Not proven
-  here:** the next PR shows whether it comments.
+  it possible:** a job that can succeed silently was treated as a reviewer. **Proven on
+  the next PR** (#152, run 35416928233): it posted a summary and two inline findings, both
+  valid and fixed there.
 - **Chart titles overprinted the plot and ignored the theme; the chart contrast rows
   were measured on a background nothing painted** (GitHub #112, #113; #111 addressed).
   The title is no longer drawn into the ECharts canvas: the `<figcaption>` is the
