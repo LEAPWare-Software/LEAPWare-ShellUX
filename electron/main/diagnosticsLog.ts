@@ -72,7 +72,33 @@ export const MAX_BYTES = 1_048_576;
 /** `diagnostics.log`, `diagnostics.log.1`, `diagnostics.log.2`. Nothing older survives. */
 export const MAX_BACKUPS = 2;
 
+/**
+ * 16 KiB per string field. `MAX_BYTES` bounds the live file only by "one entry
+ * past the cap", so without a bound on the entry itself one report (a renderer
+ * that stringifies a huge object into `message`, say) could write an entry of
+ * any size straight through the rotation check. Review of the hardening change
+ * found that; this cap is the fix. A real stack is a few KiB.
+ */
+export const MAX_FIELD_CHARS = 16_384;
+
 const LOG_FILE_NAME = 'diagnostics.log';
+
+/** `value` cut to `MAX_FIELD_CHARS`, saying how much was cut, so a truncated line is never mistaken for a whole one. */
+export function capField(value: string): string {
+  if (value.length <= MAX_FIELD_CHARS) return value;
+  return `${value.slice(0, MAX_FIELD_CHARS)}...[truncated ${String(value.length - MAX_FIELD_CHARS)} chars]`;
+}
+
+function capEntry(entry: DiagnosticsEntry): DiagnosticsEntry {
+  const capped: { -readonly [K in keyof DiagnosticsEntry]: DiagnosticsEntry[K] } = {
+    ...entry,
+    kind: capField(entry.kind),
+    message: capField(entry.message),
+  };
+  if (typeof entry.stack === 'string') capped.stack = capField(entry.stack);
+  if (typeof entry.filename === 'string') capped.filename = capField(entry.filename);
+  return capped;
+}
 
 /** Where the live file and its backups live, given the log directory root. */
 export function logFilePath(logsDir: string, backup = 0): string {
@@ -105,7 +131,7 @@ function rotate(fs: DiagnosticsFs, logsDir: string): void {
  * subscriber that throws.
  */
 export function writeDiagnosticsEntry(fs: DiagnosticsFs, logsDir: string, entry: DiagnosticsEntry): void {
-  const line = `${JSON.stringify({ timestamp: new Date().toISOString(), ...entry })}\n`;
+  const line = `${JSON.stringify({ timestamp: new Date().toISOString(), ...capEntry(entry) })}\n`;
   try {
     const target = logFilePath(logsDir);
     if (fs.existsSync(target) && fs.statSync(target).size + line.length > MAX_BYTES) {

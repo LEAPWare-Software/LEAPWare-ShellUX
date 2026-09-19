@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_BACKUPS,
   MAX_BYTES,
+  MAX_FIELD_CHARS,
+  capField,
   logFilePath,
   writeDiagnosticsEntry,
 } from '../main/diagnosticsLog';
@@ -85,6 +87,40 @@ describe('writeDiagnosticsEntry', () => {
     const lines = fs.files[LIVE]!.trim().split('\n');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"message":"second"');
+  });
+
+  it('caps every string field of an oversized report, so one entry cannot outgrow the rotation bound', () => {
+    const fs = makeFakeFs();
+    const huge = 'y'.repeat(MAX_FIELD_CHARS * 4);
+    writeDiagnosticsEntry(fs, LOGS_DIR, {
+      source: 'renderer-extension',
+      kind: huge,
+      message: huge,
+      stack: huge,
+      filename: huge,
+      lineno: 1,
+      colno: 1,
+    });
+    const parsed = JSON.parse(fs.files[LIVE]!.trim()) as Record<string, string>;
+    for (const field of ['kind', 'message', 'stack', 'filename']) {
+      expect(parsed[field]).toBe(capField(huge));
+      expect(parsed[field]!.length).toBeLessThan(MAX_FIELD_CHARS + 64);
+    }
+    expect(fs.files[LIVE]!.length).toBeLessThan(MAX_FIELD_CHARS * 4 + 1024);
+  });
+
+  it('leaves a field at the cap untouched and says how much it cut from one over it', () => {
+    const atCap = 'z'.repeat(MAX_FIELD_CHARS);
+    expect(capField(atCap)).toBe(atCap);
+    expect(capField(`${atCap}zz`)).toBe(`${atCap}...[truncated 2 chars]`);
+  });
+
+  it('keeps a null stack and filename null when capping', () => {
+    const fs = makeFakeFs();
+    writeDiagnosticsEntry(fs, LOGS_DIR, { source: 'main', kind: 'k', message: 'm', stack: null, filename: null });
+    const parsed = JSON.parse(fs.files[LIVE]!.trim()) as Record<string, unknown>;
+    expect(parsed.stack).toBeNull();
+    expect(parsed.filename).toBeNull();
   });
 
   it('serialises every field, including the optional ones', () => {

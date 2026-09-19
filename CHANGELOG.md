@@ -20,7 +20,10 @@ from so a reader can check it.
   (GitHub #86, #85; Electron half). `electron/main/diagnosticsLog.ts` writes a rotating
   log (1 MiB, two backups) under `app.getPath('logs')`; main records
   `uncaughtException`, `unhandledRejection` and `render-process-gone`; both renderers
-  forward `error` and `unhandledrejection` through one new preload member. Nothing
+  forward `error` and `unhandledrejection` through one new preload member. Each string
+  field is capped at 16 KiB, so one oversized report cannot outgrow the rotation bound
+  (found in review). The `source` a renderer reports is self-declared, not derived from
+  the sender, so attribution between the two renderers is a guardrail. Nothing
   leaves the machine: no endpoint exists. Vite now emits sourcemaps and
   `build.target: 'chrome150'`, the Chromium measured in the installed Electron 43.2.0.
   Sourcemaps are kept out of the asar, **third-party ones included**: the first version
