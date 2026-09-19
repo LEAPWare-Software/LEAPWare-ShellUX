@@ -150,12 +150,14 @@ Each run does one unit of work, then exits.
    - add a HANDOFF.md pointer to `docs/handoff/next-session.md`;
    - open a PR.
 2. **Land this runbook and `.claude/agents/lw-*.md`** from branch `cloud/runbook`, as its own PR.
-3. **Make the independent review a gate** (owner order, 2026-09-19: "we must have full proof of completion on the cloud"). Extend `scripts/claims/pr-evidence.mjs` and its tests, so that a PR fails the required `PR evidence` check unless:
-   - its conversation has a comment starting `Reviewer: shellux-cloud-reviewer`;
-   - that comment's `Reviewed SHA:` equals the PR head;
-   - its `Verdict:` is `MERGE`.
-
-   Read the comments through the REST API with the workflow's token. Add a probe row that shows a missing or stale review fails. Name the limit honestly: every routine posts under the owner's login, so the check proves a review exists at the head, not who wrote it. It is a guardrail. This change is a gate change, so list it under `Gate changes:`. The reviewer routine reviews it like any other PR.
+3. **Make the independent review a gate** (owner order, 2026-09-19: "we must have full proof of completion on the cloud"). The independent reviewer is **`claude[bot]`**: the Claude review job in `.github/workflows/claude-code-review.yml`, running in GitHub Actions under its own GitHub identity. Cloud routines post as `LEAPWare-HQ` and **cannot** post as `claude[bot]`, so a conductor cannot forge this review.
+   - Change that job's prompt so every review comment ends with `Reviewed SHA: <full PR head sha>` and `Verdict: MERGE | MERGE WITH FIXES | DO NOT MERGE`. Keep its existing guards (D-49).
+   - Extend `scripts/claims/pr-evidence.mjs` and its tests, so that the required `PR evidence` check fails unless a comment **authored by `claude[bot]`** has `Reviewed SHA:` equal to the head and `Verdict: MERGE`.
+   - Make `PR evidence` re-run when that comment lands (`issue_comment` trigger), so a PR is not stuck.
+   - Add a probe row showing that a missing review, a stale SHA, or a LEAPWare-HQ-authored review each fail.
+   - The cloud reviewer routine stays as a second, deeper review; its verdicts inform the conductor but are not the gate.
+   - This is a gate change, so list it under `Gate changes:`.
+   - *Rejected alternative:* a second GitHub account's token inside a routine. The cloud refused to use a credential embedded in a prompt (2026-09-19), and it is weaker than a bot identity.
 4. The D-27 strike and reversal (plan step 1 and step 3 item), then the SECURITY.md reorder, the README move, and the #74/#103 raw API evidence.
 5. **The gate-4 record is already on this branch** under `docs/design/gate4/`: the v4 canvas source, PNGs and a README. It lands with the runbook PR. After it lands, open a `needs-owner` issue with links to the PNGs on `main`, asking the owner to approve gate 4 (C-24).
 6. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
