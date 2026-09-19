@@ -1,0 +1,1103 @@
+{
+  "schemaVersion": 1,
+  "active": [
+    {
+      "id": "C-01",
+      "box": "Adversarial review of PR #115 (rule 1), by an `lw-verifier` (sonnet) that did not write it. Verdict MERGE AFTER FIXES; record on the PR, 2026-09-18.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "115",
+          "--json",
+          "state,comments",
+          "--jq",
+          "\"pr115_state=\\(.state)\", \"pr115_review_records=\\([.comments[] | select((.body | test(\"Verdict: MERGE AFTER FIXES\")) and (.body | test(\"lw-verifier\")))] | length)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr115_state",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr115_review_records",
+          "op": ">=",
+          "value": 1
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-02",
+      "box": "Fix the findings (`899fa66`, three prose findings). Gates on the fix: `check:portability` and `check:citations` exit 0; CI 5 of 5 green. The full `verify` was not re-run for a two-file prose change.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "115",
+          "--json",
+          "headRefOid,statusCheckRollup",
+          "--jq",
+          "\"pr115_head=\\(.headRefOid[0:7])\", \"pr115_checks_success=\\([.statusCheckRollup[] | select(.conclusion == \"SUCCESS\")] | length)\", \"pr115_checks_total=\\(.statusCheckRollup | length)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr115_head",
+          "op": "==",
+          "value": "899fa66"
+        },
+        {
+          "key": "pr115_checks_success",
+          "op": "==",
+          "value": 5
+        },
+        {
+          "key": "pr115_checks_total",
+          "op": "==",
+          "value": 5
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-03",
+      "box": "Merge #115: merged as `148217b`. **HANDOFF §1 was NOT updated in that landing**; it is carried into the docs-recast change instead, which is a rule-3 miss recorded rather than hidden.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "115",
+          "--json",
+          "state,mergeCommit",
+          "--jq",
+          "\"pr115_state=\\(.state)\", \"pr115_merge_commit=\\(.mergeCommit.oid[0:7])\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr115_state",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr115_merge_commit",
+          "op": "==",
+          "value": "148217b"
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-04",
+      "box": "**Clear the red production audit** (found 2026-09-18: failing every Monday since 2026-08-10 on `js-yaml`), close the unaudited dev tree, and make a failing scheduled audit file an issue. PR #126: `verify` exit 0, review MERGE, Medium finding fixed; merged `e00ea93`, all seven checks green.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "126",
+          "--json",
+          "state,mergeCommit,statusCheckRollup,body",
+          "--jq",
+          "\"pr126_state=\\(.state)\", \"pr126_merge_commit=\\(.mergeCommit.oid[0:7])\", \"pr126_checks_success=\\([.statusCheckRollup[] | select(.conclusion == \"SUCCESS\")] | length)\", \"pr126_checks_total=\\(.statusCheckRollup | length)\", \"pr126_exit_code_record=\\(.body | test(\"VERIFY_EXIT=0\"))\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr126_state",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr126_merge_commit",
+          "op": "==",
+          "value": "e00ea93"
+        },
+        {
+          "key": "pr126_checks_success",
+          "op": "==",
+          "value": 7
+        },
+        {
+          "key": "pr126_checks_total",
+          "op": "==",
+          "value": 7
+        },
+        {
+          "key": "pr126_exit_code_record",
+          "op": "==",
+          "value": "true"
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-05",
+      "box": "Triage the Dependabot PRs. **Done 2026-09-18:** #117 and the group #131 merged green on every leg; the D-28 pin landed in `.github/dependabot.yml` (#130); declined with reasons and an ignore rule: #118, #119, #120, #132, #133, #134, #135, #136, #137, #138, #139, #140, each confirmed `CLOSED` with `gh pr view`. **What \"done\" means here:** every Dependabot pull request opened through 2026-09-18 is merged or declined. It does not mean the queue stays empty: Dependabot opened #140 minutes after this line was first written as \"zero open\", which was true only at that moment:",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "117",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr117=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "131",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr131=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "130",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr130=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "118",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr118=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "119",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr119=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "120",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr120=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "132",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr132=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "133",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr133=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "134",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr134=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "135",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr135=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "136",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr136=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "137",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr137=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "138",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr138=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "139",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr139=\\(.state)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "140",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr140=\\(.state)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr117",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr131",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr130",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr118",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr119",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr120",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr132",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr133",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr134",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr135",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr136",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr137",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr138",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr139",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "pr140",
+          "op": "==",
+          "value": "CLOSED"
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-06",
+      "box": "React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0. React 18 has no known defect in this tree.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/deferred-deps.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "react_major",
+          "op": "==",
+          "value": 18
+        },
+        {
+          "key": "react_dom_major",
+          "op": "==",
+          "value": 18
+        },
+        {
+          "key": "react_refresh_line",
+          "op": "==",
+          "value": "0.4"
+        }
+      ],
+      "probe": {
+        "name": "take React 19",
+        "edits": [
+          {
+            "file": "package.json",
+            "replace": [
+              "\"react\": \"^18.3.1\"",
+              "\"react\": \"^19.0.0\""
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-07",
+      "box": "Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/proof-design-audit.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "audit_rounds",
+          "op": ">=",
+          "value": 12
+        },
+        {
+          "key": "last_round_blockers",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "d50_recorded",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "last audit round finds a Blocker",
+        "edits": [
+          {
+            "file": "docs/proof-of-completion.md",
+            "replace": [
+              "1, 1, **0**.",
+              "1, 1, **1**."
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-08",
+      "box": "HANDOFF.md → ≤3000 bytes. It keeps only the transition: where main is, what landed, what is in flight, the next step. §2–§12 move verbatim to `docs/history/handoff-archive-2026-08.md`.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/context-caps.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "handoff_bytes",
+          "op": "<=",
+          "value": 3000
+        },
+        {
+          "key": "handoff_archive",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "HANDOFF.md grows past 3000 bytes",
+        "edits": [
+          {
+            "file": "HANDOFF.md",
+            "pad": 3001
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-09",
+      "box": "CLAUDE.md → ≤200 lines. The \"Traps\" and \"jsdom is blind\" bodies move to `docs/traps.md`, and CLAUDE.md keeps one-line pointers plus the rules.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/context-caps.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "claude_lines",
+          "op": "<=",
+          "value": 200
+        },
+        {
+          "key": "traps_doc",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "CLAUDE.md grows past 200 lines",
+        "edits": [
+          {
+            "file": "CLAUDE.md",
+            "append": "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n"
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-10",
+      "box": "The caps lint: `scripts/__tests__/context-caps.test.mjs` in `test:scripts`, so inside `verify` with no new stage. Mutation-probed both halves.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/caps-lint-wiring.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "caps_test_file",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "caps_test_in_test_scripts",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "test_scripts_in_gate",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "unwire the caps test from test:scripts",
+        "edits": [
+          {
+            "file": "package.json",
+            "replace": [
+              "scripts/__tests__/context-caps.test.mjs",
+              "scripts/__tests__/context-caps.test.mjs.off"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-11",
+      "box": "`git add` the new files before running `verify` (the portability trap). Citations must still resolve: moved text keeps its `*Tests:*` markers.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/citations.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "traps_tests_markers",
+          "op": ">=",
+          "value": 1
+        },
+        {
+          "key": "citations_exit",
+          "op": "==",
+          "value": 0
+        }
+      ],
+      "probe": {
+        "name": "strip the citation markers from docs/traps.md",
+        "edits": [
+          {
+            "file": "docs/traps.md",
+            "replace": [
+              "*Tests:*",
+              "Tests:"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-12",
+      "box": "Content review of tracked files for anything that must not be public: customer names, internal hosts, credentials in docs. Two found and repaired: a personal-looking contact in `CODE_OF_CONDUCT.md`, a wrong org in `CODEOWNERS`.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/public-content.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "codeowners_hq_lines",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "coc_email_addresses",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "coc_contact_via_security",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "put the inert org back in CODEOWNERS",
+        "edits": [
+          {
+            "file": ".github/CODEOWNERS",
+            "append": "\ndocs/ @LEAPWare-HQ\n"
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-13",
+      "box": "Community files mirroring sessionkeeper's shape: `CODE_OF_CONDUCT.md`, and `.github/ISSUE_TEMPLATE/bug_report.yml` + `feature.yml` (form-based). `CONTRIBUTING.md` and `SECURITY.md` already exist and get re-aimed rather than replaced. `.editorconfig` and `.gitattributes` are added if missing; `.gitattributes` enforces LF, which `check:portability` already requires.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/community-files.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "community_files_present",
+          "op": "==",
+          "value": 7
+        },
+        {
+          "key": "issue_forms",
+          "op": "==",
+          "value": 2
+        },
+        {
+          "key": "gitattributes_eol_lf",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "delete the feature issue form",
+        "edits": [
+          {
+            "file": ".github/ISSUE_TEMPLATE/feature.yml",
+            "delete": true
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-14",
+      "box": "`.github/CODEOWNERS` → `* @LEAPWare-Software`. The current `@LEAPWare-HQ` is inert (HANDOFF §5).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/public-content.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "codeowners_default_owner",
+          "op": "==",
+          "value": "@LEAPWare-Software"
+        }
+      ],
+      "probe": {
+        "name": "route the catch-all to the inert org",
+        "edits": [
+          {
+            "file": ".github/CODEOWNERS",
+            "replace": [
+              "* @LEAPWare-Software",
+              "* @LEAPWare-HQ"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-15",
+      "box": "Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: #112 (title overprint), #113 (title outside the token system, dark contrast), #111 (contrast gate measured against a background the app never paints). Landed in the charts PR; the contrast check now runs in `tokens:check`. #146 (Database chart clipped) filed, not fixed.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "148",
+          "--json",
+          "state,title",
+          "--jq",
+          "\"pr148_state=\\(.state)\", \"pr148_repairs_112_113=\\(.title | test(\"repairs #112, #113\"))\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "146",
+          "--json",
+          "number",
+          "--jq",
+          "\"issue146_filed=\\(.number)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr148_state",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr148_repairs_112_113",
+          "op": "==",
+          "value": "true"
+        },
+        {
+          "key": "issue146_filed",
+          "op": "==",
+          "value": 146
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-16",
+      "box": "Browser-lane cases, mutation-probed. Revert the fix and watch them go red. Whole-fix revert re-run at landing; result in the charts PR body.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "148",
+          "--json",
+          "body",
+          "--jq",
+          "\"pr148_whole_fix_revert_went_red=\\(.body | test(\"Whole fix reverted:.*went red\"))\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr148_whole_fix_revert_went_red",
+          "op": "==",
+          "value": "true"
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-17",
+      "box": "Review → `verify` → merge (per D-30). Record and `VERIFY_EXIT` in the charts PR body.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "148",
+          "--json",
+          "state,body",
+          "--jq",
+          "\"pr148_state=\\(.state)\", \"pr148_exit_code_record=\\(.body | test(\"(?m)^VERIFY_EXIT=0$\"))\", \"pr148_verdict_merge=\\(.body | test(\"(?m)^Verdict: MERGE\"))\", \"pr148_reviewer=\\(.body | test(\"(?m)^Reviewer: lw-verifier\"))\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr148_state",
+          "op": "==",
+          "value": "MERGED"
+        },
+        {
+          "key": "pr148_exit_code_record",
+          "op": "==",
+          "value": "true"
+        },
+        {
+          "key": "pr148_verdict_merge",
+          "op": "==",
+          "value": "true"
+        },
+        {
+          "key": "pr148_reviewer",
+          "op": "==",
+          "value": "true"
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-18",
+      "box": "**ADR-0006 first, before any code.** Accepted 2026-09-18 on D-46 to D-48, with ADR-0001 Amendment P; see `docs/adr/0006-runtime-plugin-host.md`. Covers the manifest format; where plugins live (per-user `app.getPath('userData')/plugins`); how they load (a custom protocol serving each plugin's bundle into the extension `WebContentsView`, with no `nodeIntegration` and a context-isolated preload); and install sources (a local `.lwplugin` package, plus a GitHub Release URL). The ADR must use ADR-0001 Amendment E vocabulary: a plugin runs **in the extension renderer, with no boundary between plugins**, which is crash containment, not isolation. D-23 stays: first-party plugins only.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/adr-0006.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "adr0006_status",
+          "op": "==",
+          "value": "Accepted"
+        },
+        {
+          "key": "adr0001_amendment_p",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_no_boundary_between_plugins",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "set ADR-0006 back to Proposed",
+        "edits": [
+          {
+            "file": "docs/adr/0006-runtime-plugin-host.md",
+            "replace": [
+              "- **Status:** **Accepted**",
+              "- **Status:** **Proposed**"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-19",
+      "box": "Scan the full history for secrets with gitleaks over `--log-opts=--all`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated**; deleting it from history is not enough. Run 2026-09-18 **after** the flip, because gitleaks could not run before it (D-43, whose pre-flip check was a grep of every commit): no leaks, raw output in the row's evidence file.",
+      "class": "manual",
+      "expect": [
+        {
+          "key": "GITLEAKS_EXIT",
+          "op": "==",
+          "value": 0
+        }
+      ],
+      "evidence": "docs/claims-evidence/C-19-gitleaks-full-history-2026-09-18.txt",
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-20",
+      "box": "**Licence.** Sessionkeeper ships `LICENSE` (Apache-2.0, 201 lines) and a `NOTICE`, and its README carries a license line. ShellUX's `package.json` says `MIT`. **Owner picks one**; the default is Apache-2.0 to match the house pattern. That means the `LICENSE` and `NOTICE` files, `package.json` `license`, and the README line, all in one commit. The owner picked Apache-2.0 (D-42).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/licence.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "licence_is_apache_2",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "licence_lines",
+          "op": "==",
+          "value": 201
+        },
+        {
+          "key": "notice_present",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "package_license",
+          "op": "==",
+          "value": "Apache-2.0"
+        },
+        {
+          "key": "readme_license_line",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "package.json goes back to MIT",
+        "edits": [
+          {
+            "file": "package.json",
+            "replace": [
+              "\"license\": \"Apache-2.0\"",
+              "\"license\": \"MIT\""
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-21",
+      "box": "**The repository is public.** Outward and hard to reverse, so it was the owner's call (D-43), executed by the CTO agent under the owner's 2026-09-18 delegation. The owner accepted the Context risk statement in D-34.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "api",
+          "repos/LEAPWare-Software/LEAPWare-ShellUX",
+          "--jq",
+          "\"visibility=\\(.visibility)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "visibility",
+          "op": "==",
+          "value": "public"
+        }
+      ],
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-22",
+      "box": "Owner confirms or overrides the SHAPE-BRIEF gate points: §3 editorial voice, §4 the 11–13px scale, §9 palette arrow-keys, §13.1. Each goes into DECISIONS.md.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/design-gates.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "d40_owner",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d40_gate_points",
+          "op": "==",
+          "value": 4
+        }
+      ],
+      "probe": {
+        "name": "drop §13.1 from D-40",
+        "edits": [
+          {
+            "file": "docs/DECISIONS.md",
+            "replace": [
+              "§13.1 (redesign before #65) is moot",
+              "redesign before #65 is moot"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-23",
+      "box": "**Gate 3:** write `DESIGN.md` with impeccable, from real `design/generate.mjs` output. It covers type scale, spacing, planes, states and motion, and no hand-written hex (the token pipeline stays the only colour source).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/design-gates.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "design_sections",
+          "op": "==",
+          "value": 5
+        },
+        {
+          "key": "design_hex_values",
+          "op": ">=",
+          "value": 1
+        },
+        {
+          "key": "design_hex_not_generated",
+          "op": "==",
+          "value": 0
+        }
+      ],
+      "probe": {
+        "name": "type a hand-written hex into DESIGN.md",
+        "edits": [
+          {
+            "file": "DESIGN.md",
+            "replace": [
+              "\"#006e65\"",
+              "\"#123456\""
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-24",
+      "box": "**Owner approves gate 4.** Steps 4–6 and 6b's UI implement the approved wireframes, and a live impeccable pass on the running app checks the result against them.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/design-gates.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "d45_owner",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d45_screens_approved",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "D-45 not yet approved",
+        "edits": [
+          {
+            "file": "docs/DECISIONS.md",
+            "replace": [
+              "gate-4 screens are approved",
+              "gate-4 screens are awaiting approval"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-25",
+      "box": "Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it. Everything else goes to **1.1** or stays on Phase 2. The milestone then *is* the gate, and it can be counted.",
+      "class": "manual",
+      "expect": [
+        {
+          "key": "unmilestoned_open_issues",
+          "op": "==",
+          "value": 0
+        }
+      ],
+      "evidence": "docs/claims-evidence/C-25-milestones-2026-09-18.txt",
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    }
+  ],
+  "retired": []
+}

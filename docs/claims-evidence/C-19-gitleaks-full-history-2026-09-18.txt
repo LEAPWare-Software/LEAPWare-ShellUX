@@ -1,0 +1,18 @@
+# Evidence for register row C-19: a full-history secret scan.
+# Captured 2026-09-18 in a clone of LEAPWare-Software/LEAPWare-ShellUX, HEAD dcc378426b659c5da38ad61caee5310b37b4c5d8.
+# Tool: gitleaks 8.30.1, a standalone binary run once (not a tracked dependency, ADR-0002).
+# Command: gitleaks git --log-opts=--all --redact --no-color .
+# Scope: every ref in this clone. git rev-list --all --count = 136; --no-merges = 122.
+# Limit: refs that exist only on GitHub (deleted PR branches, refs/pull/*) were not fetched and are not in scope.
+# Raw output follows, unedited.
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+10:35PM INF 121 commits scanned.
+10:35PM INF scanned ~7936548 bytes (7.94 MB) in 653ms
+10:35PM INF no leaks found
+GITLEAKS_EXIT=0

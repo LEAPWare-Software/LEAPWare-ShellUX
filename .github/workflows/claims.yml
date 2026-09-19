@@ -1,0 +1,150 @@
+name: Claims
+
+# The proof-of-completion register, re-proven (docs/proof-of-completion.md §3.4, §3.5).
+#
+# On a pull request or a merge-queue entry, `Prove claims` runs the structural checks on
+# every ticked plan item plus the register rows the change touched, and fails the change
+# on any failure. On every push to main and once a day it re-runs every repo and github
+# row, every probe and the ruleset comparison, records each result in the
+# `claims-results` artifact that `npm run status` reads, and succeeds unless it crashes;
+# a failing result files one issue from the separate job below.
+#
+# NOT a required check yet (rollout step 1). PR B adds it to .github/rulesets/main.json.
+# A guardrail against the honest mistake: anyone who can merge can edit this file.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+  push:
+    branches: [main]
+  schedule:
+    # 05:17 UTC daily, off the hour so it does not queue behind every other cron.
+    - cron: '17 5 * * *'
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+  issues: read
+
+# PR and queue runs: one per ref, a newer push cancels the older run. Main runs: one
+# group, never cancelled in progress. GitHub keeps at most one pending run per group and
+# cancels an older pending one; the newer run checks a tree that contains the older one,
+# and cancelled runs are never reference runs for `npm run status`.
+concurrency:
+  group: ${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'claims-main' || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
+
+jobs:
+  prove:
+    name: Prove claims
+    runs-on: ubuntu-24.04
+    # Queue-bound runs must fit the merge queue's 10-minute response window; main runs are
+    # not queue-bound and may take the whole register plus every probe.
+    timeout-minutes: ${{ (github.event_name == 'push' || github.event_name == 'schedule') && 30 || 10 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The diff is origin/main...HEAD; a shallow clone has no merge base, and the
+          # prover fails loudly rather than guessing.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Under merge_group the pull request number comes from the queue ref; an
+      # unresolvable ref fails the job rather than proving nothing.
+      - name: Resolve the queued pull request
+        if: github.event_name == 'merge_group'
+        env:
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          node --input-type=module -e "import { prNumberFromQueueRef } from './scripts/claims/lib.mjs'; console.log('queued PR #' + prNumberFromQueueRef(process.env.HEAD_REF));"
+
+      - name: Prove claims
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Repo rows run under `unshare --net`; if the wrapper does not work the job
+          # fails, it never falls back to running unrestricted.
+          CLAIMS_NET_RESTRICT: unshare
+          MODE: ${{ github.event_name }}
+        run: node scripts/claims/prove-claims.mjs --mode "$MODE" --out claims-results.json
+
+      # Advisory only: annotations on the added prose, never a failure.
+      - name: Advisory prose lint
+        if: github.event_name == 'pull_request'
+        run: node scripts/claims/lint-prose.mjs
+
+      - name: Upload claims-results
+        if: always() && (github.event_name == 'push' || github.event_name == 'schedule')
+        uses: actions/upload-artifact@v4
+        with:
+          name: claims-results
+          path: claims-results.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # Files or comments one issue when a main run's check job failed, its artifact is
+  # missing, or any recorded row failed. A run cancelled by hand or by concurrency files
+  # nothing (`!cancelled()`). Separate job, so the proving job never holds a write token.
+  file-issue:
+    name: File the claims failure
+    needs: prove
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      issues: write
+
+    steps:
+      - name: Download claims-results
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: claims-results
+
+      - name: Decide
+        id: decide
+        env:
+          PROVE_RESULT: ${{ needs.prove.result }}
+          DOWNLOAD: ${{ steps.download.outcome }}
+        run: |
+          reason=""
+          if [ "$PROVE_RESULT" = "failure" ]; then
+            reason="the Prove claims job failed"
+          elif [ "$DOWNLOAD" != "success" ] || [ ! -f claims-results.json ]; then
+            reason="the claims-results artifact is missing"
+          else
+            failed=$(jq -r '[.results[] | select(.pass != true) | .rowId] | join(", ")' claims-results.json)
+            if [ -n "$failed" ]; then reason="failing: $failed"; fi
+          fi
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "decision: ${reason:-nothing failed, no issue}"
+
+      # The find-or-comment step audit-schedule.yml uses (proven by #142).
+      - name: File the failure where someone will see it
+        if: steps.decide.outputs.reason != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: Claims register is failing
+          REASON: ${{ steps.decide.outputs.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="$ISSUE_TITLE"
+          body="Claims run failed ($REASON): $RUN_URL"
+          existing=$(gh issue list --state open --search "$title in:title" --json number,title --jq "map(select(.title == env.ISSUE_TITLE)) | .[0].number // empty" || true)
+          if [ -n "$existing" ] && gh issue comment "$existing" --body "$body"; then
+            exit 0
+          fi
+          gh issue create --title "$title" --body "$body"

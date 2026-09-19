@@ -38,18 +38,50 @@ wave is what produced every defect listed in ADR-0003's Context.
 - [ ] The change is scoped so a reviewer can actually read it. If it is large, the
       reason it could not be split is stated above.
 
-## `npm run verify`, run locally
+## Review
 
-Paste the real output. Not a summary of it, not "all green", not a screenshot of
-part of it. `verify` runs, in order: the portability check, the citation check,
-lint at zero warnings, typecheck, the suite with the coverage gate, the randomised
-integration run, the script tests, the build, and a production-dependency audit.
+<!--
+The review record, for the head SHA it reviewed. Any push or rebase makes
+"Reviewed SHA:" stale; the PR evidence check then fails until the record is
+updated for the new head. Write the full 40-character SHA.
 
-**CI runs fewer steps than `verify` does** — the `verify` job in
-`.github/workflows/ci.yml` runs the portability check, lint, typecheck, coverage
-and build, and nothing else. The citation check, the integration run and the script
-tests execute on no CI leg, and the audit runs only when the dependency graph
-changed. So this paste is the only place several of these gates are observed.
+Rows reviewed: every register row (docs/claims.json) this change adds, changes, or
+cites from a ticked plan item, by id (C-nn), or "none".
+Items removed or reworded: each plan item this change removes or rewords, as
+<file>:<line on the base branch>. The Prove claims log lists them.
+Gate changes: every changed file under scripts/claims/, a change to the schema of
+docs/claims.json, claims.yml, pr-evidence.yml, or .github/rulesets/. "none" if none.
+
+"Done" has one recording form: a ticked item in docs/plans/** that cites a passing
+register row. Prose (HANDOFF, CHANGELOG, this body) may point to an item; it does not
+declare one done. docs/proof-of-completion.md is the protocol.
+-->
+
+Reviewer:
+Reviewed SHA:
+Verdict:
+Rows reviewed:
+Items removed or reworded:
+Gate changes:
+
+## Evidence
+
+`npm run verify`, run locally. Paste the real output. Not a summary of it, not "all
+green", not a screenshot of part of it. `verify` runs, in order: the portability
+check, the citation check, the token and contrast checks, lint at zero warnings,
+typecheck, the suite with the coverage gate, the randomised integration run, the
+script tests, the build, and a production-dependency audit.
+
+Capture the exit code directly, never through a pipe
+(`npm run verify > verify.log 2>&1; echo VERIFY_EXIT=$?`), and put the line it prints
+here on a line of its own. The `PR evidence` check fails without a `VERIFY_EXIT=0`
+line in this section.
+
+CI runs every stage of `verify`, across two workflows: `ci.yml` runs all but the audit
+on three operating systems; the production audit runs in `audit-dependencies.yml` when
+`package.json` or the lockfile changes, and weekly in `audit-schedule.yml`. The paste
+still matters: it is the run on the tree you are asking a reviewer to read, and the
+only audit a change that leaves the dependency files alone gets before merge.
 
 The browser lane is a separate workflow and is deliberately outside `verify`; if
 your change is geometric or visual, the section below is where it gets answered.
@@ -130,7 +162,10 @@ sentences accumulated here.
 - [ ] Nothing here asserts an unmeasured result, and anything aspirational is
       labelled as aspiration.
 
-## What this deliberately does NOT build, and what is NOT covered
+## Not done
+
+What this deliberately does NOT build, and what is NOT covered. The `PR evidence`
+check fails if this section is empty.
 
 <!--
 Rule 8, and required. State plainly what a reader might reasonably assume this

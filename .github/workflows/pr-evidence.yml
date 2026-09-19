@@ -1,0 +1,58 @@
+name: PR evidence
+
+# The PR evidence gate (docs/proof-of-completion.md §3.3). Reads the pull request body
+# through the API, so a re-run after a body edit sees the edited body, and fails unless it
+# carries ## Evidence (VERIFY_EXIT=0), ## Not done, ## Review (Reviewer, Reviewed SHA equal
+# to the head SHA, Verdict), Rows reviewed, and, when they apply, Items removed or
+# reworded and Gate changes. Verified Dependabot-only pull requests are exempt.
+#
+# NOT a required check yet (rollout step 1). PR B adds it to .github/rulesets/main.json.
+# A guardrail against the honest mistake: the body is written by whoever merges.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: read
+  issues: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: PR evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check the pull request body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          if [ "$EVENT" = "merge_group" ]; then
+            node scripts/claims/pr-evidence.mjs --event merge_group --head-ref "$HEAD_REF"
+          else
+            node scripts/claims/pr-evidence.mjs --event pull_request --pr "$PR_NUMBER"
+          fi

@@ -1,7 +1,7 @@
 # Proof of completion, before LEAPWare BuildCraft can enforce it
 
-**Status: design adopted, not built.** Nothing below exists in the repository yet except
-this document; plan step 0c tracks the build. Revision r12, audited adversarially in twelve
+**Status: PR A built (§4), rollout steps 2 to 5 not done.** The two checks are not required;
+plan step 0c tracks the rest. Revision r12, audited adversarially in twelve
 rounds by agents that did not write it; the last round found no Blocker, and its Majors and
 Minors (X1-X9) are folded in. Author: agent, under the owner's CTO delegation of
 2026-09-18 (D-50).
