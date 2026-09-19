@@ -134,11 +134,13 @@ from so a reader can check it.
   (#196), and the "What landed" list re-trimmed to the 3000-byte cap (row C-08: a trim
   there is by design, not a defect) rather than appended, adding #190, #194 and #196.
   **Five bullets were dropped, not two as an earlier draft of this entry undercounted**
-  (caught by `Claude Code Review` on the PR, citing rule 2): `#141`/`#151` (public,
-  Apache-2.0, ruleset and merge queue), `#148`/`#150`/`#160` (charts, crash log,
-  ShellLayout split), `#178` (operator install guide, known limits) and `#179` (PR B,
-  proof-of-completion checks) — plus, initially missed and the more load-bearing one,
-  `#152`/`#156`/`#169` (proof of completion: design, PR A, rollout 2). That thread is
+  (caught by `Claude Code Review` on the PR, citing rule 2, twice — the second catch
+  was this sentence misattributing its own correction): `#141` (public, Apache-2.0,
+  ruleset and merge queue) and `#151` (Claude review working), `#148`/`#150`/`#160`
+  (charts, crash log, ShellLayout split), `#178` (operator install guide, known
+  limits) and `#179` (PR B, proof-of-completion checks) — plus, initially missed and
+  the more load-bearing one, `#152`/`#156`/`#169` (proof of completion: design, PR A,
+  rollout 2). That thread is
   not lost: #190's new entry two lines below is the current chapter of the same
   proof-of-completion effort (the audit that corrected 3 false, 11 weak and 17
   underproven rows), so the active record survives even though the founding landmark's
