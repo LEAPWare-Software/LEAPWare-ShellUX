@@ -28,6 +28,7 @@ import {
   reachableModules,
   relativeImports,
   repositoryPainters,
+  sharedModuleEntries,
   tokenClassRoles,
 } from '../../design/lib/painters.mjs';
 
@@ -172,6 +173,53 @@ describe('painters: the walk and the table', () => {
     );
   });
 
+  it('skips type-only edges, which the build erases', () => {
+    assert.deepEqual(
+      relativeImports(
+        [
+          "import type { A } from './typeOnlyImport';",
+          "export type { B } from './typeOnlyExport';",
+          'import type {',
+          '  C,',
+          "} from './typeOnlyMultiline';",
+          "import { type D } from './inlineTypeOnly';",
+          "import { type E, f } from './mixed';",
+          "export * from './star';",
+        ].join('\n'),
+      ).sort(),
+      // `import { type D }` is kept: under verbatimModuleSyntax it survives as a
+      // side-effect import, so the module still loads.
+      ['./inlineTypeOnly', './mixed', './star'],
+    );
+  });
+
+  it('does not follow a from-clause inside a string or text that does not begin a statement', () => {
+    assert.deepEqual(
+      relativeImports(
+        "const help = \"write import x from './z' to use it\";\n<p>import a from './y'</p>",
+      ),
+      [],
+    );
+  });
+
+  it('does not let a type-only edge make a module reachable', () => {
+    const { exists, read } = tree({
+      'src/main.tsx': "import type { Props } from './ui/Banner';",
+      'src/ui/Banner.tsx': "import { TOKEN_CLASS } from '../core/theme/tokenClasses';\nTOKEN_CLASS.bannerWash;",
+    });
+    assert.equal(isPainted(painters(['src/main.tsx'], exists, read), '--status-info-subtle'), false);
+  });
+
+  it('reads the source paths of the SHARED_MODULES table', () => {
+    assert.deepEqual(
+      sharedModuleEntries(
+        "// ['commented', 'src/no.ts']\nexport const SHARED_MODULES = new Map([\n  ['react', 'src/sdk/shared/react.ts'],\n  ['sdk', 'src/sdk/index.ts'],\n]);",
+      ),
+      ['src/sdk/shared/react.ts', 'src/sdk/index.ts'],
+    );
+    assert.deepEqual(sharedModuleEntries('export const OTHER = 1;'), []);
+  });
+
   it('resolves extensionless, .js and index specifiers', () => {
     const { exists, read } = tree({
       'src/main.tsx': "import './a';\nimport './b.js';\nimport './c';",
@@ -200,8 +248,14 @@ describe('painters: the walk and the table', () => {
 describe('painters: the real repository', () => {
   const set = repositoryPainters(ROOT);
 
-  it('starts from the two production documents and never from dev.html or states.html', () => {
-    assert.deepEqual(set.entries, ['src/main.tsx', 'src/paneview/main.paneview.tsx']);
+  it('starts from the two production documents and the /shared/* inputs, never from dev.html or states.html', () => {
+    assert.deepEqual(set.entries, [
+      'src/main.tsx',
+      'src/paneview/main.paneview.tsx',
+      'src/sdk/shared/react.ts',
+      'src/sdk/shared/react-jsx-runtime.ts',
+      'src/sdk/index.ts',
+    ]);
   });
 
   it('reads every role in tokenClasses.ts, so no role is silently unreadable', () => {

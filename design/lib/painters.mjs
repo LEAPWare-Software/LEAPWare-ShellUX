@@ -15,13 +15,16 @@
  * So a background now counts as painted only when a module THE PRODUCTION
  * BUILD CAN REACH references it:
  *
- *  1. The entries are the `<script type="module" src>` of the two build inputs
- *     `vite.config.ts` declares, `index.html` and `paneview.html`. `dev.html`
+ *  1. The entries are the `<script type="module" src>` of the two documents
+ *     `vite.config.ts` builds, `index.html` and `paneview.html`, plus the
+ *     `/shared/*` inputs it takes from `SHARED_MODULES`. `dev.html`
  *     and `states.html` are not entries, so `src/dev/**` and `src/mocks/**`
  *     are reached only if a production module imports them.
- *  2. From there, every RELATIVE import is followed (`import … from './x'`,
- *     `export … from`, and a bare side-effect `import './x.css'`). Package
- *     imports are not followed: nothing in `node_modules` paints a token.
+ *  2. From there, every RELATIVE run-time import is followed (`import … from
+ *     './x'`, `export … from`, and a bare side-effect `import './x.css'`);
+ *     `import type` and `export type` edges are not, because the build erases
+ *     them. Package imports are not followed: nothing in `node_modules` paints
+ *     a token.
  *  3. `*.generated.*` files and anything under `__tests__` or named `.test.`
  *     are never painters, even if reached: the generated stylesheet DECLARES
  *     every token, which is not painting one.
@@ -31,7 +34,9 @@
  *     `buttonClasses.ts` counts only when something reachable imports it.
  *
  * WHAT THIS IS, IN THIS REPOSITORY'S THREE WORDS: a **guardrail**. It follows
- * static relative imports by regular expression. It does not see a dynamic
+ * static relative imports by regular expression, reading only statements
+ * that begin a line; a line inside a template string that itself begins
+ * `import … from './x'` would be followed. It does not see a dynamic
  * `import()` (there are none in `src/` today), a path alias (none either), a
  * role reached through `TOKEN_CLASS[name]` (none), or whether a reachable
  * reference is in a branch that ever renders. A reference in reachable dead
@@ -47,6 +52,26 @@ import { join, posix } from 'node:path';
 
 /** The build inputs `vite.config.ts` declares. `dev.html` and `states.html` are not. */
 export const PRODUCTION_DOCUMENTS = Object.freeze(['index.html', 'paneview.html']);
+
+/**
+ * The table of ADR-0006's `/shared/<name>.js` build inputs, which `vite.config.ts`
+ * adds to the two documents. It is READ, not imported: this checker runs on the
+ * CI job pinned to Node 22.13.0, which cannot import a `.ts` file, so the
+ * `['name', 'src/…']` pairs of the one `SHARED_MODULES` literal are parsed from
+ * its text. One source still, no second copy of the list.
+ */
+export const SHARED_MODULES_MODULE = 'src/sdk/sharedModules.ts';
+
+/** The source paths of the `SHARED_MODULES` table, parsed from its module text. */
+export function sharedModuleEntries(text) {
+  const source = stripComments(text);
+  const start = source.indexOf('SHARED_MODULES');
+  const end = source.indexOf(']);', start);
+  if (start === -1 || end === -1) return [];
+  return [...source.slice(start, end).matchAll(/\[\s*'[^']+'\s*,\s*'(src\/[^']+)'\s*\]/g)].map(
+    (match) => match[1],
+  );
+}
 
 /** The table of roles, which is read as data and never counted as a painter. */
 export const TOKEN_CLASS_MODULE = 'src/core/theme/tokenClasses.ts';
@@ -66,12 +91,32 @@ export function documentEntries(html) {
   return found;
 }
 
-/** Every relative specifier a module imports or re-exports, side-effect imports included. */
+/**
+ * Every relative specifier a module imports or re-exports AT RUN TIME, side-effect
+ * imports included.
+ *
+ * Only a statement that STARTS a line with `import` or `export` is read, so a
+ * string or JSX text that merely contains `from './z'` mid-line is not an
+ * import. Type-only edges are skipped, because the build erases them and the
+ * module behind one ships nothing: `import type … from` and `export type … from`.
+ *
+ * **`import { type A } from './x'` IS followed, on purpose.** `tsconfig.json`
+ * sets `verbatimModuleSyntax`, under which TypeScript keeps that statement as
+ * `import {} from './x'`: the module still loads, for its side effects. Only
+ * the statement-level `type` keyword erases the edge. No such inline-only form
+ * exists in `src/` today, so the choice is conservative at no present cost.
+ */
 export function relativeImports(text) {
   const found = [];
   const source = stripComments(text);
-  for (const match of source.matchAll(/\bfrom\s*['"](\.{1,2}\/[^'"]+)['"]/g)) found.push(match[1]);
-  for (const match of source.matchAll(/\bimport\s*['"](\.{1,2}\/[^'"]+)['"]/g)) found.push(match[1]);
+  const statement =
+    /^[ \t]*(?:import|export)[ \t]+(type[ \t]+)?(?:[^;'"`]*?)from[ \t]*['"](\.{1,2}\/[^'"]+)['"]/gm;
+  for (const match of source.matchAll(statement)) {
+    if (match[1] === undefined) found.push(match[2]);
+  }
+  for (const match of source.matchAll(/^[ \t]*import[ \t]*['"](\.{1,2}\/[^'"]+)['"]/gm)) {
+    found.push(match[1]);
+  }
   return found;
 }
 
@@ -173,8 +218,11 @@ export function repositoryPainters(root) {
   const toDisk = (path) => join(root, ...path.split('/'));
   const exists = (path) => statSync(toDisk(path), { throwIfNoEntry: false })?.isFile() === true;
   const read = (path) => readFileSync(toDisk(path), 'utf8');
-  const entries = PRODUCTION_DOCUMENTS.flatMap((document) =>
-    exists(document) ? documentEntries(read(document)) : [],
-  );
+  const entries = [
+    ...PRODUCTION_DOCUMENTS.flatMap((document) =>
+      exists(document) ? documentEntries(read(document)) : [],
+    ),
+    ...(exists(SHARED_MODULES_MODULE) ? sharedModuleEntries(read(SHARED_MODULES_MODULE)) : []),
+  ];
   return { entries, ...painters(entries, exists, read) };
 }
