@@ -15,7 +15,7 @@ name: Claims
 # other event INJECT is 'none', and the prover refuses anything else outside a dispatch
 # from main.
 #
-# NOT a required check yet (rollout step 1). PR B adds it to .github/rulesets/main.json.
+# Required check since rollout step 4 (.github/rulesets/main.json, PR B).
 # A guardrail against the honest mistake: anyone who can merge can edit this file.
 on:
   pull_request:

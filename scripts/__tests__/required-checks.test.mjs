@@ -65,6 +65,21 @@ function triggers(wf) {
 const FILTERS = ['paths', 'paths-ignore', 'branches', 'branches-ignore'];
 
 describe('every required context is produced on pull_request and merge_group', () => {
+  it('now requires all seven contexts (rollout step 4 added Prove claims and PR evidence)', () => {
+    assert.deepEqual(
+      [...requiredContexts].sort(),
+      [
+        'Browser tests (chromium)',
+        'Declared Node floor (22.13.0)',
+        'PR evidence',
+        'Prove claims',
+        'Verify (macos-latest)',
+        'Verify (ubuntu-latest)',
+        'Verify (windows-latest)',
+      ],
+    );
+  });
+
   it('expands a matrix into one context per value', () => {
     assert.deepEqual(jobContexts('v', { name: 'Verify (${{ matrix.os }})', strategy: { matrix: { os: ['a', 'b'] } } }), ['Verify (a)', 'Verify (b)']);
     assert.deepEqual(jobContexts('plain', {}), ['plain']);
@@ -122,8 +137,8 @@ describe('the proof-of-completion workflows (§3.4)', () => {
         assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
       });
 
-      it('is not required yet (rollout step 1)', () => {
-        assert.equal(requiredContexts.includes(name), false);
+      it('is required (rollout step 4, PR B)', () => {
+        assert.equal(requiredContexts.includes(name), true);
       });
     });
   }

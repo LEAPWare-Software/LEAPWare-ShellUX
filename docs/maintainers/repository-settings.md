@@ -41,7 +41,8 @@ See "Bootstrap is owner-only" below.
   `allowed_merge_methods: ["squash"]` (squash-only: one commit per PR on
   `main`, no merge commits, no rebase-merge).
 - **`required_status_checks`** — `strict_required_status_checks_policy: true`
-  (the PR branch must be up to date with `main` before merging) and the five
+  (the PR branch must be up to date with `main` before merging) and, since
+  rollout step 4 of `docs/proof-of-completion.md` (§5 step 4, "PR B"), seven
   CI job names actually emitted by this repo's workflows today:
 
   | Ruleset context | Workflow / job |
@@ -51,6 +52,8 @@ See "Bootstrap is owner-only" below.
   | `Verify (windows-latest)` | same job, `matrix.os: windows-latest` |
   | `Browser tests (chromium)` | `.github/workflows/browser.yml`, `browser` job |
   | `Declared Node floor (22.13.0)` | `.github/workflows/ci.yml`, `floor` job |
+  | `Prove claims` | `.github/workflows/claims.yml`, `prove` job (proof-of-completion §3.4) |
+  | `PR evidence` | `.github/workflows/pr-evidence.yml`, `evidence` job (proof-of-completion §3.3) |
 
   These are the workflow files' own `name:` fields, not invented labels — a
   required status check is matched by GitHub on the exact string a workflow
@@ -59,6 +62,28 @@ See "Bootstrap is owner-only" below.
   workflow file and this table together**, the same rule
   LEAPWare-SessionKeeper's own copy of this file states for its Python
   matrix.
+
+  **`Prove claims` and `PR evidence` are guardrails, not integrity controls**
+  (proof-of-completion §1): each defends only against the honest mistake —
+  an unticked claim, a missing review record, prose that asserts "done"
+  without a proven row. Whoever can edit `.github/rulesets/main.json`,
+  `claims.yml` or `pr-evidence.yml` can also loosen or remove what they
+  enforce; that is outside this protocol's threat model and is closed only
+  by a second approver or LEAPWare BuildCraft R4 (`docs/proof-of-completion.md`
+  §1, §6).
+
+  Every entry above also carries `"integration_id": 15368` — the GitHub
+  Actions app id (measured: `gh api repos/{r}/commits/main/check-runs --jq
+  '.check_runs[0].app.id'` returned `15368`, `docs/proof-of-completion.md`
+  intro facts). This pins each required context to check runs posted by the
+  Actions app specifically, closing the gap where any caller with
+  `checks:write` could post a same-named status through the plain Statuses
+  API and satisfy the requirement without a workflow having run at all.
+  `compare-ruleset.mjs` (§3.5) excludes `integration_id` from the drift
+  comparison only when the live (read-only) response omits the field
+  entirely, which is the case for every response captured against this repo
+  so far — so the exclusion note it prints is expected, not a sign the field
+  went unset.
 - **`merge_queue`** — `merge_method: SQUASH`, `grouping_strategy: ALLGREEN`
   (the queue only merges a batch once every entry in it is green — no
   partial-pass merges), small min/max group sizes (1..5) and a 10-minute
@@ -112,6 +137,32 @@ gh api -X PATCH repos/LEAPWare-Software/LEAPWare-ShellUX \
 
 Run this **before** `apply-rulesets.mjs` — the script's own ordering guard
 enforces that, but the PATCH above is what actually satisfies it.
+
+## Applying rollout step 4 (PR B) and reading it back
+
+Per `docs/proof-of-completion.md` §5 step 4 (M5), the order is: merge PR B
+first, THEN apply it, THEN read it back to confirm. Do not apply before the
+merge — `main.json` in a feature branch is not yet the tree `apply-rulesets`
+should be reading `gh auth`'s current checkout from, and applying early would
+make the two new checks required before any PR has proven it can pass them.
+This is the owner's/integrator's own action, same as the rest of this file's
+bootstrap section:
+
+```
+git checkout main && git pull                    # after PR B is merged
+node scripts/apply-rulesets.mjs --dry-run         # inspect the JSON, incl. integration_id
+node scripts/apply-rulesets.mjs                   # apply for real (PUT, since ruleset 23685990 exists)
+gh api repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990 \
+  --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks'
+node scripts/claims/compare-ruleset.mjs           # confirm no drift against the live ruleset
+```
+
+Expect one main `claims.yml` run between the merge and the apply to record
+`S-ruleset` drift (the two new contexts are declared in `main.json` on `main`
+before they exist on the live ruleset) and file the "Claims register is
+failing" issue; the read-back above, once it shows the two new contexts live,
+is the evidence that closes that issue with a comment, not a re-run of the
+row (`manual`ly, per §3.5's "Issue job" and G3).
 
 ## Bootstrap is owner-only
 
