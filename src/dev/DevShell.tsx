@@ -116,7 +116,7 @@ function Registrar(): null {
  * browser-lane fixture — where a future lifecycle-bearing plugin would need its
  * hooks to fire, though neither fixture `Registrar` registers today,
  * `MailPlugin` or `DatabasePlugin`, declares `lifecycle` — and host chrome's
- * dev-run document (where the packaged-topology guarantee does not apply).
+ * dev-run document (where the packaged-topology claim does not apply).
  * This repo already accepts that as a stated dev-vs-packaged gap, not
  * something to solve here.
  * See ADR-0006 decision 6's amendment for issue #183.

@@ -590,7 +590,10 @@ isolation", and that is the ceiling of every claim this ADR makes about it.
   > `true` on the extension surface and, threaded through `AppProps`, in the
   > dev fixture — and because `dev.html` is the document host chrome loads in a
   > **development** run, the claim "host chrome refuses lifecycle" is scoped to
-  > the **packaged** topology, not to every run. *Tests:*
+  > the **packaged** topology, not to every run. In today's packaged topology
+  > host chrome's own `index.html` → `App` registers nothing at all
+  > (`src/main.tsx`), so the refusal cannot fire there yet either — it is a
+  > precondition for step 6, not a behaviour anything exercises today. *Tests:*
   > `src/core/__tests__/registryNormalization.test.tsx` — "refuses a blueprint
   > declaring lifecycle hooks in a registry that does not run plugin code, and
   > names the field"; `src/core/__tests__/lifecycle.test.tsx` — "accepts the

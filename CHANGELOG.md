@@ -71,7 +71,7 @@ from so a reader can check it.
   all registrations pass, and a guardrail against the honest mistake — not an
   integrity control, since `runsPluginCode` is a prop and any caller may pass
   `true`. Because `dev.html` is the document host chrome loads in a
-  **development** run, the guarantee is scoped to the **packaged** topology, not
+  **development** run, the claim is scoped to the **packaged** topology, not
   to every run. *Tests:* "refuses a blueprint declaring lifecycle hooks in a
   registry that does not run plugin code, and names the field"
   (`src/core/__tests__/registryNormalization.test.tsx`); "accepts the same

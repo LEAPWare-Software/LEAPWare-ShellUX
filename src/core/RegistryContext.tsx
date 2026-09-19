@@ -1642,6 +1642,12 @@ export interface ExtensionRegistryProviderProps {
    * provider says it runs plugin code. See ADR-0006 decision 6's amendment
    * for issue #183 — this is entry-point validation at the registry door,
    * not an integrity control; any caller may pass `true`.
+   *
+   * Read fresh on every `register()` call, not pinned at mount: a caller
+   * that flips this prop mid-life changes what the NEXT registration is
+   * checked against, but does not retroactively re-validate a blueprint
+   * this registry already holds. Both real call sites pass a literal
+   * today, so this is a documented limit, not a reachable defect.
    */
   readonly runsPluginCode?: boolean | undefined;
 }
@@ -1694,7 +1700,8 @@ export function ExtensionRegistryProvider({
       // silently holding hooks nothing here will ever call (or that a
       // sibling registry might call too, double-firing them). Reads only
       // the host-owned, already-normalised `record` — no plugin code runs
-      // to reach this branch. Not an integrity control: `runsPluginCode`
+      // to EVALUATE it here; normalisation above has already run the
+      // payload's getters. Not an integrity control: `runsPluginCode`
       // is a prop, and any caller may pass `true`.
       if (record.lifecycle !== undefined && !runsPluginCode) {
         return {
