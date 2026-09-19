@@ -16,6 +16,19 @@ from so a reader can check it.
 
 ### Added
 
+- **ADR-0006, the runtime plugin host, Accepted; ADR-0001 Amendment P.** The design
+  for step 6b: package format, per-user plugin store, a custom-scheme loader into the
+  extension surface, lifecycle hooks, the contract version rule, the conformance kit
+  and the plugin manager. Accepted on the owner's rulings of 2026-09-18: D-46 (a new
+  ADR-0001 **Amendment P**: first-party runtime loading does not meet Amendment E's
+  trigger, and four named events re-fire it), D-47 (no plugin signing in 1.0; the
+  manifest `sha512` is **entry-point validation**) and D-48 (a fifth plugin-manager
+  state, *files changed*, offering Reinstall). A throwaway spike under
+  `spike/plugin-host/` settles how a bundle loads; its raw output is committed.
+  **Nothing is built:** every behavioural claim in the ADR names a test that does not
+  exist yet, and says so. #68 and #91 are decided in the ADR and stay open until their
+  decision rows are recorded.
+
 - **Claude GitHub Actions, guarded for a public repo (D-49).**
   `.github/workflows/claude.yml` runs Claude on an `@claude` mention (issue
   comment, PR review comment, PR review, or issue body/title), gated to

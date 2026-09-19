@@ -3601,6 +3601,51 @@ green tree with the views, the adapter and a deterministic focus ring:
 
 ---
 
+## Amendment P — First-party runtime loading does not meet Amendment E's trigger, and the four things that re-fire it
+
+**Date:** 2026-09-18 · **Status:** Accepted (owner, D-46) · **Amends:** Amendment E,
+*THE TRIGGER*, as to what "a runtime remote loader of any kind" means while D-23 holds
+
+**What it decides.** ADR-0006 builds a runtime plugin host that installs a local
+`.lwplugin` package or a GitHub Release asset. Read literally, that is "a runtime
+remote loader", and Amendment E says such a loader voids the no-boundary decision. The
+trigger's *condition*, though, is the bolded sentence: code **the deployer did not read
+and compile from source they chose** reaching the page. While D-23 holds, that
+condition is not met, for three reasons ADR-0006 sets out in *Before anything else*:
+
+1. Every plugin 1.0 can load is built by LEAPWare, in LEAPWare's CI, from LEAPWare's
+   source: the same party, source control and release channel as the host binary.
+2. The updater already runs remote code from that channel (D-34), under a
+   **guardrail**, not an integrity control. A plugin from the same organisation's
+   releases adds no new trusted party; it adds a second door for the same one.
+3. A local install is an act by someone already running code as that Windows user,
+   and the per-user install leaves the host's own `app.asar` writable by that user.
+
+**What it does not decide, stated so it is not read wider.** Nothing *mechanically*
+makes a package first-party: plugins are unsigned in 1.0 (D-47), so an operator can
+install a `.lwplugin` anyone built. The manifest `sha512` is **entry-point
+validation** against a damaged or mismatched package, not a defence against a
+deliberate substitution, because the manifest and the bundle travel together. This
+amendment is a statement about the deployment (who builds and who installs), not a
+property of the code. There is still **no boundary between two plugins**: they share
+one renderer, and Amendment E's vocabulary rules apply to every sentence about them.
+
+**THE TRIGGER, restated.** Any one of these re-fires Amendment E, and real per-plugin
+separation, with its own threat model, becomes mandatory before the change ships:
+
+- a plugin publisher outside the LEAPWare-Software GitHub organisation is allowed;
+- a catalogue or marketplace of plugins exists;
+- D-23 (first-party plugins only) reverses;
+- a hosted or multi-tenant deployment ships.
+
+**Where it is enforced, and how far.** The GitHub Release door accepts only URLs under
+`https://github.com/LEAPWare-Software/`; that allowlist is **entry-point validation**,
+real at that door and silent about who controls the organisation. The test that will
+pin it is named in ADR-0006's implementation sequence (step 11) and does not exist
+yet; until it does, no document may cite the allowlist as a property of the shell.
+
+---
+
 ## Related
 
 - [`.github/ISSUES_MANIFEST.md`](../../.github/ISSUES_MANIFEST.md) — ISSUE-001

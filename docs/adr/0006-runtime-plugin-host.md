@@ -1,8 +1,9 @@
 # ADR 0006 — The Runtime Plugin Host
 
-- **Status:** **Proposed.** Nothing here is built. It cannot move to `Accepted` until
-  the owner rules on the question in *Before anything else* below, because this ADR
-  builds a mechanism that ADR-0001 Amendment E's trigger names.
+- **Status:** **Accepted** (2026-09-18), on the owner's rulings D-46 (ADR-0001
+  Amendment P accepted), D-47 (no plugin signing in 1.0) and D-48 (a fifth
+  plugin-manager state). **Nothing here is built.** Accepted means the design is
+  decided; every claim about behaviour waits for the test named beside it.
 - **Date:** 2026-09-18
 - **Deciders:** LEAPWare-ShellUX project owner and maintainers
 - **Implements:** D-36 (plugins install, enable and disable at runtime in 1.0), plan
@@ -38,9 +39,9 @@ threat model, before any code — the Option B that Amendment E priced at the vi
 contract and the keyboard model.
 
 **This ADR does not quietly decide that the trigger has not fired.** It argues that
-the trigger's *condition* — the bolded sentence — is not met while D-23 holds, and
-drafts the amendment that would say so (in the report that accompanies this ADR, not
-in ADR-0001, which this change does not edit). The argument:
+the trigger's *condition* — the bolded sentence — is not met while D-23 holds. The
+owner accepted that argument as ADR-0001 **Amendment P** (D-46), which lands in the
+same change as this ADR. The argument:
 
 1. **The code comes from the same party as the host.** Every plugin 1.0 can load is
    built by LEAPWare, in LEAPWare's CI, from LEAPWare's source. That is the same
@@ -61,12 +62,10 @@ in ADR-0001, which this change does not edit). The argument:
 can install a `.lwplugin` anyone built. The argument holds only as long as the
 people who install plugins are LEAPWare operators installing LEAPWare packages —
 which is D-23 as a fact about the deployment, not a property of the code. The
-drafted amendment names the conditions that re-fire the trigger: a publisher outside
-the LEAPWare GitHub organisation, a catalogue or marketplace, D-23 reversing, or a
-hosted deployment.
-
-**If the owner rejects the amendment,** step 6b as planned cannot proceed, and the
-next document is the Option B threat model Amendment E requires.
+amendment names the conditions that re-fire the trigger: a publisher outside the
+LEAPWare GitHub organisation, a catalogue or marketplace, D-23 reversing, or a hosted
+deployment. When any of them happens, the next document is the Option B threat model
+Amendment E requires, before the change ships.
 
 ---
 
@@ -199,8 +198,8 @@ Per user, under `userData`, as the plan fixes. `state.json` is written only by m
    fetched by main. The organisation allowlist is how D-23 appears at this door. It
    is **entry-point validation**: real at this door, and it says nothing about who
    controls the organisation — D-34's reasoning, unchanged. It is the last step of
-   the sequence and waits on the owner's answer about plugin signing (open
-   questions).
+   the sequence. The owner ruled against signing for 1.0 (D-47), so this door ships
+   with the allowlist and the manifest `sha512` only.
 
 Install writes to a temporary directory, validates everything in decision 4, then
 renames into `<id>/<version>/` — so a half-written plugin is never listed. An
@@ -291,10 +290,10 @@ limit as expected behaviour. In `electron/__tests__/pluginScheme.test.ts`, "refu
 serve an entry changed on disk after install". **Until those exist, this section is a
 design statement and no document may cite the check as a property of the shell.**
 
-**Rejected:** signing packages (Ed25519 via `node:crypto`, key in CI) in 1.0 — it is
-the one mechanism here that would make D-23 checkable at the URL door, and it is
-cheap in code; what it costs is key custody, which is an owner decision (open
-questions), not a design one. Import-map `integrity` or SRI in the renderer — it
+**Rejected for 1.0 (owner, D-47):** signing packages (Ed25519 via `node:crypto`, key
+in CI). It is the one mechanism here that would make D-23 checkable at the URL door,
+and it is cheap in code; what it costs is key custody, which was the owner's decision.
+It is the recorded alternative for after 1.0. Import-map `integrity` or SRI in the renderer — it
 verifies in the process where plugin code runs, which can be subverted by the code it
 verifies.
 
@@ -515,13 +514,13 @@ and remove are quiet buttons; removal confirms inline, not in a modal.
 | **enabled** | `state.json` | switch on | disable, remove |
 | **disabled** | `state.json` | switch off | enable, remove |
 | **incompatible** | decision 3, at install or boot | warning status, reason in words ("built for host contract 2, this shell offers 1") | remove |
-| **crashed** | decision 9, or decision 4's serve-time mismatch | danger status, the error in plain language | **Restart**, remove |
+| **crashed** | decision 9 | danger status, the error in plain language | **Restart**, remove |
+| **files changed** | decision 4's serve-time mismatch | danger status: "the installed files no longer match this plugin's manifest" | **Reinstall**, remove |
 
-**The delta, flagged for gate 4 rather than decided here:** a serve-time hash mismatch
-lands in *crashed*, but Restart cannot fix it — the files are wrong, not the process.
-This ADR shows it as crashed with Restart replaced by **Reinstall**. If the approved
-wireframe has no room for that, the fallback is Restart disabled with the reason
-stated.
+**The fifth state (owner, D-48).** A serve-time hash mismatch is not a crash: Restart
+cannot fix it, because the files are wrong, not the process. It is its own state and
+offers **Reinstall**. The approved gate-4 screens (D-45) show four states; the fifth
+is drawn, and `DESIGN.md` gains it, in the change that builds the plugin manager.
 
 The manager lives in host chrome, so it renders only data — decision 6.
 
@@ -556,9 +555,9 @@ cites a test before that step writes it.
 | 6 | Surface loader, tier-1 fault reports, tier-2 attribution and the crash-loop breaker | "attributes a renderer loss to the foreground plugin, and says it is attributed"; "stops reloading a plugin into its own crash after the second loss inside sixty seconds"; decision 9's honest-pinning case |
 | 7 | Move the three plugins to `plugins/*`, `plugins:build`, delete `FIXTURE_EXTENSIONS` | An import-graph scan, in `crossDocumentIdref.test.ts`'s manner: "no module reachable from paneview.html imports src/mocks or src/examples" |
 | 8 | `plugin:check` and its CI job | Planted-bad plugins, one per check row in decision 10, each failing for its own reason |
-| 9 | Plugin manager in host chrome, per the approved gate-4 wireframe | Browser lane: all four states drawn, inline remove confirmation, keyboard reachable from the palette (D-37) |
+| 9 | Plugin manager in host chrome, per the approved gate-4 wireframe | Browser lane: all five states drawn (D-48), inline remove confirmation, keyboard reachable from the palette (D-37) |
 | 10 | Packaged-app end to end | Install → appears → disable → gone → a crashing plugin shows *crashed* and the shell survives — the plan's own acceptance line |
-| 11 | GitHub Release URL source, organisation allowlist | "refuses a URL outside the LEAPWare-Software organisation"; waits on the signing answer |
+| 11 | GitHub Release URL source, organisation allowlist | "refuses a URL outside the LEAPWare-Software organisation"; unsigned by D-47 |
 
 ---
 
@@ -583,10 +582,10 @@ cites a test before that step writes it.
 
 ## What this ADR did NOT do
 
-- It did not edit ADR-0001. The amendment its central argument depends on is drafted
-  in the accompanying report, for the owner.
+- It did not build anything. ADR-0001 Amendment P, which its central argument depends
+  on, lands in the same change (D-46).
 - It did not measure real React hooks across the shared-module boundary, the CSP
   against the real application, or anything about packaged paths. The spike served
   strings from memory.
-- It closes no issue. #68 and #91 are decided here, and stay open until this ADR is
-  accepted and their decision rows are recorded.
+- It closes no issue. #68 and #91 are decided here and stay open until their decision
+  rows are recorded and the step that builds each lands.

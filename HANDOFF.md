@@ -6,37 +6,37 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `e00ea93` (2026-09-18). Mission: a best-in-class UI/UX shell hosting
+`main` at `8e6e35a` (#144, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
-Decisions (none open for v1):
-[`docs/DECISIONS.md`](docs/DECISIONS.md).
+Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
+(Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
+with a merge queue.
 
-## What landed on 2026-09-18
+## What landed on 2026-09-18 and 19
 
-- **PR #115**: the redesign groundwork (wave 1) and the repairs behind #110 and #114.
-  Adversarially reviewed, three prose findings resolved, merged `148217b`.
-- **PR #126**: the production audit had been red every Monday since 2026-08-10
-  (`js-yaml`, via `electron-updater`). It is cleared, the dev tree is now audited
-  (`audit:all`), and a failing scheduled audit files an issue. Merged `e00ea93`.
+- #115 (wave 1), #126 (audit), #128 (mission recast, gate 3), #141 (public-release
+  scaffolding), #143 (an npm claim corrected), #144 (Claude Actions, guarded).
+- This change: ADR-0006 Accepted, with ADR-0001 Amendment P (D-46 to D-48).
 
 ## In flight
 
-- **Branches built in parallel, landing one at a time**: `chore/public-release-prep`
-  (this change), `docs/adr-0006-plugin-host`, `fix/chart-title-contrast`,
+- **Landing one at a time:** `fix/chart-title-contrast`, then
   `fix/observability-build-target`. Each lands with its own review and `verify`.
-- **Gate-4 screens** await owner approval (D-45). No redesign component before then.
+- **Proof of completion:** a register of claims with CI checks, drafted and under
+  adversarial audit before it is built.
 
 ## The next step
 
-1. Land `docs/mission-recast`.
-2. Land in order: ADR-0006, charts, hardening. Step 0 is complete.
-3. After this lands: the owner makes the repository public (D-43); then apply the ruleset.
+1. Land charts, then hardening.
+2. Build the proof-of-completion protocol once its audit finds no Blocker.
+3. Plan steps 3b to 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 
 - **v1.0.0 waits for LEAPWare BuildCraft** (D-39): readiness bar R1 to R7 in
   [`docs/sdlc.md`](docs/sdlc.md). There is no 1.0 date.
 - Steps run one at a time: every landing edits this file and `CHANGELOG.md`.
+- Merge with `gh pr merge <n> --squash --auto`; it enters the queue.
 - One git writer in the main tree. Throwaway worktrees go in a `.workspaces/`
   directory beside the repository.
 - Use npm 11.16.0 (`packageManager`). See `docs/traps.md` for the npm 10 history.
