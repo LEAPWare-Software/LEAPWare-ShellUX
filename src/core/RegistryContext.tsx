@@ -1617,8 +1617,11 @@ export interface ExtensionRegistry {
  * The registry API and the registry's revision counter live in SEPARATE
  * contexts on purpose.
  *
- * The API object's identity is stable for the provider's whole lifetime, so a
- * plugin can safely write `useEffect(() => { registry.register(bp); },
+ * The API object's identity is stable for the provider's whole lifetime AS
+ * LONG AS `runsPluginCode` does not change between renders — `register` lists
+ * it as a dependency (ADR-0006 decision 6's amendment for issue #183), and
+ * every real caller passes a literal, never a variable. So a plugin can
+ * safely write `useEffect(() => { registry.register(bp); },
  * [registry])`. Had the counter been folded into the same object, every
  * registration would change that identity, re-fire the effect, and — for the
  * register/unregister effect pair that StrictMode encourages — spin into an
@@ -1840,8 +1843,10 @@ export function ExtensionRegistryProvider({
 }
 
 /**
- * Access the registry API. The returned object keeps a stable identity, so it
- * is safe to list in a dependency array.
+ * Access the registry API. The returned object keeps a stable identity as
+ * long as the provider's `runsPluginCode` prop does not change, so it is
+ * safe to list in a dependency array — every real provider passes
+ * `runsPluginCode` as a literal.
  *
  * @throws when called outside `ExtensionRegistryProvider`.
  */

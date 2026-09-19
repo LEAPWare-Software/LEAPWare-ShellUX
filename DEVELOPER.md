@@ -167,7 +167,7 @@ the four modifier flags on `Hotkey`.
 | `commands` | `readonly Command[]` | Your commands. May be empty. At most 128. **Declare this OR `ribbonActions`, never both** — see "One collection, two names" below. |
 | `ribbonActions` | `readonly Command[]` | **Deprecated spelling of `commands`.** Identical in every respect; kept so existing manifests keep working. |
 | `views` | `{ pane2: ExtensionView; pane3: ExtensionView }` | Your two pane components. Both are required; there is no blueprint-level Pane 1 view, because Pane 1 is the host's navigation chrome rendering *your* `navigationTree`. |
-| `lifecycle?` | `{ onActivate?(shell); onDeactivate?(); onRelease?() }` | **Optional, since host contract 1.1.** Functions the host calls when you take the foreground, lose it, and are released. Each must be a function or absent; the object is read once at registration. See "Lifecycle hooks" below. |
+| `lifecycle?` | `{ onActivate?(shell); onDeactivate?(); onRelease?() }` | **Optional, since host contract 1.1.** Functions the host calls when you take the foreground, lose it, and are released. Each must be a function or absent; the object is read once at registration. **Accepted only by a registry that declares it runs plugin code** (ADR-0006 decision 6's amendment for issue #183) — see "Lifecycle hooks" below. |
 
 There is **no `icon` field on the blueprint.** Earlier drafts of this guide
 described one; it does not exist. Icons are per ribbon action and per navigation
@@ -787,10 +787,15 @@ also keeps your `views` component references stable, which is what stops the
 host remounting your panes on every render.
 
 The registry API object returned by `useRegistry` has a **stable identity for
-the provider's whole lifetime**, so listing it in a dependency array is safe and
-is the intended pattern. If you need to recompute when the registry's *contents*
-change, subscribe to `useRegistryRevision()` instead — a counter that increases
-by one on every successful registration or removal.
+the provider's whole lifetime, as long as the provider's `runsPluginCode` prop
+does not change** (ADR-0006 decision 6's amendment for issue #183 added that
+prop to `register`'s own dependencies), so listing it in a dependency array is
+safe and is the intended pattern — every shipped provider passes `runsPluginCode`
+as a literal, never a variable, so this qualification does not affect you unless
+you are writing a host-side harness that flips the flag at runtime. If you need
+to recompute when the registry's *contents* change, subscribe to
+`useRegistryRevision()` instead — a counter that increases by one on every
+successful registration or removal.
 
 **`unregister` is not authorised, and that is deliberate.** Any caller holding
 the registry can remove any id, including one it did not register. There is no
@@ -1090,6 +1095,24 @@ lifecycle: {
   },
 },
 ```
+
+**Your registry must declare that it runs plugin code, or this is refused.**
+`useRegistry()`'s underlying `ExtensionRegistryProvider` takes a `runsPluginCode`
+prop, default `false`; `register()` refuses any blueprint whose `lifecycle` is
+set unless the provider you registered through passes `runsPluginCode`. A
+refused registration returns `{ ok: false, error }` with `error.code ===
+'INVALID_FIELD'` and `error.field === 'lifecycle'` — it does not throw, and it
+does not partially register you. This exists because the shell can host more
+than one document, and a blueprint's hooks may fire only in the document that
+actually runs your code (ADR-0006 decision 6's amendment for issue #183); every
+production and example provider that runs extension code already passes the
+prop, so you only need to know this if you are writing your own test harness
+around a bare `<ExtensionRegistryProvider>`. *Tests:*
+`src/core/__tests__/registryNormalization.test.tsx` — "refuses a blueprint
+declaring lifecycle hooks in a registry that does not run plugin code, and
+names the field"; `src/core/__tests__/lifecycle.test.tsx` — "accepts the same
+blueprint, and calls onActivate, when the provider declares it runs plugin
+code".
 
 | Hook | When | If it throws |
 |---|---|---|

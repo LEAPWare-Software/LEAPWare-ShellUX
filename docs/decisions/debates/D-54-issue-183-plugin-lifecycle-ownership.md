@@ -4,7 +4,11 @@ Per `docs/cloud/runbook.md` §1 step 8: CTO proposes, QA attacks, up to 3 rebutt
 rounds, each round sees the full previous exchange. Conducted 2026-09-19, lane A,
 cloud conductor session `session_01TmgTzwDBnWNu7obqXCgv2B`. CTO role: `lw-architect`
 (opus). QA role: `lw-verifier` (opus), a separate dispatch that did not write the
-proposal. Verbatim below, exactly as each dispatch returned it.
+proposal. Verbatim below, exactly as each dispatch returned it, except for
+bracketed `[...]` insertions and the one clearly labelled editorial note near
+the end — both added when this record was committed, after the debate itself,
+to correct a misattribution `shellux-cloud-reviewer` found and to flag a title
+that did not ship as proposed.
 
 ---
 

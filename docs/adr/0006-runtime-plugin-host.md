@@ -607,6 +607,18 @@ isolation", and that is the ceiling of every claim this ADR makes about it.
   > declares `lifecycle`, so this guardrail does not catch the mistake of
   > registering them from host chrome — that is decision 6's own renders-data-
   > only gap, a different question from this amendment's.
+  >
+  > **What this enforces, stated precisely.** D-54 decides "exactly one
+  > registry may hold" a lifecycle-bearing blueprint. The shipped check
+  > enforces only the default-refusal half: a registry that has NOT declared
+  > `runsPluginCode` refuses one. It does not enforce the "exactly one" half —
+  > two registries that both declare `runsPluginCode` would both accept the
+  > same blueprint and both fire its hooks, the double-fire #183 exists to
+  > prevent. `PaneViewShell` is exported and mounts its own
+  > `runsPluginCode`-true provider; nothing refuses nesting it inside another
+  > provider that also declares `runsPluginCode`. Unreachable from either of
+  > today's two entry points (`main.paneview.tsx`, `App`/`DevShell.tsx`), so
+  > not a live defect — named as a limit, not fixed here.
 
 - **Management calls are sender-checked in main.** Install, enable, disable, remove and
   restart are accepted only when the IPC sender is host chrome's `webContents`; both
