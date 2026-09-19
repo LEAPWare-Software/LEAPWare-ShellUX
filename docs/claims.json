@@ -2135,6 +2135,326 @@
       ],
       "provenOn": "2026-09-19",
       "addedBy": "PR B applied (docs/pr-b-applied)"
+    },
+    {
+      "id": "C-38",
+      "box": "**Ruleset as code, not classic branch protection.** `.github/rulesets/main.json` targets the default branch (`conditions.ref_name.include: [\"~DEFAULT_BRANCH\"]`) with `bypass_actors: []`; `deletion` and `non_fast_forward`; `pull_request` with `required_approving_review_count: 0` and squash-only; `required_status_checks`, strict, naming `Verify (ubuntu-latest)`, `Verify (macos-latest)`, `Verify (windows-latest)`, `Browser tests (chromium)` and `Declared Node floor (22.13.0)`; `merge_queue` with ALLGREEN, and `on: merge_group:` added to `ci.yml` and `browser.yml`. `scripts/apply-rulesets.mjs`, a Node port of `lws_apply_rulesets.py` that actually shells out to `gh api` (not a stub) and supports `--dry-run`, and has a `node:test` file. `docs/maintainers/repository-settings.md` covers what each rule enforces, how to re-apply, and the squash-only repo `PATCH`.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/ruleset-as-code.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "ruleset_bypass_actors_empty",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_deletion",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_non_fast_forward",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_pr_zero_approvals",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_squash_only",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_strict",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_named_checks",
+          "op": "==",
+          "value": 5
+        },
+        {
+          "key": "ruleset_merge_queue_allgreen",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "applier_exists",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "applier_dry_run",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "applier_test_exists",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "applier_test_node_test",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "settings_doc_exists",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "settings_doc_dry_run",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "settings_doc_squash_patch",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "settings_doc_bootstrap_owner_only",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ci_merge_group",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "browser_merge_group",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "ruleset_target_default_branch",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "applier_shells_out_to_gh_api",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "settings_doc_covers_enforcement",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "settings_doc_covers_reapply",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "add a bypass actor to the ruleset",
+        "edits": [
+          {
+            "file": ".github/rulesets/main.json",
+            "replace": [
+              "\"bypass_actors\": []",
+              "\"bypass_actors\": [1]"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+    },
+    {
+      "id": "C-39",
+      "box": "Private vulnerability reporting is enabled on the repository, measured with `gh api repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting`.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "api",
+          "repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting",
+          "--jq",
+          "\"private_vuln_reporting=\\(.enabled)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "private_vuln_reporting",
+          "op": "==",
+          "value": "true"
+        }
+      ],
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+    },
+    {
+      "id": "C-43",
+      "box": "Secret scanning and Dependabot security updates are enabled on the repository, read with an admin token on 2026-09-19 (`security_and_analysis`). CI's read-only token gets `null` for these fields, so this row is dated, not re-proven, and CI would not notice either being turned off.",
+      "class": "manual",
+      "expect": [
+        {
+          "key": "SECRET_SCANNING",
+          "op": "==",
+          "value": "enabled"
+        },
+        {
+          "key": "DEPENDABOT_SECURITY_UPDATES",
+          "op": "==",
+          "value": "enabled"
+        }
+      ],
+      "evidence": "docs/claims-evidence/C-43-security-and-analysis-2026-09-19.txt",
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+    },
+    {
+      "id": "C-40",
+      "box": "#74 (\"Branch protection is impossible on this repository...\") and #103 (\"Decide the update feed...\") are closed.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "issue",
+          "view",
+          "74",
+          "--json",
+          "state",
+          "--jq",
+          "\"issue_74_state=\\(.state)\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "103",
+          "--json",
+          "state",
+          "--jq",
+          "\"issue_103_state=\\(.state)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "issue_74_state",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "issue_103_state",
+          "op": "==",
+          "value": "CLOSED"
+        }
+      ],
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+    },
+    {
+      "id": "C-41",
+      "box": "The audit gap is closed: a full-tree `npm audit --audit-level=high` job (`audit-all` in `audit-dependencies.yml`, running `npm run audit:all`) audits the dev tree as its own job (HANDOFF §6.2).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/audit-full-tree.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "audit_all_job",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "audit_all_step_runs_script",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "audit_all_full_tree",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "drop --audit-level=high from the full-tree audit script",
+        "edits": [
+          {
+            "file": "package.json",
+            "replace": [
+              "\"audit:all\": \"npm audit --audit-level=high\"",
+              "\"audit:all\": \"npm audit\""
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+    },
+    {
+      "id": "C-42",
+      "box": "Integrity: the manifest carries a `sha512` of the bundle, and the loader refuses a mismatch. This is **entry-point validation** at install, not an integrity control against a hostile local user. The claim is written only once a named test pins it.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/plugin-integrity.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "manifest_declares_sha512",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "install_refuses_mismatch",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "serve_rehashes_bundle",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "install_mismatch_test",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "serve_mismatch_test",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "entry_point_validation_named",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "invert the install-time sha512 comparison",
+        "edits": [
+          {
+            "file": "electron/main/plugins/pluginPackage.ts",
+            "replace": [
+              "sha512Base64(bundle) !== manifest.sha512",
+              "sha512Base64(bundle) === manifest.sha512"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 6b tick (docs/proof-rows-done-work)"
     }
   ],
   "retired": []

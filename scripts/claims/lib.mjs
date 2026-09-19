@@ -130,6 +130,8 @@ const GH_API_PATHS = [
   /^repos\/[\w.-]+\/[\w.-]+\/(commits|git\/commits)\/[0-9a-f]{7,40}$/,
   /^repos\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/,
   /^repos\/[\w.-]+\/[\w.-]+\/rulesets\/\d+$/,
+  // The repository's own single-object settings resources, not a list or search endpoint.
+  /^repos\/[\w.-]+\/[\w.-]+\/private-vulnerability-reporting$/,
 ];
 
 /** The first git argument after the subcommand that is not an allowed flag, or null. */

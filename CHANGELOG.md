@@ -16,6 +16,28 @@ from so a reader can check it.
 
 ### Added
 
+- **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
+  its applier and settings doc, not classic branch protection; the three GitHub security
+  settings, read back as enabled (private vulnerability reporting re-proven on every
+  run; secret scanning and Dependabot security updates dated, because CI's read-only
+  token cannot see them); #74 and #103 closed; the full-tree audit job; and the
+  plugin bundle's sha512, refused at install and re-checked on every serve, each half
+  pinned by a named test. Each row's check was probed red, and a review tightened two
+  that could pass on an honest mistake (a wrong ruleset target, an applier that never
+  calls `gh api`, or a commented-out audit step now fail; a deliberate fake can still
+  pass them, so they are guardrails). Three plan items mixed true facts with unmet
+  ones; each is split, so the true part is ticked and four remainders stay open as
+  their own items: the D-27 reversal write-up, SECURITY.md's reorder, the README's move to
+  `docs/`, and pasted API evidence on #74 and #103. The ruleset item's claim that it
+  matches sessionkeeper's shape was dropped, because no check can decide it.
+
+### Fixed
+
+- **`SECURITY.md` said private vulnerability reporting did not exist here.** It was
+  true while the repository was private; after it went public the form was enabled
+  (`{"enabled":true}`, read 2026-09-19) and the file was not updated. It now names the
+  form beside the email address, and the old note is in the past tense.
+
 - **Plugin lifecycle hooks, a runtime navigation tree, and badge clearing** (ADR-0006
   step 5; addresses #17, #16 and #80). Host contract **1.1**: a minor bump, since every
   addition is optional or new. An extension may declare `lifecycle` hooks

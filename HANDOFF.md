@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `bd70b6c` (#184, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `31257bf` (#185, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -29,15 +29,16 @@ with a merge queue.
 - Plan step 0c complete: the protocol is in force (#181, row C-37).
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1, the state primitives (#184).
-- This change: plugin lifecycle hooks, nav tree, badge clear (ADR-0006 step 5).
+- Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
+- This change: proof rows C-38 to C-43 for work already built.
 
 ## In flight
 
-- Proof rows for plan items already built.
+- Nothing. Work stops here for the owner's instructions.
 
 ## The next step
 
-1. ADR-0006 steps 5 to 11, and W3-2 onward.
+1. ADR-0006 steps 6 to 11, and W3-2 onward, once the owner says go.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

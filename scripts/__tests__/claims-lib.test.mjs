@@ -97,6 +97,9 @@ describe('the argv allowlist (§3.1)', () => {
     no(['gh', 'api', 'repos/o/r/pulls/1/commits'], 'github', /single-object/);
     no(['gh', 'api', 'search/issues?q=x'], 'github', /single-object/);
     no(['gh', 'api', 'repos/o/r/pulls/1', '--jq'], 'github', /needs an expression/);
+    // The repository's own single-object settings resource is accepted; a list under it is not.
+    ok(['gh', 'api', 'repos/o/r/private-vulnerability-reporting', '--jq', '.enabled'], 'github');
+    no(['gh', 'api', 'repos/o/r/private-vulnerability-reporting/advisories'], 'github', /single-object/);
     // gh views: verbs, ids, flags
     no(['gh', 'pr', 'list'], 'github', /only "view"/);
     no(['gh', 'pr', 'view', 'abc'], 'github', /number/);
