@@ -65,3 +65,6 @@ pnpm-debug.log*
 # against a secret file arriving later, not as a hint that one is expected.
 .env
 .env.*
+
+# prove-claims writes its results here on a local run (review of PR A, L3)
+claims-results.json
