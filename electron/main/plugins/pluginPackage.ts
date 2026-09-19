@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { compareHostApiVersion, CONTRACT_VERSION_PATTERN, quoteUntrusted } from './compatibility.js';
 import type { Compatibility } from './compatibility.js';
 import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS } from './hostContract.js';
@@ -152,9 +152,25 @@ export interface PluginPackageFs {
   closeSync: (fd: number) => void;
 }
 
+/**
+ * The flags a package is opened with: read-only, and non-blocking where the
+ * platform defines `O_NONBLOCK`. On POSIX a plain `open` of a FIFO with no
+ * writer blocks until one appears, and a synchronous open in the main process
+ * would freeze the whole application before `fstat` could refuse it; with
+ * `O_NONBLOCK` the open returns at once and `fstat` refuses the FIFO. Windows
+ * defines no `O_NONBLOCK` and has no such FIFO in the filesystem. A function of
+ * the constants, not a constant, so both shapes are tested on every platform.
+ * *Tests:* `electron/__tests__/pluginPackage.test.ts` — "opens non-blocking
+ * where the platform defines O_NONBLOCK, and read-only everywhere", "refuses a
+ * real FIFO without blocking on its open".
+ */
+export function packageOpenFlags(flags: { readonly O_RDONLY: number; readonly O_NONBLOCK?: number }): number {
+  return flags.O_RDONLY | (flags.O_NONBLOCK ?? 0);
+}
+
 /** The real filesystem. What production code passes. */
 export const nodePluginPackageFs: PluginPackageFs = {
-  openSync: (path) => openSync(path, 'r'),
+  openSync: (path) => openSync(path, packageOpenFlags(constants)),
   fstatSync,
   readSync,
   closeSync,
@@ -167,8 +183,15 @@ export const nodePluginPackageFs: PluginPackageFs = {
  */
 const TITLE_FORBIDDEN_PATTERN = /[\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
 
-/** Zero-width characters, removed before the blank check so a title of only these is blank. */
-const ZERO_WIDTH_PATTERN = /[\u200B-\u200D\u2060\uFEFF]/g;
+/**
+ * Characters that draw nothing, removed before the blank check so a title of
+ * only these is blank: the zero-width space, joiners and word joiner, the BOM,
+ * the soft hyphen, the Mongolian vowel separator, the Hangul fillers, and the
+ * tag characters. *Tests:* `electron/__tests__/pluginPackage.test.ts` —
+ * "refuses a title carrying a bidi control, a C0 or C1 control, or nothing but
+ * invisible characters".
+ */
+const INVISIBLE_PATTERN = /[\u00AD\u115F\u1160\u180E\u200B-\u200D\u2060\u3164\uFEFF\uFFA0\u{E0000}-\u{E007F}]/gu;
 
 /** Base64 SHA-512 of `bytes`, the form the manifest records. Step 4's serve-time rehash reuses it. */
 export function sha512Base64(bytes: Uint8Array): string {
@@ -224,7 +247,7 @@ function validateManifest(value: unknown): PluginManifest {
   if (TITLE_FORBIDDEN_PATTERN.test(title)) {
     refuse('manifest.title must not contain control characters or bidi controls');
   }
-  if (title.replace(ZERO_WIDTH_PATTERN, '').trim().length === 0) refuse('manifest.title must not be blank');
+  if (title.replace(INVISIBLE_PATTERN, '').trim().length === 0) refuse('manifest.title must not be blank');
   if (title.length > MAX_TEXT_LENGTH) {
     refuse(`manifest.title exceeds ${String(MAX_TEXT_LENGTH)} characters`);
   }

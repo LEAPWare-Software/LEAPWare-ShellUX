@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,6 +16,7 @@ import {
   PACKAGE_ENTRY,
   PACKAGE_FORMAT,
   nodePluginPackageFs,
+  packageOpenFlags,
   parsePluginPackage,
   readPluginPackage,
   sha512Base64,
@@ -166,12 +168,25 @@ describe('the .lwplugin package', () => {
     for (const [result, reason] of cases) expect(reasonOf(result)).toBe(reason);
   });
 
-  it('refuses a title carrying a bidi control, a C0 or C1 control, or nothing but zero-width characters', () => {
+  it('refuses a title carrying a bidi control, a C0 or C1 control, or nothing but invisible characters', () => {
     const controls = ['\u202Eliam', 'Mail\u200F', 'Ma\u2066il', '\u061CMail', 'Mail\u0000', 'Mail\n', 'Mail\u007F', 'Mail\u0085'];
     for (const title of controls) {
       expect(reasonOf(parse({ title }))).toBe('manifest.title must not contain control characters or bidi controls');
     }
-    for (const title of ['\u200B', '\u200B\u200C\u200D', ' \u2060 ', '\uFEFF']) {
+    const invisible = [
+      '\u200B',
+      '\u200B\u200C\u200D',
+      ' \u2060 ',
+      '\uFEFF',
+      '\u3164', // HANGUL FILLER
+      '\u115F\u1160', // HANGUL CHOSEONG and JUNGSEONG FILLER
+      '\uFFA0', // HALFWIDTH HANGUL FILLER
+      '\u180E', // MONGOLIAN VOWEL SEPARATOR
+      '\u00AD', // SOFT HYPHEN
+      '\u{E0041}\u{E0042}', // TAG LATIN CAPITAL A, B
+      '\u{E0000}\u{E007F}', // the ends of the tag block
+    ];
+    for (const title of invisible) {
       expect(reasonOf(parse({ title }))).toBe('manifest.title must not be blank');
     }
     // Zero-width characters inside a real title are left alone.
@@ -464,10 +479,36 @@ describe('reading a package from disk, through the injected filesystem', () => {
       const result = readPluginPackage(nodePluginPackageFs, path);
       if (!result.ok) throw new Error(result.reason);
       expect(result.plugin.manifest.id).toBe('mail');
-      // A directory opens on POSIX and fails to open on Windows; refused either way.
-      expect(readPluginPackage(nodePluginPackageFs, dir).ok).toBe(false);
+      // A directory opens on Windows and on POSIX alike, and fstat refuses it.
+      expect(reasonOf(readPluginPackage(nodePluginPackageFs, dir))).toBe('the package is not a regular file');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('opens non-blocking where the platform defines O_NONBLOCK, and read-only everywhere', () => {
+    expect(packageOpenFlags({ O_RDONLY: 0, O_NONBLOCK: 2048 })).toBe(2048);
+    expect(packageOpenFlags({ O_RDONLY: 0 })).toBe(0);
+  });
+
+  // A platform condition, not a suppression: Windows has no FIFO in the
+  // filesystem for `mkfifo` to make. Runs on the Linux and macOS CI legs. If a
+  // regression makes the open block, the synchronous call cannot be preempted
+  // by the timeout below; the worker hangs and the run fails at vitest's own
+  // hang detection instead, which is still a failure, never a pass.
+  it.skipIf(process.platform === 'win32')(
+    'refuses a real FIFO without blocking on its open',
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), 'lwplugin-fifo-'));
+      try {
+        const fifo = join(dir, 'package.lwplugin');
+        execFileSync('mkfifo', [fifo]);
+        // No writer is ever opened: a blocking open would wait for one forever.
+        expect(reasonOf(readPluginPackage(nodePluginPackageFs, fifo))).toBe('the package is not a regular file');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    5000,
+  );
 });
