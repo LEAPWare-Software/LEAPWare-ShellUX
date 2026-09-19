@@ -738,6 +738,13 @@ the status is `IN PROGRESS`. The gates were checked by running
   which is 800px and wider" for where that weaker property holds and where it stops,
   "leaves no 0px void when a divider is driven fully to either edge", and "reports a
   non-zero minimum on every divider, which is the floor above".
+
+  *Superseded 2026-09-19, twice, and kept as written above because it is the record
+  of what ISSUE-002 shipped.* The pane bands have followed an observed width since the
+  native-host pivot (`src/hooks/useElementWidth.ts`), and since GitHub issue #23 the
+  live layout is re-fitted on every group-width change and the correction is never
+  persisted — decision 1 of the banner in `src/components/layout/ShellLayout.tsx`
+  is the current statement, and `e2e/pane-refit.spec.ts` measures it.
 - **`role="toolbar"` with every button individually tabbable, and NOT the roving
   tabindex the ARIA toolbar pattern recommends.** This is a real deviation and it is
   recorded as one. The roving pattern requires an arrow-key handler, and when
@@ -1065,6 +1072,9 @@ state" — is likewise unmet: nothing consumes anything yet.
 - **No reconciliation of a restored size against the live group width**, for the reason
   given under Status above: the engine checks a fixed percentage band and never sees the
   measured width.
+  *Superseded 2026-09-19 by GitHub issue #23:* the engine still never sees a width, and
+  `ShellLayout` now re-fits a restored size against the live one — see decision 1 of its
+  banner.
 - **No `IShellAPI` persistence member.** The interface is unchanged — extensions cannot
   reach this engine, and the scoped-persistence surface described in `DEVELOPER.md`
   remains design intent.

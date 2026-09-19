@@ -10,6 +10,12 @@ import type { PaneId } from '../../core/types';
  * percentages measured once into pixels, and why a restored size is clamped, is
  * decisions 1 and 6 of the banner in `ShellLayout.tsx`; that is not restated
  * here. *Tests:* `src/components/__tests__/paneSizing.test.ts`.
+ *
+ * GitHub issue #23 (2026-09-19) added `paneBandsAt`, `intentFromRecord` and
+ * `fitPaneLayout` below them: the arithmetic `ShellLayout.tsx` used to spell
+ * inline for its mount-time `defaultSize`, lifted out so that the re-fit it now
+ * performs on every group-width change is the SAME function and not a second
+ * copy that can drift from it.
  */
 
 /**
@@ -124,4 +130,141 @@ export function clampPanePercent(value: number): number {
 export function isEngineDefaultLayout(sizes: PaneSizes): boolean {
   const defaults = DEFAULT_SHELL_STATE.paneSizes;
   return (Object.keys(defaults) as PaneId[]).every((pane) => sizes[pane] === defaults[pane]);
+}
+
+/** One pane's legal share of the group, as the library's `minSize`/`maxSize`. */
+export interface PaneBand {
+  readonly min: number;
+  readonly max: number;
+}
+
+/**
+ * Every pane's band at one group width.
+ *
+ * Pane 3 declares a `minSize` and deliberately no `maxSize` — it is the
+ * remainder pane — so its `max` is the library's own implicit 100 rather than a
+ * constraint this shell invented.
+ */
+export interface PaneBands {
+  readonly nav: PaneBand;
+  readonly list: PaneBand;
+  readonly detail: PaneBand;
+}
+
+/** `PANE_PX`'s minimums and maximums as shares of `width`. See `percentOf`. */
+export function paneBandsAt(width: number): PaneBands {
+  return {
+    nav: {
+      min: percentOf(PANE_PX.navMin, width, PANE_FALLBACK_PERCENT.navMin),
+      max: percentOf(PANE_PX.navMax, width, PANE_FALLBACK_PERCENT.navMax),
+    },
+    list: {
+      min: percentOf(PANE_PX.listMin, width, PANE_FALLBACK_PERCENT.listMin),
+      max: percentOf(PANE_PX.listMax, width, PANE_FALLBACK_PERCENT.listMax),
+    },
+    detail: {
+      min: percentOf(PANE_PX.detailMin, width, PANE_FALLBACK_PERCENT.detailMin),
+      max: 100,
+    },
+  };
+}
+
+/**
+ * What the two leading panes are ASKED to be, before any band is applied.
+ *
+ * Pane 3 is not in here because it is never asked for anything: it is the
+ * remainder, and `fitPaneLayout` gives it whatever the other two leave.
+ */
+export interface PaneIntent {
+  readonly nav: number;
+  readonly list: number;
+}
+
+/**
+ * The layout a persisted record asks for, as shares of the group it will be laid
+ * out in.
+ *
+ * ONE DERIVATION, USED AT MOUNT AND AGAIN ON EVERY WIDTH CHANGE (GitHub issue
+ * #23). That is what makes a live resize to width W land on the layout a reload
+ * at W opens on: the two are the same function of the same record.
+ *
+ * **A record holding the engine's untouched defaults asks for `PANE_PX`**, at
+ * `pixelWidth` — see `isEngineDefaultLayout` for why "a record exists" is not
+ * "the user chose a layout".
+ *
+ * **A chosen pane-2 share is re-based onto the group that is actually live.** The
+ * record stores three percentages of one width. When pane 1 is not a member of
+ * the group — the extension surface, where pane 1 is in another document, or a
+ * collapsed pane 1, which is a fixed 48px track outside the group (GitHub issue
+ * #114) — `sizes.pane2` is a share of a denominator this group does not have.
+ * Dividing by the pair's own total is the same layout expressed against the width
+ * it is being laid out in. The denominator cannot be zero: the engine clamps
+ * every stored slot into `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]`, whose floor is
+ * above zero.
+ */
+export function intentFromRecord(
+  sizes: PaneSizes,
+  paneOneIsInGroup: boolean,
+  pixelWidth: number,
+): PaneIntent {
+  if (isEngineDefaultLayout(sizes)) {
+    return {
+      nav: percentOf(PANE_PX.navDefault, pixelWidth, PANE_FALLBACK_PERCENT.navDefault),
+      list: percentOf(PANE_PX.listDefault, pixelWidth, PANE_FALLBACK_PERCENT.listDefault),
+    };
+  }
+  return {
+    nav: sizes.pane1,
+    list: paneOneIsInGroup ? sizes.pane2 : (sizes.pane2 / (sizes.pane2 + sizes.pane3)) * 100,
+  };
+}
+
+/** A fitted layout: one share per pane. `nav` is meaningful only when pane 1 is in the group. */
+export interface FittedLayout {
+  readonly nav: number;
+  readonly list: number;
+  readonly detail: number;
+}
+
+/**
+ * An intent held to the bands, with pane 3 given the remainder.
+ *
+ * The two leading panes are clamped into their own bands, which is where a
+ * layout chosen on a wide monitor and shown on a narrow one is corrected rather
+ * than handed to the library and re-clamped by it with a console warning. Pane 3
+ * takes what is left, floored at its own minimum so that two wide leading panes
+ * cannot ask for a negative share.
+ *
+ * **The pane-1 term is zero whenever pane 1 is not a member of the group**,
+ * because leaving it in would subtract a pane that is not there from the width
+ * the group divides — GitHub issue #114, where it made the library renormalise
+ * and warn on every load.
+ *
+ * **When pane 3's remainder would fall under its own minimum, the deficit is
+ * taken from the leading panes** — pane 1 first, down to its minimum, then pane
+ * 2 — so the layout still sums to 100 while every pane stays in its band. Before
+ * this, a restored {40, 30, 30} narrowed from 1000px to 800px asked for 40 / 30 /
+ * 32.5 and the library warned `Invalid layout total size`; measured in review of
+ * GitHub issue #23. Only when the three minimums together exceed 100 — below
+ * roughly 700px — is there nothing left to take, and the layout sums to more
+ * than 100; the library renormalises that and says so, which is the state
+ * `ShellLayout.tsx`'s decision 1 measures and explains.
+ */
+export function fitPaneLayout(
+  intent: PaneIntent,
+  bands: PaneBands,
+  paneOneIsInGroup: boolean,
+): FittedLayout {
+  const clampedNav = clampToBand(intent.nav, bands.nav.min, bands.nav.max);
+  const clampedList = clampToBand(intent.list, bands.list.min, bands.list.max);
+  const deficit = Math.max(
+    0,
+    bands.detail.min - (100 - (paneOneIsInGroup ? clampedNav : 0) - clampedList),
+  );
+  const navCut = paneOneIsInGroup ? Math.min(deficit, clampedNav - bands.nav.min) : 0;
+  const listCut = Math.min(deficit - navCut, clampedList - bands.list.min);
+  const nav = clampedNav - navCut;
+  const list = clampedList - listCut;
+  const paneOneShare = paneOneIsInGroup ? nav : 0;
+  return { nav, list, detail: Math.max(bands.detail.min, 100 - paneOneShare - list) };
 }
