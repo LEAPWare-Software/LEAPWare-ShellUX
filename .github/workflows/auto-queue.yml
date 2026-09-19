@@ -55,11 +55,20 @@ jobs:
       # GitHub starts no workflow for an event caused by the built-in GITHUB_TOKEN, so an
       # enqueue made with it never runs the merge_group checks: measured on #194, where
       # auto-merge set by github-actions at 14:14Z left the PR out of the queue with every
-      # check green. The built-in token stays the fallback, so the job still reports why a
-      # PR is not ready when the secret is absent.
+      # check green. There is no fallback to the built-in token: without the secret the job
+      # fails loudly here rather than enqueueing a PR that would never merge.
+      - name: Require the AUTO_QUEUE_TOKEN secret
+        env:
+          HAS_TOKEN: ${{ secrets.AUTO_QUEUE_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::AUTO_QUEUE_TOKEN is not set; an enqueue with GITHUB_TOKEN never starts the merge_group checks (#194)."
+            exit 1
+          fi
+
       - name: Queue the pull request if it is ready
         env:
-          GH_TOKEN: ${{ secrets.AUTO_QUEUE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.AUTO_QUEUE_TOKEN }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || github.event.issue.number || github.event.pull_request.number }}
           EXPECTED_HEAD: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || '' }}
         run: node scripts/cloud/auto-queue.mjs "$PR_NUMBER" "$EXPECTED_HEAD"
