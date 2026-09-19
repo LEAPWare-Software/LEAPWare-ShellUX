@@ -38,7 +38,7 @@ with a merge queue.
 
 ## The next step
 
-1. ADR-0006 steps 5 to 11, and W3-2 onward.
+1. ADR-0006 steps 6 to 11, and W3-2 onward, once the owner says go.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
