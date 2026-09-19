@@ -285,4 +285,27 @@ describe('Chart — what a screen reader gets', () => {
       expect(screen.getByRole('cell', { name: value })).toBeInTheDocument();
     }
   });
+
+  it('names the figure with a visible DOM heading placed before the canvas, in label type', () => {
+    stubWidth(800);
+    const fake = createFakeRenderer();
+    const { container } = render(
+      <Chart spec={spec('Stock against reorder level')} theme={themeMarked('light:')} renderer={fake.renderer} />,
+    );
+
+    // A class read, not a paint test: this proves the heading is a DOM node that
+    // is not `sr-only` and comes first in the figure. Whether it is legible and
+    // clear of the axis is `e2e/chart.spec.ts`, because jsdom paints nothing.
+    // Queried by tag: this jsdom's accessible-name computation does not derive a
+    // figure's name from its figcaption, so `getByRole('figure', { name })` fails
+    // here for a reason unrelated to the markup. The browser lane asserts the name.
+    const figure = container.querySelector('figure');
+    const caption = figure?.querySelector('figcaption');
+    expect(caption).toHaveTextContent('Stock against reorder level');
+    expect(caption).not.toHaveClass('sr-only');
+    expect(caption).toHaveClass('text-[12px]', 'font-medium', 'text-text-primary');
+    expect(figure?.firstElementChild).toBe(caption);
+    // The canvas host paints the plot well the twelve series were validated on.
+    expect(container.querySelector('[data-chart-canvas]')).toHaveClass('bg-surface-sunken');
+  });
 });

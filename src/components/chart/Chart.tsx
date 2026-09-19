@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { buildChartOption } from '../../core/chart/ChartRenderer';
 import type { ChartInstance, ChartOption, ChartRenderer } from '../../core/chart/ChartRenderer';
 import { buildChartPalette } from '../../core/chart/chartPalette';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import type { ChartSpec } from '../../core/chart/chartSpec';
 import type { ResolvedTheme } from '../../core/theme/normalizeTheme';
 import { useElementWidth } from '../../hooks/useElementWidth';
@@ -97,6 +98,27 @@ import { ChartDataTable } from './ChartDataTable';
  * number in the table and cannot interact with the plot. That is a real gap, it
  * is recorded here rather than in a backlog, and closing it is a DOM-overlay
  * problem that a canvas renderer makes harder rather than easier.
+ *
+ * ---------------------------------------------------------------------------
+ * THE HEADING IS A DOM NODE, AND THE PLOT SITS IN A WELL
+ * ---------------------------------------------------------------------------
+ * The title is the visible `<figcaption>`, first in the figure, in label type
+ * (DESIGN.md: 500, 12px) and `--text-primary`. It used to be `sr-only` here
+ * while ECharts drew the same string into the canvas, where it overprinted the
+ * y-axis name and the top tick (GitHub #112) and painted in a colour no gate in
+ * this repository could measure (GitHub #113). A DOM heading is selectable,
+ * names the figure for assistive technology, and is inside the token pipeline.
+ *
+ * The canvas host paints `bg-surface-sunken`, the plot well. That is the
+ * background `design/contrast-manifest.json` validates all twelve series, the
+ * axis and the tick labels against; before GitHub #111 nothing painted it and
+ * the series sat on `--surface-pane`, a background nobody had measured them on.
+ *
+ * *Tests:* `src/components/chart/__tests__/Chart.test.tsx` — "names the figure
+ * with a visible DOM heading placed before the canvas, in label type";
+ * `e2e/chart.spec.ts` — "paints the heading as DOM text clearing 4.5:1 on the
+ * pane, and the plot on the well the series were validated against, in every
+ * theme".
  *
  * *Tests:* `src/components/chart/__tests__/Chart.test.tsx` — "builds exactly one
  * instance and hands it the option", "disposes and re-initialises on a theme
@@ -208,6 +230,9 @@ export function Chart({ spec, theme, renderer }: ChartProps): ReactElement {
       data-chart-figure={spec.title}
       className="flex min-h-0 min-w-0 flex-col gap-1 overflow-hidden"
     >
+      <figcaption className={`text-[12px] font-medium leading-[1.3] ${TOKEN_CLASS.paneText}`}>
+        {spec.title}
+      </figcaption>
       {/*
         The canvas host. `aria-hidden`, because a canvas has nothing an
         assistive technology can read and pretending otherwise is worse than
@@ -217,9 +242,8 @@ export function Chart({ spec, theme, renderer }: ChartProps): ReactElement {
         ref={attach}
         data-chart-canvas={renderer.id}
         aria-hidden="true"
-        className="min-h-[160px] w-full flex-1"
+        className="min-h-[160px] w-full flex-1 bg-surface-sunken"
       />
-      <figcaption className="sr-only">{spec.title}</figcaption>
       <ChartDataTable spec={spec} className="sr-only" />
     </figure>
   );

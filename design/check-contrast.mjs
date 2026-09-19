@@ -20,6 +20,15 @@
  *   - A manifest row naming a token that does not exist fails as STALE. A row
  *     that measures nothing passes vacuously, which is the failure mode
  *     HANDOFF.md section 11 records as "a green test is not a test".
+ *   - A contrast row whose BACKGROUND nothing in `src/` paints fails as
+ *     UNPAINTED (GitHub #111). All twelve chart series were validated against
+ *     `--surface-sunken` while nothing painted it: the series sat on
+ *     `--surface-pane`, and the palette search had been optimised against the
+ *     unpainted one. A pair measured on a background the product never draws
+ *     measures nothing. Backgrounds of UI that does not exist yet are exempt by
+ *     NAME, with a reason, in `UNBUILT_BACKGROUNDS` — and an exemption that has
+ *     since gained a painter fails as STALE EXEMPTION, so the list cannot
+ *     quietly outlive its reasons.
  *
  * CONTRAST IS A RELATION, NOT A PROPERTY. There is no such thing as an
  * accessible colour — only an accessible PAIR — which is why the manifest
@@ -35,15 +44,30 @@
  *   - It measures the BUILT-IN themes. It cannot validate a third-party theme,
  *     because nothing in `src/` runs this code — see design/README.md, "The gap
  *     between this manifest and the plan".
+ *   - UNPAINTED is a GUARDRAIL, not an integrity control. It asks whether
+ *     `src/` references the background the way a painter would — a Tailwind
+ *     colour utility (`bg-surface-sunken`), `var(--surface-sunken)`, or the
+ *     quoted name `'--surface-sunken'` — with comments stripped first. It does
+ *     NOT check that the background is painted UNDER the row's foreground, and
+ *     a reference in dead code satisfies it. It catches "no painter at all",
+ *     which is what #111 was, and nothing narrower. CIEDE2000 rows compare two
+ *     series, not a series with a background, and are out of its scope.
+ *   - It runs as the second half of `npm run tokens:check` (after
+ *     `scripts/check-tokens.mjs`, a different checker), so in `verify` and in
+ *     `ci.yml` on three operating systems. It ran by hand only until the change
+ *     that repaired #111.
  *   - It measures colour, not rendering. Anti-aliasing, sub-pixel positioning,
  *     font weight and a translucent ancestor all change what a user actually
  *     sees, and none of them is visible to a resolver reading JSON.
  * ============================================================================
  */
 
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { contrastRatio, deltaE2000, deltaE2000Lab, hexToRgb } from './lib/color.mjs';
 import {
   BUILT_IN_THEME_IDS,
+  DESIGN_ROOT,
   loadCore,
   loadManifest,
   loadSemantic,
@@ -54,6 +78,57 @@ import {
 
 const PASS = 'PASS';
 const FAIL = 'FAIL';
+
+/**
+ * Manifest backgrounds that nothing paints YET, each with its reason. An entry
+ * is a decision, not an oversight: the row stays in the manifest because the
+ * pair is reviewed ahead of the UI that will paint it. Remove the entry in the
+ * change that builds that UI — STALE EXEMPTION makes that the only option.
+ */
+const UNBUILT_BACKGROUNDS = Object.freeze({
+  '--accent-solid': 'The primary-button fill. No primary button is built yet.',
+  '--accent-solid-hover': 'The primary-button hover fill. No primary button is built yet.',
+  '--accent-subtle': 'The accent wash behind a current item. Not built yet.',
+  '--status-danger-subtle': 'The tinted background of a danger block. Not built yet.',
+  '--status-warning-subtle': 'The tinted background of a warning block. Not built yet.',
+  '--status-success-subtle': 'The tinted background of a success block. Not built yet.',
+  '--status-info-subtle': 'The tinted background of an info block. Not built yet.',
+  '--focus-ring-offset':
+    'The inner half of the two-tone focus ring. tailwind.config.js maps it as the default ring-offset colour, and no ring-offset utility is used yet.',
+});
+
+/** The text of every file under `src/` that can paint: not generated, not a test. */
+function paintingSources() {
+  const root = join(DESIGN_ROOT, '..', 'src');
+  /** @type {string[]} */
+  const texts = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== '__tests__') walk(path);
+      } else if (/\.(tsx?|css)$/.test(entry.name) && !/\.(generated|test)\./.test(entry.name)) {
+        // Comments stripped, so a docblock NAMING a background is not a painter.
+        // The line-comment rule skips `://`, so a URL inside a string survives.
+        texts.push(
+          readFileSync(path, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/(^|[^:])\/\/.*$/gm, '$1'),
+        );
+      }
+    }
+  };
+  walk(root);
+  return texts.join('\n');
+}
+
+/** Whether `source` references `token` the way a painter would. */
+function isPainted(source, token) {
+  const bare = token.slice(2);
+  return new RegExp(
+    `(?<![\\w-])[a-z-]+-${bare}(?![\\w-])|var\\(--${bare}\\)|['"\`]--${bare}['"\`]`,
+  ).test(source);
+}
 
 /**
  * Verify the maths against values this repository already publishes, and
@@ -186,6 +261,37 @@ function main(argv) {
   }
 
   // ---------------------------------------------------------------------
+  // Exactness, direction three (GitHub #111): a contrast row measured on a
+  // background nothing paints. Reported once per background, not per row.
+  // ---------------------------------------------------------------------
+  const source = paintingSources();
+  const backgrounds = new Set(
+    manifest.rows.filter((row) => row.metric !== 'deltaE2000').map((row) => row.background),
+  );
+  for (const background of [...backgrounds].sort()) {
+    if (!declared.has(background)) continue; // already reported as STALE
+    const painted = isPainted(source, background);
+    const exempt = Object.hasOwn(UNBUILT_BACKGROUNDS, background);
+    if (!painted && !exempt) {
+      failures.push(
+        `UNPAINTED  ${background} is the background of a manifest row and nothing in src/ paints it. ` +
+          'A pair measured on a background the product never draws measures nothing.',
+      );
+    } else if (painted && exempt) {
+      failures.push(
+        `STALE EXEMPTION  ${background} is in UNBUILT_BACKGROUNDS ("${UNBUILT_BACKGROUNDS[background]}") and src/ now paints it. Remove the entry.`,
+      );
+    }
+  }
+  for (const background of Object.keys(UNBUILT_BACKGROUNDS)) {
+    if (!backgrounds.has(background)) {
+      failures.push(
+        `STALE EXEMPTION  ${background} is in UNBUILT_BACKGROUNDS and is the background of no contrast row.`,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // Measurement, every row, every theme.
   // ---------------------------------------------------------------------
   /** @type {{theme: string, row: object, value: number}[]} */
@@ -219,6 +325,9 @@ function main(argv) {
   process.stdout.write(`Not contrast-bearing, exempt by type: ${dimensionTokens.join(', ')}\n`);
   process.stdout.write(
     `Manifest rows: ${manifest.rows.length}. Themes: ${themes.map((theme) => theme.meta.id).join(', ')}.\n`,
+  );
+  process.stdout.write(
+    `Contrast backgrounds: ${backgrounds.size}. Exempt as unbuilt UI: ${Object.keys(UNBUILT_BACKGROUNDS).join(', ')}.\n`,
   );
   process.stdout.write(`Measurements: ${measured.length}.\n\n`);
 

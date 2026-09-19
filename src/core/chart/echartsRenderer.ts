@@ -3,7 +3,6 @@ import {
   AriaComponent,
   GridComponent,
   LegendComponent,
-  TitleComponent,
   TooltipComponent,
 } from 'echarts/components';
 import { init, registerTheme, use as echartsUse } from 'echarts/core';
@@ -18,9 +17,15 @@ import type { ChartInstance, ChartOption, ChartRenderer } from './ChartRenderer'
  * ============================================================================
  * Tier 1 of §3.3: Apache ECharts 6, Apache-2.0, canvas renderer, tree-shaken.
  * The import list at the top of this file is the tree-shaking: `echarts/core`
- * plus an explicit `use([…])` pulls in three chart types and five components,
- * not the whole library, and the measured bundle cost of exactly this list is
- * recorded in `CHANGELOG.md` rather than estimated.
+ * plus an explicit `use([…])` pulls in three chart types and four components,
+ * not the whole library.
+ *
+ * CORRECTED, same commit as the change that made it false: this read "five
+ * components" and "the measured bundle cost of exactly this list is recorded in
+ * `CHANGELOG.md`". `TitleComponent` was the fifth and is gone — see
+ * "NO TITLE IN THE CANVAS" below — and `CHANGELOG.md` records the choice of
+ * ECharts but no bundle figure for this list, so there is nothing measured to
+ * point at. Nobody has measured the bundle cost of the four-component list.
  *
  * Everything above this file speaks `ChartOption` — the host's own vocabulary in
  * `ChartRenderer.ts`. The translation into ECharts' option schema happens here
@@ -69,7 +74,6 @@ echartsUse([
   BarChart,
   ScatterChart,
   GridComponent,
-  TitleComponent,
   TooltipComponent,
   LegendComponent,
   // The one component here that is not about drawing: `aria` makes ECharts
@@ -131,25 +135,41 @@ const DECAL: Readonly<Record<ChartDash, Record<string, unknown> | null>> = Objec
  * so it is applied per series in the option below and cannot drift with order.
  */
 export function toEChartsTheme(palette: ChartPalette): Record<string, unknown> {
+  // Metadata type (DESIGN.md: 400, 11px) for every string on an axis. Only the
+  // SIZE reaches the canvas: a 2D context cannot read `--font-ui`, so the family
+  // is still ECharts' own default, and the weight is its default 400.
+  const axisText = { color: palette.label, fontSize: 11 };
   return {
     // Transparent, so the pane's own `--surface-pane` shows through and the
     // chart does not paint a second background over it. The contrast pairs
     // `design/` measured are against the pane, so painting anything else here
     // would invalidate them.
+    //
+    // CORRECTED (GitHub #111). The two sentences above are false and are kept
+    // because they are the record of how the defect was possible: the manifest
+    // measured all twelve series, the axis and the label against
+    // `--surface-sunken`, never against `--surface-pane`, and nothing painted
+    // `--surface-sunken` at all. What is true now: the canvas stays transparent
+    // so that the HOST element's `bg-surface-sunken` in
+    // `src/components/chart/Chart.tsx` — the plot well — shows through, and
+    // that well is the background every chart row in
+    // `design/contrast-manifest.json` names. Painting anything here would
+    // invalidate them; that half was always right.
     backgroundColor: 'transparent',
     textStyle: { color: palette.label },
-    title: { textStyle: { color: palette.label } },
     legend: { textStyle: { color: palette.label } },
     categoryAxis: {
       axisLine: { lineStyle: { color: palette.axis } },
       axisTick: { lineStyle: { color: palette.axis } },
-      axisLabel: { color: palette.label },
+      axisLabel: axisText,
+      nameTextStyle: axisText,
       splitLine: { show: false, lineStyle: { color: palette.grid } },
     },
     valueAxis: {
       axisLine: { lineStyle: { color: palette.axis } },
       axisTick: { lineStyle: { color: palette.axis } },
-      axisLabel: { color: palette.label },
+      axisLabel: axisText,
+      nameTextStyle: axisText,
       splitLine: { show: true, lineStyle: { color: palette.grid } },
     },
     tooltip: {
@@ -169,23 +189,60 @@ export function toEChartsTheme(palette: ChartPalette): Record<string, unknown> {
  * that grows out of the axis on every data tick is the same class of motion:
  * `MailPlugin`'s and `DatabasePlugin`'s payloads republish on a timer, so an
  * animated chart would never be still.
+ *
+ * **NO TITLE IN THE CANVAS.** `option.title` is deliberately not translated.
+ * It used to be, as `title: { text, left: 'left' }`, and that one line was two
+ * defects (GitHub #112, #113): with no `top` it defaulted into the same corner
+ * as the y-axis name and the top tick and overprinted both, and its painted
+ * colour was a string rasterised into a canvas, where neither
+ * `design/check-contrast.mjs` nor `e2e/theme.spec.ts` can see it — in the dark
+ * theme it was near-illegible. The heading is `Chart.tsx`'s visible
+ * `<figcaption>` now, a DOM node inside the token pipeline. The accepted loss:
+ * a chart exported as a canvas image no longer carries its own title.
+ *
+ * *Tests:* `src/core/chart/__tests__/echartsRenderer.test.ts` — "draws no title
+ * into the canvas, because the heading is a DOM node the token pipeline can
+ * see"; `e2e/chart.spec.ts` — "draws no title into the canvas and keeps the
+ * DOM heading clear of every axis string, in Mail, at the default and the
+ * minimum pane width", and the same case in Database.
  */
 export function toEChartsOption(option: ChartOption): Record<string, unknown> {
   return {
     animation: false,
     aria: { enabled: true },
-    title: { text: option.title, left: 'left' },
     // Explicit margins rather than `containLabel`, which ECharts 6 deprecated in
     // favour of `grid.outerBounds` and warns about on every render. A warning
     // per chart per paint would break "emits no console error or warning while
     // extensions are switched faster than a fetch settles" in
     // `src/__tests__/IntegrationSuite.test.tsx`, which is the repository's only
     // guard against exactly this kind of noise.
-    grid: { left: 48, right: 16, top: 32, bottom: 48 },
+    //
+    // `top` holds the y-axis name (below) and nothing else: no title sits
+    // above the plot any more.
+    grid: { left: 48, right: 16, top: 28, bottom: 48 },
     tooltip: { trigger: 'axis' },
     legend: { data: option.series.map((series) => series.name), bottom: 0 },
     xAxis: { type: 'category', name: option.xLabel, data: option.categories },
-    yAxis: { type: 'value', name: option.yLabel },
+    // The name's placement is EXPLICIT (GitHub #112). ECharts' default is also
+    // `'end'`, but centred on the axis line, so the name straddles the tick
+    // column and only the vertical gap keeps it off the top tick. Left-aligned
+    // from the axis line it grows rightwards into the top margin while every
+    // tick label sits left of that line, so the two do not share a pixel column
+    // however long the name is — two separations instead of one.
+    //
+    // Stated so it is not over-read: with the title gone, ECharts' DEFAULT
+    // placement also measured clear of the top tick on both mock charts at
+    // `grid.top: 28` (a mutation probe deleting these three lines left
+    // `e2e/chart.spec.ts` green). The collision in #112 was with the title. These
+    // lines are the second separation, not the fix; the probe that DOES go red
+    // is dropping the alignment and closing `nameGap` to 0.
+    yAxis: {
+      type: 'value',
+      name: option.yLabel,
+      nameLocation: 'end',
+      nameGap: 12,
+      nameTextStyle: { align: 'left' },
+    },
     series: option.series.map((series) => ({
       name: series.name,
       type: SERIES_TYPE[series.kind],
