@@ -419,9 +419,23 @@ one the plugin imports — is step 2's browser-lane case to write.
 > the dev server. *Tests:* `e2e/shared-modules.spec.ts` — "a module importing
 > /shared/react.js receives the React instance the extension surface renders
 > with". With `src/sdk/shared/react.ts` pointed at a copied second React, the
-> build case fails on that comparison. **Not measured:** the packaged app
-> serving `/shared/*.js` from its asar under the `shellux:` scheme, and a plugin
-> component actually rendering — no plugin loads before step 6.
+> build case fails on that comparison.
+>
+> **The packaged app, measured.** `scripts/csp-smoke.mjs` now also imports the
+> three modules in the packaged extension surface over the `shellux:` scheme,
+> after driving the fixtures and before reading the violation counts. One run
+> (Windows, Electron 43.2.0, `docs/measurements/shared-modules-2026-09-19.json`):
+> all three resolved, `HOST_API_VERSION` `1.0`, one renderer whose
+> `currentDispatcherRef` is `/shared/react.js`'s dispatcher, `jsx` made a React
+> element, and 0 CSP violations on each surface with both positive controls
+> registering. The smoke's `ok` now requires all of it. The imports are
+> evaluated code, not a plugin's static import. **Not measured:** a plugin
+> component actually rendering — no plugin loads before step 6 — and macOS or
+> Linux.
+>
+> **The baseline changed shape without a version bump** in review (`shellApi`
+> split into required and optional; `sharedModules` added). Accepted: `1.0` has
+> never been released, so no plugin was built against the earlier description.
 >
 > **A cost, measured:** with five inputs sharing chunks, the build splits more.
 > `<link rel="modulepreload">` tags went from 1 to 4 in `dist/index.html` and
