@@ -13,9 +13,15 @@ import type { RowStatusKind } from '../ui/rowStatusVocabulary';
  * THE ROW STATUS LINE'S DOM, AND ONLY ITS DOM.
  * ============================================================================
  * The status colour, the mark's shape and the word's contrast on the row are
- * painted facts jsdom cannot see, and are measured in `e2e/list-rows.spec.ts`
- * ("every status line renders its mark and its word and the word clears 4.5:1
- * on the row in all three themes"). What is asserted here is what the DOM alone
+ * painted facts jsdom cannot see, and are measured in `e2e/list-rows.spec.ts`,
+ * which ships one case per status rather than the single case
+ * `docs/design/WAVE3-PLAN.md` first sketched.
+ * *Tests:* `e2e/list-rows.spec.ts` — "renders the warning status line's mark and
+ * word, clearing 4.5:1 in every theme", "renders the success status line's mark
+ * and word, clearing 4.5:1 in every theme", "renders the danger status line's
+ * mark and word, clearing 4.5:1 in every theme" and "renders the info status
+ * line's mark and word, clearing 4.5:1 in every theme".
+ * What is asserted here is what the DOM alone
  * decides: which mark and which ink class a status gets, that the mark carries
  * `aria-hidden` and no text a screen reader would read twice, and that the word
  * — the one required prop — is what a reader actually sees.

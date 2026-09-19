@@ -1163,8 +1163,10 @@ const ruleCount = CONTENT_RULES.length + STRUCTURAL_RULES.length;
 
 if (violations.length === 0) {
   // The username rule is the one rule whose patterns depend on the machine. Saying
-  // so on a clean run keeps that visible rather than implying all 20 rules found
-  // nothing when one of them had nothing to look for. See ADR-0002.
+  // so on a clean run keeps that visible rather than implying every rule found
+  // nothing when one of them had nothing to look for. The count in the line below
+  // is `ruleCount`, computed from the two rule arrays, so it cannot drift from the
+  // code; this comment carries no number of its own for the same reason. See ADR-0002.
   const usernameRule = CONTENT_RULES.find((rule) => rule.id === 'developer-username');
   const inert = usernameRule !== undefined && usernameRule.patterns.length === 0 ? ' (developer-username inert: no login name to match)' : '';
   process.stdout.write(
