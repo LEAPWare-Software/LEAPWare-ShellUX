@@ -1964,7 +1964,7 @@
     },
     {
       "id": "C-34",
-      "box": "Contract items not covered by Step 6b ship as documented limits (D-35, now narrowed to exclude #16, #17, #28, #32, #57, #68 and #80). The one remaining, #91, is named in `DEVELOPER.md`'s \"Known limits at 1.0\".",
+      "box": "Contract items not covered by Step 6b ship as documented limits (D-13's list, narrowed by D-36 to exclude #16, #17, #28, #32, #57, #68 and #80; the plan first cited D-35 here in error). The one remaining, #91, is named in `DEVELOPER.md`'s \"Known limits at 1.0\".",
       "class": "repo",
       "checks": [
         [
