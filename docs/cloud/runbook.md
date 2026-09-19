@@ -108,10 +108,10 @@ Each run does one unit of work, then exits.
 2. A lane lock older than 150 minutes is stale. Note it and clear it.
 3. If `main` has been red for more than one hour, open or update a `needs-owner` issue titled `main is red`.
 
-## 3. Reviewer routine (every 30 minutes)
+## 3. Reviewer routine (hourly; a routine cannot run more often than once an hour)
 
 1. Find open PRs whose head SHA has no review comment from this routine: `Reviewer: shellux-cloud-reviewer` with `Reviewed SHA: <head>`.
-2. For each one, oldest first, **at most 2 per run:** check out the head. Review adversarially per `CLAUDE.md` rule 1:
+2. For each one, oldest first, **at most 3 per run:** check out the head. Review adversarially per `CLAUDE.md` rule 1:
    - measure every claim;
    - run each new test's probe;
    - run `npm run verify` and, for UI work, the browser lane;
