@@ -27,7 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      # write: the plugin posts its verdict with `gh pr comment` and inline comments.
+      # Run 35410730035 (PR #145) held `read`, was denied 14 tool calls and posted nothing.
+      pull-requests: write
       issues: read
       id-token: write
 
@@ -45,7 +47,11 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+          # Exactly the tools the plugin's own command declares (plugins/code-review/commands/
+          # code-review.md, `allowed-tools`), plus read-only file tools for its subagents.
+          # With only the inline-comment tool, run 35410730035 was denied 14 calls and
+          # reported SUCCESS having posted nothing.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read,Grep,Glob"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 
