@@ -89,8 +89,9 @@ See "Bootstrap is owner-only" below.
   comparison only when the live response omits the field entirely, which is
   the case for every response captured against this repo so far — **because
   the ruleset has never had the field set, not because the caller lacks
-  write access.** An authenticated call against a ruleset that genuinely
-  carries `integration_id` returns it; the exclusion is keyed on the field's
+  write access.** An authenticated call against a ruleset that
+  carries `integration_id` is expected to return it (not yet measured here, because
+  the field has never been set; the post-apply read-back is the measurement); the exclusion is keyed on the field's
   presence in the response, not on the token's permissions (`bypass_actors`,
   above, is the one that is genuinely access-gated). Concretely: **the
   post-apply read-back's pass condition is `integration_id: 15368` present on
@@ -196,8 +197,8 @@ with `main`, never GitHub's "Update branch" button. `pr-evidence.yml`'s
 Dependabot exemption (`docs/proof-of-completion.md` §3.3) requires every
 commit on the PR to have `author.login == 'dependabot[bot]'` and a verified
 signature; "Update branch" merges `main` into the PR branch with a merge
-commit authored by whoever clicked it, which both breaks that all-commits
-check and adds a commit the bot never signed — the exemption is lost and the
+commit authored by whoever clicked it, which breaks that all-commits author
+check — the exemption is lost and the
 PR needs a full evidence body instead. `@dependabot rebase` re-requests the
 update from the bot itself, so every commit stays `dependabot[bot]`-authored
 and verified.
