@@ -16,6 +16,14 @@ from so a reader can check it.
 
 ### Added
 
+- **Proof-of-completion rollout step 2 is complete** (plan step 0c item 3, row C-30).
+  Twelve cases, each as designed: eleven throwaway PRs (#157 to #168, not #160) each
+  broke one rule and failed for exactly that reason, a failing body re-ran the gate on
+  `edited` and passed, and two groups went through the merge queue with both jobs
+  green, the last (#169 and #170) as a two-entry group. The run ids are in
+  `docs/claims-evidence/rollout-step2-2026-09-19.md`, and row C-30 re-reads each run's
+  conclusion from GitHub on every main run, so the record cannot silently drift.
+
 - **The plugin SDK and the shared modules** (ADR-0006 step 2). `src/sdk/index.ts`
   (`HOST_API_VERSION` 1.0) is the one host module a plugin may import, served as
   `/shared/sdk.js` beside `/shared/react.js` and `/shared/react-jsx-runtime.js`, built in

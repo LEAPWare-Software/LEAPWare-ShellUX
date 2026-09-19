@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `a2bba77` (#160, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `f3ab4d9` (#170, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -27,8 +27,9 @@ with a merge queue.
 - #156: proof-of-completion PR A: register, box linter, prover, `npm run status`,
   two workflows (not yet required); first main run 35421271000 green.
 - #160: `ShellLayout.tsx` split before wave 3 (part of #95).
-- This change: the plugin SDK and `/shared/*` (ADR-0006 step 2); the rollout step 2
-  record lands beside it, the two queued together as rollout case (l).
+- #169 + #170, one queue group (rollout case l): the rollout step 2 record; the plugin
+  SDK and `/shared/*` (ADR-0006 step 2).
+- This change: plan step 0c item 3 ticked (row C-30 re-reads every case's run).
 
 ## In flight
 

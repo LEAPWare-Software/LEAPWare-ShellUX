@@ -1445,6 +1445,287 @@
       },
       "provenOn": "2026-09-19",
       "addedBy": "wave 3 increment 1 (refactor/split-shelllayout)"
+    },
+    {
+      "id": "C-30",
+      "box": "Rollout step 2: every throwaway-PR case shown with its run id. Cases (a) to (l), each as designed: `docs/claims-evidence/rollout-step2-2026-09-19.md` lists every run, and the row re-reads each run's conclusion from GitHub.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "run",
+          "view",
+          "35421034443",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"a_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35421034378",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"a_evidence=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35421695911",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"b_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35421902172",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"c_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422123043",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"d_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422220468",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"d2_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422311632",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"e_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422411665",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"f_evidence=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422496166",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"g_evidence=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422573538",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"h_evidence_before=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422634428",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"h_evidence_after=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422780283",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"i_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422925481",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"j_claims=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35423036084",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"k_evidence=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35424116743",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"l_claims_first=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35424117731",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"l_claims_second=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35424116766",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"l_evidence_first=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35424117668",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"l_evidence_second=\\(.conclusion)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "a_claims",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "a_evidence",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "b_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "c_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "d_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "d2_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "e_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "f_evidence",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "g_evidence",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "h_evidence_before",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "h_evidence_after",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "i_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "j_claims",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "k_evidence",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "l_claims_first",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "l_claims_second",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "l_evidence_first",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "l_evidence_second",
+          "op": "==",
+          "value": "success"
+        }
+      ],
+      "provenOn": "2026-09-19",
+      "addedBy": "rollout step 2 tick (docs/rollout-step2-tick)"
     }
   ],
   "retired": []
