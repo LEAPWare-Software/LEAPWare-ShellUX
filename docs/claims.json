@@ -113,6 +113,36 @@
           "state,mergeCommit,statusCheckRollup,body",
           "--jq",
           "\"pr126_state=\\(.state)\", \"pr126_merge_commit=\\(.mergeCommit.oid[0:7])\", \"pr126_checks_success=\\([.statusCheckRollup[] | select(.conclusion == \"SUCCESS\")] | length)\", \"pr126_checks_total=\\(.statusCheckRollup | length)\", \"pr126_exit_code_record=\\(.body | test(\"VERIFY_EXIT=0\"))\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "126",
+          "--json",
+          "statusCheckRollup",
+          "--jq",
+          "\"pr126_audit_prod_green=\\([.statusCheckRollup[] | select(.name == \"Audit production dependencies\" and .conclusion == \"SUCCESS\")] | length)\", \"pr126_audit_all_green=\\([.statusCheckRollup[] | select(.name == \"Audit all dependencies\" and .conclusion == \"SUCCESS\")] | length)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "126",
+          "--json",
+          "comments",
+          "--jq",
+          "\"pr126_review_merge=\\([.comments[] | select((.body | test(\"Verdict: MERGE\\\\.\")) and (.body | test(\"lw-verifier\")))] | length)\", \"pr126_medium_fixed=\\([.comments[] | select(.body | test(\"\\\\| Medium \\\\|[^\\n]*Fixed in the follow-up commit\"))] | length)\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "142",
+          "--json",
+          "state,title,author",
+          "--jq",
+          "\"issue142_title=\\(.title)\", \"issue142_author=\\(.author.login)\""
         ]
       ],
       "expect": [
@@ -140,6 +170,36 @@
           "key": "pr126_exit_code_record",
           "op": "==",
           "value": "true"
+        },
+        {
+          "key": "pr126_audit_prod_green",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr126_audit_all_green",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr126_review_merge",
+          "op": ">=",
+          "value": 1
+        },
+        {
+          "key": "pr126_medium_fixed",
+          "op": ">=",
+          "value": 1
+        },
+        {
+          "key": "issue142_title",
+          "op": "==",
+          "value": "Scheduled dependency audit is failing"
+        },
+        {
+          "key": "issue142_author",
+          "op": "==",
+          "value": "app/github-actions"
         }
       ],
       "provenOn": "2026-09-18",
@@ -614,7 +674,7 @@
     },
     {
       "id": "C-12",
-      "box": "Content review of tracked files for anything that must not be public: customer names, internal hosts, credentials in docs. Two found and repaired: a personal-looking contact in `CODE_OF_CONDUCT.md`, a wrong org in `CODEOWNERS`.",
+      "box": "The two repairs from the public-content review hold: `CODE_OF_CONDUCT.md` names no personal contact and routes reports through `SECURITY.md`, and `CODEOWNERS` names no `@LEAPWare-HQ`. The review itself (customer names, internal hosts, credentials in docs) was by hand in #141 and is not re-run by the row.",
       "class": "repo",
       "checks": [
         [
@@ -724,7 +784,7 @@
     },
     {
       "id": "C-15",
-      "box": "Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: #112 (title overprint), #113 (title outside the token system, dark contrast), #111 (contrast gate measured against a background the app never paints). Landed in the charts PR; the contrast check now runs in `tokens:check`. #146 (Database chart clipped) filed, not fixed.",
+      "box": "Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: repairs #112 (title overprint) and #113 (title outside the token system, dark contrast), and addresses #111 (contrast gate measured against a background the app never paints), which stays open. Landed in the charts PR. #146 (Database chart clipped) filed, not fixed.",
       "class": "github",
       "checks": [
         [
@@ -735,7 +795,37 @@
           "--json",
           "state,title",
           "--jq",
-          "\"pr148_state=\\(.state)\", \"pr148_repairs_112_113=\\(.title | test(\"repairs #112, #113\"))\""
+          "\"pr148_state=\\(.state)\", \"pr148_repairs_112_113=\\(.title | test(\"repairs #112, #113; addresses #111\"))\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "111",
+          "--json",
+          "state,title,author",
+          "--jq",
+          "\"issue111_state=\\(.state)\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "112",
+          "--json",
+          "state,title,author",
+          "--jq",
+          "\"issue112_state=\\(.state)\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "113",
+          "--json",
+          "state,title,author",
+          "--jq",
+          "\"issue113_state=\\(.state)\""
         ],
         [
           "gh",
@@ -743,9 +833,9 @@
           "view",
           "146",
           "--json",
-          "number",
+          "state,title,author",
           "--jq",
-          "\"issue146_filed=\\(.number)\""
+          "\"issue146_state=\\(.state)\""
         ]
       ],
       "expect": [
@@ -760,9 +850,24 @@
           "value": "true"
         },
         {
-          "key": "issue146_filed",
+          "key": "issue111_state",
           "op": "==",
-          "value": 146
+          "value": "OPEN"
+        },
+        {
+          "key": "issue112_state",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "issue113_state",
+          "op": "==",
+          "value": "CLOSED"
+        },
+        {
+          "key": "issue146_state",
+          "op": "==",
+          "value": "OPEN"
         }
       ],
       "provenOn": "2026-09-18",
@@ -879,11 +984,16 @@
     },
     {
       "id": "C-19",
-      "box": "Scan the full history for secrets with gitleaks over `--log-opts=--all`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated**; deleting it from history is not enough. Run 2026-09-18 **after** the flip, because gitleaks could not run before it (D-43, whose pre-flip check was a grep of every commit): no leaks, raw output in the row's evidence file.",
+      "box": "Scan the published history for secrets with gitleaks: every commit on `main`, plus the lockfile as it stands, which `gitleaks git` cannot read because `.gitattributes` marks it `-diff`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated**; deleting it from history is not enough. Run 2026-09-18 **after** the flip, because gitleaks could not run before it (D-43, whose pre-flip check was a grep of every commit): no leaks. Raw output, the commit counts, and the two false positives an all-refs scan finds are in the row's evidence file.",
       "class": "manual",
       "expect": [
         {
-          "key": "GITLEAKS_EXIT",
+          "key": "PUBLISHED_HISTORY_EXIT",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "LOCKFILE_EXIT",
           "op": "==",
           "value": 0
         }
@@ -1048,7 +1158,7 @@
     },
     {
       "id": "C-24",
-      "box": "**Owner approves gate 4.** Steps 4–6 and 6b's UI implement the approved wireframes, and a live impeccable pass on the running app checks the result against them.",
+      "box": "**Owner approves gate 4:** the six gate-4 screens are approved (D-45).",
       "class": "repo",
       "checks": [
         [
@@ -1092,9 +1202,113 @@
           "key": "unmilestoned_open_issues",
           "op": "==",
           "value": 0
+        },
+        {
+          "key": "v1_0_0_title",
+          "op": "==",
+          "value": "v1.0.0"
+        },
+        {
+          "key": "v1_0_0_closed_issues",
+          "op": ">=",
+          "value": 2
+        },
+        {
+          "key": "m1_1_title",
+          "op": "==",
+          "value": "1.1"
         }
       ],
       "evidence": "docs/claims-evidence/C-25-milestones-2026-09-18.txt",
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-26",
+      "box": "#85 for Electron: set Vite `build.target` to the Chromium version Electron 43 ships. The Safari half is moot because the target is Electron only. Verify that `base` is correct for `file://` loading by launching the packaged app. `chrome150`, measured from Electron 43.2.0; the packaged renderer loads over the `shellux://` scheme, not `file://`. The packaged launch is recorded in #150 and is not re-checked by the row.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/build-target.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "vite_build_target",
+          "op": "==",
+          "value": "chrome150"
+        },
+        {
+          "key": "electron_major",
+          "op": "==",
+          "value": 43
+        },
+        {
+          "key": "app_scheme",
+          "op": "==",
+          "value": "shellux"
+        },
+        {
+          "key": "scheme_privileged",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "drop the build target",
+        "edits": [
+          {
+            "file": "vite.config.ts",
+            "replace": [
+              "target: 'chrome150'",
+              "target: 'es2020'"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-27",
+      "box": "The chart contrast check runs in `tokens:check`, and so inside `verify`.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/contrast-in-tokens-check.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "contrast_stage_in_tokens_check",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "tokens_check_in_gate",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "contrast_check_exit",
+          "op": "==",
+          "value": 0
+        }
+      ],
+      "probe": {
+        "name": "take the contrast check out of tokens:check",
+        "edits": [
+          {
+            "file": "package.json",
+            "replace": [
+              " && node design/check-contrast.mjs --self-test",
+              ""
+            ]
+          }
+        ]
+      },
       "provenOn": "2026-09-18",
       "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
     }

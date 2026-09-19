@@ -70,6 +70,17 @@ describe('the argv allowlist (§3.1)', () => {
     for (const bad of ['-c', '-C', '-O', '-Oless', '-C3', '--git-dir', '--git-dir=x', '--work-tree=y', '--exec-path', '--ext-diff', '--output', '--output=f', '--open-files-in-pager']) {
       no(['git', 'grep', bad, 'x'], 'repo', /rejected/);
     }
+    // Abbreviated long options: git accepts any unambiguous prefix, so `--open=CMD` is
+    // `--open-files-in-pager=CMD` and runs CMD. Reproduced in review; each must be refused.
+    for (const bad of ['--open=echo PWNED', '--open-files=echo PWNED', '--open-files-in=x', '--ext', '--ext-d', '--textc', '--textconv', '--outp=f', '--git-d=x', '--work-t=y', '--exec=x']) {
+      no(['git', 'grep', bad, 'x'], 'repo', /rejected/);
+      no(['git', 'diff', bad, 'HEAD'], 'repo', /rejected/);
+    }
+    // A flag allowed for one subcommand is not allowed for another.
+    no(['git', 'ls-files', '-e', 'x'], 'repo', /rejected/);
+    // A value after -e is a pattern, not a flag; everything after -- is a path.
+    ok(['git', 'grep', '-e', '--open=looks-like-a-flag', '--', 'docs'], 'repo');
+    ok(['git', 'ls-files', '--', '--open=a-path-name'], 'repo');
     // gh api: methods, fields, input, paginate, graphql, list endpoints, flag order
     no(['gh', 'api', 'repos/o/r/pulls/1', '-X', 'POST'], 'github', /-X/);
     no(['gh', 'api', 'repos/o/r/pulls/1', '-XPOST'], 'github', /-X/);

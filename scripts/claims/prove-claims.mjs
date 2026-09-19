@@ -31,6 +31,7 @@ import {
   assertRestrictionWorks,
   networkRestriction,
   defaultRunner,
+  evaluateExpect,
   formatExpectation,
   git,
   rowHash,
@@ -125,8 +126,16 @@ export function prove({
   for (const row of toRun) {
     const record = { rowId: row.id, rowHash: rowHash(row), class: row.class };
     if (row.class === 'manual') {
-      const present = existsSync(path.join(cwd, row.evidence));
-      Object.assign(record, { pass: present, output: `evidence=${row.evidence}`, failures: present ? [] : [`evidence file ${row.evidence} is missing`], ms: 0 });
+      // Never re-run. The stated expectations must at least agree with the committed
+      // evidence: each key printed exactly once there, and holding.
+      const file = path.join(cwd, row.evidence);
+      if (!existsSync(file)) {
+        Object.assign(record, { pass: false, output: `evidence=${row.evidence}`, failures: [`evidence file ${row.evidence} is missing`], ms: 0 });
+      } else {
+        const expect = evaluateExpect(row.expect, readFileSync(file, 'utf8'));
+        const failures = expect.filter((e) => !e.pass).map((e) => `evidence ${row.evidence}: ${e.reason ?? `does not state ${formatExpectation(e)}`}`);
+        Object.assign(record, { pass: failures.length === 0, output: `evidence=${row.evidence}`, expect, failures, ms: 0 });
+      }
     } else {
       const outcome = runRow(row, { cwd, run, restrict, now });
       Object.assign(record, { pass: outcome.pass, output: outcome.output, expect: outcome.expect, failures: outcome.failures, ms: outcome.ms });

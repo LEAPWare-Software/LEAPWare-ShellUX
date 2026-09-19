@@ -48,7 +48,9 @@ updated for the new head. Write the full 40-character SHA.
 Rows reviewed: every register row (docs/claims.json) this change adds, changes, or
 cites from a ticked plan item, by id (C-nn), or "none".
 Items removed or reworded: each plan item this change removes or rewords, as
-<file>:<line on the base branch>. The Prove claims log lists them.
+<file>:<line on the base branch>, all on ONE line, separated by commas or
+spaces. The Prove claims log lists them. Each field is read from its own line only, and
+names are matched exactly: docs/plans/v1-production.md:84 does not name line 8.
 Gate changes: every changed file under scripts/claims/, a change to the schema of
 docs/claims.json, claims.yml, pr-evidence.yml, or .github/rulesets/. "none" if none.
 

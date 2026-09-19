@@ -95,9 +95,29 @@ export function loadRegister(root = REPO_ROOT, read = readFileSync) {
 // ---------------------------------------------------------------------------
 
 const NODE_REJECTED_ARG1 = ['-e', '--eval', '-p', '--print', '--import', '--require', '-r'];
-const GIT_SUBCOMMANDS = ['ls-files', 'show', 'grep', 'rev-parse', 'cat-file', 'diff'];
-const GIT_REJECTED_LONG = ['--git-dir', '--work-tree', '--exec-path', '--ext-diff', '--output', '--open-files-in-pager'];
-const GIT_REJECTED_SHORT = ['-c', '-C', '-O'];
+/**
+ * git: an allowlist of named flags per subcommand, matched exactly. A deny-list of
+ * dangerous options cannot work, because git accepts any unambiguous prefix of a long
+ * option: `--open=CMD` is `--open-files-in-pager=CMD` and runs CMD. So every argument
+ * that starts with `-` must be one of these spellings, character for character; an
+ * argument that does not start with `-` is a revision, path or pattern, and everything
+ * after a bare `--` is a path. Flags that take a value in the next argument are listed in
+ * GIT_VALUE_FLAGS, and that value is consumed without being read as a flag. The design's
+ * "rejected anywhere" flags (-c, -C, -O and the long ones) appear in no list.
+ *
+ * Not covered: diff and show honour textconv and external-diff drivers set in the local
+ * git config or the environment. A row cannot set either; the runner's config is trusted.
+ */
+const GIT_FLAGS = {
+  'ls-files': ['--cached', '--others', '--exclude-standard', '--error-unmatch', '--deleted', '--modified', '-z'],
+  show: ['--no-patch', '--name-only', '--name-status', '--stat', '--no-color', '--no-textconv', '--no-ext-diff'],
+  grep: ['-n', '-l', '-L', '-i', '-w', '-F', '-E', '-G', '-P', '-I', '-h', '-q', '-e', '--count', '--line-number', '--files-with-matches', '--ignore-case', '--fixed-strings', '--extended-regexp', '--no-color', '--no-textconv', '--cached'],
+  'rev-parse': ['--short', '--abbrev-ref', '--is-shallow-repository'],
+  'cat-file': ['-e', '-t', '-s', '-p'],
+  diff: ['--stat', '--numstat', '--name-only', '--name-status', '--no-renames', '--no-color', '--no-textconv', '--no-ext-diff', '--exit-code', '--quiet', '--cached'],
+};
+const GIT_VALUE_FLAGS = new Set(['-e']);
+const GIT_SUBCOMMANDS = Object.keys(GIT_FLAGS);
 const FORBIDDEN_WORDS = ['verify', 'test:coverage', 'test:browser'];
 
 /**
@@ -112,10 +132,17 @@ const GH_API_PATHS = [
   /^repos\/[\w.-]+\/[\w.-]+\/rulesets\/\d+$/,
 ];
 
-function rejectsFlag(arg, shortFlags, longFlags) {
-  if (longFlags.some((flag) => arg === flag || arg.startsWith(`${flag}=`))) return true;
-  if (!arg.startsWith('--') && shortFlags.some((flag) => arg.startsWith(flag))) return true;
-  return false;
+/** The first git argument after the subcommand that is not an allowed flag, or null. */
+function disallowedGitArg(sub, args) {
+  const allowed = GIT_FLAGS[sub];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--') return null;
+    if (!arg.startsWith('-')) continue;
+    if (!allowed.includes(arg)) return arg;
+    if (GIT_VALUE_FLAGS.has(arg)) i += 1;
+  }
+  return null;
 }
 
 function checkGhApi(argv) {
@@ -189,8 +216,8 @@ export function validateArgv(argv, rowClass) {
   if (cmd === 'git') {
     if (rowClass !== 'repo') return 'git checks are allowed in repo rows only';
     if (!GIT_SUBCOMMANDS.includes(argv[1])) return `git: subcommand ${argv[1]} is not allowed`;
-    const bad = argv.slice(2).find((a) => rejectsFlag(a, GIT_REJECTED_SHORT, GIT_REJECTED_LONG));
-    if (bad !== undefined) return `git: ${bad} is rejected`;
+    const bad = disallowedGitArg(argv[1], argv.slice(2));
+    if (bad !== null) return `git ${argv[1]}: ${bad} is rejected; only the named flags of that subcommand are allowed`;
     return null;
   }
   if (cmd === 'gh') {

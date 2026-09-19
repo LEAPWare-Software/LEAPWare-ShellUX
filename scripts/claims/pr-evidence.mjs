@@ -118,7 +118,7 @@ export function checkBody(body, { headSha, requiredRows = [], removedOrReworded 
   const rows = field(text, 'Rows reviewed');
   if (rows === null) failures.push('missing "Rows reviewed:"');
   else {
-    const named = new Set(rows.match(/C-\d+/g) ?? []);
+    const named = new Set([...tokens(rows)].filter((t) => /^C-\d+$/.test(t)));
     const missing = requiredRows.filter((id) => !named.has(id));
     if (missing.length) failures.push(`Rows reviewed: does not name ${missing.join(', ')}`);
     if (requiredRows.length === 0 && named.size === 0 && !/^none\b/i.test(rows)) failures.push('Rows reviewed: names no row; write "none"');
@@ -128,19 +128,48 @@ export function checkBody(body, { headSha, requiredRows = [], removedOrReworded 
     const items = field(text, 'Items removed or reworded');
     if (items === null) failures.push('missing "Items removed or reworded:"');
     else {
+      const named = tokens(items);
       for (const r of removedOrReworded) {
-        if (!items.includes(`${r.file}:${r.baseLine}`)) failures.push(`Items removed or reworded: does not name ${r.file}:${r.baseLine}`);
+        if (!named.has(`${r.file}:${r.baseLine}`)) failures.push(`Items removed or reworded: does not name ${r.file}:${r.baseLine}`);
       }
-      for (const f of deletedPlanFiles) if (!items.includes(f)) failures.push(`Items removed or reworded: does not name deleted or moved ${f}`);
+      for (const f of deletedPlanFiles) if (!named.has(f)) failures.push(`Items removed or reworded: does not name deleted or moved ${f}`);
     }
   }
 
   if (gateFiles.length) {
     const gates = field(text, 'Gate changes');
     if (gates === null) failures.push('missing "Gate changes:"');
-    else for (const f of gateFiles) if (!gates.includes(f)) failures.push(`Gate changes: does not name ${f}`);
+    else {
+      const named = tokens(gates);
+      for (const f of gateFiles) if (!named.has(f)) failures.push(`Gate changes: does not name ${f}`);
+    }
   }
   return failures;
+}
+
+/**
+ * A field's value as exact tokens: split on whitespace, commas and semicolons, with
+ * backticks, asterisks and a trailing full stop removed. Names are compared token to
+ * token, never by substring, so `:8` does not satisfy `:84` and `main.json.bak` does not
+ * satisfy `main.json`.
+ */
+export function tokens(value) {
+  return new Set(
+    String(value ?? '')
+      .split(/[\s,;]+/)
+      .map((t) => t.replace(/[`*]/g, '').replace(/\.$/, ''))
+      .filter(Boolean),
+  );
+}
+
+/**
+ * A list endpoint read to the end: `gh api --paginate --slurp` returns one array per
+ * page, flattened here. (GitHub lists at most 250 commits for a pull request.)
+ */
+export function ghJsonAllPages(apiPath, run = defaultRunner) {
+  const result = run('gh', ['api', '--paginate', '--slurp', apiPath], {});
+  if (result.status !== 0) throw new Error(`gh api ${apiPath} failed: ${result.stderr.trim()}`);
+  return JSON.parse(result.stdout).flat();
 }
 
 /** Every commit authored by dependabot[bot] and verified. */
@@ -170,7 +199,7 @@ export function gate({ event, pr, headRef, repo = DEFAULT_REPO, cwd = REPO_ROOT,
   }
   const requiredRows = [...new Set([...diff.rowsChanged, ...diff.citedRows])].sort();
 
-  const commits = ghJson(`repos/${repo}/pulls/${number}/commits`, run);
+  const commits = ghJsonAllPages(`repos/${repo}/pulls/${number}/commits`, run);
   if (isVerifiedDependabot(commits)) {
     log(`PR #${number}: every commit is verified and authored by dependabot[bot]; the evidence gate is skipped (the box linter still runs in Prove claims)`);
     return 0;

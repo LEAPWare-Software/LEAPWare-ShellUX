@@ -173,6 +173,18 @@ describe('a whole run', () => {
     assert.equal(row.pass, false);
     assert.match(row.failures[0], /is missing/);
   });
+
+  it('fails a manual row whose committed evidence does not state its expectations', () => {
+    const manual = { id: 'C-1', box: 'Notes stay short.', class: 'manual', evidence: 'docs/claims-evidence/n.txt', expect: [{ key: 'EXIT', op: '==', value: 0 }], provenOn: '2026-09-18', addedBy: 't' };
+    const cwd = makeProject(manual);
+    mkdirSync(path.join(cwd, 'docs', 'claims-evidence'), { recursive: true });
+    writeFileSync(path.join(cwd, 'docs', 'claims-evidence', 'n.txt'), 'raw output\nEXIT=1\n');
+    const red = prove({ mode: 'pull_request', cwd, env: {}, log: () => {} }).report.results.find((r) => r.rowId === 'C-1');
+    assert.equal(red.pass, false);
+    assert.match(red.failures[0], /does not state EXIT=1 == 0/);
+    writeFileSync(path.join(cwd, 'docs', 'claims-evidence', 'n.txt'), 'raw output\nEXIT=0\n');
+    assert.equal(prove({ mode: 'pull_request', cwd, env: {}, log: () => {} }).report.results.find((r) => r.rowId === 'C-1').pass, true);
+  });
 });
 
 // ---------------------------------------------------------------------------

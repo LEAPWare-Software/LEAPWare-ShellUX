@@ -75,6 +75,19 @@ describe('the PR evidence gate (§3.3)', () => {
     assert.ok(checkBody(body(), deleted).some((f) => /deleted or moved docs\/plans\/old.md/.test(f)));
   });
 
+  it('compares names as exact tokens, never as substrings', () => {
+    const at84 = { ...context, removedOrReworded: [{ file: 'docs/plans/v1-production.md', baseLine: 8 }] };
+    assert.ok(checkBody(body().replace(':108', ':84'), at84).some((f) => /does not name docs\/plans\/v1-production.md:8$/.test(f)), '`:84` must not satisfy `:8`');
+    assert.deepEqual(checkBody(body().replace(':108', ':84, docs/plans/v1-production.md:8.'), at84), []);
+    const bak = body().replace('Gate changes: scripts/claims/lib.mjs', 'Gate changes: scripts/claims/lib.mjs.bak');
+    assert.ok(checkBody(bak, context).some((f) => /Gate changes: does not name scripts\/claims\/lib.mjs/.test(f)), '`.bak` must not satisfy the file');
+    const prefixed = body().replace('Gate changes: scripts/claims/lib.mjs', 'Gate changes: old-scripts/claims/lib.mjs');
+    assert.ok(checkBody(prefixed, context).some((f) => /does not name scripts\/claims\/lib.mjs/.test(f)));
+    const deleted = { ...context, deletedPlanFiles: ['docs/plans/old.md'] };
+    assert.ok(checkBody(body().replace(':108', ':108 docs/plans/old.md.bak'), deleted).some((f) => /deleted or moved docs\/plans\/old.md/.test(f)));
+    assert.ok(checkBody(body().replace('Rows reviewed: C-01, C-02', 'Rows reviewed: C-012, C-02'), context).some((f) => /does not name C-01/.test(f)));
+  });
+
   it('fails a gate change that is not named', () => {
     assert.ok(checkBody(body().replace('Gate changes: scripts/claims/lib.mjs', 'Gate changes: none'), context).some((f) => /does not name scripts\/claims\/lib.mjs/.test(f)));
     assert.ok(checkBody(body().replace(/Gate changes:.*\n/, ''), context).includes('missing "Gate changes:"'));
@@ -164,7 +177,11 @@ function project() {
 function ghDouble({ bodyText, commits }) {
   return (cmd, args, opts) => {
     if (cmd !== 'gh') return defaultRunner(cmd, args, opts);
-    if (args[1].endsWith('/commits')) return { status: 0, stdout: JSON.stringify(commits), stderr: '' };
+    if (args.at(-1).endsWith('/commits')) {
+      // --paginate --slurp: one array per page. Split so the flatten is exercised.
+      assert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);
+      return { status: 0, stdout: JSON.stringify([commits.slice(0, 1), commits.slice(1)]), stderr: '' };
+    }
     return { status: 0, stdout: JSON.stringify({ head: { sha: SHA }, body: bodyText }), stderr: '' };
   };
 }

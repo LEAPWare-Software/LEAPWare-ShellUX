@@ -9,7 +9,10 @@ const row = (id) => decisions.split('\n').find((l) => l.startsWith(`| ${id} |`))
 const cells = (line) => line.split('|').map((c) => c.trim());
 
 const d40 = row('D-40');
-const points = ['§3', '§4', '§9', '§13.1'].filter((p) => d40.includes(p));
+// Each point as a whole section number: `§3` is not satisfied by `§30` or `§3.2`, and
+// `§13.1` not by `§13.10`.
+const point = (p) => new RegExp(`${p.replace('.', '\\.')}(?!\\d|\\.\\d)`);
+const points = ['§3', '§4', '§9', '§13.1'].filter((p) => point(p).test(d40));
 console.log(`d40_owner=${cells(d40)[3] === 'Owner' ? 1 : 0}`);
 console.log(`d40_gate_points=${points.length}`);
 
