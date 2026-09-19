@@ -1211,7 +1211,7 @@
         {
           "key": "v1_0_0_closed_issues",
           "op": ">=",
-          "value": 2
+          "value": 4
         },
         {
           "key": "m1_1_title",
@@ -1305,6 +1305,93 @@
             "replace": [
               " && node design/check-contrast.mjs --self-test",
               ""
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+    },
+    {
+      "id": "C-28",
+      "box": "PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/pr-a-wiring.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "claims_scripts_present",
+          "op": "==",
+          "value": 7
+        },
+        {
+          "key": "status_wired",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "claims_workflow",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "evidence_workflow",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "new_checks_required",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "register_schema_version",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "template_headings",
+          "op": "==",
+          "value": 3
+        },
+        {
+          "key": "template_review_fields",
+          "op": "==",
+          "value": 6
+        },
+        {
+          "key": "claude_prose_rule",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "claims_tests",
+          "op": ">=",
+          "value": 9
+        },
+        {
+          "key": "claims_tests_unwired",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "ticked_items_without_tag",
+          "op": "==",
+          "value": 0
+        }
+      ],
+      "probe": {
+        "name": "unwire npm run status",
+        "edits": [
+          {
+            "file": "package.json",
+            "replace": [
+              "\"status\": \"node scripts/status.mjs\"",
+              "\"status\": \"echo none\""
             ]
           }
         ]

@@ -1,17 +1,18 @@
 # Evidence for register row C-25: milestones v1.0.0 and 1.1, and every open issue on a milestone.
 # Captured 2026-09-18 (UTC 2026-09-19) with an authenticated gh 2.92.0,
-# after #112 and #113 (closed by #148) were moved from Phase 2 onto v1.0.0. Counts are
-# mutable; this is the state at capture. Each command is shown before its raw output.
+# after #112 and #113 (closed by #148) and #74 and #103 (closed, and marked done by the plan's
+# Step 3 README item) were moved from Phase 2 onto v1.0.0. Counts are mutable; this is the
+# state at capture. Each command is shown before its raw output.
 
 $ gh api "repos/LEAPWare-Software/LEAPWare-ShellUX/milestones?state=all" --jq '.[] | "\(.number) \(.title) state=\(.state) open=\(.open_issues) closed=\(.closed_issues)"'
-1 Phase 2 — Production Readiness state=open open=0 closed=21
-2 v1.0.0 state=open open=29 closed=2
+1 Phase 2 — Production Readiness state=open open=0 closed=19
+2 v1.0.0 state=open open=30 closed=4
 3 1.1 state=open open=26 closed=0
 
 $ gh api repos/LEAPWare-Software/LEAPWare-ShellUX/milestones/2 --jq '"v1_0_0_title=\(.title)", "v1_0_0_open_issues=\(.open_issues)", "v1_0_0_closed_issues=\(.closed_issues)"'
 v1_0_0_title=v1.0.0
-v1_0_0_open_issues=29
-v1_0_0_closed_issues=2
+v1_0_0_open_issues=30
+v1_0_0_closed_issues=4
 
 $ gh api repos/LEAPWare-Software/LEAPWare-ShellUX/milestones/3 --jq '"m1_1_title=\(.title)", "m1_1_open_issues=\(.open_issues)"'
 m1_1_title=1.1
@@ -37,13 +38,13 @@ $ for n in <each #N in the plan>; do gh api repos/LEAPWare-Software/LEAPWare-She
 #62 issue open milestone=v1.0.0
 #65 issue open milestone=1.1
 #68 issue open milestone=v1.0.0
-#74 issue closed milestone=Phase 2 — Production Readiness
+#74 issue closed milestone=v1.0.0
 #80 issue open milestone=v1.0.0
 #85 issue open milestone=v1.0.0
 #86 issue open milestone=v1.0.0
 #91 issue open milestone=v1.0.0
 #95 issue open milestone=v1.0.0
-#103 issue closed milestone=Phase 2 — Production Readiness
+#103 issue closed milestone=v1.0.0
 #105 issue open milestone=1.1
 #106 issue open milestone=1.1
 #111 issue open milestone=v1.0.0
@@ -71,6 +72,5 @@ $ for n in <each #N in the plan>; do gh api repos/LEAPWare-Software/LEAPWare-She
 #146 issue open milestone=v1.0.0
 #150 PR closed milestone=none
 
-# Read by the capturer, not by a machine: #74 and #103 are closed on Phase 2, and the plan's
-# Step 3 README item marks them done. If that item counts as closing them, they belong on
-# v1.0.0 and this row's claim is short by two. #13 in the plan is BuildCraft's PR #13, another repository.
+# Read by the capturer, not by a machine: no issue the plan mentions is left on Phase 2.
+# #13 in the plan is BuildCraft's PR #13, another repository, and has no milestone here.

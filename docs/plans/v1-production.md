@@ -92,10 +92,10 @@ Measured today:
 ## Step 0b — Withdrawn
 The BuildCraft pilot is not part of this plan (D-44). The 1.0 tag still waits for BuildCraft (D-39).
 
-## Step 0c — Proof of completion, before BuildCraft  (1/5)
+## Step 0c — Proof of completion, before BuildCraft  (2/5)
 Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until its PR B lands, a tick here is recorded under the old convention.
 - [x] Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50. [C-07]
-- [ ] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items.
+- [x] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items. [C-28]
 - [ ] Rollout step 2: every throwaway-PR case shown with its run id.
 - [ ] Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue.
 - [ ] PR B: both checks required with `integration_id: 15368`, applied and read back.
@@ -226,5 +226,4 @@ Default `sonnet` (Steps 0–3, 7–10, and all reviews by `lw-verifier`). `opus`
 - BuildCraft readiness bar R1–R7. There is no size estimate, so there is no 1.0 date.
 
 ## Blocking now
-1. Adversarial review of PR #115 (nobody has done it).
-2. Owner actions in Step 3: accept the risk statement, pick the licence (Apache-2.0 per sessionkeeper, or MIT as `package.json` says today), flip visibility.
+Rendered by `npm run status`, not written here: this list went stale once already (it named PR #115's review and the Step 3 owner actions long after both were done).
