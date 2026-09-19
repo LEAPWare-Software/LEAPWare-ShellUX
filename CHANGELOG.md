@@ -20,9 +20,9 @@ from so a reader can check it.
   - the pull request is open and not a draft;
   - it carries a `lane-*` label;
   - the body says `Verdict: MERGE`;
-  - a `Reviewer: shellux-cloud-reviewer` comment gives `Verdict: MERGE` at the exact head.
+  - the **newest** `Reviewer: shellux-cloud-reviewer` comment at the exact head is from `LEAPWare-HQ` and says `Verdict: MERGE`. A later rejection wins, and a comment from any other account is ignored, because the repository is public.
 
-  The queue then re-runs every required check. It is a guardrail: every routine posts under the owner's login, so the comment proves a review exists at that head, not who wrote it. *Tests:* "refuses a review comment made at an older head", "refuses MERGE WITH FIXES and DO NOT MERGE, in the comment and in the body", "calls gh pr merge --squash --auto only when ready".
+  The enqueue is pinned to that head commit. The workflow also fires on a late reviewer comment and on a lane label, and it always runs the default branch's code. The queue then re-runs every required check. It is a guardrail: every routine posts under the owner's login, so the comment proves a review exists at that head, not which routine wrote it. *Tests:* "ignores a forged review comment from any other account", "lets a later rejection at the same head win over an earlier MERGE", "refuses a head that moved since the triggering run", "calls gh pr merge --squash --auto pinned to the head only when ready". **Not proven yet:** that a merge-queue entry made by the workflow's own token gets its checks run. The first live cloud PR proves it or refutes it.
 
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security

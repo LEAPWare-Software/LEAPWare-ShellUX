@@ -2,40 +2,57 @@ name: Auto-queue
 
 # Adds a ready cloud-lane pull request to the merge queue (docs/cloud/runbook.md, lane C
 # item 0a). Cloud routines cannot enable auto-merge through their proxy; this job can,
-# because it runs in GitHub Actions. It fires after the required `PR evidence` check
-# completes. The decision (open, lane label, MERGE verdict in the body, and a reviewer
-# MERGE comment at the head) is in scripts/cloud/auto-queue.mjs, tested by
-# scripts/__tests__/auto-queue.test.mjs. The merge queue then re-runs every required
-# check, so this job cannot merge anything the ruleset would refuse. A guardrail.
+# because it runs in GitHub Actions. It fires when any of these happen:
+#   - the required `PR evidence` check completes;
+#   - a comment is posted (a late reviewer verdict);
+#   - a lane label is added.
+# Every trigger runs the DEFAULT BRANCH's code, never the pull request's. The decision is
+# in scripts/cloud/auto-queue.mjs, tested by scripts/__tests__/auto-queue.test.mjs: open,
+# lane label, MERGE in the body, and the newest LEAPWare-HQ reviewer comment at the head
+# saying MERGE. The enqueue is pinned to the head commit. The merge queue then re-runs
+# every required check, so this job cannot merge anything the ruleset would refuse.
+# A guardrail.
 on:
   workflow_run:
     workflows: ['PR evidence']
     types: [completed]
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [labeled]
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: auto-queue-${{ github.event.workflow_run.head_sha }}
+  group: auto-queue-${{ github.event.workflow_run.pull_requests[0].number || github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   queue:
     name: Queue when ready
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.pull_requests[0].number
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'pull_request' &&
+        github.event.workflow_run.pull_requests[0].number) ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, 'Reviewer: shellux-cloud-reviewer')) ||
+      (github.event_name == 'pull_request_target' &&
+        startsWith(github.event.label.name, 'lane-'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      # The default branch, never the PR's code: workflow_run runs trusted code only.
+      # The default branch only: none of these triggers may run pull request code.
       - name: Checkout the default branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
 
       - name: Queue the pull request if it is ready
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
-        run: node scripts/cloud/auto-queue.mjs "$PR_NUMBER"
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || github.event.issue.number || github.event.pull_request.number }}
+          EXPECTED_HEAD: ${{ github.event.workflow_run.head_sha || github.event.pull_request.head.sha || '' }}
+        run: node scripts/cloud/auto-queue.mjs "$PR_NUMBER" "$EXPECTED_HEAD"
