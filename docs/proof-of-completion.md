@@ -11,7 +11,8 @@ LEAPWare-ShellUX is public; the organisation is on the `free` plan; ruleset 2368
 `~DEFAULT_BRANCH` requires a PR (0 approvals), five strict required checks (Verify on
 ubuntu, macos and windows; Browser tests (chromium); Declared Node floor (22.13.0)) and a
 merge queue (ALLGREEN, SQUASH, 10-minute response timeout); the GitHub Actions app id is
-15368; artifact retention is 90 days; `ci.yml`, `browser.yml`, `desktop.yml` and
+15368; artifact retention is 90 days (`gh api repos/{r}/actions/permissions/artifact-and-log-retention`
+returned `{"days":90}`); `ci.yml`, `browser.yml`, `desktop.yml` and
 `audit-dependencies.yml` use `concurrency: group: ${{ github.workflow }}-${{ github.ref }},
 cancel-in-progress: true` (X6).
 
@@ -105,11 +106,11 @@ Row = `{ id, box, class, checks?, expect?, probe?, evidence?, provenOn, addedBy 
   with `--json`/`--jq` only.
 - Any argv containing `verify`, `test:coverage` or `test:browser` is rejected.
 
-**Network confinement for `repo` rows**: on the Linux runner they run as
+**Network restriction for `repo` rows** (a guardrail): on the Linux runner they run as
 `sudo unshare --net -- sudo -u runner -E "$(command -v node)" ...` (ubuntu-24.04 restricts
 unprivileged user namespaces through AppArmor; not yet measured on a runner). If the
-wrapper fails the job fails; it never falls back to running unconfined. Local runs are
-unconfined and print that they are.
+wrapper fails the job fails; it never falls back to running unrestricted. Local runs are
+unrestricted and print that they are.
 
 ### 3.2 Box linter: `scripts/claims/lint-boxes.mjs`
 
