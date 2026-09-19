@@ -173,6 +173,23 @@ describe('painters: the walk and the table', () => {
     );
   });
 
+  it("follows a stylesheet's @import, so a CSS module it pulls in can paint", () => {
+    assert.deepEqual(relativeImports("@import './styles/extra.css';\n@import 'pkg/x.css';"), [
+      './styles/extra.css',
+    ]);
+    assert.equal(
+      paints(
+        {
+          'src/main.tsx': "import './index.css';",
+          'src/index.css': "@import './styles/extra.css';",
+          'src/styles/extra.css': '.x { background: var(--status-info-subtle); }',
+        },
+        '--status-info-subtle',
+      ),
+      true,
+    );
+  });
+
   it('skips type-only edges, which the build erases', () => {
     assert.deepEqual(
       relativeImports(

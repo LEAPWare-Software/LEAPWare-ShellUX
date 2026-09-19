@@ -117,6 +117,11 @@ export function relativeImports(text) {
   for (const match of source.matchAll(/^[ \t]*import[ \t]*['"](\.{1,2}\/[^'"]+)['"]/gm)) {
     found.push(match[1]);
   }
+  // A stylesheet's own `@import './x.css'`, as `index.css` imports the tokens.
+  // Followed, so a hand-written CSS module a reachable stylesheet pulls in counts.
+  for (const match of source.matchAll(/^[ \t]*@import[ \t]+['"](\.{1,2}\/[^'"]+)['"]/gm)) {
+    found.push(match[1]);
+  }
   return found;
 }
 
