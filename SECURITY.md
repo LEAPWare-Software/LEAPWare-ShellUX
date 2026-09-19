@@ -316,8 +316,12 @@ repository *claims* otherwise is genuinely valuable — see below.
 
 ## Reporting a vulnerability
 
-**Report privately, by email, to `leapware@outlook.com`.** That is the route, it is
-monitored, and it is the only one this project asks you to use.
+**Report privately, through GitHub's
+[Report a vulnerability](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/security/advisories/new)
+form, or by email to `leapware@outlook.com`.** Both are monitored. The form exists since
+the repository went public (2026-09-18): `gh api
+repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting` returned
+`{"enabled":true}` on 2026-09-19.
 
 Encrypted mail is welcome and no key is published, so if you need one, say so in a
 first message containing no detail and one will be arranged. **A report is never
@@ -326,9 +330,9 @@ better than a finding that does not reach us.
 
 > **This section used to be circular, and it is worth saying so rather than quietly
 > replacing it.** It sent reporters to the Security tab's "Report a vulnerability"
-> button. **That button does not exist here.** Private vulnerability reporting is a
-> **public-repository** feature; this repository is private, `security_and_analysis`
-> is `null` and the advisories endpoint returns `404`. The fallback sentence then
+> button. **That button did not exist then.** Private vulnerability reporting is a
+> **public-repository** feature; the repository was private at the time,
+> `security_and_analysis` was `null` and the advisories endpoint returned `404`. The fallback sentence then
 > said to use "the private channel you *do* have" — and never named one, anywhere in
 > this file or any other.
 >
