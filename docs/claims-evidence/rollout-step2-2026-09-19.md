@@ -21,10 +21,9 @@ each closed unmerged with its branch deleted. Run ids can be read back with
 | i | a `repo` row whose check calls the network, beside a tree-only row (#166) | network row fails, tree row passes, Node matches `.nvmrc` | as expected | 35422780283 | passed | fetch refused under `unshare --net`; Node 24.20.0, as `.nvmrc` declares |
 | j | a task item with a non-breaking space after the checkbox (#167) | fail as ambiguous | failed | 35422925481 | passed | the raw scan and remark disagree |
 | k | `claims.yml` changed without `Gate changes:` (#168) | evidence gate fails | failed | passed | 35423036084 | `Gate changes:` did not name `claims.yml` |
+| l | a two-entry merge-queue group: #169 then #170, queued together | both jobs pass on both entries | both succeeded | 35424116743 (#169), 35424117731 (#170) | 35424116766 (#169), 35424117668 (#170) | #170's queue ref `gh-readonly-queue/main/pr-170-531cdc0…` is built on #169's entry `531cdc0`, so the second entry ran with the first under it |
 
-**Not yet shown here:** case (l), a two-entry merge-queue group passing both jobs. It is
-recorded by the change that follows this one, which is queued together with another PR
-for that purpose.
+Case (l) was added after #169 and #170 landed through the queue as one group.
 
 One operator slip, not a tooling defect: case (d)'s first body omitted the new check
 script from `Gate changes:`, the gate failed for that reason, and the body was corrected.
