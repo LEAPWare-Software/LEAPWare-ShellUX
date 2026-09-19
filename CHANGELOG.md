@@ -16,6 +16,47 @@ from so a reader can check it.
 
 ### Added
 
+- **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
+  `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
+  `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while
+  the owner travels: three conductor lanes with disjoint file ownership (rule 6), a
+  watchdog, a reviewer routine that is never a subagent of the author (rule 1), and the
+  boundaries a routine stops at — anything only the owner can do, the clean Windows VM,
+  BuildCraft, and anything needing a packaged Electron launch. The GitHub access it
+  records was measured from a cloud session on 2026-09-19 rather than recalled (rule 9):
+  GraphQL is blocked by the proxy there, so `gh pr create`, `gh pr merge`, `gh pr list`,
+  `gh pr edit` and `gh issue comment` fail and the GitHub MCP tools or REST are used
+  instead; a REST comment on #187 returned 201; pushing a new branch works, REST ref
+  deletion is 403, and `git push --delete` prints `unexpected disconnect` and exits 1
+  while deleting the ref anyway, so a routine reads `git ls-remote` rather than that exit
+  code. The browser lane cannot run in the cloud VM — Playwright 1.63 wants a chromium
+  build the proxy will not let it download — so the `Browser tests (chromium)` CI check is
+  the browser evidence there, and the config is not to be bent to suit the VM (ADR-0002).
+  Issue #187 is the shared ledger, because a routine starts each run with no memory. An owner command carries an `OWNER:` prefix and no Claude footer, because
+  routines post under the owner's own login and the login alone therefore identifies
+  nobody. This is a process document: it constrains routines, and it asserts nothing
+  about the product's behaviour.
+- **The gate-4 v4 screens, recorded in the repository** (`docs/design/gate4/`, commit
+  `759af49`): the canvas source, nine artboards as HTML and PNG
+  (`ls docs/design/gate4/screens/*.dc.html | wc -l` → 9), and a README. The nine PNGs are
+  2,323,134 bytes (`stat -c '%s' docs/design/gate4/png/*.png | awk '{s+=$1} END {print s}'`),
+  which every clone now carries and no review can diff. **Gate 4's approval was recorded
+  twice, in opposite directions**, and this change settles neither side of it:
+  `docs/plans/v1-production.md:139` ticks C-24 citing D-45 and `docs/DECISIONS.md` D-45
+  records an owner approval dated 2026-09-18, while the runbook records that the owner
+  did not recognise D-45 on 2026-09-19. The conflict was filed as #189, where an
+  `OWNER: gate 4 approved` comment was posted at 2026-09-19T13:23Z asking for a new
+  decision row to supersede D-45 and for C-24 to cite it. **That ledger work is not in
+  this change**: no decision row is written, C-24's citation is untouched, and so nothing
+  yet builds "per the approved gate-4 wireframe" — ADR-0006 step 9 and wave 4 wait for the
+  row, which is the order the answer itself sets out. **The counts also disagree and this
+  change does not reconcile them:** D-45 approves "the six gate-4 screens" on 2026-09-18,
+  while this record is the v4 set of **nine** numbered pages published 2026-09-19, adding
+  the resolved critique and the D-48 plugin state; the nine are not six screens plus three
+  state sheets, since `canvas.json` numbers all nine as pages. D-45 may therefore be about
+  an earlier artefact rather than a mislaid approval of this one, and #189's answer repeats
+  the ambiguity by reading "the six gate-4 screens (v4, `docs/design/gate4/`)". The
+  decision row, when someone writes it, should name the screens it approves.
 - **Plugin lifecycle-hook ownership, enforced at the registry door** (D-54, GitHub
   issue #183, ADR-0006 decision 6 amendment). Two documents each run their own
   `ExtensionRegistryProvider` (host chrome, the extension surface); a blueprint
@@ -44,7 +85,6 @@ from so a reader can check it.
   mock declares `lifecycle`, so this guardrail does not catch a lifecycle-free
   mock being registered from host chrome — a different, pre-existing gap
   (ADR-0006 decision 6).
-
 - **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
   - the pull request is open and not a draft;
   - it carries a `lane-*` label;
