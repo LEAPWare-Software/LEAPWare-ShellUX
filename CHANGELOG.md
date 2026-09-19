@@ -18,7 +18,8 @@ from so a reader can check it.
 
 - **The `.lwplugin` validator and the `hostApiVersion` rule** (ADR-0006 step 3).
   `electron/main/plugins/` reads a package (one JSON document of at most 8 MiB, read
-  through one non-blocking file handle with at most the limit plus one byte in memory,
+  through one file handle, non-blocking where the platform supports it, into a read
+  buffer of at most the limit plus one byte,
   a non-regular file refused before any read), validates its manifest (unknown keys,
   control and bidi characters and blank titles refused; untrusted values echoed at
   most 64 characters, quoted), checks the bundle against the manifest `sha512`, and
