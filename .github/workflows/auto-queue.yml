@@ -1,0 +1,41 @@
+name: Auto-queue
+
+# Adds a ready cloud-lane pull request to the merge queue (docs/cloud/runbook.md, lane C
+# item 0a). Cloud routines cannot enable auto-merge through their proxy; this job can,
+# because it runs in GitHub Actions. It fires after the required `PR evidence` check
+# completes. The decision (open, lane label, MERGE verdict in the body, and a reviewer
+# MERGE comment at the head) is in scripts/cloud/auto-queue.mjs, tested by
+# scripts/__tests__/auto-queue.test.mjs. The merge queue then re-runs every required
+# check, so this job cannot merge anything the ruleset would refuse. A guardrail.
+on:
+  workflow_run:
+    workflows: ['PR evidence']
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-queue-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  queue:
+    name: Queue when ready
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.pull_requests[0].number
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # The default branch, never the PR's code: workflow_run runs trusted code only.
+      - name: Checkout the default branch
+        uses: actions/checkout@v4
+
+      - name: Queue the pull request if it is ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        run: node scripts/cloud/auto-queue.mjs "$PR_NUMBER"

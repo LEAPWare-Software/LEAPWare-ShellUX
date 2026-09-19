@@ -16,6 +16,14 @@ from so a reader can check it.
 
 ### Added
 
+- **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
+  - the pull request is open and not a draft;
+  - it carries a `lane-*` label;
+  - the body says `Verdict: MERGE`;
+  - a `Reviewer: shellux-cloud-reviewer` comment gives `Verdict: MERGE` at the exact head.
+
+  The queue then re-runs every required check. It is a guardrail: every routine posts under the owner's login, so the comment proves a review exists at that head, not who wrote it. *Tests:* "refuses a review comment made at an older head", "refuses MERGE WITH FIXES and DO NOT MERGE, in the comment and in the body", "calls gh pr merge --squash --auto only when ready".
+
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
   settings, read back as enabled (private vulnerability reporting re-proven on every
