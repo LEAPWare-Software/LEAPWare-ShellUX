@@ -1875,7 +1875,7 @@
     },
     {
       "id": "C-32",
-      "box": "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6). Written as `docs/design/WAVE3-PLAN.md`: nine increments, W3-0 to W3-8, one per critique resolution R1 to R9 of the v4 gate-4 screens, with a file-ownership table; only W3-0 is built.",
+      "box": "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6). Written as `docs/design/WAVE3-PLAN.md`: nine increments, W3-0 to W3-8, with a table assigning each critique resolution R1 to R9 of the v4 gate-4 screens to an increment, and a file-ownership table; only W3-0 is built.",
       "class": "repo",
       "checks": [
         [
