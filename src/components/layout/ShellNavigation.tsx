@@ -200,7 +200,10 @@ export function ShellNavButton({
           // above for why that independence is the point.
           <span
             aria-hidden="true"
-            className="flex h-full w-full items-center justify-center rounded-sm font-semibold"
+            className={
+              'flex h-full w-full items-center justify-center rounded-sm font-semibold ' +
+              `${TOKEN_CLASS.identityTileSurface} ${TOKEN_CLASS.identityTileText}`
+            }
           >
             {label.trim().slice(0, 1).toUpperCase()}
           </span>
@@ -261,33 +264,25 @@ export function ShellNavButton({
     <Tooltip.Provider>
       <Tooltip.Root>
         <Tooltip.Trigger asChild>{button}</Tooltip.Trigger>
-        {/*
-          Portalled to `document.body` — see the module docblock for why:
-          the rail track and the shell root above it are both
-          `overflow-hidden`, and content positioned in place there has
-          nowhere to paint past their edges.
-        */}
-        <Tooltip.Portal>
-          {/* `role="tooltip"` is Radix's own default here — no `aria-label`
-              prop is passed, which is the one thing that would swap it out
-              for a visually hidden label node instead. */}
-          <Tooltip.Content
-            side="right"
-            sideOffset={8}
-            collisionPadding={4}
-            className={
-              'z-50 rounded-sm px-2 py-1 text-[11px] leading-4 ' +
-              `${TOKEN_CLASS.tooltipSurface} ${TOKEN_CLASS.tooltipElevation} ${TOKEN_CLASS.secondaryText}`
-            }
-          >
-            {/*
-              Title alone. See the docblock above: `describeHotkey` exists but
-              nothing a rail row wraps carries a hotkey field it could read
-              one from yet, so a shortcut column is step 6c's, not this one's.
-            */}
-            {label}
-          </Tooltip.Content>
-        </Tooltip.Portal>
+        {/* `role="tooltip"` is Radix's own default here — no `aria-label`
+            prop is passed, which is the one thing that would swap it out
+            for a visually hidden label node instead. */}
+        <Tooltip.Content
+          side="right"
+          sideOffset={8}
+          collisionPadding={4}
+          className={
+            'z-50 rounded-sm px-2 py-1 text-[11px] leading-4 ' +
+            `${TOKEN_CLASS.tooltipSurface} ${TOKEN_CLASS.tooltipElevation} ${TOKEN_CLASS.secondaryText}`
+          }
+        >
+          {/*
+            Title alone. See the docblock above: `describeHotkey` exists but
+            nothing a rail row wraps carries a hotkey field it could read
+            one from yet, so a shortcut column is step 6c's, not this one's.
+          */}
+          {label}
+        </Tooltip.Content>
       </Tooltip.Root>
     </Tooltip.Provider>
   );
