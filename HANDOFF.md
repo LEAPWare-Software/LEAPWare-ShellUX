@@ -23,8 +23,8 @@ with a merge queue.
 
 ## In flight
 
-- **Proof of completion, rollout step 2** (plan step 0c): throwaway PRs, one per case
-  in `docs/proof-of-completion.md` §5, each shown with its run id.
+- **Proof of completion, rollout step 3** (plan step 0c): three green main runs exist;
+  a forced failing row and a forced crash need the dispatch harness, under review.
 
 ## The next step
 
