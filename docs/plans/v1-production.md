@@ -92,12 +92,12 @@ Measured today:
 ## Step 0b — Withdrawn
 The BuildCraft pilot is not part of this plan (D-44). The 1.0 tag still waits for BuildCraft (D-39).
 
-## Step 0c — Proof of completion, before BuildCraft  (3/5)
+## Step 0c — Proof of completion, before BuildCraft  (4/5)
 Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until its PR B lands, a tick here is recorded under the old convention.
 - [x] Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50. [C-07]
 - [x] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items. [C-28]
 - [x] Rollout step 2: every throwaway-PR case shown with its run id. Cases (a) to (l), each as designed: `docs/claims-evidence/rollout-step2-2026-09-19.md` lists every run, and the row re-reads each run's conclusion from GitHub. [C-30]
-- [ ] Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue.
+- [x] Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue. Main runs 35421271000, 35422494969 and 35424386634 were green; the `failing-row` dispatch 35427314752 filed #174 through the issue job, and the `crash` dispatch 35427454734 failed and its issue job ran; the `npm run status` readings and #174's text are in `docs/claims-evidence/rollout-step3-2026-09-19.md`. [C-31]
 - [ ] PR B: both checks required with `integration_id: 15368`, applied and read back.
 
 ## Step 1 — Record the decisions before acting on them  (1/2)
