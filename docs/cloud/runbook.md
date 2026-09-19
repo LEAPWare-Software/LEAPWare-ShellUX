@@ -17,7 +17,7 @@ You start with no memory, so re-derive everything.
   - open, update and label PRs;
   - comment on #187, on `needs-owner` issues and on PRs;
   - open `needs-owner` issues;
-  - `gh pr merge --squash --auto`, which goes through the merge queue.
+  - enable auto-merge on a PR, by the CCR route in Environment below, so the merge queue squash-merges it. Not `gh pr merge`, which is GraphQL and fails here.
 
   Never push to `main`. D-52 records the parallel lanes.
 - **Environment.**
@@ -72,7 +72,7 @@ Each run does one unit of work, then exits.
 3. **Re-derive:**
    - `main` green: the latest runs of CI, Browser and Prove claims on `main`. **If `main` is red, fix that first**, whichever lane caused it, then exit.
    - `npm run status`.
-   - Your lane's open PRs: `gh pr list --label lane-<x>`.
+   - Your lane's open PRs. **Not `gh pr list`** — it is GraphQL and returns 403 here (measured 2026-09-19: `gh pr list --label lane-c` printed the proxy's "GitHub GraphQL is not available" message). Use the GitHub MCP tool that lists pull requests, or REST: `gh api "repos/{owner}/{repo}/pulls?state=open" --jq '.[] | "#\(.number) \([.labels[].name] | join(","))"'`.
    For `docs/handoff-package`, a `LOCAL LOCK` comment on #187 also counts: skip that branch until the lock says RELEASED, or until 4 hours pass with no new commit on it.
 4. **Choose the work, in this order:**
    1. an open lane PR with an unaddressed review;
@@ -86,7 +86,7 @@ Each run does one unit of work, then exits.
 7. **After a MERGE verdict at the current head:**
    - put the verdict's `Reviewer:`, `Reviewed SHA:` and `Verdict:` into the body;
    - run `node scripts/claims/pr-evidence.mjs --event pull_request --pr <n>`;
-   - run `gh pr merge <n> --squash --auto`.
+   - enable auto-merge with the CCR route, `PUT /repos/{owner}/{repo}/pulls/<n>/ccr/auto_merge`, so the merge queue squash-merges it. **Not `gh pr merge`**, which is GraphQL and fails here; the proxy's own 403 message names this route. If the route fails, take the fallback in Environment: comment `ready to merge: <sha>` on the PR and record it in your lane comment.
 
    Any push after the review needs a new review at the new head.
 8. **Decisions: you are the CTO** (the owner delegated all technical decisions to the cloud run, 2026-09-19).
@@ -167,7 +167,7 @@ Each run does one unit of work, then exits.
 2. Steps 7, 8 and 11.
 3. Step 10: prepare the packaged end-to-end script and its runbook, then open a `needs-owner` issue, because it needs a packaged launch.
 4. Step 9 only after gate 4 is approved and lane B's W3-8 has merged. Until then it is blocked.
-4. Then #68 (a decision row), #91 and #172, and the plan step 6b ticks.
+5. Then #68 (a decision row), #91 and #172, and the plan step 6b ticks.
 
 **Lane B, UI:**
 1. W3-2 to W3-8, in the order and ownership of `docs/design/WAVE3-PLAN.md`.
