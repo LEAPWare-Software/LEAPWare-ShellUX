@@ -26,8 +26,8 @@ from so a reader can check it.
   create, skip or satisfy the required "Prove claims" check. A `workflow_dispatch` run on
   `main` now counts as a reference run for `npm run status`. All of this is a guardrail.
   *Tests:* "refuses an injection on pull_request, merge_group, push and schedule, and a
-  dispatch from any ref but main"; "claims.yml names a dispatch run "Prove claims
-  (dispatch)", so a dispatch never produces the required context". **Not done:** no
+  dispatch from any ref but main", and the test in `required-checks.test.mjs` that pins
+  the dispatch run's name. **Not done:** no
   dispatch has run yet; that is step 3 itself, after this lands.
 
 - **Proof-of-completion rollout step 2 is complete** (plan step 0c item 3, row C-30).
