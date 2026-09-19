@@ -17,8 +17,8 @@ import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS }
  *
  * This module turns bytes into a validated manifest, the decoded bundle, and a
  * compatibility state, or into one refusal reason. It writes nothing: the
- * store, the install directory, `state.json` and the `/plugins/` route are
- * step 4.
+ * store, the install directory and `state.json` are `pluginStore.ts`, and the
+ * `/plugins/` route is `pluginRoute.ts` (step 4).
  *
  * ---------------------------------------------------------------------------
  * THE `sha512` CHECK IS ENTRY-POINT VALIDATION, AND NOTHING MORE.
@@ -68,12 +68,13 @@ import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS }
  * `PluginPackageFs` is the seam: production passes `nodePluginPackageFs`, a
  * test passes an in-memory fake, and nothing stubs `node:fs` globally. The file
  * is opened once and `fstat`ed on that descriptor (a FIFO or a device is
- * refused: its size reads 0 and says nothing), then read into a buffer of
- * `MAX_PACKAGE_BYTES + 1`, so memory is bounded by that buffer whatever the file
- * does between the stat and the read. *Tests:*
- * `electron/__tests__/pluginPackage.test.ts` — "stops reading at the limit when
- * a file yields more than its stat said", "refuses a path that is not a regular
- * file".
+ * refused: its size reads 0 and says nothing), then read into a buffer of its
+ * stated size plus one byte — at most `MAX_PACKAGE_BYTES + 1` — so memory is
+ * bounded by that buffer whatever the file does between the stat and the read. *Tests:*
+ * `electron/__tests__/pluginPackage.test.ts` — "stops reading one byte past its
+ * stat when a file yields more than its stat said", "never buffers more than
+ * the limit plus one byte, even for a file stated at the limit", "refuses a
+ * path that is not a regular file".
  * ============================================================================
  */
 
@@ -280,16 +281,23 @@ function decodeBundle(value: unknown): Uint8Array {
   return new Uint8Array(bytes);
 }
 
+/**
+ * `JSON.parse` behind a fatal `TextDecoder`, and nothing else: the one parser
+ * the duplicate-key invariant above binds every reader to.
+ */
+function parseJsonDocument(bytes: Uint8Array, what: string): unknown {
+  try {
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch {
+    return refuse(`${what} is not a UTF-8 JSON document`);
+  }
+}
+
 function validate(bytes: Uint8Array, hostVersion: string): ValidatedPluginPackage {
   if (bytes.byteLength > MAX_PACKAGE_BYTES) {
     refuse(`package is ${String(bytes.byteLength)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}`);
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-  } catch {
-    refuse('package is not a UTF-8 JSON document');
-  }
+  const parsed = parseJsonDocument(bytes, 'package');
   if (!isPlainObject(parsed)) refuse('package must be a JSON object');
   refuseUnknownKeys(parsed, PACKAGE_KEYS, 'package');
   if (requireString(parsed, 'format', 'package') !== PACKAGE_FORMAT) {
@@ -316,40 +324,95 @@ export function parsePluginPackage(bytes: Uint8Array, hostVersion: string = HOST
   }
 }
 
+/** An installed `plugin.json`, validated, or one refusal reason. */
+export type InstalledManifestResult =
+  | { readonly ok: true; readonly manifest: PluginManifest }
+  | { readonly ok: false; readonly reason: string };
+
 /**
- * Read and validate the package at `path`, through one descriptor. A path that
- * is not a regular file is refused before a read; a size over the limit is
- * refused from `fstat`; and the read stops at `MAX_PACKAGE_BYTES + 1`, so a file
- * that grows between the stat and the read is refused without being buffered
- * whole. A failure to open or read is a refusal, not a throw.
+ * Validate an installed `plugin.json`: parsed with `JSON.parse`, as the
+ * invariant above requires, and held to the same manifest rules a package's
+ * manifest is, through the same `validateManifest`, so there is one rule and
+ * not two. Install writes this file as `serializeManifest` of the validated
+ * manifest; a file that no longer passes is a file changed on disk.
  */
-export function readPluginPackage(
-  fs: PluginPackageFs,
-  path: string,
-  hostVersion: string = HOST_API_VERSION,
-): PluginPackageResult {
-  let bytes: Uint8Array;
+export function parseInstalledManifest(bytes: Uint8Array): InstalledManifestResult {
+  try {
+    return { ok: true, manifest: validateManifest(parseJsonDocument(bytes, 'plugin.json')) };
+  } catch (error) {
+    return { ok: false, reason: (error as Error).message };
+  }
+}
+
+/**
+ * The bytes install writes to `plugin.json`: the VALIDATED manifest,
+ * re-serialised, never the package's raw bytes — the second half of the
+ * duplicate-key invariant above. *Tests:* `electron/__tests__/pluginScheme.test.ts`
+ * — "writes plugin.json from the validated manifest re-serialised, never the
+ * package's raw bytes".
+ */
+export function serializeManifest(manifest: PluginManifest): Uint8Array {
+  return new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+/** Bytes read from disk under a bound, or one refusal reason. */
+export type BoundedReadResult =
+  | { readonly ok: true; readonly bytes: Uint8Array<ArrayBuffer> }
+  | { readonly ok: false; readonly reason: string };
+
+/**
+ * Read the file at `path` through one descriptor, buffering `fstat`'s size plus
+ * one byte — never `limit + 1` for a small file. A path that is not a regular
+ * file is refused before a read; a size over `limit` is refused from `fstat`;
+ * and the read stops one byte past the stated size, so a file that grows
+ * between the stat and the read is refused without being buffered whole.
+ * *Tests:* `electron/__tests__/pluginPackage.test.ts` — "allocates for the
+ * file's size, not for the limit", "stops reading one byte past its stat when a
+ * file yields more than its stat said", "never buffers more than the limit plus
+ * one byte, even for a file stated at the limit". A failure to open or read is a refusal, not a throw. `noun`
+ * names the file in the reason. The package reader below and the plugin store's
+ * serve-time read (`pluginStore.ts`) share it, so the bound is one rule.
+ */
+export function readBoundedFile(fs: PluginPackageFs, path: string, limit: number, noun: string): BoundedReadResult {
   try {
     const fd = fs.openSync(path);
     try {
       const stat = fs.fstatSync(fd);
-      if (!stat.isFile()) return { ok: false, reason: 'the package is not a regular file' };
-      if (stat.size > MAX_PACKAGE_BYTES) {
-        return { ok: false, reason: `package is ${String(stat.size)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}` };
+      if (!stat.isFile()) return { ok: false, reason: `the ${noun} is not a regular file` };
+      if (stat.size > limit) {
+        return { ok: false, reason: `${noun} is ${String(stat.size)} bytes; the limit is ${String(limit)}` };
       }
-      const buffer = new Uint8Array(MAX_PACKAGE_BYTES + 1);
+      // One byte past what `fstat` said, so a file that grew is seen without
+      // being buffered: the read stops at `stat.size + 1`.
+      const buffer = new Uint8Array(stat.size + 1);
       let total = 0;
       while (total < buffer.byteLength) {
         const read = fs.readSync(fd, buffer, total, buffer.byteLength - total, total);
         if (read === 0) break;
         total += read;
       }
-      bytes = buffer.subarray(0, total);
+      if (total > stat.size) {
+        return { ok: false, reason: `${noun} grew while it was read: fstat said ${String(stat.size)} bytes` };
+      }
+      return { ok: true, bytes: buffer.subarray(0, total) };
     } finally {
       fs.closeSync(fd);
     }
   } catch (error) {
-    return { ok: false, reason: `the package could not be read: ${quoteUntrusted(String(error))}` };
+    return { ok: false, reason: `the ${noun} could not be read: ${quoteUntrusted(String(error))}` };
   }
-  return parsePluginPackage(bytes, hostVersion);
+}
+
+/**
+ * Read and validate the package at `path`, through `readBoundedFile` with
+ * decision 1's 8 MiB bound.
+ */
+export function readPluginPackage(
+  fs: PluginPackageFs,
+  path: string,
+  hostVersion: string = HOST_API_VERSION,
+): PluginPackageResult {
+  const read = readBoundedFile(fs, path, MAX_PACKAGE_BYTES, 'package');
+  if (!read.ok) return read;
+  return parsePluginPackage(read.bytes, hostVersion);
 }

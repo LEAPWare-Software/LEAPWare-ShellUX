@@ -144,6 +144,17 @@ const CHANNEL = {
    * the wrong place to put a second failure.
    */
   diagnosticsReport: 'shellux:diagnostics:report',
+  /**
+   * Renderer → main, plugin management (ADR-0006 step 4). Invoke channels: each
+   * resolves to `{ ok: true, value }` or `{ ok: false, reason }`. Mirrors
+   * `PLUGIN_CHANNEL` in `electron/main/plugins/pluginIpc.ts`, which this
+   * CommonJS realm cannot import.
+   */
+  pluginsList: 'shellux:plugins:list',
+  pluginsInstall: 'shellux:plugins:install',
+  pluginsEnable: 'shellux:plugins:enable',
+  pluginsDisable: 'shellux:plugins:disable',
+  pluginsRemove: 'shellux:plugins:remove',
 } as const;
 
 /** Mirrors `UpdateState` in electron/main/updater.ts. Structured-clone shaped. */
@@ -297,6 +308,24 @@ contextBridge.exposeInMainWorld('shelluxHost', {
     report: (payload: unknown): void => {
       ipcRenderer.send(CHANNEL.diagnosticsReport, payload);
     },
+  },
+  /**
+   * The plugin-management door (ADR-0006 decision 6).
+   *
+   * **It exists in both views, and main refuses it from one.** Both views load
+   * this preload, so the extension surface — where plugin code runs — gets these
+   * functions too; main answers every call whose sender is not host chrome's
+   * `webContents` with a refusal (`electron/main/plugins/pluginIpc.ts`). *Tests:*
+   * `electron/__tests__/pluginIpc.test.ts` — "refuses a management call whose
+   * sender is the extension surface". `install` takes no argument: main opens
+   * the picker, so no renderer string names a path. `id` is checked in main.
+   */
+  plugins: {
+    list: (): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsList),
+    install: (): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsInstall),
+    enable: (id: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsEnable, id),
+    disable: (id: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsDisable, id),
+    remove: (id: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsRemove, id),
   },
   /** The replicated store's transport. See the block above this call. */
   transport: {

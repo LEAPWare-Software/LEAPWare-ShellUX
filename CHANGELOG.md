@@ -16,6 +16,23 @@ from so a reader can check it.
 
 ### Added
 
+- **The plugin store** (ADR-0006 step 4). Main installs a `.lwplugin` chosen through its
+  own file picker (the renderer never supplies a path) into
+  `<userData>/plugins/<id>/<version>/`, staging, validating and renaming so a
+  half-written plugin is never listed, and records it in a `state.json` that only main
+  writes and fsyncs. A `state.json` that fails validation is set aside as
+  `state.json.corrupt-<time>` and reported, not fatal. `/plugins/<id>/<version>/bundle.js`
+  is served, with the CSP, only for an installed, enabled, compatible plugin whose file
+  still matches its recorded hash, rehashed at every serve; a mismatch refuses the serve
+  and records D-48's "files changed" state. Management calls (list, install, enable,
+  disable, remove) are refused unless they come from host chrome's view: entry-point
+  validation. *Tests:* "serves only the entry of an installed, enabled, compatible
+  plugin"; "refuses to serve an entry changed on disk after install"; "refuses a
+  management call whose sender is the extension surface". **Not done:** no surface loads
+  a plugin yet (step 6) and no UI calls these channels (step 9); the rehash runs on
+  main's thread at every serve, with no cache or rate limit; `.staging-*`, `.retired-*`
+  and directories orphaned by a set-aside `state.json` are not swept.
+
 - **The proof-of-completion protocol is complete and in force** (plan step 0c, 5 of 5,
   row C-37). After PR B (#179) merged, the ruleset was applied and read back: ruleset
   23685990 requires seven contexts, "Prove claims" and "PR evidence" among them, each

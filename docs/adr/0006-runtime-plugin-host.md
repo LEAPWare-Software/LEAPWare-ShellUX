@@ -217,6 +217,41 @@ has none); bundling plugins into `app.asar` (that is compile-time loading with e
 steps, and the thing D-36 removes); an in-renderer drag-and-drop install (it hands
 main a renderer-supplied path).
 
+> **2026-09-19, step 4 landed — the store as built.** `electron/main/plugins/pluginStore.ts`,
+> rooted at `<userData>/plugins/` by `electron/main/index.ts`. `state.json` is
+> `{ "format": "shellux-plugin-state/1", "plugins": { <id>: { version, enabled,
+> sha512, fault } } }`, where `fault` is `null` or `{ state: "files-changed" |
+> "crashed", reason, at }` — D-48 keeps "files changed" apart from a crash, so
+> the "crash record" above is a fault record with its state named. It is read
+> with `JSON.parse` and validated. One that reads but fails is renamed to
+> `state.json.corrupt-<time>`, reported to the diagnostics log, and the store
+> starts empty — its plugins unlisted until reinstalled, their directories left
+> on disk. A reinstall then records a plugin afresh: one the user had disabled
+> comes back enabled, and its fault record is lost. One that cannot be read at
+> all refuses the operation. Every write is
+> flushed before the rename that publishes it. `plugin.json` is `serializeManifest` of the
+> validated manifest, never the package's bytes — the step-3 invariant.
+> Transient `.staging-*` and `.retired-*` directories start with `.`, which no
+> id can. An incompatible package **is installed**, listed as incompatible with
+> its reason, and never served or enabled. A same-version install is the
+> Reinstall of decision 11 and clears the fault. **One departure:** an update
+> deletes the old directory as soon as `state.json` has switched, not after a
+> reload — nothing reloads before step 6, which moves it. The picker is
+> `dialog.showOpenDialog`, opened by main behind `shellux:plugins:install`,
+> which takes no argument. *Tests:* `electron/__tests__/pluginScheme.test.ts` —
+> "lays out userData/plugins as ADR-0006 decision 2 fixes, and records the
+> plugin in state.json", "writes plugin.json from the validated manifest
+> re-serialised, never the package's raw bytes", "installs an update beside the
+> old version, switches state.json, then deletes the old directory", "a
+> reinstall of the same version clears the files-changed state";
+> `electron/__tests__/pluginIpc.test.ts` — "installs from the path main's
+> picker returns, and takes no path from the renderer";
+> `electron/__tests__/pluginScheme.test.ts` — "sets aside a state.json that is
+> not UTF-8 JSON, reports it, and starts empty", "flushes state.json to disk
+> before renaming it into place". **Not built:** the GitHub URL source (step
+> 11), and any sweep of a `.staging-*` or `.retired-*` directory left by a
+> crash mid-install, or of a directory a set-aside `state.json` orphaned.
+
 ### 3. The versioned contract: one number, checked before the bundle is ever served — #68 decided
 
 **#68's question is answered with both halves, bound to one version so there are not
@@ -359,6 +394,25 @@ design statement and no document may cite the check as a property of the shell.*
 > `electron/__tests__/pluginPackage.test.ts` — "resolves a manifest icon key the
 > host does not publish to the host fallback glyph, and keeps no icon when the
 > manifest gives none". Host chrome does not draw a manifest icon until step 9.
+>
+> **2026-09-19, step 4 — the serve half is pinned.** The store calls the
+> validator at install, and `PluginStore.entryFor` rehashes the entry at every
+> serve against the `sha512` in `state.json`, serving the same bytes it hashed.
+> A mismatch, a missing entry, or a `plugin.json` that no longer validates or
+> names another id, version or hash refuses the serve (a 404) and records
+> D-48's `files-changed` state with decision 11's words; restoring the bytes
+> does not clear it, a reinstall does. It is **entry-point validation**, and
+> the limit is asserted, not only stated: rewrite the bundle, `plugin.json` and
+> `state.json` together and it serves. *Tests:*
+> `electron/__tests__/pluginScheme.test.ts` — "refuses to serve an entry changed
+> on disk after install", "serves a bundle whose file and state.json record were
+> rewritten together, because state.json is as writable as the bundle". Both
+> doors now exist in code; no plugin reaches a renderer before step 6.
+> **A stated limit:** every serve reads and hashes the entry on main's thread,
+> with no cache and no rate limit, so the extension surface can make main do
+> that work — up to 8 MiB a request — as often as it asks. A cache keyed on
+> mtime and size was rejected: it would pass a same-size edit that kept its
+> mtime, and the read it cannot save is most of the cost.
 
 **Rejected for 1.0 (owner, D-47):** signing packages (Ed25519 via `node:crypto`, key
 in CI). It is the one mechanism here that would make D-23 checkable at the URL door,
@@ -375,6 +429,18 @@ is looked up in `state.json` — **constructed, not filtered**, the posture
 `src/core/ipc/manifest.ts` takes: the route serves the entry of an installed, enabled,
 compatible plugin by lookup, and every other path under `/plugins/` is a 404 without
 ever being joined to a directory. Everything else the handler serves is unchanged.
+
+> **2026-09-19, step 4 — the route as built.** `electron/main/plugins/pluginRoute.ts`,
+> reached through `createRendererHandler`'s `servePlugin` option, so its
+> responses carry the policy like every other. A request whose decoded,
+> lower-cased path is `/plugins` or under `/plugins/` goes to the route and
+> never to the file fetcher (`/PLUGINS/` and `/plug%69ns/` included). The route
+> matches the raw pathname against `/plugins/<id>/<version>/bundle.js`, holds
+> both parts to the id and version patterns, and asks the store. *Tests:*
+> `electron/__tests__/pluginScheme.test.ts` — "serves only the entry of an
+> installed, enabled, compatible plugin", "answers 404 for every other path
+> under /plugins/, and never reads dist for one". Not measured: Chromium
+> importing a module from this route in the packaged app — no loader exists yet.
 
 **Why not a second scheme — measured, not preferred.** Spike case B: a second
 privileged scheme without `corsEnabled` is refused by CORS outright. Case C: with
@@ -511,6 +577,20 @@ isolation", and that is the ceiling of every claim this ADR makes about it.
   written in step 4, in `electron/__tests__/pluginIpc.test.ts`: "refuses a management
   call whose sender is the extension surface". It says nothing about the filesystem,
   which is decision 4's door.
+
+> **2026-09-19, step 4 — the sender check as built.** `electron/main/plugins/pluginIpc.ts`
+> registers five `ipcMain.handle` channels — `shellux:plugins:list`, `:install`,
+> `:enable`, `:disable`, `:remove` — and each compares `event.sender` with
+> host chrome's live `webContents` (`paneWindow.contentsOf('chrome')`) before
+> anything runs; no window, a destroyed view or the extension surface is
+> refused, and no picker opens. Restart is not a channel yet: it clears a crash
+> record and reloads the surface, both step 6's. The preload exposes the five
+> as `shelluxHost.plugins` in both views. **Entry-point validation**, as above:
+> it holds at this door only. *Tests:* `electron/__tests__/pluginIpc.test.ts` —
+> "refuses a management call whose sender is the extension surface", "refuses
+> every sender when host chrome has no live webContents". Not shown: that
+> Electron reports the calling view as `event.sender`, which is Electron's
+> contract, exercised only in the running application.
 
 ### 7. Enable, disable, restart and remove, in the running surface
 

@@ -430,15 +430,45 @@ describe('reading a package from disk, through the injected filesystem', () => {
     expect(fs.open.size).toBe(0);
   });
 
-  it('stops reading at the limit when a file yields more than its stat said', () => {
-    // `fstat` says 10 bytes; the file yields 3 * the limit. The read must stop
-    // at MAX_PACKAGE_BYTES + 1 and refuse, never buffering the rest.
-    const fs = fakeFs({ 'grew.lwplugin': { bytes: new Uint8Array(3 * MAX_PACKAGE_BYTES), statSize: 10 } });
-    expect(reasonOf(readPluginPackage(fs, 'grew.lwplugin'))).toBe(
-      `package is ${String(MAX_PACKAGE_BYTES + 1)} bytes; the limit is ${String(MAX_PACKAGE_BYTES)}`,
+  it('never buffers more than the limit plus one byte, even for a file stated at the limit', () => {
+    // The largest buffer the reader ever allocates: `fstat` says exactly the
+    // limit, and the file yields three times that.
+    const fs = fakeFs({ 'full.lwplugin': { bytes: new Uint8Array(3 * MAX_PACKAGE_BYTES), statSize: MAX_PACKAGE_BYTES } });
+    const allocated: number[] = [];
+    const read = fs.readSync;
+    fs.readSync = (fd, buffer, offset, length, position) => {
+      allocated.push(buffer.byteLength);
+      return read(fd, buffer, offset, length, position);
+    };
+    expect(reasonOf(readPluginPackage(fs, 'full.lwplugin'))).toBe(
+      `package grew while it was read: fstat said ${String(MAX_PACKAGE_BYTES)} bytes`,
     );
+    expect(Math.max(...allocated)).toBe(MAX_PACKAGE_BYTES + 1);
     expect(fs.readBytes.reduce((sum, n) => sum + n, 0)).toBe(MAX_PACKAGE_BYTES + 1);
     expect(fs.open.size).toBe(0);
+  });
+
+  it('stops reading one byte past its stat when a file yields more than its stat said', () => {
+    // `fstat` says 10 bytes; the file yields 3 * the limit. The read must stop
+    // one byte past what `fstat` said — well inside the limit — and refuse,
+    // never buffering the rest.
+    const fs = fakeFs({ 'grew.lwplugin': { bytes: new Uint8Array(3 * MAX_PACKAGE_BYTES), statSize: 10 } });
+    expect(reasonOf(readPluginPackage(fs, 'grew.lwplugin'))).toBe('package grew while it was read: fstat said 10 bytes');
+    expect(fs.readBytes.reduce((sum, n) => sum + n, 0)).toBe(11);
+    expect(fs.open.size).toBe(0);
+  });
+
+  it("allocates for the file's size, not for the limit", () => {
+    const bytes = encode(packageObject());
+    const fs = fakeFs({ 'mail.lwplugin': { bytes } });
+    const allocated: number[] = [];
+    const read = fs.readSync;
+    fs.readSync = (fd, buffer, offset, length, position) => {
+      allocated.push(buffer.byteLength);
+      return read(fd, buffer, offset, length, position);
+    };
+    expect(readPluginPackage(fs, 'mail.lwplugin').ok).toBe(true);
+    expect(allocated[0]).toBe(bytes.byteLength + 1);
   });
 
   it('refuses a path that is not a regular file', () => {

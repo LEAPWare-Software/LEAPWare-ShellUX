@@ -1,4 +1,5 @@
 import { join, sep } from 'node:path';
+import { isPluginRequest } from './plugins/pluginRoute.js';
 
 /**
  * ============================================================================
@@ -145,6 +146,14 @@ export interface RendererHandlerOptions {
   readonly fetchFile: (absolutePath: string) => Promise<Response>;
   /** The host's diagnostic channel. */
   readonly warn: (message: string) => void;
+  /**
+   * The `/plugins/` route (ADR-0006 decision 5, `electron/main/plugins/pluginRoute.ts`).
+   * When given, every request `isPluginRequest` claims goes here and never to
+   * `fetchFile`, and its response carries the policy like every other. *Tests:*
+   * `electron/__tests__/pluginScheme.test.ts` — "serves only the entry of an
+   * installed, enabled, compatible plugin".
+   */
+  readonly servePlugin?: (requestUrl: string) => Response;
 }
 
 function describeError(error: unknown): string {
@@ -158,6 +167,9 @@ function describeError(error: unknown): string {
  */
 export function createRendererHandler(options: RendererHandlerOptions): (request: Request) => Promise<Response> {
   return async (request) => {
+    if (options.servePlugin !== undefined && isPluginRequest(request.url)) {
+      return withRendererCsp(options.servePlugin(request.url));
+    }
     const target = resolveRendererFile(options.root, request.url);
     if (target === null) {
       options.warn(`refused a request that resolves outside the renderer root: ${request.url}`);
