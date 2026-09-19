@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, MouseEvent, ReactElement, ReactNode } from 'react';
 import { BUTTON_CLASS, LOADING_BAR_CLASS } from './buttonClasses';
 import type { ButtonVariant } from './buttonClasses';
 
@@ -18,7 +18,8 @@ import type { ButtonVariant } from './buttonClasses';
  * `ResizeObserver` and no stored pixel width.
  *
  * While loading the button stays focusable and keeps focus, says `aria-busy`,
- * and ignores activation, so a second press cannot start the work twice. It is
+ * and ignores activation, a form submission included, so a second press cannot
+ * start the work twice. It is
  * not `disabled`: that would repaint it in disabled ink and drop focus to the
  * document, which is what a keyboard user who just pressed Enter least wants.
  *
@@ -44,6 +45,15 @@ export interface ButtonProps
    * draws the indeterminate bar.
    */
   readonly progress?: number;
+}
+
+/**
+ * A loading button's click handler. Dropping the handler is not enough: a
+ * `type="submit"` button inside a form submits by default action, with or
+ * without an `onClick`, so the default is what has to be cancelled.
+ */
+function preventActivation(event: MouseEvent<HTMLButtonElement>): void {
+  event.preventDefault();
 }
 
 /** The determinate bar's width, or `undefined` for the indeterminate bar. */
@@ -72,7 +82,7 @@ export function Button({
       type={type}
       className={BUTTON_CLASS[variant]}
       aria-busy={loading || undefined}
-      onClick={loading ? undefined : onClick}
+      onClick={loading ? preventActivation : onClick}
     >
       <span className={`col-start-1 row-start-1 ${showsLoadingLabel ? 'invisible' : ''}`}>
         {children}

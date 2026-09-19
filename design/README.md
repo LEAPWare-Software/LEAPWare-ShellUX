@@ -36,9 +36,13 @@ node design/lib/build-manifest.mjs                   # rewrite the manifest
 ```
 
 `check-contrast.mjs` exits non-zero on any failure and is the gate. Since GitHub
-#111 it also fails as **UNPAINTED** any contrast row whose background nothing in
-`src/` paints — the twelve series had been validated on `--surface-sunken` while
+#111 it also fails as **UNPAINTED** any contrast row whose background nothing
+shipped paints — the twelve series had been validated on `--surface-sunken` while
 nothing painted it — with unbuilt UI exempted by name in `UNBUILT_BACKGROUNDS`.
+Since wave-3 W3-1, "shipped" means a module reachable by relative imports from
+`index.html` or `paneview.html`, and a `TOKEN_CLASS` role counts only where a
+reachable module uses it: the role table itself, a dev fixture (`src/dev/**`) and
+a test paint nothing (`lib/painters.mjs`).
 It is a `verify` stage: `npm run tokens:check` runs `scripts/check-tokens.mjs` and
 then `design/check-contrast.mjs --self-test`, and `ci.yml` runs `tokens:check` on
 three operating systems, so an UNPAINTED, UNREVIEWED or STALE row fails a pull
@@ -61,6 +65,7 @@ a generated artefact lands is the wiring change's job and not this script's.
 | `generate.mjs` | Emits the CSS custom-property blocks and the TypeScript contract module. Zero dependencies. |
 | `lib/color.mjs` | OKLCH → sRGB, gamut mapping, WCAG 2.x contrast, CIEDE2000. One copy, imported by both scripts. |
 | `lib/resolve.mjs` | Token JSON + one theme → resolved colours. Also one copy, also imported by both. |
+| `lib/painters.mjs` | Which backgrounds a shipped module can paint: the UNPAINTED rule's input, and its limits. |
 | `lib/build-manifest.mjs` | How the manifest's 165 rows — including 66 pairwise chart rows — were produced. Not part of any pipeline. |
 
 **`lib/` exists for one reason.** If the generator's OKLCH-to-sRGB conversion and

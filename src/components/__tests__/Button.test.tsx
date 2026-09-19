@@ -64,6 +64,28 @@ describe('Button', () => {
     expect(button).not.toBeDisabled();
   });
 
+  it('does not submit its form while loading, and does at rest', () => {
+    const onSubmit = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
+    const { rerender } = render(
+      <form onSubmit={onSubmit}>
+        <Button type="submit" loading>
+          Save
+        </Button>
+      </form>,
+    );
+    const button = screen.getByRole('button', { name: 'Save' });
+    fireEvent.click(button);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    rerender(
+      <form onSubmit={onSubmit}>
+        <Button type="submit">Save</Button>
+      </form>,
+    );
+    fireEvent.click(button);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps both labels in one cell and hides the one not showing', () => {
     const { rerender } = render(<Button loadingLabel="Reordering">Reorder</Button>);
     const [idle, busy] = Array.from(screen.getByRole('button').children);

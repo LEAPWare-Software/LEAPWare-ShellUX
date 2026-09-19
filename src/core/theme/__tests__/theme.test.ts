@@ -186,6 +186,16 @@ describe('TOKEN_CLASS', () => {
     }
   });
 
+  it('keys every current-item role on aria-current="true", never on the bare attribute', () => {
+    // `aria-[current]:` matches `aria-current="false"` too, and paints it current.
+    const current = Object.entries(TOKEN_CLASS).filter(([, value]) => value.includes('current'));
+    expect(current.length).toBeGreaterThan(0);
+    for (const [role, className] of current) {
+      expect(className, role).not.toMatch(/aria-\[current\]:/);
+      expect(className, role).toMatch(/aria-\[current=true\]:/);
+    }
+  });
+
   it('carries no raw palette colour and no dark: variant of its own', () => {
     // This module is the single place a colour class is written in the shell,
     // which makes it the single place a raw one could hide.

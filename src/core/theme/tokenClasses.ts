@@ -154,10 +154,14 @@ export const TOKEN_CLASS = {
   // compile identically — but the `theme()` spelling is what let a raw
   // `theme(colors.neutral.400)` hide from every colour scan in this repository
   // until now, and `noRawColor.test.ts` forbids the spelling for that reason.
+  //
+  // `aria-[current=true]` and not the bare `aria-[current]`, which matches
+  // the attribute's PRESENCE and so paints `aria-current="false"` as current.
+  // `ShellNavigation.tsx` writes `'true'` or omits the attribute.
   // ---------------------------------------------------------------------
-  navSelectedBorder: 'aria-[current]:border-border-subtle',
-  navSelectedSurface: 'aria-[current]:bg-surface-selected',
-  navSelectedRule: 'aria-[current]:shadow-[inset_2px_0_0_0_var(--border-selected)]',
+  navSelectedBorder: 'aria-[current=true]:border-border-subtle',
+  navSelectedSurface: 'aria-[current=true]:bg-surface-selected',
+  navSelectedRule: 'aria-[current=true]:shadow-[inset_2px_0_0_0_var(--border-selected)]',
 
   // ---------------------------------------------------------------------
   // Selected virtualized row. Same two-channel argument, different ARIA
@@ -253,7 +257,8 @@ export const TOKEN_CLASS = {
   // Tailwind's own `ring-2`. The offset is painted in `--focus-ring-offset`,
   // which is the surface colour, and that is the second tone.
   // *Tests:* `e2e/focus-visibility.spec.ts` — "paints no ring on a mouse
-  // click and the two-tone ring on a Tab".
+  // click and the two-tone ring on a Tab, in the light theme", and the same
+  // case in dark and high contrast.
   // ---------------------------------------------------------------------
   controlFocusRing:
     'outline-none focus-visible:ring-[length:var(--focus-ring-width)] focus-visible:ring-focus-ring ' +
@@ -324,8 +329,8 @@ export const TOKEN_CLASS = {
   // accent pair W3-3's token list names.
   // ---------------------------------------------------------------------
   railWidth: 'w-rail',
-  navCurrentSurface: 'aria-[current]:bg-accent-subtle',
-  navCurrentText: 'aria-[current]:text-text-primary',
+  navCurrentSurface: 'aria-[current=true]:bg-accent-subtle',
+  navCurrentText: 'aria-[current=true]:text-text-primary',
   navGuideRule: 'border-border-subtle',
   identityTileSurface: 'bg-accent-subtle',
   identityTileText: 'text-accent-text',

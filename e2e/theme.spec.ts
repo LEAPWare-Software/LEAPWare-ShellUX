@@ -420,39 +420,85 @@ async function computed(page: Page, selector: string, property: string): Promise
     .evaluate((node, name) => window.getComputedStyle(node).getPropertyValue(name), property);
 }
 
+/**
+ * The colour of the first 1px INSET layer of an element's box-shadow, painted
+ * through a canvas to an 8-bit triple, or `null` when it draws none.
+ */
+async function insetRule(page: Page, selector: string): Promise<[number, number, number] | null> {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((node) => {
+      const value = window.getComputedStyle(node).boxShadow;
+      const layers: string[] = [];
+      let depth = 0;
+      let current = '';
+      for (const char of value) {
+        if (char === '(') depth += 1;
+        if (char === ')') depth -= 1;
+        if (char === ',' && depth === 0) {
+          layers.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      layers.push(current.trim());
+      const layer = layers.find((entry) => /\binset\b/.test(entry) && /\b1px\b/.test(entry));
+      if (layer === undefined) return null;
+      const colour = /^(?:[a-z]+\([^)]*\)|#[0-9a-f]+)/i.exec(layer)?.[0] ?? '';
+      const canvas = document.createElement('canvas');
+      canvas.width = 1;
+      canvas.height = 1;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (context === null) throw new Error('e2e: no 2d context');
+      context.fillStyle = colour;
+      context.fillRect(0, 0, 1, 1);
+      const data = context.getImageData(0, 0, 1, 1).data;
+      return [data[0] as number, data[1] as number, data[2] as number] as [number, number, number];
+    });
+}
+
 test.describe('the W3-1 state primitives paint their states', () => {
   test('paints pressed one step past hover, on a quiet and on a primary button', async ({
     page,
   }) => {
-    await openStates(page);
-    const light = THEMES[0].selector;
+    for (const theme of THEMES) {
+      // A fresh page per theme: releasing the press clicks the fixture's
+      // primary button, which puts it into its loading state.
+      await openStates(page);
+      await forceTheme(page, theme.attribute);
+      const at = (token: string): string => annotated(theme.selector, token);
+      const name = theme.name;
 
-    // Quiet: rest is the pane, hover is one grey step, pressed is the next.
-    await page.hover('#fixture-quiet');
-    const quietHover = await paintedColor(page, '#fixture-quiet', 'background-color');
-    await page.mouse.down();
-    const quietPressed = await paintedColor(page, '#fixture-quiet', 'background-color');
-    await page.mouse.up();
-    expectColor(quietHover, annotated(light, '--surface-hover'), 'the quiet button on hover');
-    expectColor(quietPressed, annotated(light, '--surface-selected'), 'the quiet button pressed');
-    expect(quietPressed, 'a pressed quiet button paints its hover background').not.toEqual(
-      quietHover,
-    );
+      // Quiet: rest is the pane, hover is one grey step, pressed is the next.
+      await page.hover('#fixture-quiet');
+      const quietHover = await paintedColor(page, '#fixture-quiet', 'background-color');
+      await page.mouse.down();
+      const quietPressed = await paintedColor(page, '#fixture-quiet', 'background-color');
+      await page.mouse.up();
+      expectColor(quietHover, at('--surface-hover'), `${name}: the quiet button on hover`);
+      expectColor(quietPressed, at('--surface-selected'), `${name}: the quiet button pressed`);
+      expect(quietPressed, `${name}: pressed quiet paints its hover background`).not.toEqual(
+        quietHover,
+      );
 
-    // Primary: the ramp has no step past deep petrol, so the v4 canvas draws
-    // pressed as deep petrol plus a 1px inset accent rule. The rule is what
-    // separates the two states, so the rule is what is asserted.
-    await page.hover('#fixture-primary');
-    const primaryHover = await paintedColor(page, '#fixture-primary', 'background-color');
-    const primaryHoverShadow = await computed(page, '#fixture-primary', 'box-shadow');
-    await page.mouse.down();
-    const primaryPressed = await paintedColor(page, '#fixture-primary', 'background-color');
-    const primaryPressedShadow = await computed(page, '#fixture-primary', 'box-shadow');
-    await page.mouse.up();
-    expectColor(primaryHover, annotated(light, '--accent-solid-hover'), 'the primary on hover');
-    expectColor(primaryPressed, annotated(light, '--accent-solid-hover'), 'the primary pressed');
-    expect(primaryPressedShadow).toContain('inset');
-    expect(primaryHoverShadow).not.toContain('inset');
+      // Primary: the ramp has no step past deep petrol, so the v4 canvas draws
+      // pressed as deep petrol plus a 1px inset `--accent-border` rule. The rule
+      // is what separates the two states, so the rule and its colour are asserted.
+      await page.hover('#fixture-primary');
+      const primaryHover = await paintedColor(page, '#fixture-primary', 'background-color');
+      const hoverRule = await insetRule(page, '#fixture-primary');
+      await page.mouse.down();
+      const primaryPressed = await paintedColor(page, '#fixture-primary', 'background-color');
+      const pressedRule = await insetRule(page, '#fixture-primary');
+      await page.mouse.up();
+      expectColor(primaryHover, at('--accent-solid-hover'), `${name}: the primary on hover`);
+      expectColor(primaryPressed, at('--accent-solid-hover'), `${name}: the primary pressed`);
+      expect(hoverRule, `${name}: a hovered primary draws an inset rule`).toBeNull();
+      expect(pressedRule, `${name}: a pressed primary draws no inset rule`).not.toBeNull();
+      expectColor(pressedRule ?? [], at('--accent-border'), `${name}: the pressed inset rule`);
+    }
   });
 
   test('draws a disabled button in disabled ink at full opacity', async ({ page }) => {

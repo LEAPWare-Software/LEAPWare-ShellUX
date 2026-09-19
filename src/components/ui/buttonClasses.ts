@@ -27,7 +27,7 @@ import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
  *    "paints pressed one step past hover, on a quiet and on a primary button".
  *  - focus: the two-tone ring on `:focus-visible` only. *Tests:*
  *    `e2e/focus-visibility.spec.ts` — "paints no ring on a mouse click and the
- *    two-tone ring on a Tab".
+ *    two-tone ring on a Tab, in the light theme", and in dark and high contrast.
  *  - disabled: `--text-disabled` ink at full opacity. *Tests:* `e2e/theme.spec.ts`
  *    — "draws a disabled button in disabled ink at full opacity".
  *  - loading: `Button.tsx`.
