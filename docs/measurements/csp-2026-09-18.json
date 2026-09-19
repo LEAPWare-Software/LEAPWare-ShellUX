@@ -1,0 +1,182 @@
+{
+  "what": "ADR-0006 implementation step 1: CSP violations measured on the packaged app (scripts/csp-smoke.mjs) and for an ECharts axis tooltip (scripts/csp-echarts-probe.mjs).",
+  "date": "2026-09-18",
+  "electron": "43.2.0",
+  "platform": "win32",
+  "packagedFrom": "npm run verify:desktop -> release/win-unpacked",
+  "runs": {
+    "1-packaged-style-src-self": {
+      "note": "First measurement, with style-src 'self'. Run by an earlier revision of csp-smoke.mjs whose second control was a style attribute (not a data: image) and whose Log filter matched /^Refused to/. The one chrome-surface violation appeared after the palette opened (paletteOpen: true); first load recorded none.",
+      "output": {
+        "ok": false,
+        "summary": [
+          {
+            "surface": "extension",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true
+          },
+          {
+            "surface": "chrome",
+            "headerPresent": true,
+            "violations": 2,
+            "controlsRegistered": true
+          }
+        ],
+        "results": [
+          {
+            "surface": "extension",
+            "url": "shellux://renderer/paneview.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "paletteOpen": null
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "styleAttribute": {
+                "raised": 1
+              }
+            }
+          },
+          {
+            "surface": "chrome",
+            "url": "shellux://renderer/index.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [
+                {
+                  "directive": "style-src-elem",
+                  "blocked": "inline",
+                  "sample": ""
+                }
+              ],
+              "logRefusals": [],
+              "auditIssues": 1,
+              "paletteOpen": true
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "styleAttribute": {
+                "raised": 1
+              }
+            }
+          }
+        ]
+      }
+    },
+    "2-echarts-tooltip-probe": {
+      "note": "One shown axis tooltip, ECharts dist build, per candidate policy.",
+      "output": [
+        {
+          "policy": "default-src 'self'; style-src 'self'",
+          "tooltipShown": true,
+          "violations": 13,
+          "byDirective": {
+            "style-src-attr": 13
+          }
+        },
+        {
+          "policy": "default-src 'self'; style-src 'self'; style-src-elem 'self' 'unsafe-inline'",
+          "tooltipShown": true,
+          "violations": 13,
+          "byDirective": {
+            "style-src-attr": 13
+          }
+        },
+        {
+          "policy": "default-src 'self'; style-src 'self' 'unsafe-inline'",
+          "tooltipShown": true,
+          "violations": 0,
+          "byDirective": {}
+        }
+      ]
+    },
+    "3-packaged-final-policy": {
+      "note": "The committed policy and the committed csp-smoke.mjs, run against the same package.",
+      "output": {
+        "ok": true,
+        "summary": [
+          {
+            "surface": "extension",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true
+          },
+          {
+            "surface": "chrome",
+            "headerPresent": true,
+            "violations": 0,
+            "controlsRegistered": true
+          }
+        ],
+        "results": [
+          {
+            "surface": "extension",
+            "url": "shellux://renderer/paneview.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "paletteOpen": null
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "raised": 1
+              }
+            }
+          },
+          {
+            "surface": "chrome",
+            "url": "shellux://renderer/index.html",
+            "header": "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'",
+            "firstLoad": {
+              "logRefusals": [],
+              "auditIssues": 0
+            },
+            "afterReload": {
+              "events": [],
+              "logRefusals": [],
+              "auditIssues": 0,
+              "paletteOpen": true
+            },
+            "controls": {
+              "inlineScript": {
+                "raised": 1,
+                "inlineScriptRan": false
+              },
+              "dataImage": {
+                "raised": 1
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
