@@ -366,6 +366,14 @@ from so a reader can check it.
   review, and nobody opened the run's log. **Not proven here:** a PR that changes
   this workflow is skipped by the action, so whether the review comments is proven
   by the next PR.
+- **The Claude review job still posted nothing on #148** (run 35412804663: 10 turns,
+  10 permission denials). **Inferred, not observed:** the run log reports only the
+  denial count, not which tools were denied. The plugin's command launches review
+  subagents, and the subagent tool was not allowed, so that is the likely cause. The
+  workflow now also allows `Task` and `Agent` (the tool's old and new names). **What
+  made it possible:** the previous fix copied the command's declared `allowed-tools`,
+  which do not list the subagent tool that the command's own steps use. **Not proven here**, for the same
+  reason as before: the action skips a PR that changes its own workflow.
 - **Chart titles overprinted the plot and ignored the theme; the chart contrast rows
   were measured on a background nothing painted** (GitHub #112, #113; #111 addressed).
   The title is no longer drawn into the ECharts canvas: the `<figcaption>` is the

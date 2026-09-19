@@ -50,8 +50,12 @@ jobs:
           # Exactly the tools the plugin's own command declares (plugins/code-review/commands/
           # code-review.md, `allowed-tools`), plus read-only file tools for its subagents.
           # With only the inline-comment tool, run 35410730035 was denied 14 calls and
-          # reported SUCCESS having posted nothing.
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read,Grep,Glob"'
+          # reported SUCCESS having posted nothing. With the plugin's list, run
+          # 35412804663 (#148) was still denied 10 calls and posted nothing. The log
+          # does not name the denied tools; the likely cause is that the command
+          # launches review subagents, which need the subagent tool (`Task`, named
+          # `Agent` in newer Claude Code). Both names are allowed.
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*),Read,Grep,Glob,Task,Agent"'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
 

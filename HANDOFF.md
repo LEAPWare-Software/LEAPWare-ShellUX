@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `a59c15f` (#147, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `1248f02` (#148, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -18,7 +18,8 @@ with a merge queue.
   scaffolding), #143 (an npm claim corrected), #144 (Claude Actions, guarded).
 - #145: ADR-0006 Accepted, with ADR-0001 Amendment P (D-46 to D-48).
 - #147: the Claude review job gets the tools it needs to comment (D-49).
-- This change: charts repaired (#112, #113; #111 addressed); #146 filed.
+- #148: charts repaired (#112, #113; #111 addressed); #146 filed.
+- This change: the review job may launch its subagents.
 
 ## In flight
 
