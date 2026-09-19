@@ -128,6 +128,12 @@ from so a reader can check it.
 
 ### Fixed
 
+- **`HANDOFF.md`'s "Where main is" pointed at `f0bf492` (#192), four merges stale** (#194,
+  #188, #190, #196 had all landed since). It is the first thing every session — human or
+  cloud lane — reads, so a stale pointer there misleads at the door. Updated to `713c97b`
+  (#196), and the "What landed" list re-trimmed to the 3000-byte cap (row C-08: a trim
+  there is by design, not a defect) rather than appended, dropping the two oldest,
+  least load-bearing landmarks and adding #190, #194 and #196.
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast
