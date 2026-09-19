@@ -595,11 +595,15 @@ isolation", and that is the ceiling of every claim this ADR makes about it.
   > declaring lifecycle hooks in a registry that does not run plugin code, and
   > names the field"; `src/core/__tests__/lifecycle.test.tsx` — "accepts the
   > same blueprint, and calls onActivate, when the provider declares it runs
-  > plugin code"; `src/__tests__/App.test.tsx` — "host chrome's provider
-  > refuses a lifecycle-declaring registration, which is the copy-paste this
-  > guardrail exists for". All three run in jsdom and observe a return value
-  > only; the packaged two-document behaviour is **not verified in a browser
-  > or in the native host** and waits on step 6, which has not yet landed.
+  > plugin code"; `src/__tests__/App.test.tsx` — "refuses a lifecycle-declaring
+  > registration under App's default, host-chrome-shaped configuration, though
+  > no shipped fixture attempts one today". All three run in jsdom and observe
+  > a return value only; the packaged two-document behaviour is **not
+  > verified in a browser or in the native host** and waits on step 6, which
+  > has not yet landed. Neither shipped mock (`MailPlugin`, `DatabasePlugin`)
+  > declares `lifecycle`, so this guardrail does not catch the mistake of
+  > registering them from host chrome — that is decision 6's own renders-data-
+  > only gap, a different question from this amendment's.
 
 - **Management calls are sender-checked in main.** Install, enable, disable, remove and
   restart are accepted only when the IPC sender is host chrome's `webContents`; both

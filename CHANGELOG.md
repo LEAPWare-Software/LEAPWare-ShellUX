@@ -35,11 +35,15 @@ from so a reader can check it.
   registry that does not run plugin code, and names the field"
   (`src/core/__tests__/registryNormalization.test.tsx`); "accepts the same
   blueprint, and calls onActivate, when the provider declares it runs plugin
-  code" (`src/core/__tests__/lifecycle.test.tsx`); "host chrome's provider
-  refuses a lifecycle-declaring registration, which is the copy-paste this
-  guardrail exists for" (`src/__tests__/App.test.tsx`). All three run in jsdom
-  and observe a return value only; the packaged two-document behaviour is not
-  verified in a browser or in the native host and waits on ADR-0006 step 6.
+  code" (`src/core/__tests__/lifecycle.test.tsx`); "refuses a
+  lifecycle-declaring registration under App's default, host-chrome-shaped
+  configuration, though no shipped fixture attempts one today"
+  (`src/__tests__/App.test.tsx`). All three run in jsdom and observe a return
+  value only; the packaged two-document behaviour is not verified in a
+  browser or in the native host and waits on ADR-0006 step 6. Neither shipped
+  mock declares `lifecycle`, so this guardrail does not catch a lifecycle-free
+  mock being registered from host chrome — a different, pre-existing gap
+  (ADR-0006 decision 6).
 
 - **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
   - the pull request is open and not a draft;

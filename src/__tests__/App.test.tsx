@@ -121,7 +121,7 @@ describe('App', () => {
     expect(panelSizes(container)).not.toEqual([18, 26, 56]);
   });
 
-  it("host chrome's provider refuses a lifecycle-declaring registration, which is the copy-paste this guardrail exists for", () => {
+  it("refuses a lifecycle-declaring registration under App's default, host-chrome-shaped configuration, though no shipped fixture attempts one today", () => {
     // ADR-0006 decision 6's amendment for issue #183: host chrome's own
     // `ExtensionRegistryProvider` runs with no `runsPluginCode` prop here — the
     // default, host-chrome-shaped configuration — so this is the case that

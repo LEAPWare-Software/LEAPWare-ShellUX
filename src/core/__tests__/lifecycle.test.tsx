@@ -960,7 +960,7 @@ describe('the lifecycle member at registration', () => {
 });
 
 /**
- * ISSUE-183 — ADR-0006 decision 6's amendment. `mountHost` above sets
+ * #183 — ADR-0006 decision 6's amendment. `mountHost` above sets
  * `runsPluginCode` on its `ExtensionRegistryProvider`, which is why every
  * lifecycle-bearing registration in this file has kept working; this case
  * pins the other half of that guardrail — that the accepted path really does

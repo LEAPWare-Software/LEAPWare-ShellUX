@@ -599,7 +599,7 @@ describe('register — a weaponised ShellUXError cannot be relocated into the ho
 });
 
 /* -------------------------------------------------------------------------- */
-/* ISSUE-183 — lifecycle-hook ownership: `runsPluginCode` at the registry door */
+/* #183 — lifecycle-hook ownership: `runsPluginCode` at the registry door */
 /* -------------------------------------------------------------------------- */
 
 describe('register — lifecycle hooks belong to a registry that declares it runs plugin code', () => {
