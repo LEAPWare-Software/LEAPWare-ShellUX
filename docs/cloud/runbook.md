@@ -174,7 +174,13 @@ Each run does one unit of work, then exits.
    - This is a gate change, so list it under `Gate changes:`.
    - *Rejected alternative:* a second GitHub account's token inside a routine. The cloud refused to use a credential embedded in a prompt (2026-09-19), and it is weaker than a bot identity.
 4. The D-27 strike and reversal (plan step 1 and step 3 item), then the SECURITY.md reorder, the README move, and the #74/#103 raw API evidence.
-5. **The gate-4 record is already on this branch** under `docs/design/gate4/`: the v4 canvas source, PNGs and a README. It lands with the runbook PR. After it lands, open a `needs-owner` issue with links to the PNGs on `main`, asking the owner to approve gate 4 (C-24).
+5. **The gate-4 ledger, on #189 — not a second question.** The record itself lands with the runbook PR, under `docs/design/gate4/`: the v4 canvas source, the nine PNGs and a README. **#189 already carries an `OWNER: gate 4 approved` comment** (2026-09-19T13:23Z), so do **not** open another `needs-owner` issue asking for the approval; that question has been asked and answered. What is outstanding is the ledger work, in this order:
+   - settle on #189 the six-against-nine count the Environment section above records, because the answer names six screens against a directory of nine and the row must not inherit that ambiguity;
+   - write the decision row, naming the screens it approves and superseding the D-45 conflict;
+   - point C-24's citation at that row;
+   - only then unblock ADR-0006 step 9 and the wave-4 design.
+
+   If the count is still unsettled, ask on #189 rather than opening a new issue.
 6. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
 7. Step 6c performance budgets (#62): budgets measurable in CI without a packaged launch (bundle size, dev-server palette open in Playwright), each labelled as not the packaged app. The packaged baseline is owner/VM.
 8. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also settle #17, #16, #80, #23 and #95, each with evidence pasted from `main`. (Deliberately not the word this list used to carry: GitHub's parser reads a closing keyword next to an issue number and shuts the issue, and §1 step 6 has conductors build PR bodies from these lines. §0 rule 3 and `docs/traps.md`.)
@@ -183,13 +189,13 @@ Each run does one unit of work, then exits.
 1. ADR-0006 step 6. Decide #183 first and record the decision.
 2. Steps 7, 8 and 11.
 3. Step 10: prepare the packaged end-to-end script and its runbook, then open a `needs-owner` issue, because it needs a packaged launch.
-4. Step 9 only after gate 4 is approved and lane B's W3-8 has merged. Until then it is blocked.
+4. Step 9 only once **the gate-4 decision row exists and C-24 cites it** (lane C item 5 — the `OWNER:` comment on #189 is not that row, and on its own does not release this), and lane B's W3-8 has merged. Until both, it is blocked.
 5. Then #68 (a decision row), #91 and #172, and the plan step 6b ticks.
 
 **Lane B, UI:**
 1. W3-2 to W3-8, in the order and ownership of `docs/design/WAVE3-PLAN.md`.
 2. #146, #111, #22, #21 and #20.
-3. Plan step 6 (wave 4), only once gate 4 is approved. Until then, W3 work and the issues come first.
+3. Plan step 6 (wave 4), only once **the gate-4 decision row exists and C-24 cites it** (lane C item 5 — the `OWNER:` comment on #189 is not that row). Until then, W3 work and the issues come first.
 4. Step 6c keyboard work: `describeHotkey` and the focus-order specs.
 5. The step 6c heuristic benchmark review, done by the reviewer routine on opus, never by a lane that built the UI.
 
