@@ -10,6 +10,25 @@ Shared state lives in GitHub, never in a session:
 
 You start with no memory, so re-derive everything.
 
+## Authorization and environment (measured on 2026-09-19 by cloud probes)
+
+- **Authorization.** The repository owner (GitHub login `LEAPWare-HQ`) created these routines from the owner's own Claude account. The order they gave: "fully run cloud jobs only and get this product done while I travel". Unattended routines are authorized to write to LEAPWare-Software/LEAPWare-ShellUX in exactly these ways, and no others:
+  - push branches `lane-*`, `docs/*`, `cloud/*` and `reviews/buildcraft`;
+  - open, update and label PRs;
+  - comment on #187, on `needs-owner` issues and on PRs;
+  - open `needs-owner` issues;
+  - `gh pr merge --squash --auto`, which goes through the merge queue.
+
+  Never push to `main`. D-52 records the parallel lanes.
+- **Environment.**
+  - `gh` is not preinstalled. Install it first: `(sudo apt-get install -y -qq gh || apt-get install -y -qq gh)`. `GH_TOKEN` is set, and git pushes go through a proxy.
+  - Use `npx -y npm@11.16.0 ci`, because the VM's npm is 10.x.
+  - **Run every long command in the FOREGROUND.** A backgrounded command is killed when the session ends, and its result is lost.
+- **Agents.** The `lw-*` roles are in `.claude/agents/` on `main` once lane C lands them. Until then, read `.claude/agents/lw-<role>.md` from `origin/cloud/runbook` and dispatch a general-purpose subagent with that file's instructions and its `model`.
+- **Deliverables go to files or comments, never only to your final message.** The run-log reader truncates final messages.
+- **Not doable in the cloud:** anything that launches the packaged Electron app. `desktop.yml` runs only on tags or a manual dispatch, never launches Electron, and has no Linux leg. That covers ADR-0006 step 10 (packaged end to end), the step 6c #62 baseline on the packaged app, and step 8's icon build-log check. These are **owner/VM items**. Prepare them, open a `needs-owner` issue, and move on.
+- **Gate 4 is not approved** (C-24 is unticked, and the owner does not recognise D-45). Anything that says "per the approved gate-4 wireframe" is **blocked**: ADR-0006 step 9 (plugin manager UI) and the wave-4 design. Lane C commits the gate-4 record to the repo so the owner can approve it. Until the owner approves, those items wait.
+
 ## 0. Hard rules (every routine)
 
 1. **Stop at the boundaries:** anything only the owner can do, the clean Windows VM (plan step 9), and BuildCraft (steps 9b and 10). Never tag, publish a release, or change repository settings or rulesets. Never merge any way except the merge queue. When you reach a boundary, open or update a `needs-owner` issue and move to the next item.
@@ -39,6 +58,7 @@ Each run does one unit of work, then exits.
    - `main` green: the latest runs of CI, Browser and Prove claims on `main`. **If `main` is red, fix that first**, whichever lane caused it, then exit.
    - `npm run status`.
    - Your lane's open PRs: `gh pr list --label lane-<x>`.
+   For `docs/handoff-package`, a `LOCAL LOCK` comment on #187 also counts: skip that branch until the lock says RELEASED, or until 4 hours pass with no new commit on it.
 4. **Choose the work, in this order:**
    1. an open lane PR with an unaddressed review;
    2. an open lane PR whose checks failed;
@@ -99,21 +119,22 @@ Each run does one unit of work, then exits.
    - open a PR.
 2. **Land this runbook and `.claude/agents/lw-*.md`** from branch `cloud/runbook`, as its own PR.
 3. The D-27 strike and reversal (plan step 1 and step 3 item), then the SECURITY.md reorder, the README move, and the #74/#103 raw API evidence.
-4. The gate-4 record committed under `docs/design/`. Gate-4 approval stays with the owner (C-24).
+4. **Commit the gate-4 record** under `docs/design/gate4/`: the six screens as static HTML or PNG from the published canvas `https://claude.ai/code/artifact/c5ad2085-40fa-419c-b64b-f211c2f9c5d2`, plus the critique and how it was resolved. Then open a `needs-owner` issue asking the owner to approve them (C-24).
 5. Plan step 8, items 1–6 (not tagging), then step 7's sourcemaps.
-6. Step 6c performance budgets (#62).
+6. Step 6c performance budgets (#62): budgets measurable in CI without a packaged launch (bundle size, dev-server palette open in Playwright), each labelled as not the packaged app. The packaged baseline is owner/VM.
 7. Issues #92, #129, #155, #24, #25, #26, #43, #85, #86. Also close #17, #16, #80, #23 and #95, each with evidence pasted from `main`.
 
 **Lane A, plugin host:**
 1. ADR-0006 step 6. Decide #183 first and record the decision.
-2. Steps 7, 8, 10 and 11.
-3. Step 9, after lane B's W3-8 has merged.
+2. Steps 7, 8 and 11.
+3. Step 10: prepare the packaged end-to-end script and its runbook, then open a `needs-owner` issue, because it needs a packaged launch.
+4. Step 9 only after gate 4 is approved and lane B's W3-8 has merged. Until then it is blocked.
 4. Then #68 (a decision row), #91 and #172, and the plan step 6b ticks.
 
 **Lane B, UI:**
 1. W3-2 to W3-8, in the order and ownership of `docs/design/WAVE3-PLAN.md`.
 2. #146, #111, #22, #21 and #20.
-3. Plan step 6 (wave 4).
+3. Plan step 6 (wave 4), only once gate 4 is approved. Until then, W3 work and the issues come first.
 4. Step 6c keyboard work: `describeHotkey` and the focus-order specs.
 5. The step 6c heuristic benchmark review, done by the reviewer routine on opus, never by a lane that built the UI.
 
