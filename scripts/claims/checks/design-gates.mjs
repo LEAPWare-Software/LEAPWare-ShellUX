@@ -15,6 +15,11 @@ const point = (p) => new RegExp(`${p.replace('.', '\\.')}(?!\\d|\\.\\d)`);
 const points = ['§3', '§4', '§9', '§13.1'].filter((p) => point(p).test(d40));
 console.log(`d40_owner=${cells(d40)[3] === 'Owner' ? 1 : 0}`);
 console.log(`d40_gate_points=${points.length}`);
+// C-22 (proof audit item 31): the box was reworded to attribute confirmation of these
+// gate points to the CTO, under an explicit 2026-09-19 delegation — corrected from the
+// original wording, which said "Owner confirms". This checks that D-40 actually carries
+// that dated delegation note, not merely that the row itself exists.
+console.log(`d40_delegation_note=${/2026-09-19: the owner delegated these gate points to the CTO; the CTO confirms §3, §4, §9, and §13\.1 as moot under D-32\./.test(d40) ? 1 : 0}`);
 
 const design = existsSync('DESIGN.md') ? readFileSync('DESIGN.md', 'utf8') : '';
 const generatedRaw = readFileSync('src/styles/tokens.generated.css', 'utf8');

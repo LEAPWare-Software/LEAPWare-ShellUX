@@ -1,0 +1,89 @@
+C-16 manual reproduction, 2026-09-19 (proof audit item 22)
+============================================================
+
+Why manual: claims.yml (the environment the registered checks run in) installs no
+Playwright browser (grep -n -i "playwright|chromium|browser" .github/workflows/claims.yml
+is empty), so a `repo`-class probe that runs `npx playwright test` inside a scratch
+worktree during `prove-claims.mjs` would fail there regardless of the chart fix's own
+correctness. This file is the raw, one-off reproduction instead, run locally where
+Chromium *is* installed (Playwright 1.63.0; `npx playwright --version`).
+
+Method
+------
+1. `git worktree add --detach C:\Users\manny.ramos\leapware-hq\.workspaces\c16-repro 1248f02`
+   (1248f02 = the merge commit of PR #148, "repairs #112, #113; addresses #111").
+2. `node_modules` symlinked in from the main tree (no reinstall).
+3. Baseline: `npx playwright test e2e/chart.spec.ts --reporter=list` at 1248f02, unmodified.
+4. Revert: `git checkout 1248f02^1 -- src/core/chart/echartsRenderer.ts src/components/chart/Chart.tsx`
+   (1248f02^1 = a59c15f, the commit immediately before the fix).
+5. Mutated: `npx playwright test e2e/chart.spec.ts --reporter=list` again.
+6. Restore: `git checkout 1248f02 -- src/core/chart/echartsRenderer.ts src/components/chart/Chart.tsx`,
+   then re-ran the suite a third time to confirm the restore was exact (5 passed again).
+7. `git worktree remove --force` the scratch worktree.
+
+Baseline (at 1248f02, unmodified) — RAW OUTPUT
+-----------------------------------------------
+Running 5 tests using 1 worker
+
+  ok 1 [chromium] › e2e\chart.spec.ts:282:3 › a real chart, really drawn › initialises ECharts into a canvas with a non-zero box, silently (1.0s)
+  ok 2 [chromium] › e2e\chart.spec.ts:316:3 › a real chart, really drawn › reveals the same chart's numbers in the block inspector (959ms)
+  ok 3 [chromium] › e2e\chart.spec.ts:331:5 › a real chart, really drawn › draws no title into the canvas and keeps the DOM heading clear of every axis string, in Mail, at the default and the minimum pane width (1.1s)
+  ok 4 [chromium] › e2e\chart.spec.ts:331:5 › a real chart, really drawn › draws no title into the canvas and keeps the DOM heading clear of every axis string, in Database, at the default and the minimum pane width (1.8s)
+  ok 5 [chromium] › e2e\chart.spec.ts:407:3 › a real chart, really drawn › paints the heading as DOM text clearing 4.5:1 on the pane, and the plot on the well the series were validated against, in every theme (737ms)
+
+  5 passed (7.9s)
+
+Mutated (echartsRenderer.ts and Chart.tsx reverted to 1248f02^1) — RAW OUTPUT
+-------------------------------------------------------------------------------
+Running 5 tests using 1 worker
+
+  ok 1 [chromium] › e2e\chart.spec.ts:282:3 › a real chart, really drawn › initialises ECharts into a canvas with a non-zero box, silently (904ms)
+  ok 2 [chromium] › e2e\chart.spec.ts:316:3 › a real chart, really drawn › reveals the same chart's numbers in the block inspector (891ms)
+  x  3 [chromium] › e2e\chart.spec.ts:331:5 › a real chart, really drawn › draws no title into the canvas and keeps the DOM heading clear of every axis string, in Mail, at the default and the minimum pane width (713ms)
+  x  4 [chromium] › e2e\chart.spec.ts:331:5 › a real chart, really drawn › draws no title into the canvas and keeps the DOM heading clear of every axis string, in Database, at the default and the minimum pane width (1.1s)
+  x  5 [chromium] › e2e\chart.spec.ts:407:3 › a real chart, really drawn › paints the heading as DOM text clearing 4.5:1 on the pane, and the plot on the well the series were validated against, in every theme (707ms)
+
+  1) [chromium] › e2e\chart.spec.ts:331:5 › ... in Mail ...
+     Error: Mail, default pane width: the heading is not a painted line of text
+     expect(received).toBeGreaterThanOrEqual(expected)
+     Expected: >= 12
+     Received:    1
+
+  2) [chromium] › e2e\chart.spec.ts:331:5 › ... in Database ...
+     Error: expect(headingBox.height, "...the heading is not a painted line of text").toBeGreaterThanOrEqual(12)
+     Expected: >= 12
+     Received:    1
+
+  3) [chromium] › e2e\chart.spec.ts:407:3 › ... every theme
+     Error: expect(received).toBe(expected) // Object.is equality
+     Expected: "500"
+     Received: "400"
+     (paint.fontWeight assertion, DESIGN.md's 500-weight label)
+
+  3 failed
+    [chromium] › e2e\chart.spec.ts:331:5 › ... in Mail ...
+    [chromium] › e2e\chart.spec.ts:331:5 › ... in Database ...
+    [chromium] › e2e\chart.spec.ts:407:3 › ... every theme
+  2 passed (7.7s)
+
+Restore — RAW OUTPUT
+---------------------
+Running 5 tests using 1 worker
+
+  ok 1 [chromium] › e2e\chart.spec.ts:282:3 (899ms)
+  ok 2 [chromium] › e2e\chart.spec.ts:316:3 (858ms)
+  ok 3 [chromium] › e2e\chart.spec.ts:331:5 › ... in Mail ... (928ms)
+  ok 4 [chromium] › e2e\chart.spec.ts:331:5 › ... in Database ... (1.6s)
+  ok 5 [chromium] › e2e\chart.spec.ts:407:3 › ... every theme (680ms)
+
+  5 passed (6.8s)
+
+`git status --short` after the restore checkout: empty (files byte-identical to 1248f02).
+
+Conclusion
+----------
+Matches the PR #148 body's own claim ("Whole fix reverted: ... went red") exactly:
+3 of 5 browser-lane cases fail when both fix files are reverted to their pre-fix
+state, and all 5 pass at the fix commit and again after the restore. This file is
+the primary, reproduced evidence for C-16; the PR-body text remains the row's
+secondary, existing evidence (still checked live by `gh pr view 148 --json body`).

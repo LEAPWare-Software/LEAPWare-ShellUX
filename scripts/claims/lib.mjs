@@ -139,6 +139,11 @@ const GH_API_PATHS = [
   // here, and pinned to this repository's own exact query so it cannot become a general
   // search escape hatch.
   /^search\/issues\?q=repo:LEAPWare-Software\/LEAPWare-ShellUX\+is:issue\+is:open\+no:milestone$/,
+  // C-31 (proof audit item 27) needs one live list: the comments on the one issue the
+  // crash-dispatch rollout case (rollout step 3) filed. A general issues/comments list
+  // endpoint stays rejected for every other issue number and repo; pinned to this
+  // repository's own #174 so it cannot become a general list escape hatch.
+  /^repos\/LEAPWare-Software\/LEAPWare-ShellUX\/issues\/174\/comments$/,
 ];
 
 /** The first git argument after the subcommand that is not an allowed flag, or null. */

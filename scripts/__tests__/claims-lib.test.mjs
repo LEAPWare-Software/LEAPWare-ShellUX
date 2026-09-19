@@ -116,6 +116,13 @@ describe('the argv allowlist (§3.1)', () => {
     // are still rejected on it, exactly as on every other gh api path.
     no(['gh', 'api', 'search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:issue+is:open+no:milestone', '-X', 'POST'], 'github', /-X/);
     no(['gh', 'api', 'search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:issue+is:open+no:milestone', '-f', 'q=x'], 'github', /rejected/);
+    // C-31's one comments-list exception: pinned to this exact repo and this exact issue
+    // number (#174, the rollout-step-3 crash issue). Every other issue's comments, and a
+    // bare issues/comments path, stay rejected.
+    ok(['gh', 'api', 'repos/LEAPWare-Software/LEAPWare-ShellUX/issues/174/comments', '--jq', '.[].body'], 'github');
+    no(['gh', 'api', 'repos/LEAPWare-Software/LEAPWare-ShellUX/issues/175/comments'], 'github', /single-object/);
+    no(['gh', 'api', 'repos/o/r/issues/174/comments'], 'github', /single-object/);
+    no(['gh', 'api', 'repos/LEAPWare-Software/LEAPWare-ShellUX/issues/174/comments', '-X', 'POST'], 'github', /-X/);
     // gh views: verbs, ids, flags
     no(['gh', 'pr', 'list'], 'github', /only "view"/);
     no(['gh', 'pr', 'view', 'abc'], 'github', /number/);

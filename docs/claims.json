@@ -382,480 +382,480 @@
     },
     {
       "id": "C-05",
-        "box": "Triage the Dependabot PRs. Every Dependabot pull request opened through 2026-09-18 — 30 in total, #34 to #140 — is merged or closed, none left open; the D-28 pin landed separately in `.github/dependabot.yml` as the human-authored #130 (MERGED). It does not mean the queue stays empty going forward: Dependabot can open a new PR at any time after this date.",
-        "class": "github",
-        "checks": [
-          [
-            "gh",
-            "pr",
-            "view",
-            "34",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr34_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "35",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr35_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "36",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr36_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "37",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr37_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "38",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr38_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "96",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr96_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "97",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr97_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "98",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr98_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "99",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr99_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "116",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr116_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "117",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr117_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "118",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr118_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "119",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr119_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "120",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr120_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "121",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr121_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "122",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr122_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "123",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr123_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "124",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr124_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "125",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr125_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "127",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr127_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "131",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr131_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "132",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr132_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "133",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr133_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "134",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr134_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "135",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr135_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "136",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr136_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "137",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr137_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "138",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr138_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "139",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr139_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "140",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr140_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
-          ],
-          [
-            "gh",
-            "pr",
-            "view",
-            "130",
-            "--json",
-            "state",
-            "--jq",
-            "\"pr130=(.state)\""
-          ]
+      "box": "Triage the Dependabot PRs. Every Dependabot pull request opened through 2026-09-18 — 30 in total, #34 to #140 — is merged or closed, none left open; the D-28 pin landed separately in `.github/dependabot.yml` as the human-authored #130 (MERGED). It does not mean the queue stays empty going forward: Dependabot can open a new PR at any time after this date.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "pr",
+          "view",
+          "34",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr34_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
         ],
-        "expect": [
-          {
-            "key": "pr34_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr35_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr36_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr37_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr38_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr96_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr97_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr98_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr99_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr116_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr117_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr118_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr119_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr120_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr121_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr122_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr123_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr124_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr125_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr127_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr131_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr132_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr133_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr134_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr135_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr136_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr137_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr138_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr139_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr140_disposed",
-            "op": "==",
-            "value": 1
-          },
-          {
-            "key": "pr130",
-            "op": "==",
-            "value": "MERGED"
-          }
+        [
+          "gh",
+          "pr",
+          "view",
+          "35",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr35_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
         ],
-        "provenOn": "2026-09-19",
-        "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 17): the old check hand-picked 15 of the 30 Dependabot PRs opened through 2026-09-18 (missing #34,35,36,37,38,96,97,98,99,116,121,122,123,124,125,127), so a PR left open outside that hand-picked list would have gone unnoticed. `gh pr list --author app/dependabot --state all` (a list endpoint, usable here only to build this row, not inside a registered check under the argv allowlist) enumerated the full 30; every one is now checked by id via `gh pr view` and asserted not OPEN (merged or closed, either being an acceptable disposition)."
-      },
+        [
+          "gh",
+          "pr",
+          "view",
+          "36",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr36_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "37",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr37_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "38",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr38_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "96",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr96_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "97",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr97_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "98",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr98_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "99",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr99_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "116",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr116_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "117",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr117_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "118",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr118_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "119",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr119_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "120",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr120_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "121",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr121_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "122",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr122_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "123",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr123_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "124",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr124_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "125",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr125_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "127",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr127_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "131",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr131_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "132",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr132_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "133",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr133_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "134",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr134_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "135",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr135_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "136",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr136_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "137",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr137_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "138",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr138_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "139",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr139_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "140",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr140_disposed=\\(if .state == \"OPEN\" then 0 else 1 end)\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "130",
+          "--json",
+          "state",
+          "--jq",
+          "\"pr130=(.state)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "pr34_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr35_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr36_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr37_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr38_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr96_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr97_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr98_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr99_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr116_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr117_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr118_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr119_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr120_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr121_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr122_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr123_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr124_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr125_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr127_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr131_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr132_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr133_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr134_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr135_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr136_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr137_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr138_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr139_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr140_disposed",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "pr130",
+          "op": "==",
+          "value": "MERGED"
+        }
+      ],
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 17): the old check hand-picked 15 of the 30 Dependabot PRs opened through 2026-09-18 (missing #34,35,36,37,38,96,97,98,99,116,121,122,123,124,125,127), so a PR left open outside that hand-picked list would have gone unnoticed. `gh pr list --author app/dependabot --state all` (a list endpoint, usable here only to build this row, not inside a registered check under the argv allowlist) enumerated the full 30; every one is now checked by id via `gh pr view` and asserted not OPEN (merged or closed, either being an acceptable disposition)."
+    },
     {
       "id": "C-06",
       "box": "React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0: the lockfile resolves React and React DOM to 18.3.1, not a stray 19.x from a transitive bump.",
@@ -967,7 +967,7 @@
     },
     {
       "id": "C-08",
-      "box": "HANDOFF.md → ≤3000 bytes. It keeps only the transition: where main is, what landed, what is in flight, the next step. §2–§12 move verbatim to `docs/history/handoff-archive-2026-08.md`.",
+      "box": "HANDOFF.md → ≤3000 bytes. It keeps only the transition: where main is, what landed, what is in flight, the next step. §2–§12 move verbatim (relative-link rewrites aside) to `docs/history/handoff-archive-2026-08.md`.",
       "class": "repo",
       "checks": [
         [
@@ -985,6 +985,11 @@
           "key": "handoff_archive",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "handoff_archive_verbatim",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
@@ -996,8 +1001,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 19): \"§2-§12 verbatim\" was existence-only (the archive file existing). context-caps.mjs now diffs the archived §2-§12 body against `git show 5b3a6ff~1:HANDOFF.md`'s own §2-§12, normalising only markdown link targets (the rewrites the move itself needed, e.g. `](docs/x.md)` to `](../x.md)`); confirmed equal on 2026-09-19."
     },
     {
       "id": "C-09",
@@ -1102,7 +1107,7 @@
     },
     {
       "id": "C-11",
-      "box": "`git add` the new files before running `verify` (the portability trap). Citations must still resolve: moved text keeps its `*Tests:*` markers.",
+      "box": "Citations must still resolve: moved text keeps its `*Tests:*` markers.",
       "class": "repo",
       "checks": [
         [
@@ -1134,8 +1139,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — reworded 2026-09-19 (proof audit item 20): the clause \"git add the new files before running verify (the portability trap)\" is a process step performed once, not a fact about the tree that a check can re-verify; removed from the box and the plan item text. The citations clause, which the check does verify, is kept."
     },
     {
       "id": "C-12",
@@ -1266,7 +1271,7 @@
     },
     {
       "id": "C-15",
-      "box": "Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: repairs #112 (title overprint) and #113 (title outside the token system, dark contrast), and addresses #111 (contrast gate measured against a background the app never paints), which stays open. Landed in the charts PR. #146 (Database chart clipped) filed, not fixed.",
+      "box": "Stream A: repairs #112 (title overprint) and #113 (title outside the token system, dark contrast), and addresses #111 (contrast gate measured against a background the app never paints), which stays open. Landed in the charts PR (#148), which also touched shared files (`design/tokens/semantic.json`, `design/check-contrast.mjs`, `package.json`) — not disjoint from other streams. #146 (Database chart clipped) filed, not fixed.",
       "class": "github",
       "checks": [
         [
@@ -1278,6 +1283,16 @@
           "state,title",
           "--jq",
           "\"pr148_state=\\(.state)\", \"pr148_repairs_112_113=\\(.title | test(\"repairs #112, #113; addresses #111\"))\""
+        ],
+        [
+          "gh",
+          "pr",
+          "view",
+          "148",
+          "--json",
+          "files",
+          "--jq",
+          "\"pr148_shared_files_touched=\\([.files[].path] | map(select(. == \"design/tokens/semantic.json\" or . == \"design/check-contrast.mjs\" or . == \"package.json\")) | length)\""
         ],
         [
           "gh",
@@ -1350,10 +1365,15 @@
           "key": "issue146_state",
           "op": "==",
           "value": "OPEN"
+        },
+        {
+          "key": "pr148_shared_files_touched",
+          "op": "==",
+          "value": 3
         }
       ],
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — reworded 2026-09-19 (proof audit item 21): \"disjoint files\" was false — `gh pr view 148 --json files` shows it also touched `design/tokens/semantic.json`, `design/check-contrast.mjs` and `package.json`, shared with other streams. The box now states that plainly and the row asserts those three shared files are among #148's changed files, rather than claiming disjointness."
     },
     {
       "id": "C-16",
@@ -1378,8 +1398,8 @@
           "value": "true"
         }
       ],
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — corroborated 2026-09-19 (proof audit item 22): this row's automated check only re-read the PR-body sentence, which is itself the author's own report. claims.yml installs no Chromium (`grep -i playwright .github/workflows/claims.yml` is empty), so a probe cannot run the real revert-and-test inside prove-claims here; instead the revert was reproduced by hand — echartsRenderer.ts and Chart.tsx reset to `1248f02^1`, e2e/chart.spec.ts run with Playwright 1.63.0/Chromium (locally installed), 3 of 5 cases failed, then the files were restored and the suite re-ran green. Raw output: docs/claims-evidence/C-16-revert-repro-2026-09-19.txt (primary evidence; the PR-body check above is kept as secondary, still live)."
     },
     {
       "id": "C-17",
@@ -1526,7 +1546,7 @@
     },
     {
       "id": "C-19",
-      "box": "Scan the published history for secrets with gitleaks: every commit on `main`, plus the lockfile as it stands, which `gitleaks git` cannot read because `.gitattributes` marks it `-diff`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated**; deleting it from history is not enough. Run 2026-09-18 **after** the flip, because gitleaks could not run before it (D-43, whose pre-flip check was a grep of every commit): no leaks. Raw output, the commit counts, and the two false positives an all-refs scan finds are in the row's evidence file.",
+      "box": "Scan the published history for secrets with gitleaks: every commit on `main`, plus the lockfile as it stands, which `gitleaks git` cannot read because `.gitattributes` marks it `-diff`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated**; deleting it from history is not enough. `.gitleaks.toml` allowlists 3 confirmed-false `generic-api-key` matches on the `\"key\": \"<name>\"` shape in `docs/claims.json`, scoped to that exact shape and path. Re-run 2026-09-19 with the allowlist: no leaks. Raw output, the commit counts, and the triage of the 3 false positives are in the row's evidence file.",
       "class": "manual",
       "expect": [
         {
@@ -1540,9 +1560,9 @@
           "value": 0
         }
       ],
-      "evidence": "docs/claims-evidence/C-19-gitleaks-full-history-2026-09-18.txt",
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "evidence": "docs/claims-evidence/C-19-gitleaks-full-history-2026-09-19.txt",
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — re-run 2026-09-19 (proof audit item 23): the 2026-09-18 evidence was stale (main has moved on) and its own all-refs scan already noted 2 generic-api-key false positives on unmerged branches, uninvestigated for main itself. Re-running gitleaks 8.30.1 against origin/main directly found 3 (not 2) generic-api-key matches, all the register's own `\"key\": \"<name>\"` field shape in docs/claims.json from commit 06ec066; triaged by hand (raw match text in the evidence file — expectation names, not secrets) and allowlisted narrowly in .gitleaks.toml (exact shape, exact path). Re-scan after the allowlist: no leaks, either scan. Superseded evidence kept at docs/claims-evidence/C-19-gitleaks-full-history-2026-09-18.txt."
     },
     {
       "id": "C-20",
@@ -1593,8 +1613,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — cross-checked 2026-09-19 (proof audit item 24): the box's \"Sessionkeeper ships LICENSE (Apache-2.0, 201 lines)\" clause is about a different repository (LEAPWare-Software/LEAPWare-SessionKeeper, found via `gh repo list LEAPWare-Software`), which this row's `repo`-class check cannot read live (a `gh api` call is `github`-class only, and cannot be mixed with this row's local `node` check under the argv allowlist). Confirmed by hand: `gh api repos/LEAPWare-Software/LEAPWare-SessionKeeper/contents/LICENSE --jq .content | base64 -d` is 201 lines, opening \"Apache License / Version 2.0, January 2004\" — the clause holds, but is reported here as a manual finding, not machine-proved by this row."
     },
     {
       "id": "C-21",
@@ -1621,7 +1641,7 @@
     },
     {
       "id": "C-22",
-      "box": "Owner confirms or overrides the SHAPE-BRIEF gate points: §3 editorial voice, §4 the 11–13px scale, §9 palette arrow-keys, §13.1. Each goes into DECISIONS.md.",
+      "box": "The CTO confirms or overrides the SHAPE-BRIEF gate points: §3 editorial voice, §4 the 11–13px scale, §9 palette arrow-keys, §13.1 (the owner delegated these calls to the CTO on 2026-09-19). Each goes into DECISIONS.md.",
       "class": "repo",
       "checks": [
         [
@@ -1639,22 +1659,27 @@
           "key": "d40_gate_points",
           "op": "==",
           "value": 4
+        },
+        {
+          "key": "d40_delegation_note",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
-        "name": "drop §13.1 from D-40",
+        "name": "drop the 2026-09-19 delegation note from D-40",
         "edits": [
           {
             "file": "docs/DECISIONS.md",
             "replace": [
-              "§13.1 (redesign before #65) is moot",
-              "redesign before #65 is moot"
+              "**2026-09-19: the owner delegated these gate points to the CTO; the CTO confirms §3, §4, §9, and §13.1 as moot under D-32.**",
+              "the CTO confirms these"
             ]
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — reworded 2026-09-19 (proof audit item 31): \"Owner confirms\" was factually wrong — the original D-40 row records the owner's 2026-09-18 call on the gate points themselves, not an ongoing confirming role. The correct attribution, per the owner's explicit 2026-09-19 delegation, is that the CTO confirms these; the box is reworded and D-40 gained a dated delegation note, which this row's check now verifies by its exact text (d40_delegation_note), not merely D-40's existence."
     },
     {
       "id": "C-23",
@@ -1707,43 +1732,6 @@
       },
       "provenOn": "2026-09-19",
       "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit): the old check only asked whether a DESIGN.md hex appeared ANYWHERE in the generated stylesheet, which a wrong-but-still-generated hex would satisfy; it also missed 3/8-digit hex and rgb()/hsl()/oklch() forms entirely. The new check binds each named colour to the CSS custom property named beside it in the body and compares against that property's own generated value."
-    },
-    {
-      "id": "C-24",
-      "box": "**Owner approves gate 4:** the six gate-4 screens are approved (D-45).",
-      "class": "repo",
-      "checks": [
-        [
-          "node",
-          "scripts/claims/checks/design-gates.mjs"
-        ]
-      ],
-      "expect": [
-        {
-          "key": "d45_owner",
-          "op": "==",
-          "value": 1
-        },
-        {
-          "key": "d45_screens_approved",
-          "op": "==",
-          "value": 1
-        }
-      ],
-      "probe": {
-        "name": "D-45 not yet approved",
-        "edits": [
-          {
-            "file": "docs/DECISIONS.md",
-            "replace": [
-              "gate-4 screens are approved",
-              "gate-4 screens are awaiting approval"
-            ]
-          }
-        ]
-      },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
     },
     {
       "id": "C-25",
@@ -1799,7 +1787,7 @@
     },
     {
       "id": "C-26",
-      "box": "#85 for Electron: set Vite `build.target` to the Chromium version Electron 43 ships. The Safari half is moot because the target is Electron only. Verify that `base` is correct for `file://` loading by launching the packaged app. `chrome150`, measured from Electron 43.2.0; the packaged renderer loads over the `shellux://` scheme, not `file://`. The packaged launch is recorded in #150 and is not re-checked by the row.",
+      "box": "#85 for Electron: set Vite `build.target` to the Chromium version Electron 43 ships. The Safari half is moot because the target is Electron only. Verify that `base` is correct for `file://` loading by launching the packaged app. `chrome150`, measured from Electron 43.2.0; the packaged renderer loads over the `shellux://` scheme, not `file://`. The packaged launch is measured, not just recorded: `docs/measurements/csp-2026-09-18.json` (via `scripts/csp-smoke.mjs`) shows zero CSP violations on both surfaces, real DOM content extracted from the Mail and Database fixtures, a drawn chart canvas, a shown tooltip, a completed pointer drag and an opened command palette — the renderer loaded and ran, not merely the executable starting.",
       "class": "repo",
       "checks": [
         [
@@ -1827,6 +1815,36 @@
           "key": "scheme_privileged",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "csp_smoke_ok",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "csp_extension_violations",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "csp_chrome_violations",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "csp_renderer_content_extracted",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "csp_tooltip_and_drag",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "csp_palette_opened",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
@@ -1841,8 +1859,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 26): the row cited #150's packaged launch by number without reading it. docs/measurements/csp-2026-09-18.json's final run does show the renderer loaded and ran (extracted DOM text from both fixtures, a drawn canvas, a shown tooltip, a completed drag, an opened palette, zero CSP violations); build-target.mjs now reads that file directly and the box cites it explicitly as the proof."
     },
     {
       "id": "C-27",
@@ -1951,6 +1969,11 @@
           "key": "ticked_items_without_tag",
           "op": "==",
           "value": 0
+        },
+        {
+          "key": "new_checks_required",
+          "op": "==",
+          "value": 2
         }
       ],
       "probe": {
@@ -1965,8 +1988,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit item 26): `new_checks_required` was printed by the check but never asserted, so it could silently read 0, 1 or 2 with no failure. PR B (register row C-37) has since made both checks required, so its correct current value is 2; added to the expectation."
     },
     {
       "id": "C-29",
@@ -2390,6 +2413,13 @@
           "author",
           "--jq",
           "\"issue_174_author=\\(.author.login)\""
+        ],
+        [
+          "gh",
+          "api",
+          "repos/LEAPWare-Software/LEAPWare-ShellUX/issues/174/comments",
+          "--jq",
+          "\"issue_174_bot_comment=\\([.[] | select(.user.login == \"github-actions[bot]\" and (.body|contains(\"35427454734\")))] | length)\""
         ]
       ],
       "expect": [
@@ -2437,10 +2467,15 @@
           "key": "issue_174_author",
           "op": "==",
           "value": "app/github-actions"
+        },
+        {
+          "key": "issue_174_bot_comment",
+          "op": "==",
+          "value": 1
         }
       ],
       "provenOn": "2026-09-19",
-      "addedBy": "rollout step 3 record (docs/rollout-step3-record)"
+      "addedBy": "rollout step 3 record (docs/rollout-step3-record) — tightened 2026-09-19 (proof audit item 27): the row checked the crash dispatch's CI job conclusion and that issue #174 exists, but never that the crash run actually commented on it. Added `repos/.../issues/174/comments` (a new, narrowly pinned entry in the gh api allowlist, scripts/claims/lib.mjs, GH_API_PATHS) and asserted exactly one comment from github-actions[bot] naming the crash run id (35427454734)."
     },
     {
       "id": "C-32",
@@ -3041,5 +3076,45 @@
       "addedBy": "plan step 6b tick (docs/proof-rows-done-work) — tightened 2026-09-19 (proof audit): install_mismatch_test and serve_mismatch_test only grepped the test file for the title string, so they stayed green even when the install-time comparison was inverted (measured: git show + sed inversion left both =1 on the old check). They now run each named Vitest test for real (spawnSync to node_modules/vitest/vitest.mjs, not through the argv allowlist, which governs only the row's own registered command) and assert exit 0."
     }
   ],
-  "retired": []
+  "retired": [
+    {
+      "id": "C-24",
+      "box": "**Owner approves gate 4:** the six gate-4 screens are approved (D-45).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/design-gates.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "d45_owner",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d45_screens_approved",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "D-45 not yet approved",
+        "edits": [
+          {
+            "file": "docs/DECISIONS.md",
+            "replace": [
+              "gate-4 screens are approved",
+              "gate-4 screens are awaiting approval"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-18",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)",
+      "retiredBy": "proof audit 2026-09-19 (item 32)",
+      "reason": "D-45 recorded an owner approval the owner does not recognise as theirs; the row cited that approval as proven fact. The plan item is unticked (docs/plans/v1-production.md, Step 3b) with a one-line reason and a link to the screens for real owner review. D-45 is corrected in place (struck through, annotated, not deleted) rather than rewritten."
+    }
+  ]
 }

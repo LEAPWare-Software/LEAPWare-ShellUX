@@ -10,7 +10,7 @@ forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6)."
 
 Sources, in the order they win when they disagree:
 
-1. **The approved gate-4 screens, revision 4** (D-45): *Shell at rest* (light and dark),
+1. **The gate-4 screens, revision 4** (D-45; **correction, 2026-09-19: the owner does not recognise D-45's approval as theirs — pending owner review, not yet approved**): *Shell at rest* (light and dark),
    *Command palette*, *Palette states*, *Plugin manager*, *States*, *Collapsed rail and
    selection toolbar*, *Notifications*, *After Reverse movement: undo strip*. Revision 4
    is the one with the independent critique resolved on the canvas. The canvas is a
