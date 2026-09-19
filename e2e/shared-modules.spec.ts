@@ -183,7 +183,7 @@ test.describe('the dev server', () => {
     expectOneReact(await observe(page, baseURL ?? ''));
   });
 
-  test('serves each of the three /shared/ modules as script, and no other name under /shared/, prototype names included', async ({
+  test('serves each of the three /shared/ modules as script, and no other name under /shared/', async ({
     request,
   }) => {
     for (const name of ['react', 'react-jsx-runtime', 'sdk']) {
@@ -194,9 +194,11 @@ test.describe('the dev server', () => {
     // Vite's SPA fallback answers an unknown path with the HTML shell and a 200,
     // so "not served" reads as "not served as script": a module import of it
     // fails on the MIME type.
-    // `constructor` and `toString` are names an object-literal lookup would have
-    // found on `Object.prototype`; the table is a `Map` so they find nothing.
-    for (const name of ['react-dom', 'constructor', 'toString']) {
+    // Route-level only: Vite's HTML fallback would answer a bad rewrite with a
+    // 200 of HTML too, so this cannot tell a prototype-name lookup from a miss.
+    // That the table answers no `Object.prototype` name is a unit test:
+    // "answers only the three shared names, and no name Object.prototype carries".
+    for (const name of ['react-dom', 'constructor']) {
       const unknown = await request.get(`/shared/${name}.js`);
       expect(unknown.headers()['content-type'], name).not.toContain('javascript');
     }

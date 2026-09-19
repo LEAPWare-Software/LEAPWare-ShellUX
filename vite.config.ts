@@ -3,6 +3,7 @@ import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
 import { RENDERER_CSP } from './electron/main/rendererCsp.js';
+import { SHARED_MODULES, sharedModuleSource } from './src/sdk/sharedModules.js';
 
 /**
  * Serve the fixture shell at `/` on the DEV SERVER ONLY.
@@ -69,20 +70,6 @@ function serveFixtureAtRoot(): Plugin {
 const SHARED_PREFIX = 'shared/';
 
 /**
- * Each `/shared/*` URL, and the source module that answers it.
- *
- * One table for both servers: the build inputs below are named from it, and the
- * dev-server route serves from it, so the two cannot list different modules. A
- * `Map`, not an object literal: the name in the lookup comes from a request URL,
- * and `/shared/constructor.js` must not find `Object.prototype.constructor`.
- */
-const SHARED_MODULES: ReadonlyMap<string, string> = new Map([
-  ['react', 'src/sdk/shared/react.ts'],
-  ['react-jsx-runtime', 'src/sdk/shared/react-jsx-runtime.ts'],
-  ['sdk', 'src/sdk/index.ts'],
-]);
-
-/**
  * Serve `/shared/<name>.js` on the DEV SERVER, from the source module that
  * the build emits under that name.
  *
@@ -91,7 +78,7 @@ const SHARED_MODULES: ReadonlyMap<string, string> = new Map([
  * module: its `react` import resolves to the one pre-bundled React every other
  * module on the page gets. `apply: 'serve'`, so `vite build` never runs it; in a
  * build the same URLs are real files (`build.rollupOptions` below). Only the
- * three names in `SHARED_MODULES` are rewritten; anything else under `/shared/`
+ * three names in `SHARED_MODULES` (`src/sdk/sharedModules.ts`) are rewritten; anything else under `/shared/`
  * falls through to Vite's own 404.
  */
 function serveSharedModules(): Plugin {
@@ -101,7 +88,7 @@ function serveSharedModules(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
         const match = /^\/shared\/([a-z-]+)\.js(?:\?.*)?$/.exec(req.url ?? '');
-        const source = match?.[1] === undefined ? undefined : SHARED_MODULES.get(match[1]);
+        const source = match?.[1] === undefined ? undefined : sharedModuleSource(match[1]);
         if (source !== undefined) req.url = `/${source}`;
         next();
       });

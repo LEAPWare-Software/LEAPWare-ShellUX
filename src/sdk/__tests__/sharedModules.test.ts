@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as sharedJsxRuntime from '../shared/react-jsx-runtime';
 import * as sharedReact from '../shared/react';
+import { sharedModuleSource } from '../sharedModules';
 
 /**
  * The two shared modules that stand in for a package, checked against the
@@ -33,5 +34,16 @@ describe('the shared modules, against the packages they stand for', () => {
   it('/shared/react-jsx-runtime.js exports exactly the names the installed runtime exports', () => {
     const installed = requireInstalled('react/jsx-runtime') as Readonly<Record<string, unknown>>;
     assertSameModule(sharedJsxRuntime, installed);
+  });
+});
+
+describe('the /shared/ route table', () => {
+  it('answers only the three shared names, and no name Object.prototype carries', () => {
+    expect(sharedModuleSource('react')).toBe('src/sdk/shared/react.ts');
+    expect(sharedModuleSource('react-jsx-runtime')).toBe('src/sdk/shared/react-jsx-runtime.ts');
+    expect(sharedModuleSource('sdk')).toBe('src/sdk/index.ts');
+    for (const name of ['constructor', '__proto__', 'hasOwnProperty', 'toString', 'react-dom']) {
+      expect(sharedModuleSource(name), name).toBeUndefined();
+    }
   });
 });
