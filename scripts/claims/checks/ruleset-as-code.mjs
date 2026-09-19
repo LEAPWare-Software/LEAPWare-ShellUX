@@ -12,6 +12,9 @@ console.log(`ruleset_bypass_actors_empty=${Array.isArray(ruleset.bypass_actors) 
 console.log(`ruleset_deletion=${rules.some((r) => r.type === 'deletion') ? 1 : 0}`);
 console.log(`ruleset_non_fast_forward=${rules.some((r) => r.type === 'non_fast_forward') ? 1 : 0}`);
 
+const refInclude = ruleset.conditions?.ref_name?.include ?? [];
+console.log(`ruleset_target_default_branch=${Array.isArray(refInclude) && refInclude.includes('~DEFAULT_BRANCH') ? 1 : 0}`);
+
 const pr = byType('pull_request').parameters ?? {};
 console.log(`ruleset_pr_zero_approvals=${pr.required_approving_review_count === 0 ? 1 : 0}`);
 console.log(`ruleset_squash_only=${Array.isArray(pr.allowed_merge_methods) && pr.allowed_merge_methods.length === 1 && pr.allowed_merge_methods[0] === 'squash' ? 1 : 0}`);
@@ -31,11 +34,22 @@ console.log(`applier_dry_run=${/--dry-run/.test(applier) ? 1 : 0}`);
 console.log(`applier_test_exists=${existsSync('scripts/__tests__/apply-rulesets.test.mjs') ? 1 : 0}`);
 console.log(`applier_test_node_test=${/from ['"]node:test['"]/.test(read('scripts/__tests__/apply-rulesets.test.mjs')) ? 1 : 0}`);
 
+// A real applier, not a stub: it imports child_process and actually shells out to
+// `gh api`, rather than merely mentioning `--dry-run` in a comment (which a one-line
+// stub can do too).
+const importsChildProcess = /from\s+['"](?:node:)?child_process['"]|require\(\s*['"](?:node:)?child_process['"]\s*\)/.test(applier);
+const spawnsProcess = /\b(?:spawnSync|execFileSync)\s*\(/.test(applier);
+const mentionsGh = /(['"])gh\1/.test(applier);
+const mentionsApi = /(['"])api\1/.test(applier);
+console.log(`applier_shells_out_to_gh_api=${importsChildProcess && spawnsProcess && mentionsGh && mentionsApi ? 1 : 0}`);
+
 const settingsDoc = read('docs/maintainers/repository-settings.md');
 console.log(`settings_doc_exists=${existsSync('docs/maintainers/repository-settings.md') ? 1 : 0}`);
 console.log(`settings_doc_dry_run=${/--dry-run/.test(settingsDoc) ? 1 : 0}`);
 console.log(`settings_doc_squash_patch=${/allow_squash_merge/.test(settingsDoc) ? 1 : 0}`);
 console.log(`settings_doc_bootstrap_owner_only=${/[Bb]ootstrap is owner-only/.test(settingsDoc) ? 1 : 0}`);
+console.log(`settings_doc_covers_enforcement=${/^##\s+What `main\.json` enforces\s*$/m.test(settingsDoc) ? 1 : 0}`);
+console.log(`settings_doc_covers_reapply=${/^##\s+Re-applying from any machine\s*$/m.test(settingsDoc) ? 1 : 0}`);
 
 console.log(`ci_merge_group=${/^\s*merge_group:/m.test(read('.github/workflows/ci.yml')) ? 1 : 0}`);
 console.log(`browser_merge_group=${/^\s*merge_group:/m.test(read('.github/workflows/browser.yml')) ? 1 : 0}`);

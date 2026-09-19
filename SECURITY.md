@@ -318,8 +318,9 @@ repository *claims* otherwise is genuinely valuable — see below.
 
 **Report privately, through GitHub's
 [Report a vulnerability](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/security/advisories/new)
-form, or by email to `leapware@outlook.com`.** Both are monitored. The form exists since
-the repository went public (2026-09-18): `gh api
+form, or by email to `leapware@outlook.com`.** The email address is monitored (see
+"What you can expect back" below). Private vulnerability reporting is enabled on this
+repository: `gh api
 repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting` returned
 `{"enabled":true}` on 2026-09-19.
 
