@@ -100,6 +100,22 @@ describe('the argv allowlist (§3.1)', () => {
     // The repository's own single-object settings resource is accepted; a list under it is not.
     ok(['gh', 'api', 'repos/o/r/private-vulnerability-reporting', '--jq', '.enabled'], 'github');
     no(['gh', 'api', 'repos/o/r/private-vulnerability-reporting/advisories'], 'github', /single-object/);
+    // A milestone is a single object by number; a bare milestones list stays rejected.
+    ok(['gh', 'api', 'repos/o/r/milestones/2', '--jq', '.title'], 'github');
+    no(['gh', 'api', 'repos/o/r/milestones'], 'github', /single-object/);
+    // C-25's one search exception: pinned to this exact repo and this exact read-only
+    // query. GET only (the allowlist forbids -X/--method other than GET regardless).
+    ok(['gh', 'api', 'search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:issue+is:open+no:milestone', '--jq', '"unmilestoned_open_issues=\\(.total_count)"'], 'github');
+    // Every sibling and unrelated search/issues path is still rejected: a different repo,
+    // a different query, and a bare list-issues endpoint on the same repo.
+    no(['gh', 'api', 'search/issues?q=repo:someone-else/other+is:issue+is:open+no:milestone'], 'github', /single-object/);
+    no(['gh', 'api', 'search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:pr+is:open'], 'github', /single-object/);
+    no(['gh', 'api', 'search/issues?q=x'], 'github', /single-object/);
+    no(['gh', 'api', 'repos/LEAPWare-Software/LEAPWare-ShellUX/issues'], 'github', /single-object/);
+    // The mutation guardrail is not weakened by the new path: -X/--method/-f/--paginate
+    // are still rejected on it, exactly as on every other gh api path.
+    no(['gh', 'api', 'search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:issue+is:open+no:milestone', '-X', 'POST'], 'github', /-X/);
+    no(['gh', 'api', 'search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:issue+is:open+no:milestone', '-f', 'q=x'], 'github', /rejected/);
     // gh views: verbs, ids, flags
     no(['gh', 'pr', 'list'], 'github', /only "view"/);
     no(['gh', 'pr', 'view', 'abc'], 'github', /number/);

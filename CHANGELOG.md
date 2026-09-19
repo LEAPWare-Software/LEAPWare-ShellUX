@@ -31,13 +31,6 @@ from so a reader can check it.
   `docs/`, and pasted API evidence on #74 and #103. The ruleset item's claim that it
   matches sessionkeeper's shape was dropped, because no check can decide it.
 
-### Fixed
-
-- **`SECURITY.md` said private vulnerability reporting did not exist here.** It was
-  true while the repository was private; after it went public the form was enabled
-  (`{"enabled":true}`, read 2026-09-19) and the file was not updated. It now names the
-  form beside the email address, and the old note is in the past tense.
-
 - **Plugin lifecycle hooks, a runtime navigation tree, and badge clearing** (ADR-0006
   step 5; addresses #17, #16 and #80). Host contract **1.1**: a minor bump, since every
   addition is optional or new. An extension may declare `lifecycle` hooks
@@ -64,6 +57,30 @@ from so a reader can check it.
   handle once 1024 are held". **Not done:** pane 1 rendering a replaced tree is checked
   in jsdom only, not in a browser (no shipped extension calls it yet); which document
   owns a plugin's hooks is left to step 6 (#183).
+
+### Fixed
+
+- **Proof audit: three false claims corrected (C-09, C-25, C-32), eleven checks
+  tightened (C-07, C-10, C-12, C-14, C-18, C-23, C-29, C-30, C-33, C-41, C-42).** C-09
+  claimed the "jsdom is blind" body had moved to `docs/traps.md`; it had not, and the
+  claim is split so only the true "Traps" half is ticked. C-25 claimed every open issue
+  was milestoned; #172 was not, and the row is now a live GitHub search-API check
+  instead of dated evidence. C-32 embedded a built-increment count that went stale the
+  moment W3-1 landed. Of the tightened checks: C-14's CODEOWNERS check read the first
+  matching line, not GitHub's own last-match rule; C-10's caps-lint check passed on a
+  gutted test file; C-12's code-of-conduct check missed a stale "GitHub Issues, once
+  published" route now that the repository is public; C-18's ADR-0006 check covered 3
+  of its 9 clauses; C-07's D-50 check matched only the decision id, not its content;
+  C-33's pane-refit check could not detect a `.skip(`/`.fixme(`/`.only(`; C-23's
+  DESIGN.md colour check did not bind a hex to its named token and missed 3/8-digit hex
+  and `rgb()`/`hsl()`/`oklch()`; C-29's redefinition scan matched inside comments and
+  missed `const`/`class` forms; C-41 did not catch a job-level `if:`; C-42 grepped a
+  test title instead of running the test. Each tightened check was probed red on the
+  defect it now catches, then green after the fix. `docs/claims.json` and
+  `scripts/claims/checks/*` carry the detail.
+  true while the repository was private; after it went public the form was enabled
+  (`{"enabled":true}`, read 2026-09-19) and the file was not updated. It now names the
+  form beside the email address, and the old note is in the past tense.
 
 - **Wave-3 state primitives** (W3-1, `docs/design/WAVE3-PLAN.md` R6 and R7). A
   `Button` (primary and quiet: hover, a pressed state one step past hover, a two-tone

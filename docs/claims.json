@@ -508,6 +508,21 @@
           "key": "d50_recorded",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "d50_about_proof_of_completion",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d50_links_proof_doc",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d50_names_audit_rounds",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
@@ -522,8 +537,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit): d50_recorded only matched the row ID string, so a D-50 row about anything else would still pass; now the row content is checked for the proof-of-completion topic, its link to docs/proof-of-completion.md, and the twelve-round audit history."
     },
     {
       "id": "C-08",
@@ -561,7 +576,7 @@
     },
     {
       "id": "C-09",
-      "box": "CLAUDE.md → ≤200 lines. The \"Traps\" and \"jsdom is blind\" bodies move to `docs/traps.md`, and CLAUDE.md keeps one-line pointers plus the rules.",
+      "box": "CLAUDE.md → ≤200 lines. The \"Traps\" body moves to `docs/traps.md`, and CLAUDE.md keeps a pointer to it plus the rules.",
       "class": "repo",
       "checks": [
         [
@@ -579,6 +594,21 @@
           "key": "traps_doc",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "traps_section_in_traps_doc",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "claude_points_to_traps_doc",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "claude_has_traps_body",
+          "op": "==",
+          "value": 0
         }
       ],
       "probe": {
@@ -590,8 +620,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof audit 2026-09-19 (split: the box previously also claimed the \"jsdom is blind\" body had moved to docs/traps.md, which was false — grep -ni jsdom docs/traps.md found nothing; that clause is now its own unticked plan item)"
     },
     {
       "id": "C-10",
@@ -618,6 +648,16 @@
           "key": "test_scripts_in_gate",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "caps_test_asserts_handoff_cap",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "caps_test_asserts_claude_cap",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
@@ -632,8 +672,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit): the check previously passed even if the test file were gutted to an empty it(); now it verifies the file still reads each named file and asserts its cap."
     },
     {
       "id": "C-11",
@@ -697,6 +737,26 @@
           "key": "coc_contact_via_security",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "coc_phone_numbers",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "coc_social_handles",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "coc_names_alternate_channel",
+          "op": "==",
+          "value": 0
+        },
+        {
+          "key": "coc_stale_once_published",
+          "op": "==",
+          "value": 0
         }
       ],
       "probe": {
@@ -708,8 +768,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — broadened 2026-09-19 (proof audit): the check only looked for email addresses, but the claim is broader (no personal contact info; report only via SECURITY.md); also fixed CODE_OF_CONDUCT.md, which still said report via GitHub Issues \"once published\" after the repository went public."
     },
     {
       "id": "C-13",
@@ -768,14 +828,11 @@
         }
       ],
       "probe": {
-        "name": "route the catch-all to the inert org",
+        "name": "append a later catch-all owner (GitHub uses the LAST matching line, not the first)",
         "edits": [
           {
             "file": ".github/CODEOWNERS",
-            "replace": [
-              "* @LEAPWare-Software",
-              "* @LEAPWare-HQ"
-            ]
+            "append": "\n* @SomeoneElse\n"
           }
         ]
       },
@@ -965,6 +1022,66 @@
           "key": "adr0006_no_boundary_between_plugins",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "adr0006_manifest_format",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_userdata_path",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_custom_protocol_serve",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_webcontentsview",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_no_node_integration",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_context_isolation",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_preload_mentioned",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_local_lwplugin_source",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_github_release_source",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "adr0006_d23_first_party",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "decisions_d23_present",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "decisions_d23_first_party_topic",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
@@ -979,8 +1096,8 @@
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit): the check verified only status, Amendment P and the no-boundary phrase out of the box's nine clauses; now every clause (manifest format, userData path, custom-protocol serve into the extension WebContentsView, nodeIntegration false, contextIsolation true, preload usage, .lwplugin local source, GitHub Release source, D-23 first-party) has its own key."
     },
     {
       "id": "C-19",
@@ -1116,7 +1233,7 @@
     },
     {
       "id": "C-23",
-      "box": "**Gate 3:** write `DESIGN.md` with impeccable, from real `design/generate.mjs` output. It covers type scale, spacing, planes, states and motion, and no hand-written hex (the token pipeline stays the only colour source).",
+      "box": "**Gate 3:** write `DESIGN.md` with impeccable, from real `design/generate.mjs` output. It covers type scale, spacing, planes, states and motion, and no hand-written colour: every colour literal (hex, `rgb()`, `hsl()`, `oklch()`) also appears in the generated stylesheet, and every colour bound to a named CSS custom property in the body matches that property's generated value exactly.",
       "class": "repo",
       "checks": [
         [
@@ -1139,22 +1256,32 @@
           "key": "design_hex_not_generated",
           "op": "==",
           "value": 0
+        },
+        {
+          "key": "design_hex_bound_checked",
+          "op": ">=",
+          "value": 1
+        },
+        {
+          "key": "design_hex_bound_mismatched",
+          "op": "==",
+          "value": 0
         }
       ],
       "probe": {
-        "name": "type a hand-written hex into DESIGN.md",
+        "name": "swap a colour name for a different token's hex, still present elsewhere in the generated file",
         "edits": [
           {
             "file": "DESIGN.md",
             "replace": [
-              "\"#006e65\"",
-              "\"#123456\""
+              "accent-petrol: \"#006e65\"",
+              "accent-petrol: \"#1e1f21\""
             ]
           }
         ]
       },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit): the old check only asked whether a DESIGN.md hex appeared ANYWHERE in the generated stylesheet, which a wrong-but-still-generated hex would satisfy; it also missed 3/8-digit hex and rgb()/hsl()/oklch() forms entirely. The new check binds each named colour to the CSS custom property named beside it in the body and compares against that property's own generated value."
     },
     {
       "id": "C-24",
@@ -1195,14 +1322,32 @@
     },
     {
       "id": "C-25",
-      "box": "Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it. Everything else goes to **1.1** or stays on Phase 2. The milestone then *is* the gate, and it can be counted.",
-      "class": "manual",
+      "box": "Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it; what is deferred goes to **1.1**. The milestone is the gate, live-checked: 0 open issues currently carry no milestone.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "api",
+          "repos/LEAPWare-Software/LEAPWare-ShellUX/milestones/2",
+          "--jq",
+          "\"v1_0_0_title=\\(.title)\", \"v1_0_0_closed_issues=\\(.closed_issues)\""
+        ],
+        [
+          "gh",
+          "api",
+          "repos/LEAPWare-Software/LEAPWare-ShellUX/milestones/3",
+          "--jq",
+          "\"m1_1_title=\\(.title)\""
+        ],
+        [
+          "gh",
+          "api",
+          "search/issues?q=repo:LEAPWare-Software/LEAPWare-ShellUX+is:issue+is:open+no:milestone",
+          "--jq",
+          "\"unmilestoned_open_issues=\\(.total_count)\""
+        ]
+      ],
       "expect": [
-        {
-          "key": "unmilestoned_open_issues",
-          "op": "==",
-          "value": 0
-        },
         {
           "key": "v1_0_0_title",
           "op": "==",
@@ -1217,11 +1362,15 @@
           "key": "m1_1_title",
           "op": "==",
           "value": "1.1"
+        },
+        {
+          "key": "unmilestoned_open_issues",
+          "op": "==",
+          "value": 0
         }
       ],
-      "evidence": "docs/claims-evidence/C-25-milestones-2026-09-18.txt",
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)"
+      "provenOn": "2026-09-19",
+      "addedBy": "proof audit 2026-09-19 (was manual/dated; #172 was found unmilestoned and fixed, so the row is now a live GitHub check, not one-time evidence; historical capture kept at docs/claims-evidence/C-25-milestones-2026-09-18.txt, superseded)"
     },
     {
       "id": "C-26",
@@ -1439,11 +1588,11 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "wave 3 increment 1 (refactor/split-shelllayout)"
+      "addedBy": "wave 3 increment 1 (refactor/split-shelllayout) — check tightened 2026-09-19 (proof audit): the redefinition scan matched inside comments and only recognised `function X` declarations, so a moved piece re-added as `const X = () => {}` would go undetected; it now strips comments first and matches function, const/let/var and class forms."
     },
     {
       "id": "C-30",
-      "box": "Rollout step 2: every throwaway-PR case shown with its run id. Cases (a) to (l), each as designed: `docs/claims-evidence/rollout-step2-2026-09-19.md` lists every run, and the row re-reads each run's conclusion from GitHub.",
+      "box": "Rollout step 2: every throwaway-PR case shown with its run id, each matching its designed pass/fail outcome. Cases (a) to (l): `docs/claims-evidence/rollout-step2-2026-09-19.md` lists every run and the specific reason read from its log by hand; the row itself re-reads only each run's conclusion from GitHub, not the specific reason, which the API does not expose to an allowlisted check.",
       "class": "github",
       "checks": [
         [
@@ -1720,7 +1869,7 @@
         }
       ],
       "provenOn": "2026-09-19",
-      "addedBy": "rollout step 2 tick (docs/rollout-step2-tick)"
+      "addedBy": "rollout step 2 tick (docs/rollout-step2-tick) — reworded 2026-09-19 (proof audit): the box read as though the row re-verified each case's specific designed failure reason, but the row only re-reads run conclusions (success/failure) — any failure for ANY reason satisfies it. gh run view's argv allowlist exposes --json/--jq only, not --log, so the specific reason cannot be re-checked live without widening the allowlist to a log-reading endpoint; narrowed the box to say so. The per-case reason stays in the evidence file, captured by hand, not re-proven."
     },
     {
       "id": "C-31",
@@ -1870,7 +2019,7 @@
     },
     {
       "id": "C-32",
-      "box": "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6). Written as `docs/design/WAVE3-PLAN.md`: nine increments, W3-0 to W3-8, with a table assigning each critique resolution R1 to R9 of the v4 gate-4 screens to an increment, and a file-ownership table; only W3-0 is built.",
+      "box": "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6). Written as `docs/design/WAVE3-PLAN.md`: nine increments, W3-0 to W3-8, with a table assigning each critique resolution R1 to R9 of the v4 gate-4 screens to an increment, and a file-ownership table; each increment's own heading states whether it is built.",
       "class": "repo",
       "checks": [
         [
@@ -1908,7 +2057,7 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "wave 3 W3-0 landing (feat/wave3-plan-and-resize)"
+      "addedBy": "wave 3 W3-0 landing (feat/wave3-plan-and-resize) — reworded 2026-09-19 (proof audit): dropped the embedded built-state count/list (\"only W3-0 is built\"), which went stale the moment W3-1 landed (PR #184) and contradicted the file's own W3-1 heading; the check already asserted only structural properties (increment/critique counts, ownership table), so it needed no change."
     },
     {
       "id": "C-33",
@@ -1940,6 +2089,11 @@
           "key": "refit_marks_corrections",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "pane_refit_e2e_skip_fixme_only",
+          "op": "==",
+          "value": 0
         }
       ],
       "probe": {
@@ -1955,7 +2109,7 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "wave 3 W3-0 landing (feat/wave3-plan-and-resize)"
+      "addedBy": "wave 3 W3-0 landing (feat/wave3-plan-and-resize) — tightened 2026-09-19 (proof audit): pane_refit_e2e_titles counted title strings even inside a test.describe.skip(...), which would keep the count at 5 while running none of them; the check now zeroes the title count, and names it, when .skip(/.fixme(/.only( appears anywhere in the file."
     },
     {
       "id": "C-34",
@@ -2382,22 +2536,27 @@
           "key": "audit_all_full_tree",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "audit_all_job_has_if",
+          "op": "==",
+          "value": 0
         }
       ],
       "probe": {
-        "name": "drop --audit-level=high from the full-tree audit script",
+        "name": "add a job-level if: false to audit-all",
         "edits": [
           {
-            "file": "package.json",
+            "file": ".github/workflows/audit-dependencies.yml",
             "replace": [
-              "\"audit:all\": \"npm audit --audit-level=high\"",
-              "\"audit:all\": \"npm audit\""
+              "  audit-all:\n    name: Audit all dependencies",
+              "  audit-all:\n    if: false\n    name: Audit all dependencies"
             ]
           }
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work) — tightened 2026-09-19 (proof audit): the job block was checked for its steps but not for a job-level if: that could skip it entirely; the check now fails on ANY if: on the job (chosen over matching only the literal if: false form, since any condition can silently disable it)."
     },
     {
       "id": "C-42",
@@ -2454,7 +2613,7 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "plan step 6b tick (docs/proof-rows-done-work)"
+      "addedBy": "plan step 6b tick (docs/proof-rows-done-work) — tightened 2026-09-19 (proof audit): install_mismatch_test and serve_mismatch_test only grepped the test file for the title string, so they stayed green even when the install-time comparison was inverted (measured: git show + sed inversion left both =1 on the old check). They now run each named Vitest test for real (spawnSync to node_modules/vitest/vitest.mjs, not through the argv allowlist, which governs only the row's own registered command) and assert exit 0."
     }
   ],
   "retired": []

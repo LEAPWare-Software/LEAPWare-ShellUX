@@ -130,8 +130,15 @@ const GH_API_PATHS = [
   /^repos\/[\w.-]+\/[\w.-]+\/(commits|git\/commits)\/[0-9a-f]{7,40}$/,
   /^repos\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+$/,
   /^repos\/[\w.-]+\/[\w.-]+\/rulesets\/\d+$/,
+  /^repos\/[\w.-]+\/[\w.-]+\/milestones\/\d+$/,
   // The repository's own single-object settings resources, not a list or search endpoint.
   /^repos\/[\w.-]+\/[\w.-]+\/private-vulnerability-reporting$/,
+  // C-25 needs one live count: open issues with no milestone. Every other search and list
+  // endpoint stays rejected (a bare `search/issues` with any other query, or a different
+  // repo, matches none of these and is refused below); this is GET-only, like every path
+  // here, and pinned to this repository's own exact query so it cannot become a general
+  // search escape hatch.
+  /^search\/issues\?q=repo:LEAPWare-Software\/LEAPWare-ShellUX\+is:issue\+is:open\+no:milestone$/,
 ];
 
 /** The first git argument after the subcommand that is not an allowed flag, or null. */
