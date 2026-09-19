@@ -25,8 +25,8 @@ from so a reader can check it.
   commented-out audit step now fail). Four plan items mixed a true fact with an unmet
   one; each is split, so the true half is ticked and the rest stays open as its own
   item: the D-27 reversal write-up, SECURITY.md's reorder, the README's move to
-  `docs/`, and pasted API evidence on #74 and #103. "Matches sessionkeeper's shape"
-  was dropped from the ruleset item, because no check can decide it.
+  `docs/`, and pasted API evidence on #74 and #103. The ruleset item's claim that it
+  matches sessionkeeper's shape was dropped, because no check can decide it.
 
 ### Fixed
 
