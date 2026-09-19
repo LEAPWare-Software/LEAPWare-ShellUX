@@ -16,6 +16,14 @@ from so a reader can check it.
 
 ### Added
 
+- **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
+  - the pull request is open and not a draft;
+  - it carries a `lane-*` label;
+  - the body says `Verdict: MERGE`;
+  - the **newest** `Reviewer: shellux-cloud-reviewer` comment at the exact head is from `LEAPWare-HQ` and says `Verdict: MERGE`. A later rejection wins, and a comment from any other account is ignored, because the repository is public.
+
+  The enqueue is pinned to that head commit. The workflow also fires on a late reviewer comment and on a lane label, and it always runs the default branch's code. The queue then re-runs every required check. It is a guardrail: every routine posts under the owner's login, so the comment proves a review exists at that head, not which routine wrote it. *Tests:* "ignores a forged review comment from any other account", "lets a later rejection at the same head win over an earlier MERGE", "refuses a head that moved since the triggering run", "calls gh pr merge --squash --auto pinned to the head only when ready". **Not proven yet:** that a merge-queue entry made by the workflow's own token gets its checks run. The first live cloud PR proves it or refutes it.
+
 - **Gate 4 is approved, and the approval is recorded where a routine cannot have written
   it** (D-53; register row C-24; the question was #189). D-45 recorded an owner approval
   of the six gate-4 screens on 2026-09-18 which the owner did not recognise on
