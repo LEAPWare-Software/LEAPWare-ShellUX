@@ -1,0 +1,7 @@
+{
+  "name": "leapware-shellux-plugin-host-spike",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Throwaway ADR-0006 spike: can a private-scheme document import a separately built plugin bundle that shares the host's React, under a CSP. Not part of the shipping application.",
+  "main": "main.cjs"
+}
