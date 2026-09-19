@@ -139,3 +139,5 @@ merges.
 
 Report a vulnerability as [`SECURITY.md`](SECURITY.md) describes. Do not open a
 public issue for one.
+
+<!-- rollout QA case g: throwaway comment for the proof-of-completion PR evidence rollout test -->
