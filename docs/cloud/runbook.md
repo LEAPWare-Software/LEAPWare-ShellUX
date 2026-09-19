@@ -89,13 +89,23 @@ Each run does one unit of work, then exits.
    - run `gh pr merge <n> --squash --auto`.
 
    Any push after the review needs a new review at the new head.
-8. **Stop conditions:**
+8. **Decisions: you are the CTO** (the owner delegated all technical decisions to the cloud run, 2026-09-19).
+   - **Decide technical questions yourself.** That covers architecture, security design within ADR vocabulary, tooling, sequencing, and issue triage. Record each as a `docs/DECISIONS.md` row, `Called by: CTO (cloud, lane <X>), under the owner's 2026-09-19 delegation`, in the same PR as the work. Do not stop for them.
+   - **Only these go to the owner:**
+     - money, legal or business calls;
+     - credentials, accounts or settings;
+     - approving gate 4 or any other design sign-off;
+     - anything needing the packaged app, the Windows VM or a release;
+     - reversing an owner-made decision row.
+   - **How to ask:** open an issue labelled `needs-owner`, with one question and the options with a recommended default. Start its body with `@oz-mannyramos`: the owner's second account, so the owner gets a phone notification, because the owner gets no notification for the owner's own login. Add the issue to the watchdog's list. Then move to your next item; never wait.
+   - **The owner answers** by commenting `OWNER: <answer>` on that issue. The next run of the affected lane reads it, acts on it, records it and closes the issue.
+9. **Stop conditions:**
    - the same item fails review 3 times;
-   - a security or product decision the plan does not settle;
+   - an owner-only question from the list above;
    - a boundary.
 
    In each case, open a `needs-owner` issue with evidence, mark the item `blocked` in your lane comment, and move on next run.
-9. **Unlock:** edit your lane comment to `idle <utc>`, with the item, the PR, the attempt count and the next item.
+10. **Unlock:** edit your lane comment to `idle <utc>`, with the item, the PR, the attempt count and the next item.
 
 **Lanes never edit each other's files.** For shared files (`HANDOFF.md`, `CHANGELOG.md`, `docs/claims.json`, `docs/plans/v1-production.md`), always rebase onto `origin/main` just before the final `verify`, and resolve by keeping both sides. `ShellLayout.tsx` belongs to lane B. Lane A's plugin manager (ADR-0006 step 9) waits until lane B's W3-8 has merged.
 
