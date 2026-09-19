@@ -283,7 +283,8 @@ const ALLOWLIST = [
     reason:
       'Decision D-49 wires the Claude GitHub App into this repo via ' +
       'anthropics/claude-code-action. The hosts these files name — github.com, in a ' +
-      'documentation comment and in the code-review plugin_marketplaces source, and ' +
+      'documentation comment (the code-review plugin_marketplaces source was removed ' +
+      'when the review became a direct prompt), and ' +
       'code.claude.com, in a documentation comment pointing at the action\'s own docs — ' +
       'are GitHub Actions runner endpoints, not a host this codebase or its shipped ' +
       'product contacts at runtime; DOCUMENTED_ENDPOINTS stays empty per the invented-host ' +
