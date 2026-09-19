@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Row C-28: PR A of the proof-of-completion protocol is in the tree and wired: the
-// register, the scripts, `npm run status`, both workflows (not required), the template
+// register, the scripts, `npm run status`, both workflows (added not required; PR B made them required), the template
 // headings and fields, the CLAUDE.md rule, the tests in test:scripts, and every ticked
 // plan item migrated to a tag. Reads the tree only; builtins only.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';

@@ -16,6 +16,18 @@ from so a reader can check it.
 
 ### Added
 
+- **The proof-of-completion checks become required** (rollout step 4, PR B).
+  `.github/rulesets/main.json` adds "Prove claims" and "PR evidence" to the required
+  status checks, and pins all seven required contexts to the GitHub Actions app
+  (`integration_id: 15368`), so a status posted through the Statuses API under the same
+  name no longer satisfies them: a guardrail GitHub enforces. *Test:* "every
+  required_status_checks entry in the real main.json carries integration_id 15368
+  (rollout step 4)". The ruleset is applied and read back after this merges, as
+  `docs/maintainers/repository-settings.md` sets out, with a break-glass procedure for
+  a gate bug that would otherwise block every merge. Register row C-28 no longer
+  asserts the checks are unrequired: the register caught its own change. **Not done
+  here:** the apply and the read-back (plan step 0c item 5 is ticked after them).
+
 - **An operator install guide and the 1.0 known limits** (plan step 7).
   `docs/INSTALL.md` covers the per-user install, the SmartScreen path for an unsigned
   build, where the diagnostics log lives, how updates will arrive (the feed is not live
@@ -506,6 +518,12 @@ from so a reader can check it.
   become the expensive one.
 
 ### Fixed
+
+- **Two claims in the step 7 docs were wrong** (found by the Claude review on #178,
+  after it merged). `DEVELOPER.md`'s #91 row said the inventory mock works around the
+  missing selection prop; `VirtualizedList` has no consumer at all, as the project's own
+  records say. The portability allowlist entry for `docs/INSTALL.md` cited ADR-0006 for
+  the symbolic log path, which it never mentions. Both corrected.
 
 - **A window resize no longer overwrites the saved pane layout** (GitHub #23, plan
   step 5). The panes re-fit to the live width from the layout the user chose, with

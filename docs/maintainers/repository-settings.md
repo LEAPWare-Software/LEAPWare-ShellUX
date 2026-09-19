@@ -41,7 +41,8 @@ See "Bootstrap is owner-only" below.
   `allowed_merge_methods: ["squash"]` (squash-only: one commit per PR on
   `main`, no merge commits, no rebase-merge).
 - **`required_status_checks`** — `strict_required_status_checks_policy: true`
-  (the PR branch must be up to date with `main` before merging) and the five
+  (the PR branch must be up to date with `main` before merging) and, since
+  rollout step 4 of `docs/proof-of-completion.md` (§5 step 4, "PR B"), seven
   CI job names actually emitted by this repo's workflows today:
 
   | Ruleset context | Workflow / job |
@@ -51,6 +52,8 @@ See "Bootstrap is owner-only" below.
   | `Verify (windows-latest)` | same job, `matrix.os: windows-latest` |
   | `Browser tests (chromium)` | `.github/workflows/browser.yml`, `browser` job |
   | `Declared Node floor (22.13.0)` | `.github/workflows/ci.yml`, `floor` job |
+  | `Prove claims` | `.github/workflows/claims.yml`, `prove` job (proof-of-completion §3.4) |
+  | `PR evidence` | `.github/workflows/pr-evidence.yml`, `evidence` job (proof-of-completion §3.3) |
 
   These are the workflow files' own `name:` fields, not invented labels — a
   required status check is matched by GitHub on the exact string a workflow
@@ -59,6 +62,49 @@ See "Bootstrap is owner-only" below.
   workflow file and this table together**, the same rule
   LEAPWare-SessionKeeper's own copy of this file states for its Python
   matrix.
+
+  **`Prove claims` and `PR evidence` are guardrails, not integrity controls**
+  (proof-of-completion §1): each defends only against the honest mistake —
+  an unticked claim, a missing review record, prose that asserts "done"
+  without a proven row. Whoever can edit `.github/rulesets/main.json`,
+  `claims.yml` or `pr-evidence.yml` can also loosen or remove what they
+  enforce; that is outside this protocol's threat model and is closed only
+  by a second approver or LEAPWare BuildCraft R4 (`docs/proof-of-completion.md`
+  §1, §6).
+
+  Every entry above also carries `"integration_id": 15368` — the GitHub
+  Actions app id (measured: `gh api repos/{r}/commits/main/check-runs --jq
+  '.check_runs[0].app.id'` returned `15368`, `docs/proof-of-completion.md`
+  intro facts). This pins each required context to check runs posted by the
+  Actions app specifically — a guardrail GitHub itself enforces once applied,
+  closing the gap where a caller with `statuses:write` (not `checks:write`;
+  that scope covers the separate Checks API) could post a same-named commit
+  status through the plain Statuses API and satisfy the requirement without a
+  workflow having run at all. `scripts/__tests__/apply-rulesets.test.mjs` —
+  *Test:* "every required_status_checks entry in the real main.json carries
+  integration_id 15368 (rollout step 4)" — asserts the pin is present on all
+  seven contexts in the committed file.
+
+  `compare-ruleset.mjs` (§3.5) excludes `integration_id` from the drift
+  comparison only when the live response omits the field entirely, which is
+  the case for every response captured against this repo so far — **because
+  the ruleset has never had the field set, not because the caller lacks
+  write access.** An authenticated call against a ruleset that
+  carries `integration_id` is expected to return it (not yet measured here, because
+  the field has never been set; the post-apply read-back is the measurement); the exclusion is keyed on the field's
+  presence in the response, not on the token's permissions (`bypass_actors`,
+  above, is the one that is genuinely access-gated). Concretely: **the
+  post-apply read-back's pass condition is `integration_id: 15368` present on
+  all 7 entries**, not merely 7 matching contexts — see "Applying rollout
+  step 4" below. If CI's own read-only `Prove claims` token still shows the
+  field as absent after a real apply, that is a blind spot, not a non-issue:
+  `S-ruleset` cannot then detect someone dropping the pin (removing
+  `integration_id` from the live ruleset, or replacing a workflow-posted
+  check with an API-posted status of the same name) — the comparison would
+  keep excluding the field and report no drift either way. Closing that would
+  need either a token with write access to the ruleset in the comparison job
+  (a bigger permission grant than `contents/pull-requests/actions/issues:
+  read`) or a separate, deliberately privileged check; neither is built here.
 - **`merge_queue`** — `merge_method: SQUASH`, `grouping_strategy: ALLGREEN`
   (the queue only merges a batch once every entry in it is green — no
   partial-pass merges), small min/max group sizes (1..5) and a 10-minute
@@ -112,6 +158,68 @@ gh api -X PATCH repos/LEAPWare-Software/LEAPWare-ShellUX \
 
 Run this **before** `apply-rulesets.mjs` — the script's own ordering guard
 enforces that, but the PATCH above is what actually satisfies it.
+
+## Applying rollout step 4 (PR B) and reading it back
+
+Per `docs/proof-of-completion.md` §5 step 4 (M5), the order is: merge PR B
+first, THEN apply it, THEN read it back to confirm. `main.json` in a feature
+branch is not the tree `gh auth`'s current checkout applies from, and
+applying before the merge would make the two new checks required before any
+PR had proven it could pass them — so the merge has to land first. This is
+the owner's/integrator's own action, same as the rest of this file's
+bootstrap section:
+
+```
+git checkout main && git pull                    # after PR B is merged
+node scripts/apply-rulesets.mjs --dry-run         # inspect the JSON, incl. integration_id
+node scripts/apply-rulesets.mjs                   # apply for real (PUT, since ruleset 23685990 exists)
+gh api repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990 \
+  --jq '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks'
+node scripts/claims/compare-ruleset.mjs           # confirm no drift against the live ruleset
+```
+
+The read-back's pass condition is that every one of the 7 printed entries
+carries `"integration_id": 15368`, not just that the 7 `context` strings
+match — a response with the right 7 contexts but a missing or wrong
+`integration_id` is a silent narrowing of what this file declared.
+
+Expect one main `claims.yml` run between the merge and the apply to record
+`S-ruleset` drift (the two new contexts are declared in `main.json` on `main`
+before they exist on the live ruleset) and file the "Claims register is
+failing" issue; the read-back above, once it shows the two new contexts live,
+is the evidence that closes that issue with a comment, not a re-run of the
+row (`manual`ly, per §3.5's "Issue job" and G3).
+
+## Updating a Dependabot PR
+
+Use `@dependabot rebase` (a PR comment) to bring a Dependabot PR up to date
+with `main`, never GitHub's "Update branch" button. `pr-evidence.yml`'s
+Dependabot exemption (`docs/proof-of-completion.md` §3.3) requires every
+commit on the PR to have `author.login == 'dependabot[bot]'` and a verified
+signature; "Update branch" merges `main` into the PR branch with a merge
+commit authored by whoever clicked it, which breaks that all-commits author
+check — the exemption is lost and the
+PR needs a full evidence body instead. `@dependabot rebase` re-requests the
+update from the bot itself, so every commit stays `dependabot[bot]`-authored
+and verified.
+
+## Break-glass: a gate-script bug blocks every merge
+
+`bypass_actors` is `[]` (above): nothing, including the owner, bypasses this
+ruleset by role. If a bug in `Prove claims` or `PR evidence` (not the code
+under test — the gate script itself) makes either required check fail on
+every PR, including the PR that would fix it, the ruleset itself has no
+escape hatch. The only way out is the same one `docs/proof-of-completion.md`
+§1 and §6 already name as this protocol's edge: the owner edits the live
+ruleset directly, in the GitHub UI, to drop the two blocked contexts from
+`required_status_checks`; merges the fix PR (which does not need to pass the
+check it is fixing); re-applies `.github/rulesets/main.json` with
+`scripts/apply-rulesets.mjs` (restoring both contexts, now presumably fixed);
+and reads the ruleset back to confirm. This is a deliberate, visible action
+outside CI, not a script — CI cannot un-block itself — and it must be
+recorded in `docs/DECISIONS.md` through the PR that carries the fix, naming
+the outage and the UI edit, so "why were these two checks briefly not
+required" has an answer in the same place every other ruleset decision does.
 
 ## Bootstrap is owner-only
 

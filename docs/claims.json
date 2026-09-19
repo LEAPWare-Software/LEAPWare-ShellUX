@@ -1314,7 +1314,7 @@
     },
     {
       "id": "C-28",
-      "box": "PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items.",
+      "box": "PR A: register, box linter, evidence gate, status report, both workflows (added not required; PR B later made them required), template and `CLAUDE.md` rule, migration of today's ticked items.",
       "class": "repo",
       "checks": [
         [
@@ -1342,11 +1342,6 @@
           "key": "evidence_workflow",
           "op": "==",
           "value": 1
-        },
-        {
-          "key": "new_checks_required",
-          "op": "==",
-          "value": 0
         },
         {
           "key": "register_schema_version",

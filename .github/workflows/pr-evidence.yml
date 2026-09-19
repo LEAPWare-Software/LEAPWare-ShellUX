@@ -6,7 +6,7 @@ name: PR evidence
 # to the head SHA, Verdict), Rows reviewed, and, when they apply, Items removed or
 # reworded and Gate changes. Verified Dependabot-only pull requests are exempt.
 #
-# NOT a required check yet (rollout step 1). PR B adds it to .github/rulesets/main.json.
+# Required check since rollout step 4 (.github/rulesets/main.json, PR B).
 # A guardrail against the honest mistake: the body is written by whoever merges.
 on:
   pull_request:

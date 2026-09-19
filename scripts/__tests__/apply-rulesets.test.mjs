@@ -252,6 +252,56 @@ describe('loadRulesets — against the real repository files, no mocking', () =>
     const required = requiredMergeSettings(rulesets);
     assert.ok(required.has('allow_squash_merge'));
   });
+
+  it('every required_status_checks entry in the real main.json carries integration_id 15368 (rollout step 4)', () => {
+    const rulesets = loadRulesets(RULESETS_DIR);
+    const main = rulesets.find((r) => r.name === 'main.json');
+    const rule = main.data.rules.find((r) => r.type === 'required_status_checks');
+    const contexts = rule.parameters.required_status_checks;
+    assert.equal(contexts.length, 7);
+    for (const check of contexts) assert.equal(check.integration_id, 15368, `${check.context} is missing integration_id`);
+  });
+});
+
+describe('integration_id round-trips through applyOne (rollout step 4)', () => {
+  const RULESET_WITH_INTEGRATION_ID = {
+    path: '/fake/.github/rulesets/main.json',
+    name: 'main.json',
+    data: {
+      name: 'main',
+      rules: [
+        {
+          type: 'required_status_checks',
+          parameters: {
+            required_status_checks: [
+              { context: 'Prove claims', integration_id: 15368 },
+              { context: 'PR evidence', integration_id: 15368 },
+            ],
+          },
+        },
+      ],
+    },
+  };
+
+  it('a dry run prints integration_id in the JSON it would send', () => {
+    const gh = fakeGh([]);
+    const lines = [];
+    applyOne('OWNER/REPO', RULESET_WITH_INTEGRATION_ID, /* dryRun */ true, gh, (line) => lines.push(line));
+    assert.equal(gh.calls.length, 0);
+    assert.ok(lines.some((line) => line.includes('"integration_id": 15368')));
+  });
+
+  it('a real POST body carries integration_id unchanged', () => {
+    const gh = fakeGh([
+      { status: 0, stdout: '', stderr: '' }, // existingRulesetId lookup: nothing found
+      { status: 0, stdout: '{"id":1}', stderr: '' }, // the POST itself
+    ]);
+    applyOne('OWNER/REPO', RULESET_WITH_INTEGRATION_ID, false, gh, () => {});
+    const postCall = gh.calls[1];
+    const sentBody = JSON.parse(postCall.input);
+    const checks = sentBody.rules[0].parameters.required_status_checks;
+    assert.ok(checks.every((c) => c.integration_id === 15368));
+  });
 });
 
 describe('DEFAULT_REPO', () => {

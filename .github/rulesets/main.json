@@ -33,11 +33,13 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "Verify (ubuntu-latest)" },
-          { "context": "Verify (macos-latest)" },
-          { "context": "Verify (windows-latest)" },
-          { "context": "Browser tests (chromium)" },
-          { "context": "Declared Node floor (22.13.0)" }
+          { "context": "Verify (ubuntu-latest)", "integration_id": 15368 },
+          { "context": "Verify (macos-latest)", "integration_id": 15368 },
+          { "context": "Verify (windows-latest)", "integration_id": 15368 },
+          { "context": "Browser tests (chromium)", "integration_id": 15368 },
+          { "context": "Declared Node floor (22.13.0)", "integration_id": 15368 },
+          { "context": "Prove claims", "integration_id": 15368 },
+          { "context": "PR evidence", "integration_id": 15368 }
         ]
       }
     },
