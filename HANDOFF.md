@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `16a1178` (#171, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `78a69f6` (#173, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -20,12 +20,12 @@ with a merge queue.
 - ADR-0006 Accepted (#145); steps 1 CSP (#154) and 2 SDK (#170).
 - Charts (#148), crash log and build target (#150), ShellLayout split (#160).
 - Rollout step 2 complete (#171, row C-30).
-- This change: the dispatch harness for rollout step 3 (forced failing row and crash).
+- The rollout step 3 harness (#173); step 3 then run on main (it filed #174, now no longer open).
+- This change: plan step 0c item 4 ticked (row C-31).
 
 ## In flight
 
-- **Proof of completion, rollout step 3** (plan step 0c): three green main runs exist;
-  a forced failing row and a forced crash need the dispatch harness, under review.
+- **Proof of completion, PR B** (plan step 0c item 5): make both checks required.
 
 ## The next step
 

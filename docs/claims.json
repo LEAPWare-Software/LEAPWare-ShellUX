@@ -1726,6 +1726,152 @@
       ],
       "provenOn": "2026-09-19",
       "addedBy": "rollout step 2 tick (docs/rollout-step2-tick)"
+    },
+    {
+      "id": "C-31",
+      "box": "Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue. Main runs 35421271000, 35422494969 and 35424386634 were green; the `failing-row` dispatch 35427314752 filed #174 through the issue job, and the `crash` dispatch 35427454734 failed and its issue job ran; the `npm run status` readings and #174's text are in `docs/claims-evidence/rollout-step3-2026-09-19.md`.",
+      "class": "github",
+      "checks": [
+        [
+          "gh",
+          "run",
+          "view",
+          "35421271000",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"main_run_1=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35422494969",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"main_run_2=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35424386634",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"main_run_3=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35427314752",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"failing_row_dispatch=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35427454734",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"crash_dispatch=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35427580893",
+          "--json",
+          "conclusion",
+          "--jq",
+          "\"clean_dispatch=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35427314752",
+          "--json",
+          "jobs",
+          "--jq",
+          ".jobs[] | select(.name | startswith(\"File the claims\")) | \"failing_row_issue_job=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "run",
+          "view",
+          "35427454734",
+          "--json",
+          "jobs",
+          "--jq",
+          ".jobs[] | select(.name | startswith(\"File the claims\")) | \"crash_issue_job=\\(.conclusion)\""
+        ],
+        [
+          "gh",
+          "issue",
+          "view",
+          "174",
+          "--json",
+          "author",
+          "--jq",
+          "\"issue_174_author=\\(.author.login)\""
+        ]
+      ],
+      "expect": [
+        {
+          "key": "main_run_1",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "main_run_2",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "main_run_3",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "failing_row_dispatch",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "crash_dispatch",
+          "op": "==",
+          "value": "failure"
+        },
+        {
+          "key": "clean_dispatch",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "failing_row_issue_job",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "crash_issue_job",
+          "op": "==",
+          "value": "success"
+        },
+        {
+          "key": "issue_174_author",
+          "op": "==",
+          "value": "app/github-actions"
+        }
+      ],
+      "provenOn": "2026-09-19",
+      "addedBy": "rollout step 3 record (docs/rollout-step3-record)"
     }
   ],
   "retired": []

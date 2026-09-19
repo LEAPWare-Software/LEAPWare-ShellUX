@@ -16,6 +16,14 @@ from so a reader can check it.
 
 ### Added
 
+- **Proof-of-completion rollout step 3 is complete** (plan step 0c item 4, row C-31).
+  Three consecutive green main runs; a forced failing row on `main` filed issue #174
+  through the issue job; a forced crash failed its run, commented on #174, and turned
+  every one of the 28 run-proven rows to FAILING RUN in `npm run status`; one clean run
+  brought all 28 back to PASSING. Run ids and the status readings are in
+  `docs/claims-evidence/rollout-step3-2026-09-19.md`; C-31 re-reads every run's
+  conclusion. What remains is PR B: making both checks required.
+
 - **A way to force a failure on main, for proof-of-completion rollout step 3.**
   `claims.yml` takes a `workflow_dispatch` with an `inject` choice: `failing-row`
   records one synthetic failed row beside every real row (the issue job files), and
