@@ -2,8 +2,13 @@
 /**
  * Queue a cloud-lane pull request once it is proven ready (docs/cloud/runbook.md, lane C
  * item 0a). Cloud routines cannot enable auto-merge through their proxy, so this runs in
- * GitHub Actions and adds the pull request to the merge queue, which re-runs every
- * required check.
+ * GitHub Actions and adds the pull request to the merge queue. A queue entry made this
+ * way does get the required checks run on it before anything merges — measured, not
+ * assumed, and not asserted by any test here: the run at 2026-09-19T16:30:23Z logged
+ * `auto-queue: #190 queued at 9ee3f218`, and the queue branch
+ * `gh-readonly-queue/main/pr-190-39bf3502` then ran CI, Browser, Claims and PR evidence,
+ * all four `success` (`gh api repos/{owner}/{repo}/actions/runs?event=merge_group`).
+ * See docs/maintainers/repository-settings.md, which carries the same measurement.
  *
  * Ready means all of these hold:
  *   - the pull request is open, not a draft, and its head is the commit that triggered
