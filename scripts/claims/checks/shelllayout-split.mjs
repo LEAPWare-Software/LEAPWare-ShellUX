@@ -10,7 +10,16 @@ const layout = readFileSync(`${DIR}/ShellLayout.tsx`, 'utf8');
 
 const present = MODULES.filter((m) => existsSync(`${DIR}/${m}`)).length;
 const imported = MODULES.filter((m) => layout.includes(`from './${m.replace(/\.tsx?$/, '')}'`)).length;
-const redefined = ['function ShellNavButton', 'function NavNodeButton', 'function NavigationTree', 'function ExtensionPane', 'function EmptyPane', 'function ShellResizeHandle', 'function clampPanePercent'].filter((d) => layout.includes(d)).length;
+// Every piece the box says moved: the components, the palette hook, and all six
+// pane-size exports (review of C-29 found the first version checked one of six).
+const PIECES = [
+  /function ShellNavButton\b/, /function NavNodeButton\b/, /function NavigationTree\b/,
+  /function ExtensionPane\b/, /function EmptyPane\b/, /function ShellResizeHandle\b/,
+  /function useHostPalette\b/,
+  /function percentOf\b/, /function clampToBand\b/, /function clampPanePercent\b/, /function isEngineDefaultLayout\b/,
+  /const PANE_PX\b/, /const PANE_FALLBACK_PERCENT\b/,
+];
+const redefined = PIECES.filter((re) => re.test(layout)).length;
 
 console.log(`split_modules_present=${present}`);
 console.log(`split_modules_imported=${imported}`);
