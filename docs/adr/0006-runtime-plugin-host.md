@@ -570,6 +570,41 @@ isolation", and that is the ceiling of every claim this ADR makes about it.
   today**: `PaneViewShell.tsx` records that consuming it is the next piece of the
   seam, and the plugin manager depends on it. This is a statement about where code
   runs, not a boundary claim, and ADR-0005 remains `Proposed`.
+
+  > **2026-09-19, issue #183 — the enforcement, since the sentence above was
+  > previously only a design statement.** Lifecycle hooks belong to whichever
+  > registry holds the blueprint, and `ExtensionRegistryProvider` now requires
+  > the holder to say so: `runsPluginCode` defaults to `false`, and `register`
+  > refuses any blueprint whose normalised `record.lifecycle` is present in a
+  > registry that has not declared it, returning `{ ok: false }` with
+  > `ShellUXError('INVALID_FIELD', …, 'lifecycle')`. This is **entry-point
+  > validation** at the registry door — the one door all registrations pass
+  > (`.register(` has exactly two non-test callers: `src/paneview/PaneViewShell.tsx`,
+  > mounted directly by `src/paneview/main.paneview.tsx` and never through `App`
+  > by design (that entry point's own docblock: "it adapts the transport itself
+  > rather than importing host chrome's adapter"), and `src/dev/DevShell.tsx`,
+  > which does go through `App`) — and a
+  > **guardrail** against the honest mistake, because the default refuses
+  > rather than silently running plugin code. It is not an integrity control:
+  > `runsPluginCode` is a prop and any caller may pass `true`. The flag is
+  > `true` on the extension surface and, threaded through `AppProps`, in the
+  > dev fixture — and because `dev.html` is the document host chrome loads in a
+  > **development** run, the claim "host chrome refuses lifecycle" is scoped to
+  > the **packaged** topology, not to every run. *Tests:*
+  > `src/core/__tests__/registryNormalization.test.tsx` — "refuses a blueprint
+  > declaring lifecycle hooks in a registry that does not run plugin code, and
+  > names the field"; `src/core/__tests__/lifecycle.test.tsx` — "accepts the
+  > same blueprint, and calls onActivate, when the provider declares it runs
+  > plugin code"; `src/__tests__/App.test.tsx` — "refuses a lifecycle-declaring
+  > registration under App's default, host-chrome-shaped configuration, though
+  > no shipped fixture attempts one today". All three run in jsdom and observe
+  > a return value only; the packaged two-document behaviour is **not
+  > verified in a browser or in the native host** and waits on step 6, which
+  > has not yet landed. Neither shipped mock (`MailPlugin`, `DatabasePlugin`)
+  > declares `lifecycle`, so this guardrail does not catch the mistake of
+  > registering them from host chrome — that is decision 6's own renders-data-
+  > only gap, a different question from this amendment's.
+
 - **Management calls are sender-checked in main.** Install, enable, disable, remove and
   restart are accepted only when the IPC sender is host chrome's `webContents`; both
   views load one preload, so the functions exist in both and the extension surface's

@@ -57,6 +57,34 @@ from so a reader can check it.
   an earlier artefact rather than a mislaid approval of this one, and #189's answer repeats
   the ambiguity by reading "the six gate-4 screens (v4, `docs/design/gate4/`)". The
   decision row, when someone writes it, should name the screens it approves.
+- **Plugin lifecycle-hook ownership, enforced at the registry door** (D-54, GitHub
+  issue #183, ADR-0006 decision 6 amendment). Two documents each run their own
+  `ExtensionRegistryProvider` (host chrome, the extension surface); a blueprint
+  carrying `lifecycle` hooks registered in both would fire every hook twice.
+  `ExtensionRegistryProvider` gains `runsPluginCode` (default `false`), and
+  `register` now refuses any blueprint whose `lifecycle` is set when the provider
+  has not declared it runs plugin code, returning `{ ok: false }` with
+  `ShellUXError('INVALID_FIELD', …, 'lifecycle')`. The extension surface
+  (`PaneViewShell.tsx`) and the dev fixture (`App.tsx`'s new `runsPluginCode`
+  prop, forwarded from `DevShell.tsx`) declare it; host chrome does not, so it
+  refuses the hooks by default. This is entry-point validation at the one door
+  all registrations pass, and a guardrail against the honest mistake — not an
+  integrity control, since `runsPluginCode` is a prop and any caller may pass
+  `true`. Because `dev.html` is the document host chrome loads in a
+  **development** run, the guarantee is scoped to the **packaged** topology, not
+  to every run. *Tests:* "refuses a blueprint declaring lifecycle hooks in a
+  registry that does not run plugin code, and names the field"
+  (`src/core/__tests__/registryNormalization.test.tsx`); "accepts the same
+  blueprint, and calls onActivate, when the provider declares it runs plugin
+  code" (`src/core/__tests__/lifecycle.test.tsx`); "refuses a
+  lifecycle-declaring registration under App's default, host-chrome-shaped
+  configuration, though no shipped fixture attempts one today"
+  (`src/__tests__/App.test.tsx`). All three run in jsdom and observe a return
+  value only; the packaged two-document behaviour is not verified in a
+  browser or in the native host and waits on ADR-0006 step 6. Neither shipped
+  mock declares `lifecycle`, so this guardrail does not catch a lifecycle-free
+  mock being registered from host chrome — a different, pre-existing gap
+  (ADR-0006 decision 6).
 - **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
   - the pull request is open and not a draft;
   - it carries a `lane-*` label;
