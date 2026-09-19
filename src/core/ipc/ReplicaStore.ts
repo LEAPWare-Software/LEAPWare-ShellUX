@@ -1,4 +1,4 @@
-import type { ContextKeyValue, RibbonContext } from '../types';
+import type { ContextKeyValue, NavigationNode, RibbonContext } from '../types';
 import type { ShellStateStore } from '../ShellAPI';
 import { createShellStateStore } from '../ShellAPI';
 import type { PortLike } from './PortLike';
@@ -21,7 +21,7 @@ import type { StoreOperation } from './protocol';
  * ---------------------------------------------------------------------------
  * OPTIMISTIC-LOCAL, AUTHORITATIVE-ASYNC — THE ORDER OF EVENTS
  * ---------------------------------------------------------------------------
- * A write through any of the eight write doors does four things, in this order:
+ * A write through any of the eleven write doors does four things, in this order:
  *
  *  1. **Validates**, through the EXISTING, UNCHANGED validators — because the
  *     replica's local state IS a `createShellStateStore()`. `INVALID_FIELD`,
@@ -443,6 +443,7 @@ export function createReplicaStore(options: ReplicaStoreOptions): ShellStateStor
     subscribe: local.subscribe,
     getBadgeCount: local.getBadgeCount,
     getNavMetric: local.getNavMetric,
+    getNavigationTree: local.getNavigationTree,
 
     patchContext(patch: Partial<RibbonContext>): void {
       writeContext(() => {
@@ -500,6 +501,30 @@ export function createReplicaStore(options: ReplicaStoreOptions): ShellStateStor
     clearContextKeys(): void {
       local.clearContextKeys();
       post({ kind: 'clear-context-keys' });
+    },
+
+    clearBadge(extensionId: string, nodeId: string): void {
+      local.clearBadge(extensionId, nodeId);
+      // Both proven registry-valid strings by the time this runs.
+      post({ kind: 'clear-badge', extensionId, nodeId });
+    },
+
+    setNavigationTree(extensionId: string, nodes: readonly NavigationNode[]): void {
+      local.setNavigationTree(extensionId, nodes);
+      // Read BACK, for `setNavMetric`'s reason and a stronger one: the caller's
+      // array is untrusted and could answer a second read differently, so what
+      // crosses is the replica's own deep-frozen normalised copy. The read cannot
+      // miss — the write above either stored a tree or threw.
+      post({
+        kind: 'set-navigation-tree',
+        extensionId,
+        nodes: local.getNavigationTree(extensionId) as readonly NavigationNode[],
+      });
+    },
+
+    purgeScope(extensionId: string): void {
+      local.purgeScope(extensionId);
+      post({ kind: 'purge-scope', extensionId });
     },
   });
 }

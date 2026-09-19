@@ -5,6 +5,9 @@ import { join, relative, sep } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { RENDERER_CSP, createRendererHandler } from '../main/rendererCsp';
 import { HOST_API_VERSION } from '../main/plugins/hostContract';
+
+/** One minor past the host's contract: a plugin this host must refuse. */
+const NEXT_MINOR = HOST_API_VERSION.replace(/\.(\d+)$/, (_all, minor: string) => `.${Number(minor) + 1}`);
 import { PACKAGE_ENTRY, PACKAGE_FORMAT, serializeManifest } from '../main/plugins/pluginPackage';
 import { createPluginRoute, isPluginRequest, pluginEntryPath } from '../main/plugins/pluginRoute';
 import {
@@ -88,7 +91,7 @@ interface Harness {
 /** `state.json.corrupt-` plus the harness clock's time, colons and dots made dashes. */
 const CORRUPT_NAME = `${STATE_FILE}${CORRUPT_SUFFIX}2026-09-19T12-00-00-000Z`;
 
-function harness(fs: PluginStoreFs = nodePluginStoreFs, hostVersion = '1.0', reports: string[] = []): Harness {
+function harness(fs: PluginStoreFs = nodePluginStoreFs, hostVersion = HOST_API_VERSION, reports: string[] = []): Harness {
   const base = mkdtempSync(join(tmpdir(), 'shellux-plugins-'));
   cleanup.push(base);
   const root = join(base, 'userData', 'plugins');
@@ -160,8 +163,9 @@ describe('the /plugins/ route', () => {
     const newsBundle = 'export default { id: "news" };\n';
     h.install(packageText({ id: 'news', title: 'News', sha512: hashOf(newsBundle) }, newsBundle));
     valueOf(h.store.setEnabled('news', false));
-    // Built against contract 1.1; this host offers 1.0.
-    h.install(packageText({ id: 'future', title: 'Future', hostApiVersion: '1.1' }));
+    // Built against the next minor contract; this host offers HOST_API_VERSION.
+    // (Literal '1.1' against a '1.0' host until the host itself moved to 1.1.)
+    h.install(packageText({ id: 'future', title: 'Future', hostApiVersion: NEXT_MINOR }));
     expect(statusesOf(h.store)).toEqual({ future: 'incompatible', mail: 'enabled', news: 'disabled' });
 
     const served = await h.serve(pluginEntryPath('mail', '1.0.0'));
@@ -473,7 +477,7 @@ describe('the plugin store', () => {
 
   it('sets aside a state.json that is not UTF-8 JSON, reports it, and starts empty', async () => {
     const reports: string[] = [];
-    const h = harness(nodePluginStoreFs, '1.0', reports);
+    const h = harness(nodePluginStoreFs, HOST_API_VERSION, reports);
     h.install(packageText());
     writeFileSync(join(h.root, STATE_FILE), '{');
     // Nothing is served on the word of a state.json that does not validate.

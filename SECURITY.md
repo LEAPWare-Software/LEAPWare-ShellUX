@@ -159,7 +159,17 @@ evidence there.
   `string` context-key value is at most `MAX_CONTEXT_VALUE_LENGTH` (256)
   characters. There is deliberately no way to delete a context key — unsetting one
   means writing `null`, which still occupies a slot — so that key bound is what
-  stops the record growing without limit.
+  stops **one scope's** record growing without limit. It says nothing about how
+  many scopes there are; until host contract 1.1 nothing bounded that, and this
+  sentence read as if it did (GitHub issue #80). Now the shell store holds state
+  for at most `STORE_LIMITS.MAX_SCOPES` (1024) scopes at once — badges, metrics,
+  context keys and navigation trees counted together — and refuses the write that
+  would create one more with `PAYLOAD_TOO_LARGE`; `unregister` purges an
+  extension's scope, freeing it. *Tests:*
+  `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
+  MAX_SCOPES through the public store, and frees one on purge";
+  `src/core/__tests__/lifecycle.test.tsx` — "unregister purges the scope's badges
+  and context keys".
 - **Argument validation on every door into shell state.** The members of
   `IShellAPI` and the members of the unscoped store are held to the same standard,
   field by field, and a rejected patch applies none of its fields.
@@ -182,6 +192,16 @@ plug-in component and no plug-in markup. A ribbon action's `isVisible` predicate
 and its `onExecute` handler are each called inside a guard, a throwing predicate
 is treated as not visible, and the report path is itself guarded so a tampered
 `console.error` cannot turn containment into an escape.
+
+**Lifecycle hooks are contained to the extension that declared them** (host
+contract 1.1, ADR-0006 decision 8). A throwing `onActivate` fails that
+extension's activation and releases its handle; a throwing `onDeactivate` or
+`onRelease` is reported and the handover or the revocation completes anyway. That
+is error containment of an honest fault, not a boundary: nothing here stops a
+hostile extension reaching a sibling by the routes listed below. *Tests:*
+`src/core/__tests__/lifecycle.test.tsx` — "a throwing onActivate leaves a healthy
+sibling fully usable" and "calls onRelease before revocation, and revokes even
+when it throws".
 
 **Its limits, which are the documented ones and not a surprise.** React error
 boundaries catch render, lifecycle and constructor errors. They do **not** catch
@@ -241,6 +261,23 @@ repository *claims* otherwise is genuinely valuable — see below.
   the store is one browser storage entry under one origin, which any script on the
   page reads and rewrites without going through the engine at all. **Nothing
   confidential belongs in persisted UI state**, or in shell state generally.
+- **The store's scope bound can be spent by anyone holding the store.** It is
+  entry-point validation on the store's doors, not a quota per extension: code
+  that names 1024 made-up scopes through the public `useShellStore()` fills it,
+  after which a scope that holds nothing yet — a newly registered extension's
+  first badge, say — is refused until something is purged, and any holder can
+  also `purgeScope` a sibling's scope, in one renderer or over the replicated
+  store's wire. Through an extension's own facade only its own scope is
+  reachable, and `unregister` frees it, so the documented channel reaches the
+  bound only when more than 1023 extensions are registered and writing at once —
+  and then the 1025th extension's own `setBadgeCount`, `setNavMetric`,
+  `setContextKey` and `setNavigationTree` are refused. *Tests:*
+  `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
+  MAX_SCOPES through the public store, and frees one on purge", "refuses a new
+  scope through an extension's own handle once 1024 are held" and "lets any
+  holder of the store purge another extension's scope, in one renderer";
+  `src/core/ipc/__tests__/replicaStore.test.ts` — "lets any holder of the store
+  purge another extension's scope, across the wire too".
 - **`unregister` has no authorisation model.** Any holder of the registry can
   remove any extension, including one it did not register. This is an accepted
   scope decision (ADR-0001 Amendment B), not an oversight: an extension motivated

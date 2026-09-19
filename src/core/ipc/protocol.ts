@@ -1,4 +1,4 @@
-import type { ContextKeyValue, RibbonContext, ShellUXErrorCode } from '../types';
+import type { ContextKeyValue, NavigationNode, RibbonContext, ShellUXErrorCode } from '../types';
 import type { ShellStateStore } from '../ShellAPI';
 
 /**
@@ -82,13 +82,19 @@ export const PROTOCOL_VERSION = 1;
  * back out of its own store after the write, and those are frozen host-built
  * values that cannot change their mind. See `ReplicaStore`.
  *
- * The three that are not context fields keep their own shape, because their
- * state is not in the snapshot and cannot be derived from it: a badge, a nav
- * metric, and one extension's context-key namespace. `clear-context-keys` is the
- * bookkeeping half of a foreground handover and carries nothing.
+ * The ones that are not context fields keep their own shape, because their
+ * state is not in the snapshot and cannot be derived from it: a badge (set or
+ * cleared), a nav metric, one extension's context-key namespace, and one
+ * extension's replacement navigation tree. `clear-context-keys` is the
+ * bookkeeping half of a foreground handover and carries nothing; `purge-scope`
+ * is the bookkeeping half of an unregister and carries the scope (ADR-0006
+ * decision 8).
  *
  * **Every field of every member is a primitive, an array of primitives, or a
- * record of primitives.** That is `ContextKeyValue`'s primitives-only rule doing
+ * record of primitives — with one member nested deeper.** `set-navigation-tree`
+ * carries a tree: records of primitives, arrays of those, and a metric record,
+ * as `normalizeNavigationTree` builds it — still data only, with no function a
+ * normaliser could have copied, because the normaliser copies none. That is `ContextKeyValue`'s primitives-only rule doing
  * the work §3.5 of the plan credits it with: the union written for
  * render-phase-getter reasons is what makes this transport free. Nothing here
  * needs a serializer, and nothing here can carry a getter across.
@@ -118,7 +124,24 @@ export type StoreOperation =
       readonly key: string;
       readonly value: ContextKeyValue;
     }
-  | { readonly kind: 'clear-context-keys' };
+  | { readonly kind: 'clear-context-keys' }
+  | {
+      readonly kind: 'clear-badge';
+      readonly extensionId: string;
+      readonly nodeId: string;
+    }
+  | {
+      readonly kind: 'set-navigation-tree';
+      readonly extensionId: string;
+      /**
+       * The replica's own host-normalised copy, read back after the local write,
+       * never the caller's array. Main re-normalises it through the same
+       * validator on arrival, so a renderer that bypassed its replica gains
+       * nothing by sending a tree of its own.
+       */
+      readonly nodes: readonly NavigationNode[];
+    }
+  | { readonly kind: 'purge-scope'; readonly extensionId: string };
 
 /** The discriminant of `StoreOperation`. */
 export type StoreOperationKind = StoreOperation['kind'];
@@ -160,6 +183,15 @@ const OPERATION_APPLIERS: {
   },
   'clear-context-keys': (store): void => {
     store.clearContextKeys();
+  },
+  'clear-badge': (store, op): void => {
+    store.clearBadge(op.extensionId, op.nodeId);
+  },
+  'set-navigation-tree': (store, op): void => {
+    store.setNavigationTree(op.extensionId, op.nodes);
+  },
+  'purge-scope': (store, op): void => {
+    store.purgeScope(op.extensionId);
   },
 });
 

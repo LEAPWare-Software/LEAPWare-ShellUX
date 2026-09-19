@@ -42,7 +42,7 @@
  * Major moves when a plugin must change to keep working; minor moves on anything
  * additive. The rule the baseline enforces is in `./apiSurface.ts`.
  */
-export const HOST_API_VERSION = '1.0';
+export const HOST_API_VERSION = '1.1';
 
 export { useChannelPayload } from '../core/payload/PayloadChannel';
 export { TOKEN_CLASS } from '../core/theme/tokenClasses';
@@ -52,6 +52,7 @@ export { RowMetric } from '../components/ui/RowMetric';
 export type { RowMetricProps } from '../components/ui/RowMetric';
 export type {
   Command,
+  ExtensionLifecycle,
   ExtensionViewProps,
   IShellAPI,
   LEAPExtensionBlueprintInput,

@@ -4,11 +4,13 @@ import {
   REGISTRY_LIMITS,
   RESERVED_IDS,
   clampMetricValue,
+  normalizeNavigationTree,
 } from './RegistryContext';
 import type {
   BlockKind,
   ContextKeyValue,
   IShellAPI,
+  NavigationNode,
   RibbonContext,
   StructuredPayload,
 } from './types';
@@ -337,8 +339,9 @@ export interface ShellStateStore {
    *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
    *   `INVALID_FIELD` when `count` is not a non-negative safe integer;
-   *   `REENTRANT_NOTIFY` from the notification cascade, after the badge is
-   *   committed.
+   *   `PAYLOAD_TOO_LARGE` when `extensionId` would be a scope beyond
+   *   `STORE_LIMITS.MAX_SCOPES`; `REENTRANT_NOTIFY` from the notification
+   *   cascade, after the badge is committed.
    */
   setBadgeCount(extensionId: string, nodeId: string, count: number): void;
   /**
@@ -375,8 +378,10 @@ export interface ShellStateStore {
    * `src/core/__tests__/navMetric.test.tsx`.
    *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
-   *   `INVALID_FIELD` when `value` is not a finite number; `REENTRANT_NOTIFY`
-   *   from the notification cascade, after the value is committed.
+   *   `INVALID_FIELD` when `value` is not a finite number; `PAYLOAD_TOO_LARGE`
+   *   when `extensionId` would be a scope beyond `STORE_LIMITS.MAX_SCOPES`;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the value is
+   *   committed.
    */
   setNavMetric(extensionId: string, nodeId: string, value: number): void;
   /**
@@ -450,8 +455,9 @@ export interface ShellStateStore {
    *
    * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `key`;
    *   `INVALID_FIELD` when `value` is not a finite number, string, boolean or
-   *   `null`; `PAYLOAD_TOO_LARGE` when a string value is too long or the key
-   *   would exceed `REGISTRY_LIMITS.MAX_CONTEXT_KEYS`; `REENTRANT_NOTIFY` from
+   *   `null`; `PAYLOAD_TOO_LARGE` when a string value is too long, the key
+   *   would exceed `REGISTRY_LIMITS.MAX_CONTEXT_KEYS`, or `extensionId` would be
+   *   a scope beyond `STORE_LIMITS.MAX_SCOPES`; `REENTRANT_NOTIFY` from
    *   the notification cascade, after the key is committed.
    */
   setContextKey(extensionId: string, key: string, value: ContextKeyValue): void;
@@ -465,7 +471,81 @@ export interface ShellStateStore {
    * coherent notification.
    */
   clearContextKeys(): void;
+  /**
+   * Delete one extension's badge entry for `nodeId`. Notifies only when an entry
+   * was removed. See `IShellAPI.clearBadge`; this is the unscoped door behind it.
+   *
+   * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId` or `nodeId`;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the entry is
+   *   removed.
+   */
+  clearBadge(extensionId: string, nodeId: string): void;
+  /**
+   * Replace `extensionId`'s navigation tree with `nodes`, re-normalised through
+   * the registry's own tree validator (`normalizeNavigationTree`), and notify.
+   * See `IShellAPI.setNavigationTree`; this is the unscoped door behind it.
+   *
+   * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId`; every code the
+   *   tree validator raises; `PAYLOAD_TOO_LARGE` when the scope bound refuses a
+   *   new scope; `REENTRANT_NOTIFY` after the tree is stored.
+   */
+  setNavigationTree(extensionId: string, nodes: readonly NavigationNode[]): void;
+  /**
+   * The tree last stored for `extensionId` by `setNavigationTree`, or `undefined`
+   * when none was — in which case the registered blueprint's tree stands. The
+   * returned array is the deep-frozen host-owned copy.
+   *
+   * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId`.
+   */
+  getNavigationTree(extensionId: string): readonly NavigationNode[] | undefined;
+  /**
+   * Delete everything this store holds under `extensionId`'s scope — badges,
+   * metrics, context keys and a replacement navigation tree — and free the scope
+   * for `STORE_LIMITS.MAX_SCOPES`. ADR-0006 decision 8, GitHub issue #80.
+   *
+   * `ShellHostProvider` calls it inside `unregister`, before the record is
+   * removed, so an id registered again later starts from nothing. When the scope
+   * is the current foreground and has published context keys, the published
+   * record is emptied in the same notification. Notifies only when something was
+   * removed. *Tests:* `src/core/__tests__/lifecycle.test.tsx` — "unregister purges
+   * the scope's badges and context keys".
+   *
+   * Public, like every member here: any holder of the store can purge any scope,
+   * which is no more than it could already do by overwriting it.
+   *
+   * @throws {ShellUXError} `INVALID_ID` for a bad `extensionId`;
+   *   `REENTRANT_NOTIFY` from the notification cascade, after the purge.
+   */
+  purgeScope(extensionId: string): void;
 }
+
+/**
+ * Bounds the shell store enforces on itself, as opposed to on a blueprint.
+ *
+ * **`MAX_SCOPES` — how many distinct scopes the store will hold state for at
+ * once**, counting every scope that has written a badge, a metric, a context key
+ * or a navigation tree since it was last purged, the host's own included. A
+ * write that would create one more is refused with `PAYLOAD_TOO_LARGE`; a scope
+ * already held keeps writing. GitHub issue #80, ADR-0006 decision 8.
+ *
+ * **What it is: entry-point validation, at the store's doors.** An extension's
+ * own facade can name only its own scope, and `unregister` purges that scope, so
+ * through the documented channel the count follows the number of registered
+ * extensions. `useShellStore()` is public and names any scope, and this is the
+ * bound on that route. It is not a bound on memory in general.
+ *
+ * **Why it is not in `REGISTRY_LIMITS`.** That object is the contract recorded
+ * in `src/sdk/api-surface.json`, and it bounds what a blueprint may declare.
+ * This bounds the store, and a plug-in can reach it through its own facade only
+ * by being one of more than 1023 extensions registered at once, all writing.
+ * The judgement that this is not a contract narrowing is recorded in ADR-0006's
+ * dated note of 2026-09-19 under decision 8. *Tests:*
+ * `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
+ * MAX_SCOPES through the public store, and frees one on purge".
+ */
+export const STORE_LIMITS = Object.freeze({
+  MAX_SCOPES: 1024,
+});
 
 /**
  * The one empty selection, shared by every context that has none.
@@ -1050,18 +1130,18 @@ const MAX_NOTIFY_DEPTH = 16;
  * one, nothing on a function object that exposes what it captured. A caller who
  * walks React's fiber tree — which is possible, and is pinned by
  * `src/core/__tests__/reflection.test.tsx` ("never reaches the badge map itself,
- * because it is a closure variable") — obtains the twelve METHODS and never the state
+ * because it is a closure variable") — obtains the sixteen METHODS and never the state
  * behind them.
  *
  * *Its methods are its own.* The returned object is **frozen**, so no holder can
- * replace, delete or add a member. Every one of the twelve that takes an argument validates it.
+ * replace, delete or add a member. Every one of the sixteen that takes an argument validates it.
  * Therefore no caller can put a value of the wrong shape into this store's
  * context: every value that enters the context through this store is well-typed,
  * for any caller however hostile. Pinned by `reflection.test.tsx` ("gets the store
  * methods, cannot replace one, and cannot put an illegal value through one") and by
  * `capability.test.tsx` ("the store handed out by useShellStore is frozen").
  *
- * **"Every one of the twelve" was false by one member until #83, and the member it
+ * **"Every one of the twelve" (as the count then was) was false by one member until #83, and the member it
  * was false about was `subscribe`.** It took a listener, added it to a `Set`
  * unchecked, and a stored `undefined` then threw a raw `TypeError` out of the next
  * unrelated write and every write after it. The premise is repaired rather than
@@ -1077,7 +1157,7 @@ const MAX_NOTIFY_DEPTH = 16;
  * **That is the whole of it, and a wider clause used to be appended here.** The
  * sentence went on: "and no caller can intercept, suppress or forge the writes and
  * reads another holder makes through it." **False, and the freeze is irrelevant to
- * it.** `subscribe` is one of the twelve frozen members, it is reachable through the
+ * it.** `subscribe` is one of the sixteen frozen members, it is reachable through the
  * public `useShellStore()`, and it runs plug-in code SYNCHRONOUSLY INSIDE ANOTHER
  * HOLDER'S WRITE. Nothing is replaced, so nothing the freeze does applies. The real
  * limit, stated plainly: **a listener is a synchronous call into untrusted code
@@ -1143,6 +1223,12 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   // published record needs a whole scope at once; a `Map` at both levels for the
   // same prototype reason as `badgeCounts`. See `setContextKey`.
   const contextKeyScopes = new Map<string, Map<string, ContextKeyValue>>();
+  // Replacement navigation trees, one per scope, each the deep-frozen output of
+  // `normalizeNavigationTree`. See `setNavigationTree`.
+  const navTrees = new Map<string, readonly NavigationNode[]>();
+  // Every scope holding state in any of the four maps above since it was last
+  // purged. Bounded by `STORE_LIMITS.MAX_SCOPES`; see `claimScope`.
+  const scopes = new Set<string>();
   const listeners = new Set<() => void>();
   // Depth of the notification cascade currently in flight; see MAX_NOTIFY_DEPTH.
   let notifyDepth = 0;
@@ -1417,6 +1503,28 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     applyPatch(patch, 'patchContext');
   }
 
+  /**
+   * Count `extensionId` as a scope holding state, refusing it when it would be
+   * one more than `STORE_LIMITS.MAX_SCOPES`. Called by every write that can
+   * create per-scope state, after its arguments are validated and before anything
+   * is stored — so a refused write stores nothing. A scope already held is never
+   * refused. It stays counted until `purgeScope`, including after a foreground
+   * handover empties its context keys.
+   */
+  function claimScope(extensionId: string, method: string): void {
+    if (scopes.has(extensionId)) {
+      return;
+    }
+    if (scopes.size >= STORE_LIMITS.MAX_SCOPES) {
+      throw new ShellUXError(
+        'PAYLOAD_TOO_LARGE',
+        `${method}: the shell store already holds state for ${STORE_LIMITS.MAX_SCOPES} scopes, and "${extensionId}" would be one more. A scope is freed when its extension is unregistered.`,
+        'extensionId',
+      );
+    }
+    scopes.add(extensionId);
+  }
+
   function getBadgeCount(extensionId: string, nodeId: string): number | undefined {
     // Both, and before the key is built. This door used to check neither, and it
     // is a door plugin code can reach.
@@ -1435,6 +1543,7 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
         'count',
       );
     }
+    claimScope(extensionId, 'setBadgeCount');
     // Keyed by scope, so two extensions that both call their root node "inbox"
     // write to two different entries instead of overwriting each other.
     badgeCounts.set(badgeKey(extensionId, nodeId), count);
@@ -1459,7 +1568,9 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     assertValidNodeId(nodeId, 'setNavMetric');
     // The registry's own rule, imported rather than restated: clamped for an
     // out-of-range number, refused for a non-finite one.
-    navMetrics.set(badgeKey(extensionId, nodeId), clampMetricValue(value, 'setNavMetric', 'value'));
+    const clamped = clampMetricValue(value, 'setNavMetric', 'value');
+    claimScope(extensionId, 'setNavMetric');
+    navMetrics.set(badgeKey(extensionId, nodeId), clamped);
     // UNCONDITIONAL, exactly as `setBadgeCount`'s notify is: a metric is not part
     // of the context snapshot, so `useShellContext` bails out on its own
     // unchanged snapshot, and it is `useNavMetric`'s `Object.is` bail-out that
@@ -1553,6 +1664,7 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     assertValidIdentifier(key, 'setContextKey', 'key', false);
     assertValidContextKeyValue(value, 'setContextKey', 'value');
 
+    claimScope(extensionId, 'setContextKey');
     let scope = contextKeyScopes.get(extensionId);
     if (scope === undefined) {
       scope = new Map<string, ContextKeyValue>();
@@ -1601,6 +1713,65 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     contextKeyScopes.clear();
   }
 
+  function clearBadge(extensionId: string, nodeId: string): void {
+    assertValidBadgeScope(extensionId, 'clearBadge');
+    assertValidNodeId(nodeId, 'clearBadge');
+    // A delete, not a write of zero: `getBadgeCount` answers `undefined` after
+    // it, and pane 1 falls back to the count the blueprint declared. Clearing an
+    // entry that is not there moved nothing, so nobody is woken.
+    if (badgeCounts.delete(badgeKey(extensionId, nodeId))) {
+      notify();
+    }
+  }
+
+  function setNavigationTree(extensionId: string, nodes: readonly NavigationNode[]): void {
+    assertValidBadgeScope(extensionId, 'setNavigationTree');
+    // The registry's own validator, over the WHOLE tree, rooted at the name of
+    // this door's parameter. It throws before anything below runs, so a refused
+    // tree leaves the previous one in place.
+    const tree = normalizeNavigationTree(nodes, 'nodes');
+    claimScope(extensionId, 'setNavigationTree');
+    navTrees.set(extensionId, tree);
+    // UNCONDITIONAL, as `setBadgeCount`'s is: a fresh tree is a fresh identity,
+    // and `useNavigationTree` re-renders on it.
+    notify();
+  }
+
+  function getNavigationTree(extensionId: string): readonly NavigationNode[] | undefined {
+    assertValidBadgeScope(extensionId, 'getNavigationTree');
+    return navTrees.get(extensionId);
+  }
+
+  function purgeScope(extensionId: string): void {
+    assertValidBadgeScope(extensionId, 'purgeScope');
+    if (!scopes.delete(extensionId)) {
+      // Nothing was ever stored under it, or it was purged already.
+      return;
+    }
+    // The flat maps are keyed `${scope}:${node}`, and neither component can hold
+    // a `:` (see `badgeKey`), so this prefix matches exactly this scope's keys.
+    const prefix = `${extensionId}:`;
+    for (const key of Array.from(badgeCounts.keys())) {
+      if (key.startsWith(prefix)) {
+        badgeCounts.delete(key);
+      }
+    }
+    for (const key of Array.from(navMetrics.keys())) {
+      if (key.startsWith(prefix)) {
+        navMetrics.delete(key);
+      }
+    }
+    contextKeyScopes.delete(extensionId);
+    navTrees.delete(extensionId);
+    if (context.activeExtensionId === extensionId && Object.keys(context.contextKeys).length > 0) {
+      // The purged scope's keys are the published ones: empty the record in the
+      // one notification `applyPatch` makes, rather than notifying twice.
+      applyPatch({ contextKeys: {} }, 'purgeScope');
+      return;
+    }
+    notify();
+  }
+
   if (initial !== undefined) {
     applyPatch(initial, 'createShellStateStore');
   }
@@ -1616,13 +1787,13 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
   //
   // `Object.freeze`, not `deepFreeze`: the members are host-written functions with
   // nothing underneath them worth walking, and a shallow freeze is exactly the
-  // property being bought — the twelve bindings cannot be replaced, deleted, or
+  // property being bought — the sixteen bindings cannot be replaced, deleted, or
   // added to. Pinned by "the store handed out by useShellStore is frozen" in
   // `capability.test.tsx` and "the store object cannot be rewired" in
   // `shellApi.test.ts`.
   //
   // What the freeze does NOT buy is that calls through the object are private:
-  // `subscribe` is one of the twelve, it is public, and it runs plug-in code inside
+  // `subscribe` is one of the sixteen, it is public, and it runs plug-in code inside
   // another holder's write. See its docblock and `subscribe.test.tsx`.
   return Object.freeze({
     getContext,
@@ -1637,6 +1808,10 @@ export function createShellStateStore(initial?: Partial<RibbonContext>): ShellSt
     setActiveNavNode,
     setContextKey,
     clearContextKeys,
+    clearBadge,
+    setNavigationTree,
+    getNavigationTree,
+    purgeScope,
   });
 }
 
@@ -1682,14 +1857,15 @@ export interface RevocableShellAPI {
    *
    * **Not on `api`, and not reachable from it.** It is a property of THIS wrapper,
    * and it closes over a variable no other scope can reach, so a plugin holding
-   * `api` has no route to it: `Object.keys(api)` is exactly the fourteen
-   * `IShellAPI` members and there is no fifteenth. That much is an integrity control and holds
+   * `api` has no route to it: `Object.keys(api)` is exactly the sixteen
+   * `IShellAPI` members and there is no seventeenth. That much is an integrity control and holds
    * against any caller, and it is pinned by "does not expose revoke to the plugin"
    * in `src/core/__tests__/dataflow.test.tsx`, whose assertion is the literal
    * member list rather than a count — so widening `IShellAPI` from three members
    * to seven in Amendment K, from seven to nine when `setNavMetric` and
    * `getNavMetric` landed, and from nine to twelve when the payload channel did,
-   * and from twelve to fourteen when `getTheme` and `onThemeChange` did, were
+   * from twelve to fourteen when `getTheme` and `onThemeChange` did, and from
+   * fourteen to sixteen when `clearBadge` and `setNavigationTree` did, were
    * all changes that test had to be told about, which is the point of writing it
    * that way.
    *
@@ -1788,7 +1964,7 @@ export interface RevocableShellAPI {
  *
  * @throws {ShellUXError} `INVALID_ID` when `extensionId` is neither a
  *   registry-valid identifier nor `HOST_BADGE_SCOPE`. That is the only outcome
- *   THIS function decides on; what the returned `api`'s fourteen members can raise
+ *   THIS function decides on; what the returned `api`'s sixteen members can raise
  *   is documented on `IShellAPI` in `types.ts`. Pinned by "refuses to mint a
  *   scoped facade for an extensionId that was never validated" in
  *   `src/core/__tests__/shellApi.test.ts`.
@@ -1857,6 +2033,19 @@ export function createRevocableShellAPI(
       // the write half has, so a handle can read back exactly what it can write
       // and nothing else. There is no parameter through which to aim elsewhere.
       return store.getBadgeCount(extensionId, nodeId);
+    },
+
+    clearBadge(nodeId: string): void {
+      assertLive('clearBadge');
+      // `extensionId` from the closure, never from the caller.
+      store.clearBadge(extensionId, nodeId);
+    },
+
+    setNavigationTree(nodes: readonly NavigationNode[]): void {
+      assertLive('setNavigationTree');
+      // `extensionId` from the closure, never from the caller. The store runs the
+      // registry's whole-tree validator; nothing of `nodes` is kept.
+      store.setNavigationTree(extensionId, nodes);
     },
 
     setNavMetric(nodeId: string, value: number): void {
@@ -2113,6 +2302,24 @@ export function useBadgeCount(extensionId: string, nodeId: string): number | und
   const getSnapshot = useCallback(
     (): number | undefined => store.getBadgeCount(extensionId, nodeId),
     [store, extensionId, nodeId],
+  );
+  return useSyncExternalStore(store.subscribe, getSnapshot);
+}
+
+/**
+ * The navigation tree `extensionId` last replaced through `setNavigationTree`,
+ * or `undefined` when it has not — in which case the caller renders the
+ * registered blueprint's tree. Subscribes, so pane 1 re-renders when the tree is
+ * replaced or purged. ADR-0006 decision 8, GitHub issue #16.
+ *
+ * What this re-renders is observable in jsdom only as DOM text; nothing here is
+ * a claim about layout.
+ */
+export function useNavigationTree(extensionId: string): readonly NavigationNode[] | undefined {
+  const store = useShellStore();
+  const getSnapshot = useCallback(
+    (): readonly NavigationNode[] | undefined => store.getNavigationTree(extensionId),
+    [store, extensionId],
   );
   return useSyncExternalStore(store.subscribe, getSnapshot);
 }

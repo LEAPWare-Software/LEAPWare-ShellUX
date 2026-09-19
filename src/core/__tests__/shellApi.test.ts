@@ -247,15 +247,19 @@ describe('createShellStateStore', () => {
       const target = store as unknown as Record<string, unknown>;
       const before = { ...target };
       expect(Object.keys(before).sort()).toEqual([
+        'clearBadge',
         'clearContextKeys',
         'getBadgeCount',
         'getContext',
         'getNavMetric',
+        'getNavigationTree',
         'patchContext',
+        'purgeScope',
         'setActiveNavNode',
         'setBadgeCount',
         'setContextKey',
         'setNavMetric',
+        'setNavigationTree',
         'setSelectedItem',
         'setSelectedItems',
         'subscribe',

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { ReactElement } from 'react';
-import { useBadgeCount, useNavMetric } from '../../core/ShellAPI';
+import { useBadgeCount, useNavMetric, useNavigationTree } from '../../core/ShellAPI';
 import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import type { NavigationMetric, NavigationNode } from '../../core/types';
 import { MetricGlyph } from '../ui/MetricGlyph';
@@ -282,4 +282,27 @@ export function NavigationTree({
       ))}
     </ul>
   );
+}
+
+interface ExtensionNavigationTreeProps extends Omit<NavigationTreeProps, 'nodes'> {
+  /** The tree the extension's registered blueprint declared. */
+  readonly declared: readonly NavigationNode[];
+}
+
+/**
+ * The foreground extension's tree as it stands now: the replacement it last set
+ * through `IShellAPI.setNavigationTree`, or — when it has set none — the tree
+ * its blueprint declared. ADR-0006 decision 8, GitHub issue #16.
+ *
+ * Subscribes, so a replacement re-renders pane 1 without a registry change.
+ * *Tests:* `src/components/__tests__/ShellLayoutBadges.test.tsx` — "renders the
+ * tree an extension set at runtime, and a cleared badge falls back to the
+ * declared count". That is DOM text in jsdom, not a claim about layout.
+ */
+export function ExtensionNavigationTree({
+  declared,
+  ...tree
+}: ExtensionNavigationTreeProps): ReactElement {
+  const replaced = useNavigationTree(tree.extensionId);
+  return <NavigationTree {...tree} nodes={replaced ?? declared} />;
 }

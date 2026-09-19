@@ -360,15 +360,19 @@ describe('the between-extension boundary is not enforceable in-page', () => {
     // validates. This is an integrity control, not entry-point validation: it
     // holds for this caller exactly as it holds for the host.
     expect(Object.keys(store as ShellStateStore).sort()).toEqual([
+      'clearBadge',
       'clearContextKeys',
       'getBadgeCount',
       'getContext',
       'getNavMetric',
+      'getNavigationTree',
       'patchContext',
+      'purgeScope',
       'setActiveNavNode',
       'setBadgeCount',
       'setContextKey',
       'setNavMetric',
+      'setNavigationTree',
       'setSelectedItem',
       'setSelectedItems',
       'subscribe',

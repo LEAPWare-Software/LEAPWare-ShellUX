@@ -628,7 +628,12 @@ describe('re-registering an id does not resurrect the previous handle', () => {
 
     // The scope `mail-ext` now belongs to vendor B. Vendor A may not write to it.
     expect(expectShellUXError(() => vendorA.shell.setBadgeCount('root-a', 99)).code).toBe('REVOKED');
-    expect(host.result.current.store.getBadgeCount('mail-ext', 'root-a')).toBe(7);
+    // Nor does vendor B inherit vendor A's 7. This read used to be `7`: the
+    // badge outlived the registration it was written under. `unregister` now
+    // purges the scope before the record goes (ADR-0006 decision 8, #80), so
+    // vendor B starts from nothing — pinned on its own by "unregister purges the
+    // scope's badges and context keys" in `lifecycle.test.tsx`.
+    expect(host.result.current.store.getBadgeCount('mail-ext', 'root-a')).toBeUndefined();
   });
 });
 

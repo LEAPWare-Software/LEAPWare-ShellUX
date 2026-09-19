@@ -16,6 +16,33 @@ from so a reader can check it.
 
 ### Added
 
+- **Plugin lifecycle hooks, a runtime navigation tree, and badge clearing** (ADR-0006
+  step 5; addresses #17, #16 and #80). Host contract **1.1**: a minor bump, since every
+  addition is optional or new. An extension may declare `lifecycle` hooks
+  (`onActivate`, `onDeactivate`, `onRelease`); `onRelease` runs before the handle is
+  revoked, a throwing hook fails only its own extension's activation (error containment,
+  not a boundary between plugins), an async hook's rejection is reported, and an
+  `activate` made from inside a hook is refused with `LIFECYCLE_REENTRY`.
+  `IShellAPI.setNavigationTree` re-normalises the whole tree through the registration
+  validator, and `IShellAPI.clearBadge` removes a runtime badge. Unregistering an
+  extension purges its store scope (one named gap: an unregister made before the
+  provider subscribes, followed by a same-id re-registration, leaves the scope to the
+  newcomer; the ADR-0006 step-5 note pins it); the store holds at most 1024 scopes, and a write that
+  needs a 1025th throws `PAYLOAD_TOO_LARGE`, now documented on each method that can
+  throw it. The mocked-`IShellAPI` stub in `DEVELOPER.md` lists all sixteen members.
+  Failure mode: no plugin code ran around activation, and store scopes outlived their
+  registrations, so a later extension could read a predecessor's badge. *Tests:*
+  "calls onRelease before revocation, and revokes even when it throws", "a throwing
+  onActivate leaves a healthy sibling fully usable", "unregister purges the scope's
+  badges and context keys", "refuses an activate made from inside onDeactivate, and the
+  outer handover completes", "refuses an activate made from inside a hook's returned
+  then", "reports an async hook's rejection through the fault path, without awaiting
+  it", "setNavigationTree re-normalises the whole tree at the door", "clearBadge deletes
+  the entry rather than writing zero", "refuses a new scope through an extension's own
+  handle once 1024 are held". **Not done:** pane 1 rendering a replaced tree is checked
+  in jsdom only, not in a browser (no shipped extension calls it yet); which document
+  owns a plugin's hooks is left to step 6 (#183).
+
 - **Wave-3 state primitives** (W3-1, `docs/design/WAVE3-PLAN.md` R6 and R7). A
   `Button` (primary and quiet: hover, a pressed state one step past hover, a two-tone
   focus-visible ring, disabled in disabled ink at full opacity, and a loading state that

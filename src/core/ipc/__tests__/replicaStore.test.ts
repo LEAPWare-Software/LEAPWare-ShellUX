@@ -355,6 +355,55 @@ describe('ReplicaStore — property 3 preface: echo suppression', () => {
     expect(paneThree.store.getNavMetric('mail', 'inbox')).toBe(0.5);
   });
 
+  it('replicates a cleared badge, a replaced navigation tree and a purged scope', () => {
+    const board = shell();
+    const paneTwo = board.pane('pane2');
+    const paneThree = board.pane('pane3');
+
+    const nodes = [{ id: 'inbox', label: 'Inbox' }];
+    paneTwo.store.setBadgeCount('mail', 'inbox', 7);
+    paneTwo.store.setNavigationTree('mail', nodes);
+    board.settle();
+    expect(paneThree.store.getNavigationTree('mail')).toEqual(nodes);
+
+    paneTwo.store.clearBadge('mail', 'inbox');
+    board.settle();
+    expect(paneThree.store.getBadgeCount('mail', 'inbox')).toBeUndefined();
+
+    paneTwo.store.setBadgeCount('mail', 'inbox', 2);
+    paneTwo.store.purgeScope('mail');
+    board.settle();
+    expect(paneThree.store.getBadgeCount('mail', 'inbox')).toBeUndefined();
+    expect(paneThree.store.getNavigationTree('mail')).toBeUndefined();
+    expect(board.violations).toEqual([]);
+  });
+
+  it("lets any holder of the store purge another extension's scope, across the wire too", () => {
+    const board = shell();
+    const paneTwo = board.pane('pane2');
+    const paneThree = board.pane('pane3');
+    // Pane 2's extension writes its badge; pane 3 — any other holder — purges
+    // that scope, and main and pane 2 apply it. Nothing checks who owns a scope.
+    paneTwo.store.setBadgeCount('mail', 'inbox', 7);
+    board.settle();
+    paneThree.store.purgeScope('mail');
+    board.settle();
+    expect(board.main.getBadgeCount('mail', 'inbox')).toBeUndefined();
+    expect(paneTwo.store.getBadgeCount('mail', 'inbox')).toBeUndefined();
+    expect(board.violations).toEqual([]);
+  });
+
+  it('posts the normalised tree it kept, not the caller’s array', () => {
+    const pane = loneReplica();
+    const nodes = [{ id: 'inbox', label: 'Inbox', stray: 'dropped' }];
+    pane.store.setNavigationTree('mail', nodes);
+    // The port structured-clones, so identity cannot be asserted across it; the
+    // key the normaliser does not copy is the witness that what crossed was the
+    // replica's own copy.
+    const posted = operations(pane.sent)[0] as { nodes: unknown };
+    expect(posted.nodes).toEqual([{ id: 'inbox', label: 'Inbox' }]);
+  });
+
   it('replicates a foreground handover, keys and all', () => {
     const board = shell();
     const paneTwo = board.pane('pane2');
@@ -434,15 +483,19 @@ describe('ReplicaStore — the three contract corrections', () => {
     // caller, and the authoritative half is the pane teardown. Correction 2.
     expect(Object.keys(pane.store).sort()).toEqual(
       [
+        'clearBadge',
         'clearContextKeys',
         'getBadgeCount',
         'getContext',
         'getNavMetric',
+        'getNavigationTree',
         'patchContext',
+        'purgeScope',
         'setActiveNavNode',
         'setBadgeCount',
         'setContextKey',
         'setNavMetric',
+        'setNavigationTree',
         'setSelectedItem',
         'setSelectedItems',
         'subscribe',

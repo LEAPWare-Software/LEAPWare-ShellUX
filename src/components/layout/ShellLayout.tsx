@@ -45,7 +45,7 @@ import {
   paneBandsAt,
 } from './paneSizing';
 import type { PaneIntent } from './paneSizing';
-import { NavigationTree, ShellNavButton } from './ShellNavigation';
+import { ExtensionNavigationTree, ShellNavButton } from './ShellNavigation';
 import { ShellResizeHandle } from './ShellResizeHandle';
 import { useHostPalette } from './useHostPalette';
 
@@ -1179,9 +1179,9 @@ export function ShellLayout({
           >
             Navigation
           </h2>
-          <NavigationTree
+          <ExtensionNavigationTree
             extensionId={active.id}
-            nodes={active.blueprint.navigationTree}
+            declared={active.blueprint.navigationTree}
             activeNodeId={context.activeNavNodeId}
             isCollapsed={isNavCollapsed}
             onSelect={selectNavNode}

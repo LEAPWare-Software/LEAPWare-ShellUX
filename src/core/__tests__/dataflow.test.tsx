@@ -598,8 +598,10 @@ describe('activation and revocation', () => {
     // somebody had to make on purpose, here, in a test named for `revoke`. It
     // did the same job again when the pane-1 metric pair took it from seven to
     // nine, again when the structured payload channel took it to twelve, and
-    // again when the theme bridge took it to fourteen.
+    // again when the theme bridge took it to fourteen, and again when
+    // `clearBadge` and `setNavigationTree` took it to sixteen (ADR-0006 step 5).
     expect(Object.keys(surface).sort()).toEqual([
+      'clearBadge',
       'getBadgeCount',
       'getContext',
       'getNavMetric',
@@ -611,6 +613,7 @@ describe('activation and revocation', () => {
       'setBadgeCount',
       'setContextKey',
       'setNavMetric',
+      'setNavigationTree',
       'setSelectedItem',
       'setSelectedItems',
       'subscribePayload',

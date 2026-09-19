@@ -22,7 +22,7 @@
  */
 
 /** `HOST_API_VERSION`, `major.minor`, as `src/sdk/index.ts` exports it. */
-export const HOST_API_VERSION = '1.0';
+export const HOST_API_VERSION = '1.1';
 
 /** `EXTENSION_ID_PATTERN`, as the registry enforces it at `register`. */
 export const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
