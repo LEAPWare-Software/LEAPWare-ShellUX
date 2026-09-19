@@ -2229,7 +2229,25 @@ PointerEvent".
 
 ---
 
-## Where to go next
+## Known limits at 1.0
+
+These are not bugs waiting on a fix inside this guide's scope — each is a
+tracked GitHub issue, and this section names it rather than leaving you to
+discover the gap by hitting it. **None of these is committed to 1.1.** Being
+open against the 1.1 milestone means it is scheduled for consideration after
+1.0, not that a fix is promised or designed. Where a target milestone is not
+1.1, that is stated.
+
+| Issue | What the limit means for you, the plugin author |
+|---|---|
+| [#91](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/91) (v1.0.0 milestone, not closed by the runtime plugin host work) | `VirtualizedList` owns its selected row privately and takes no controlled `selectedIndex` prop, while the host clears `selectedItemId` on every foreground handover. If you render it in Pane 2 and want your own remembered selection restored after a handover, there is no public prop to drive it back in — `DatabasePlugin` in `src/mocks/` works around this today by reaching past the component; that workaround is not a pattern to copy, it is the evidence the gap is real. |
+| [#65](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/65) | The registration contract in this guide has never been exercised by an author who did not design it. "Best for plugin authors" is unproven at 1.0 (D-32) — a friction point you hit may be a genuine gap this project has not yet found, and reporting it is expected, not a sign you misread the guide. |
+| [#55](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/55) | Your extension renders two of the shell's three panes, and the one accessibility obligation the contract gives you today is the hotkey rules in the `Hotkey` section above. Everything else about how your Pane 2 and Pane 3 views behave for a keyboard or screen-reader user is yours to get right; the host does not check it and there is no conformance gate over it yet. |
+| [#61](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/61) | This shell has only ever been run in Chromium (Electron's bundled engine). Any layout assumption you build into your views — including the `[contain:paint]` behaviour the host itself relies on — is untested outside that one engine. |
+| [#66](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/66) | There is no `dir` attribute anywhere and no right-to-left support. If your extension needs RTL, the layout primitives you are handed (panes, navigation tree, context bar) do not account for it, and several physical, non-logical CSS properties are already frozen into the shell's own chrome. |
+| [#60](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/issues/60) | No assistive technology has ever been run against this shell or against an extension inside it. The keyboard-operability gate (D-37) is real and tested; screen-reader behaviour for your views is unverified in both directions — by this project and by you, unless you test it yourself. |
+
+
 
 | Document | Purpose |
 |---|---|
