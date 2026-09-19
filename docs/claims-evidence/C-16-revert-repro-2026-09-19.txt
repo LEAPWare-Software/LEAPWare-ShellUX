@@ -10,7 +10,7 @@ Chromium *is* installed (Playwright 1.63.0; `npx playwright --version`).
 
 Method
 ------
-1. `git worktree add --detach C:\Users\manny.ramos\leapware-hq\.workspaces\c16-repro 1248f02`
+1. `git worktree add --detach <scratch-dir>/c16-repro 1248f02`
    (1248f02 = the merge commit of PR #148, "repairs #112, #113; addresses #111").
 2. `node_modules` symlinked in from the main tree (no reinstall).
 3. Baseline: `npx playwright test e2e/chart.spec.ts --reporter=list` at 1248f02, unmodified.

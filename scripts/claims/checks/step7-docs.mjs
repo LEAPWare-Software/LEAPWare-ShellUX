@@ -47,3 +47,6 @@ const install = read('docs/INSTALL.md');
 const SECTIONS = ['## 2. Installing', '## 3. The unsigned-build warning (SmartScreen)', '## 4. Where the diagnostics log lives', '## 5. How updates arrive', '## 6. Uninstalling'];
 console.log(`install_sections=${SECTIONS.filter((h) => install.includes(h)).length}`);
 console.log(`install_linked_from_readme=${readme.includes('(docs/INSTALL.md)') ? 1 : 0}`);
+// C-36 (proof audit item 29): the box's "the update section says the feed is not live
+// yet" clause was unchecked.
+console.log(`install_feed_not_live=${/The update feed is not live yet/.test(install) ? 1 : 0}`);

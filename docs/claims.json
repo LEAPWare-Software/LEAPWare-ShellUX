@@ -693,7 +693,7 @@
           "--json",
           "state",
           "--jq",
-          "\"pr130=(.state)\""
+          "\"pr130=\\(.state)\""
         ]
       ],
       "expect": [
@@ -2591,6 +2591,11 @@
           "key": "known_limits_names_d35_remainder",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "d13_minus_d36_remainder",
+          "op": "==",
+          "value": "91"
         }
       ],
       "probe": {
@@ -2606,7 +2611,7 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "plan step 7 docs (docs/step7-limits-install)"
+      "addedBy": "plan step 7 docs (docs/step7-limits-install) — tightened 2026-09-19 (proof audit item 28): the box states a derivation (D-13's issue list minus D-36's narrowing leaves exactly {#91}) that was never computed by the check, only asserted in prose. step7-docs.mjs now parses D-13's own row in docs/DECISIONS.md (its \"Superseded for ...\" clause and its own issue list) and asserts the set difference is exactly `91`."
     },
     {
       "id": "C-35",
@@ -2680,6 +2685,11 @@
           "key": "install_linked_from_readme",
           "op": "==",
           "value": 1
+        },
+        {
+          "key": "install_feed_not_live",
+          "op": "==",
+          "value": 1
         }
       ],
       "probe": {
@@ -2695,11 +2705,11 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "plan step 7 docs (docs/step7-limits-install)"
+      "addedBy": "plan step 7 docs (docs/step7-limits-install) — tightened 2026-09-19 (proof audit item 29): the box's \"the feed is not live yet\" clause was unchecked; step7-docs.mjs now asserts INSTALL.md still carries that exact sentence."
     },
     {
       "id": "C-37",
-      "box": "PR B: both checks required with `integration_id: 15368`, applied and read back. Merged as #179 and applied with `scripts/apply-rulesets.mjs`; ruleset 23685990 now requires seven contexts, including \"Prove claims\" and \"PR evidence\", each pinned to the GitHub Actions app, and `compare-ruleset.mjs` reports no drift.",
+      "box": "PR B: both checks required with `integration_id: 15368`, applied and read back. Merged as #179 and applied with `scripts/apply-rulesets.mjs`; ruleset 23685990 now requires seven contexts, including \"Prove claims\" and \"PR evidence\", each pinned to the GitHub Actions app. Drift against `.github/rulesets/main.json` is `compare-ruleset.mjs`'s ongoing job, run as the `S-ruleset` synthetic row on every completed main run (docs/proof-of-completion.md §3.5) — not re-run by this row, which is `github`-class and cannot invoke that `node` check under the argv allowlist.",
       "class": "github",
       "checks": [
         [
@@ -2748,7 +2758,7 @@
         }
       ],
       "provenOn": "2026-09-19",
-      "addedBy": "PR B applied (docs/pr-b-applied)"
+      "addedBy": "PR B applied (docs/pr-b-applied) — reworded 2026-09-19 (proof audit item 30): the box's \"compare-ruleset.mjs reports no drift\" clause was unchecked by this row (a `github`-class row cannot run that `node` check under the argv allowlist), and read as a one-time claim rather than the ongoing job it actually is. Reworded to point at the real, continuously-run mechanism: the `S-ruleset` synthetic row `prove-claims.mjs` records on every completed main run (docs/proof-of-completion.md §3.5), which `npm run status` surfaces as `FAILING S-ruleset` if drift is ever found."
     },
     {
       "id": "C-38",
