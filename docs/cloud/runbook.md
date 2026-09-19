@@ -28,7 +28,10 @@ You start with no memory, so re-derive everything.
     - **Use the GitHub MCP tools** (`mcp__github__*`: create a pull request, update a pull request, add an issue comment, read issues). They are the one connector you may use, and only for this repository.
     - Otherwise use the REST API: `gh api repos/...`, or `curl` with `-H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/json"`. A REST comment on #187 returned 201.
     - **Auto-merge:** use the proxy's CCR route, `PUT /repos/{owner}/{repo}/pulls/{n}/ccr/auto_merge`. The proxy's own 403 message names the CCR routes for auto-merge, review threads and draft state. If that fails, comment `ready to merge: <sha>` on the PR and record it in your lane comment; the watchdog lists it for the owner.
-    - `git push` of a new branch works. **Deleting a branch does not**, over git or REST, so never create throwaway branches.
+    - `git push` of a new branch works. `git push --delete` prints `unexpected disconnect` and exits 1, **but the ref is deleted**: check with `git ls-remote` before retrying. REST ref deletion is 403.
+  - **The browser lane cannot run inside the cloud VM.** Playwright 1.63 wants chromium build 1243, the proxy blocks the download, and the image ships build 1194. **Do not edit the Playwright config to suit the VM** (ADR-0002).
+    - The required check `Browser tests (chromium)` on GitHub Actions runs the lane on every PR. **That check is the browser evidence.** Cite its run URL in the PR body instead of a local `BROWSER_EXIT`.
+    - To mutation-probe a browser case: push a probe commit that breaks the feature to the PR branch, wait for that check to go red, then push the revert and wait for green. Record both run URLs. After the revert, the reviewer re-reviews at the new head.
     - Commits are authored as `Claude <noreply@anthropic.com>`. Comments appear under the owner's login `LEAPWare-HQ`, which is why owner commands need the `OWNER:` prefix.
   - **Run every long command in the FOREGROUND.** A backgrounded command is killed when the session ends, and its result is lost.
 - **Agents.** The `lw-*` roles are in `.claude/agents/` on `main` once lane C lands them. Until then, read `.claude/agents/lw-<role>.md` from `origin/cloud/runbook` and dispatch a general-purpose subagent with that file's instructions and its `model`.
@@ -78,7 +81,7 @@ Each run does one unit of work, then exits.
    4. otherwise the next item in your lane's list (section 4) that is neither ticked nor already in an open PR.
 
    **One new item per run, at most.**
-5. **Build** on a branch `lane-<x>/<slug>` with the right agent. Before `verify`, run `npx -y npm@11.16.0 ci`. Run `npm run verify` and read the exit code without a pipe. Run `npm run test:browser` (after `npx playwright install --with-deps chromium`) for anything visual, geometric or pointer-driven. Add the CHANGELOG entry (cite full test titles) and the HANDOFF line in the same change, keeping HANDOFF.md at or under 3000 bytes.
+5. **Build** on a branch `lane-<x>/<slug>` with the right agent. Before `verify`, run `npx -y npm@11.16.0 ci`. Run `npm run verify` and read the exit code without a pipe. For anything visual, geometric or pointer-driven, the browser evidence is the PR's `Browser tests (chromium)` CI run (see Environment); it cannot run in the VM. Add the CHANGELOG entry (cite full test titles) and the HANDOFF line in the same change, keeping HANDOFF.md at or under 3000 bytes.
 6. **Open the PR** with label `lane-<x>` and the body format from `.github/PULL_REQUEST_TEMPLATE.md` and `docs/handoff/next-session.md` §3. Leave `## Review` with `Reviewer: pending`. The reviewer routine fills in the verdict. You copy it into the body after it passes.
 7. **After a MERGE verdict at the current head:**
    - put the verdict's `Reviewer:`, `Reviewed SHA:` and `Verdict:` into the body;
@@ -114,7 +117,7 @@ Each run does one unit of work, then exits.
 2. For each one, oldest first, **at most 3 per run:** check out the head. Review adversarially per `CLAUDE.md` rule 1:
    - measure every claim;
    - run each new test's probe;
-   - run `npm run verify` and, for UI work, the browser lane;
+   - run `npm run verify`; for UI work, read the PR's `Browser tests (chromium)` run and its probe runs;
    - try to break it.
 
    Use opus for host-security PRs, sonnet otherwise.
