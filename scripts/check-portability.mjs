@@ -45,6 +45,20 @@
  *   case-collision                Two tracked paths differing only in case
  *                                 cannot both exist on a case-insensitive
  *                                 filesystem; one clobbers the other on clone.
+ *   module-case-collision         Two tracked module sources in the SAME
+ *                                 directory whose basenames collide once the
+ *                                 extension is stripped and case is ignored —
+ *                                 one module to tsc's resolver on a
+ *                                 case-insensitive filesystem, two on Linux.
+ *                                 A different rule from case-collision above,
+ *                                 not a widening of it: case-collision compares
+ *                                 whole paths including the extension, so
+ *                                 `RowStatus.tsx` and `rowStatus.ts` do not
+ *                                 collide by its test and are correct not to,
+ *                                 because those two files really can coexist on
+ *                                 disk. This rule's own docblock, at its
+ *                                 definition below, has the incident that made
+ *                                 the distinction necessary.
  *   import-case                   An import whose case does not match the
  *                                 tracked filename resolves on Windows and
  *                                 macOS and fails on Linux.
@@ -673,6 +687,130 @@ function checkCaseCollisions(files) {
   }
 }
 
+/**
+ * Extensions TypeScript's module resolver appends to an extensionless specifier
+ * when it is trying to find out what a name like `./RowStatus` refers to.
+ *
+ * This is a narrower set than `RESOLUTION_EXTENSIONS` further down, which this
+ * file's import rules use, and the narrowing is deliberate rather than an
+ * oversight: `RESOLUTION_EXTENSIONS` also lists `''`, `.json` and `.css`, and none
+ * of those three can be the OTHER half of the collision this rule looks for. `''`
+ * is the specifier's own extensionless form, not a second file on disk to collide
+ * with. `.json` is resolved through `resolveJsonModule`, a data import, and `.css`
+ * is resolved by the bundler rather than by tsc's module resolver at all — neither
+ * is ever the thing tsc mistakes a `.ts`/`.tsx`/`.js` file for, so neither belongs
+ * in a list of extensions that can be case-confused with a script.
+ *
+ * `.d.ts` is listed as its own two-segment entry, and it is listed FIRST, and both
+ * facts matter. Declaration files are the one extension in this list that is not a
+ * single suffix: stripping only the trailing `.ts` from `foo.d.ts` leaves `foo.d`,
+ * which is not a module name anything imports — the module `foo.d.ts` describes
+ * types for is `foo`, the same name its paired `foo.js` answers to. Listing `.d.ts`
+ * ahead of the plain `.ts` entry is what makes `moduleBasenameOf` below strip it as
+ * one unit: the loop tries suffixes in this order and stops at the first match, so
+ * `foo.d.ts` matches `.d.ts` and never falls through to the shorter, wrong answer.
+ */
+const MODULE_SOURCE_EXTENSIONS = ['.d.ts', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
+
+/**
+ * `file`'s basename with its module-source extension removed, or `undefined` when
+ * `file` does not end in one of `MODULE_SOURCE_EXTENSIONS`. A `.json`, `.css`,
+ * `.md` or any other tracked file plays no part in this rule, because tsc's module
+ * resolver is never the thing that could conflate it with a script.
+ *
+ * The extension is matched case-insensitively — a resolver comparing `.ts` against
+ * `.TS` is exactly the case-blindness this rule is about — but the returned
+ * basename keeps its ORIGINAL case, because that original casing is the one thing
+ * `checkModuleCaseCollisions` needs to compare.
+ */
+function moduleBasenameOf(file) {
+  const base = file.slice(file.lastIndexOf('/') + 1);
+  const lower = base.toLowerCase();
+  for (const extension of MODULE_SOURCE_EXTENSIONS) {
+    if (lower.length > extension.length && lower.endsWith(extension)) {
+      return base.slice(0, base.length - extension.length);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Two tracked module sources in the SAME directory whose basenames, with a
+ * module-source extension stripped, differ only in case.
+ *
+ * WHY THIS IS A SEPARATE RULE FROM checkCaseCollisions ABOVE, AND NOT A WIDENING
+ * OF IT. A change on this repository once added `src/components/ui/RowStatus.tsx`
+ * (a component) alongside `src/components/ui/rowStatus.ts` (its data module).
+ * `checkCaseCollisions` compares whole tracked paths, extension included:
+ * lowercased, `rowstatus.tsx` and `rowstatus.ts` are different strings, so it
+ * correctly reported nothing — those two files genuinely can sit side by side on
+ * any filesystem, case-insensitive ones included. `npm run verify` passed on
+ * Linux and failed on macOS and Windows, at `npm run typecheck`, with:
+ *
+ *   src/mocks/DatabasePlugin.tsx(4,10): error TS2305: Module
+ *     '"../components/ui/RowStatus"' has no exported member 'RowStatus'.
+ *   src/components/__tests__/RowStatus.test.tsx(8,8): error TS1149: File name
+ *     '.../src/components/ui/rowStatus.ts' differs from already included file
+ *     name '.../src/components/ui/RowStatus.ts' only in casing.
+ *
+ * The failure is not in the filesystem, which is what checkCaseCollisions speaks
+ * about — it is in TypeScript's MODULE RESOLUTION. An import of `./rowStatus` is
+ * resolved by trying extensions in order against the specifier's own spelling; on
+ * a case-insensitive filesystem, the candidate path `RowStatus.ts` that this
+ * resolver tries for the specifier `./RowStatus` is answered by the file actually
+ * spelled `rowStatus.ts`, because the filesystem does not distinguish the two. So
+ * `RowStatus.tsx` and `rowStatus.ts` are two files to `git` and to Linux, and are
+ * ONE module — the wrong one, depending on which import ran first — to `tsc` on
+ * macOS and Windows. That is a strictly narrower and different fact than the one
+ * `checkCaseCollisions` decides, hence a rule of its own rather than a widening:
+ * a reader of the report needs to know WHICH fact fired, because the fix for one
+ * (rename so the whole paths differ) is not obviously the fix for the other
+ * (rename so the basenames, extension stripped, no longer collide) even though in
+ * practice they usually coincide.
+ *
+ * Scoped to every tracked file, not only `src/`, for the same reason
+ * `checkCaseCollisions` is: a colliding pair under `electron/` or `scripts/` would
+ * fail the same way in whichever program's `tsconfig.json` includes it, and this
+ * rule has no cheaper way to know in advance which directories tsc will be asked
+ * to compile.
+ */
+function checkModuleCaseCollisions(files) {
+  /** @type {Map<string, Map<string, {basename: string, file: string}>>} */
+  const seenByDirectory = new Map();
+  for (const file of files) {
+    const basename = moduleBasenameOf(file);
+    if (basename === undefined) continue;
+    const slash = file.lastIndexOf('/');
+    const directory = slash === -1 ? '' : file.slice(0, slash);
+    let seen = seenByDirectory.get(directory);
+    if (seen === undefined) {
+      seen = new Map();
+      seenByDirectory.set(directory, seen);
+    }
+    const key = basename.toLowerCase();
+    const previous = seen.get(key);
+    if (previous === undefined) {
+      seen.set(key, { basename, file });
+    } else if (previous.basename !== basename) {
+      // Same basename, same extension (e.g. two files both spelled exactly
+      // `Button`) is `previous.basename === basename` and is deliberately not
+      // reported here — that pair, if it exists, differs only in EXTENSION
+      // (`Button.tsx` vs `Button.ts`), which is an ordinary, if odd, pair of
+      // modules, not the case collision this rule looks for.
+      report(
+        file,
+        1,
+        1,
+        'module-case-collision',
+        "a tracked module source whose basename collides with another module source in the same " +
+          'directory once TypeScript strips the extension and ignores case — one module to tsc on a ' +
+          'case-insensitive filesystem, two on Linux',
+        `${file} vs ${previous.file}`,
+      );
+    }
+  }
+}
+
 function looksBinary(buffer) {
   const window = buffer.subarray(0, Math.min(buffer.length, 8000));
   return window.includes(0);
@@ -938,6 +1076,7 @@ const entries = trackedEntries();
 const files = entries.map((entry) => entry.path);
 
 checkCaseCollisions(files);
+checkModuleCaseCollisions(files);
 
 /**
  * Tracked paths reported as symlinked-path, so the import pass skips reading them
@@ -1014,6 +1153,7 @@ const STRUCTURAL_RULES = [
   'line-endings',
   'byte-order-mark',
   'case-collision',
+  'module-case-collision',
   'import-case',
   'import-unresolved',
   'symlinked-path',
@@ -1023,8 +1163,10 @@ const ruleCount = CONTENT_RULES.length + STRUCTURAL_RULES.length;
 
 if (violations.length === 0) {
   // The username rule is the one rule whose patterns depend on the machine. Saying
-  // so on a clean run keeps that visible rather than implying all 20 rules found
-  // nothing when one of them had nothing to look for. See ADR-0002.
+  // so on a clean run keeps that visible rather than implying every rule found
+  // nothing when one of them had nothing to look for. The count in the line below
+  // is `ruleCount`, computed from the two rule arrays, so it cannot drift from the
+  // code; this comment carries no number of its own for the same reason. See ADR-0002.
   const usernameRule = CONTENT_RULES.find((rule) => rule.id === 'developer-username');
   const inert = usernameRule !== undefined && usernameRule.patterns.length === 0 ? ' (developer-username inert: no login name to match)' : '';
   process.stdout.write(

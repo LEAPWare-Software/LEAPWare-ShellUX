@@ -75,6 +75,41 @@ So cite **full** titles, or exact `describe` group. Checker own banner list what
 it not catch: cannot tell claim has no citation at all, not check cited title live in
 cited file, cannot check test assert what sentence say.
 
+### `case-collision` cannot see a module-resolution collision
+
+A change on this branch added `src/components/ui/RowStatus.tsx` (a component) and
+`src/components/ui/rowStatus.ts` (its data module). `npm run verify` passed on
+`Verify (ubuntu-latest)` and failed on `Verify (macos-latest)` and
+`Verify (windows-latest)` — both case-insensitive filesystems — at
+`npm run typecheck`, with `TS2305` ("has no exported member 'RowStatus'") and
+`TS1149` ("differs from already included file name ... only in casing"). GitHub
+Actions run 35446002489.
+
+The live `case-collision` rule did not fire, and by its own test it was right not
+to: it lowercases WHOLE tracked paths, extension included. `rowstatus.tsx` and
+`rowstatus.ts` differ, so no collision, and that answer is correct — those two
+files really can sit in one directory on any filesystem, case-insensitive ones
+included. The failure is one level up, in TypeScript's module resolution, not the
+filesystem: an import of `./rowStatus` is resolved by trying extensions in order
+against the specifier's own spelling, and on a case-insensitive filesystem the
+candidate path `RowStatus.ts` that produces is answered by the file actually
+spelled `rowStatus.ts`. Two files whose basenames, extension stripped, differ only
+in case are therefore one module to `tsc` on macOS and Windows, and two on Linux —
+which is exactly why the ubuntu leg stayed green while the other two did not.
+
+Data module renamed to `rowStatusVocabulary.ts`; that closes this one instance.
+What now guards the general case: `module-case-collision`, a new rule in
+`scripts/check-portability.mjs`, sitting beside `case-collision` rather than
+folded into it — the two decide different facts, and a reader of the report needs
+told which one fired. It is a **guardrail** in this repository's vocabulary: it
+closes this one documented route and makes the honest mistake loud on every OS,
+including the one where it would otherwise keep passing. It enforces nothing
+against a pair added on purpose, and it only looks at the extensions TypeScript's
+resolver tries — `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.d.ts` — so a
+collision through some other extension is not this rule's to find.
+*Tests:* `scripts/__tests__/check-portability.test.mjs` — "reports two module
+sources whose basenames collide once the extension is stripped".
+
 ### Stage a new file before you run `verify`
 
 `check:portability` resolve import specifiers against **git index**, not working tree,

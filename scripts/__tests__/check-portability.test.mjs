@@ -564,6 +564,74 @@ describe('case-collision', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// module-case-collision
+//
+// The rule case-collision above cannot catch, because it compares whole tracked
+// paths — extension included — and a component `RowStatus.tsx` sitting beside its
+// data module `rowStatus.ts` is a whole-path pair that genuinely can coexist on
+// any filesystem. The two files ARE, unlike a case-collision fixture, ordinary
+// files that this suite can `git add` directly: nothing here needs
+// `trackInIndexOnly`, because nothing about the pair is blocked by the filesystem
+// this suite runs on, case-insensitive or not — the collision this rule reports
+// exists one level up, in how tsc's module resolver answers an extensionless
+// specifier, not in what a directory listing can hold.
+// ---------------------------------------------------------------------------
+
+describe('module-case-collision', () => {
+  it('reports two module sources whose basenames collide once the extension is stripped', () => {
+    // The exact pair from the incident this rule was written for.
+    const root = newRepo('module-case');
+    track(
+      root,
+      write(root, 'src/components/ui/RowStatus.tsx', 'export const RowStatus = 1;\n'),
+      write(root, 'src/components/ui/rowStatus.ts', 'export const rowStatus = 1;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 1);
+    const collision = report.violations.find((v) => v.rule === 'module-case-collision');
+    assert.ok(collision !== undefined, JSON.stringify(ruleIds(report)));
+    assert.match(collision.text, /RowStatus\.tsx/);
+    assert.match(collision.text, /rowStatus\.ts/);
+  });
+
+  it('reports nothing for two module sources with different names', () => {
+    const root = newRepo('module-case-different-names');
+    track(
+      root,
+      write(root, 'src/RowMetric.tsx', 'export const a = 1;\n'),
+      write(root, 'src/rowDelta.ts', 'export const b = 2;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 0);
+  });
+
+  it('reports nothing for the identical basename that differs only in extension', () => {
+    // Button.tsx and Button.ts share the exact same basename — the finding this
+    // rule looks for is DIFFERENT case, not SAME name, and this pair is neither
+    // colliding on a filesystem nor colliding in tsc's resolver: each extension
+    // resolves to its own file.
+    const root = newRepo('module-case-extension-only');
+    track(
+      root,
+      write(root, 'src/Button.tsx', 'export const a = 1;\n'),
+      write(root, 'src/Button.ts', 'export const b = 2;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 0);
+  });
+
+  it('reports nothing for the same basename in two different directories', () => {
+    // TypeScript resolves a specifier within one directory; a same-named module in
+    // a sibling directory is never what an extensionless import in the other one
+    // could mean, so this must not be reported however the two basenames compare.
+    const root = newRepo('module-case-different-directory');
+    track(root, write(root, 'a/Foo.ts', 'export const a = 1;\n'), write(root, 'b/foo.ts', 'export const b = 2;\n'));
+    const report = run(root);
+    assert.equal(report.status, 0);
+  });
+});
+
 describe('unreadable-tracked-file', () => {
   it('reports a path the index lists that the working tree does not have', () => {
     const root = newRepo('unreadable');
@@ -806,7 +874,7 @@ describe('exit codes', () => {
     const report = run(root, { USERNAME: inventLogin() });
     assert.equal(report.status, 0, report.stderr);
     assert.match(report.stdout, /^check-portability: OK — 3 tracked files/);
-    assert.match(report.stdout, /20 rules, 0 violations/);
+    assert.match(report.stdout, /21 rules, 0 violations/);
     assert.equal(report.stderr, '');
   });
 

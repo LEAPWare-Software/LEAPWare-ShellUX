@@ -30,7 +30,9 @@ with a merge queue.
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1, the state primitives (#184).
 - Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
-- This change: cloud lanes can merge (auto-queue workflow, runbook lane C item 0a).
+- Proof rows C-38 to C-43 for work already built.
+- Cloud lanes can merge (auto-queue workflow, runbook lane C item 0a).
+- This change: wave-3 W3-2, list rows at 32px (D-29).
 
 ## In flight
 
@@ -38,7 +40,7 @@ with a merge queue.
 
 ## The next step
 
-1. ADR-0006 steps 6 to 11, and W3-2 onward, once the owner says go.
+1. ADR-0006 steps 6 to 11, and W3-3 onward, once the owner says go.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

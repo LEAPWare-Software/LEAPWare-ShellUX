@@ -16,6 +16,47 @@ from so a reader can check it.
 
 ### Added
 
+- **Wave-3 list rows at 32px** (W3-2, D-29, `docs/design/WAVE3-PLAN.md`). The
+  comfortable row height, hover grey on pointer rest (the primary list had none
+  before this), selected grey with no outline and a heavier title weight, and the
+  keyboard ring drawn inside the row edge rather than on it. A new host primitive,
+  `RowStatus` (`src/components/ui/RowStatus.tsx`, data in `rowStatusVocabulary.ts` — the same
+  split `rowDelta.ts`/`RowMetric.tsx` use), draws the v4 row status vocabulary: a
+  mark (`aria-hidden`) beside a required `word`, so a caller cannot omit the
+  sentence and still get the mark. A **guardrail**, narrowed to that after review:
+  `word: string` accepts `''`, so it holds against the honest omission and not
+  against an empty string. `DatabasePlugin.tsx` — the mock that models inventory — exercises all four
+  statuses ("Below reorder point" from its existing stock check; "Delivered",
+  "Delivery overdue" and "Awaiting supplier" from a new `supplyState` seeded once
+  per record off the record's own id, not off the catalogue's shared random
+  sequence, so no existing badge or stock figure outside this change moved).
+  `MailPlugin.tsx` renders no status line: its only real state axis, read/unread,
+  is not one of the four words, so its rows keep their sender/time second line
+  instead of inventing one. `VirtualizedList.tsx` gains an exported
+  `ROW_HEIGHT_COMFORTABLE` and the same hover/ring token roles on its own row, with
+  a recorded limit below. Failure mode this closes: a selected or focused row could
+  not be told apart from a merely-hovered one without an outline, and a low-vision
+  reader had no non-colour channel for "this needs attention" in a dense list.
+  *Tests:* `src/components/__tests__/RowStatus.test.tsx` — "pairs the %s mark with
+  the word, in the status ink", "draws a mark with no text of its own, so a screen
+  reader is not told about a decoration" and "resolves every status kind to a
+  non-empty mark, so a typo cannot leave one blank"; `e2e/list-rows.spec.ts` —
+  "measures a row 32px tall", "changes the painted background when a pointer rests
+  on a row", "draws a selected row with no outline and a heavier title weight",
+  "keeps the current row's keyboard focus ring inside the list's clip" and "renders
+  the warning status line's mark and word, clearing 4.5:1 in every theme" (one such
+  case per status). **Not done:** the browser cases are written and reviewed but
+  not run in this environment — the sandbox's Playwright build is pinned below what
+  `playwright.config.ts` wants and the proxy blocks the newer download
+  (`docs/cloud/runbook.md`); the PR's `Browser tests (chromium)` check is the
+  evidence. `VirtualizedList.tsx`'s own row never itself matches `:focus-visible`
+  under its one-tab-stop, `aria-activedescendant` architecture, so the ring token
+  applied there does not yet paint — recorded as a limit in that file's own comment
+  rather than claimed; nothing in the shipped shell mounts it with real content
+  today, so there is no browser route to it either way. Step 6's per-row instrument
+  band is out of scope and untouched; the trailing slot is exactly what `RowMetric`
+  already drew.
+
 - **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
   - the pull request is open and not a draft;
   - it carries a `lane-*` label;
@@ -40,6 +81,32 @@ from so a reader can check it.
   matches sessionkeeper's shape was dropped, because no check can decide it.
 
 ### Fixed
+
+- **Two module files whose names differed only in case were one module to `tsc` on
+  macOS and Windows, and `verify` could not see it.** `src/components/ui/RowStatus.tsx`
+  and `src/components/ui/rowStatus.ts` landed together in the change above. On a
+  case-sensitive filesystem they are two modules and every gate passed — locally and
+  on `Verify (ubuntu-latest)`. On the case-insensitive filesystems the other two CI
+  legs run on, TypeScript resolved both names to one file and `typecheck` exited 2
+  with `TS2305` ("has no exported member 'RowStatus'") and `TS1149` ("differs from
+  already included file name ... only in casing"), in run 35446002489. The data module
+  is renamed `rowStatusVocabulary.ts`; no exported symbol changed.
+  **Why `verify` was blind:** the `case-collision` rule in
+  `scripts/check-portability.mjs` compares whole tracked paths, and
+  `rowstatus.tsx` ≠ `rowstatus.ts`, so it was right not to fire — those two files
+  really can coexist on one filesystem. The collision is one level up, in module
+  resolution: an import of `./rowStatus` is resolved by trying extensions, so a
+  basename that differs only in case is one module to `tsc` and two to the
+  filesystem. A separate rule, `module-case-collision`, now reports two tracked
+  module sources in one directory whose basenames collide once the extension is
+  stripped; the checker's count goes 20 rules to 21, and it reports 0 violations
+  over the 374 tracked files. It is a **guardrail** — it closes the documented
+  route and makes the honest mistake loud; it enforces nothing against a pair added
+  deliberately, and it is scoped to one directory and to a fixed extension list, so
+  a collision reached through a path alias or a barrel re-export is outside it.
+  Recorded in full in `docs/traps.md`.
+  *Tests:* `scripts/__tests__/check-portability.test.mjs` — "reports two module
+  sources whose basenames collide once the extension is stripped".
 
 - **`SECURITY.md` said private vulnerability reporting did not exist here.** It was
   true while the repository was private; after it went public the form was enabled
