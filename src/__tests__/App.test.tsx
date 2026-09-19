@@ -2,7 +2,9 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { SCHEMA_VERSION, STORAGE_KEY } from '../core/services/HydrationEngine';
 import { RootBoundary } from '../components/error/RootBoundary';
-import { ExtensionRegistryProvider } from '../core/RegistryContext';
+import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext';
+import type { RegistrationResult } from '../core/RegistryContext';
+import { makeBlueprint } from '../core/__tests__/fixtures';
 import App from '../App';
 
 /**
@@ -117,5 +119,38 @@ describe('App', () => {
     // The unmeasurable-width fallback band, asserted as ABSENT: without the
     // restore this is what the three panels would be.
     expect(panelSizes(container)).not.toEqual([18, 26, 56]);
+  });
+
+  it("host chrome's provider refuses a lifecycle-declaring registration, which is the copy-paste this guardrail exists for", () => {
+    // ADR-0006 decision 6's amendment for issue #183: host chrome's own
+    // `ExtensionRegistryProvider` runs with no `runsPluginCode` prop here — the
+    // default, host-chrome-shaped configuration — so this is the case that
+    // stands in for "host chrome never runs plugin lifecycle hooks by default".
+    let outcome: RegistrationResult | null = null;
+
+    function Probe(): null {
+      const registry = useRegistry();
+      outcome = registry.register(makeBlueprint({ lifecycle: { onRelease: () => undefined } }));
+      return null;
+    }
+
+    render(
+      <App>
+        <Probe />
+      </App>,
+    );
+
+    expect(outcome).not.toBeNull();
+    // Cast rather than a null-narrowing `if`, matching the convention
+    // `lifecycle.test.tsx` uses for a value a nested component assigns:
+    // `outcome` is captured by `Probe`'s closure, so TypeScript's control-flow
+    // analysis sees only the `= null` initializer at this point in the outer
+    // scope and would otherwise narrow the post-check type to `never`.
+    const result = outcome as unknown as RegistrationResult;
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      throw new Error('expected the lifecycle-bearing registration to be refused');
+    }
+    expect(result.error.field).toBe('lifecycle');
   });
 });

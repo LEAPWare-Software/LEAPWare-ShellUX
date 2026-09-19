@@ -1634,10 +1634,21 @@ function revisionReducer(current: number): number {
 
 export interface ExtensionRegistryProviderProps {
   readonly children: ReactNode;
+  /**
+   * Declares that THIS document actually executes plugin code, so a
+   * blueprint's `lifecycle` hooks registered here may legitimately fire.
+   * Defaults to `false`: a registry may hold plugin data without this flag,
+   * but `register` refuses any blueprint that carries `lifecycle` unless the
+   * provider says it runs plugin code. See ADR-0006 decision 6's amendment
+   * for issue #183 — this is entry-point validation at the registry door,
+   * not an integrity control; any caller may pass `true`.
+   */
+  readonly runsPluginCode?: boolean | undefined;
 }
 
 export function ExtensionRegistryProvider({
   children,
+  runsPluginCode = false,
 }: ExtensionRegistryProviderProps): ReactElement {
   // A Map, deliberately, not an object literal. Keys come from untrusted
   // plugin manifests; a Map has no prototype chain, so writing a key named
@@ -1677,6 +1688,25 @@ export function ExtensionRegistryProvider({
       // reaches the store.
       const { record, id, source } = normalizeBlueprint(blueprint);
 
+      // Entry-point validation at the one door all registrations pass
+      // through: a registry that has not declared it runs plugin code
+      // refuses any blueprint carrying lifecycle hooks, rather than
+      // silently holding hooks nothing here will ever call (or that a
+      // sibling registry might call too, double-firing them). Reads only
+      // the host-owned, already-normalised `record` — no plugin code runs
+      // to reach this branch. Not an integrity control: `runsPluginCode`
+      // is a prop, and any caller may pass `true`.
+      if (record.lifecycle !== undefined && !runsPluginCode) {
+        return {
+          ok: false,
+          error: new ShellUXError(
+            'INVALID_FIELD',
+            'This registry does not run plugin code and cannot hold lifecycle hooks; pass runsPluginCode on ExtensionRegistryProvider if this document actually executes the plugin.',
+            'lifecycle',
+          ),
+        };
+      }
+
       const existing = store.get(id);
       if (existing !== undefined) {
         // ---- React StrictMode double-invocation --------------------------
@@ -1712,7 +1742,7 @@ export function ExtensionRegistryProvider({
     } catch (error) {
       return { ok: false, error: toShellUXError(error) };
     }
-  }, [store]);
+  }, [store, runsPluginCode]);
 
   // A `Set` of listeners, held in a ref for the provider's lifetime. See
   // `onBeforeUnregister`.

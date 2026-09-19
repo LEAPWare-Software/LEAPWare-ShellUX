@@ -109,6 +109,16 @@ function Registrar(): null {
  * host bridge. A prop here would be a second answer to a question that already
  * has one.
  *
+ * **`runsPluginCode` is the one exception to that argument, and it is not a
+ * second answer to which surface this is.** It answers a different question
+ * `App` has no other way to derive: whether this document also happens to be
+ * what host chrome loads in a dev run. `dev.html` is genuinely both the
+ * browser-lane fixture (where `Registrar` below registers `lifecycle`-bearing
+ * plugins and those hooks must fire) and host chrome's dev-run document
+ * (where the packaged-topology guarantee does not apply) — this repo already
+ * accepts that as a stated dev-vs-packaged gap, not something to solve here.
+ * See ADR-0006 decision 6's amendment for issue #183.
+ *
  * A consequence worth naming rather than discovering: this surface is now inside
  * `RootBoundary` too. That is a strict improvement — the fixture used to be the
  * one document in the repository where a throw above the pane boundaries emptied
@@ -117,7 +127,7 @@ function Registrar(): null {
  */
 export function DevShell(): ReactElement {
   return (
-    <App>
+    <App runsPluginCode>
       <Registrar />
     </App>
   );

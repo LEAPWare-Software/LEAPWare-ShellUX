@@ -30,7 +30,9 @@ with a merge queue.
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1, the state primitives (#184).
 - Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
-- This change: cloud lanes can merge (auto-queue workflow, runbook lane C item 0a).
+- Cloud lanes can merge (auto-queue workflow, runbook lane C item 0a).
+- This change: D-54, plugin lifecycle-hook ownership enforced at the registry
+  door (`runsPluginCode`), ADR-0006 decision 6 amendment, issue #183, lane A.
 
 ## In flight
 

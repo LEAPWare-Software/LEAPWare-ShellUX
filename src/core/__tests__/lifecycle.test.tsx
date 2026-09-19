@@ -38,7 +38,7 @@ interface Harness {
 function mountHost(onLifecycleFault?: (fault: LifecycleFault) => void): { current: Harness } {
   function Providers({ children }: { children: ReactNode }): ReactElement {
     return (
-      <ExtensionRegistryProvider>
+      <ExtensionRegistryProvider runsPluginCode>
         <ShellHostProvider onLifecycleFault={onLifecycleFault}>{children}</ShellHostProvider>
       </ExtensionRegistryProvider>
     );
@@ -737,7 +737,7 @@ describe('the scope purge on unregister', () => {
     }
 
     render(
-      <ExtensionRegistryProvider>
+      <ExtensionRegistryProvider runsPluginCode>
         <ShellHostProvider>
           <Early />
         </ShellHostProvider>
@@ -772,7 +772,7 @@ describe('before the provider subscribes', () => {
     }
 
     render(
-      <ExtensionRegistryProvider>
+      <ExtensionRegistryProvider runsPluginCode>
         <ShellHostProvider>
           <Early />
         </ShellHostProvider>
@@ -807,7 +807,7 @@ describe('purging late', () => {
       return null;
     }
     render(
-      <ExtensionRegistryProvider>
+      <ExtensionRegistryProvider runsPluginCode>
         <ShellHostProvider>
           <Early />
         </ShellHostProvider>
@@ -838,7 +838,7 @@ describe('the pre-subscription remainder', () => {
       return null;
     }
     render(
-      <ExtensionRegistryProvider>
+      <ExtensionRegistryProvider runsPluginCode>
         <ShellHostProvider>
           <Early />
         </ShellHostProvider>
@@ -956,5 +956,24 @@ describe('the lifecycle member at registration', () => {
     expect(record?.lifecycle).toEqual({ onRelease });
     expect(Object.isFrozen(record?.lifecycle)).toBe(true);
     expect(host.current.registry.getExtension('db-ext')).not.toHaveProperty('lifecycle');
+  });
+});
+
+/**
+ * ISSUE-183 — ADR-0006 decision 6's amendment. `mountHost` above sets
+ * `runsPluginCode` on its `ExtensionRegistryProvider`, which is why every
+ * lifecycle-bearing registration in this file has kept working; this case
+ * pins the other half of that guardrail — that the accepted path really does
+ * go on to call the hook, not merely that `register` returns `ok: true`.
+ */
+describe('runsPluginCode — the registry that declares it, actually runs the hooks it accepted', () => {
+  it('accepts the same blueprint, and calls onActivate, when the provider declares it runs plugin code', () => {
+    const host = mountHost();
+    const onActivate = vi.fn();
+    register(host, makeBlueprint({ id: 'mail-ext', lifecycle: { onActivate } }));
+
+    activate(host, 'mail-ext');
+
+    expect(onActivate).toHaveBeenCalledTimes(1);
   });
 });

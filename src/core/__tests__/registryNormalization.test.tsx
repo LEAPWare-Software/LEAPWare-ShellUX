@@ -44,14 +44,25 @@ interface Probe {
   readonly revision: number;
 }
 
-function Wrapper({ children }: { children: ReactNode }): ReactElement {
-  return <ExtensionRegistryProvider>{children}</ExtensionRegistryProvider>;
+function Wrapper({
+  children,
+  runsPluginCode = false,
+}: {
+  children: ReactNode;
+  runsPluginCode?: boolean;
+}): ReactElement {
+  return (
+    <ExtensionRegistryProvider runsPluginCode={runsPluginCode}>
+      {children}
+    </ExtensionRegistryProvider>
+  );
 }
 
-function setup(): { current: Probe } {
+function setup(options: { runsPluginCode?: boolean } = {}): { current: Probe } {
+  const { runsPluginCode = false } = options;
   return renderHook(
     (): Probe => ({ registry: useRegistry(), revision: useRegistryRevision() }),
-    { wrapper: Wrapper },
+    { wrapper: (props) => <Wrapper {...props} runsPluginCode={runsPluginCode} /> },
   ).result;
 }
 
@@ -584,5 +595,24 @@ describe('register — a weaponised ShellUXError cannot be relocated into the ho
     const probe = setup();
     expect(probe.current.registry.listExtensions()).toEqual([]);
     expect(probe.current.revision).toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* ISSUE-183 — lifecycle-hook ownership: `runsPluginCode` at the registry door */
+/* -------------------------------------------------------------------------- */
+
+describe('register — lifecycle hooks belong to a registry that declares it runs plugin code', () => {
+  it('refuses a blueprint declaring lifecycle hooks in a registry that does not run plugin code, and names the field', () => {
+    const probe = setup();
+
+    const outcome = callRegister(
+      probe,
+      makeBlueprint({ lifecycle: { onRelease: () => undefined } }),
+    );
+
+    const error = expectFailure(outcome);
+    expect(error.field).toBe('lifecycle');
+    expect(probe.current.registry.listExtensions()).toEqual([]);
   });
 });
