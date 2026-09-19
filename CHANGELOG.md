@@ -357,6 +357,15 @@ from so a reader can check it.
 
 ### Fixed
 
+- **The Claude review job ran but could post nothing** (D-49). On #145 (run
+  35410730035) it took 10 turns, was denied 14 tool calls and reported SUCCESS with no
+  comment: `claude-code-review.yml` allowed only the inline-comment tool and gave the
+  job `pull-requests: read`. It now allows exactly the tools the `code-review`
+  plugin's command declares, plus `Read`, `Grep` and `Glob`, and holds
+  `pull-requests: write`. **What made it possible:** a green check was read as a
+  review, and nobody opened the run's log. **Not proven here:** a PR that changes
+  this workflow is skipped by the action, so whether the review comments is proven
+  by the next PR.
 - **Two links in `DEVELOPER.md` pointed outside the repository**
   (`../src/examples/HelloExtension.tsx` and its test, from a file at the root). Found
   by the link sweep this change ran; nothing checks inter-document links (GitHub #54).

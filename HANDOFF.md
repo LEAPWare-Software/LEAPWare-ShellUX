@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `8e6e35a` (#144, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `7a9e66d` (#145, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -16,7 +16,8 @@ with a merge queue.
 
 - #115 (wave 1), #126 (audit), #128 (mission recast, gate 3), #141 (public-release
   scaffolding), #143 (an npm claim corrected), #144 (Claude Actions, guarded).
-- This change: ADR-0006 Accepted, with ADR-0001 Amendment P (D-46 to D-48).
+- #145: ADR-0006 Accepted, with ADR-0001 Amendment P (D-46 to D-48).
+- This change: the Claude review job gets the tools it needs to comment (D-49).
 
 ## In flight
 
