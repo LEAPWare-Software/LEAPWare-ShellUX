@@ -23,10 +23,11 @@ import {
  */
 
 test.describe('reflow at 320px', () => {
-  // The panel group measures its width ONCE, on mount, through a callback ref —
-  // there is no ResizeObserver. Resizing after navigation rescales the panes
-  // proportionally without re-deriving the pixel minimums, so the viewport has
-  // to be set before the document loads for this to be a real narrow-width test.
+  // The viewport is set before the document loads, so the shell's FIRST layout
+  // is the narrow one and this case does not depend on the live re-fit (GitHub
+  // issue #23), which `e2e/pane-refit.spec.ts` measures on its own. This comment
+  // used to say there is no ResizeObserver; there has been one since the
+  // native-host pivot.
   test.use({ viewport: { width: 320, height: 800 } });
 
   test('does not let the page itself scroll sideways', async ({ page }) => {

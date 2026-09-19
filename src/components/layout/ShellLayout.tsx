@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useInsertionEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactElement } from 'react';
 import { Panel, PanelGroup } from 'react-resizable-panels';
+import type { ImperativePanelGroupHandle } from 'react-resizable-panels';
 import { useActivation } from '../../core/ActivationContext';
 import { useRegistry, useRegistryRevision } from '../../core/RegistryContext';
 import { useShellContext, useShellStore } from '../../core/ShellAPI';
@@ -29,13 +37,13 @@ import { FaultBoundary } from '../error/FaultBoundary';
 import { EmptyPane, ExtensionPane } from './ExtensionPane';
 import { PaneWrapper } from './PaneWrapper';
 import {
-  PANE_FALLBACK_PERCENT,
   PANE_PX,
   clampPanePercent,
-  clampToBand,
-  isEngineDefaultLayout,
-  percentOf,
+  fitPaneLayout,
+  intentFromRecord,
+  paneBandsAt,
 } from './paneSizing';
+import type { PaneIntent } from './paneSizing';
 import { NavigationTree, ShellNavButton } from './ShellNavigation';
 import { ShellResizeHandle } from './ShellResizeHandle';
 import { useHostPalette } from './useHostPalette';
@@ -55,7 +63,8 @@ import { useHostPalette } from './useHostPalette';
  * and `useHostPalette.ts`. Where a decision below says "this file", read those
  * modules and this one together.
  *
- * 1. SIZES ARE PERCENTAGES, MEASURED ONCE INTO PIXELS.
+ * 1. SIZES ARE PERCENTAGES, MEASURED INTO PIXELS AT MOUNT AND RE-FITTED ON EVERY
+ *    WIDTH CHANGE.
  *    `react-resizable-panels` v2 sizes panels in percent of the group and has no
  *    pixel unit, but "240px default" is a pixel statement. So the group element
  *    is measured once, on mount, through a callback ref, and the pixel constants
@@ -106,7 +115,8 @@ import { useHostPalette } from './useHostPalette';
  *    `PANE_PX` is worth as a share of the group", which is a different number at
  *    every window width and was previously frozen at the width the shell happened
  *    to open on: a window dragged from 1400px to 700px kept a 176px minimum
- *    expressed as 12.6%, which is 88px. Only the BANDS move.
+ *    expressed as 12.6%, which is 88px. The bands move with the width; `defaultSize`
+ *    does not, and the live layout is moved by the re-fit below instead.
  *
  *    A runtime with no `ResizeObserver` — jsdom, and some older embedded
  *    WebViews — reports `null` and every band falls back to the mount-time
@@ -123,8 +133,51 @@ import { useHostPalette } from './useHostPalette';
  *    measurement".
  *
  *    A restored size is held to the SAME minimums, at the width measured on this
- *    load — see decision 6. That is the question this paragraph used to defer to
- *    ISSUE-003, and the answer is a clamp rather than a live re-derivation.
+ *    load — see decision 6.
+ *
+ *    **THE LIVE LAYOUT IS RE-FITTED ON EVERY WIDTH CHANGE, AND NONE OF IT IS
+ *    WRITTEN (GitHub issue #23, 2026-09-19).** This paragraph used to end "the
+ *    answer is a clamp rather than a live re-derivation", and the clamp was a
+ *    one-shot at mount. What that left, measured: the library does re-evaluate a
+ *    panel whose `minSize` or `maxSize` changed, so a narrowing window already
+ *    lifted a pane to its new minimum — but each such correction reached
+ *    `onResize` looking exactly like a drag, `persistPaneSize` wrote it, and a
+ *    user who merely narrowed their window lost the layout they had chosen, for
+ *    good. Widening again restored nothing, and a reload then opened on the
+ *    correction. Issue #23 named both halves and asked whether a re-clamp is an
+ *    intent worth storing. It is not, and that is the rule now.
+ *
+ *    So, when the band width changes, a layout effect fits the group again from
+ *    what was ASKED for — the layout a person arranged this session in the
+ *    current group membership, or else the persisted record read exactly as a
+ *    reload reads it — through `intentFromRecord` and `fitPaneLayout` in
+ *    `paneSizing.ts`, the same two functions the mount-time `defaultSize` comes
+ *    from. That is the property the change exists for: **a live resize to width W
+ *    lands on the layout a reload at W opens on**, and a window narrowed and
+ *    widened again comes back to the layout the user chose. An untouched shell
+ *    re-fits to `PANE_PX` at the new width rather than scaling the old shares.
+ *    Every report the width change causes is classified by `reportPaneSize` and
+ *    is neither written nor learned as the session layout.
+ *
+ *    What it does NOT do: below roughly 700px the minimums still cannot all be
+ *    met and the library still renormalises and warns, exactly as the paragraph
+ *    on overflow above says; a pane re-added after a collapse still takes its
+ *    `defaultSize` from the mount-time width, not the live one; and a runtime
+ *    with no `ResizeObserver` never re-fits, because its band width never moves.
+ *    *Tests:* `src/components/__tests__/ShellLayoutRefit.test.tsx` — "fits an
+ *    untouched layout to the pixel intent at the new width, rather than scaling
+ *    the old shares", "fits a restored layout into the bands at the new width,
+ *    and returns to it when the width comes back", "writes nothing to storage
+ *    when only the width changed", "keeps the layout a person dragged, and
+ *    records that one rather than the correction", "fits the two-pane group from
+ *    the record when pane 1 is collapsed", "keeps a collapsed-group layout a
+ *    person arranged, which is never persisted, across a width change" and
+ *    "fits the stored layout, not the renormalised one, once pane 1 has collapsed
+ *    and come back"; `e2e/pane-refit.spec.ts` — "keeps every pane inside its
+ *    pixel band when a restored layout is narrowed live", "returns to the dragged
+ *    widths when a narrowed window is widened again, and never rewrites the
+ *    stored layout" and "keeps an untouched navigation pane on its 240px intent
+ *    across a live resize, where a reload opens it".
  *
  * 2. COLLAPSE IS A DIFFERENT COMPONENT TREE, NOT A SMALL WIDTH.
  *    ISSUE-002 requires pane 1 to collapse to a 48px icon track and says
@@ -554,7 +607,6 @@ export function ShellLayout({
   // panel starts"; see decision 6 for why binding it live would feed the value
   // being dragged back in as the starting point.
   const [restoredSizes] = useState<PaneSizes>(() => engine.getState().paneSizes);
-  const hasRestoredLayout = !isEngineDefaultLayout(restoredSizes);
 
   // The three-pane layout as the group last ANNOUNCED it, which is not the same
   // fact as the layout this shell has persisted. See `persistPaneSize`.
@@ -598,6 +650,48 @@ export function ShellLayout({
     },
     [measureGroup, observeGroupRef],
   );
+
+  // `?? 0` is the not-yet-measured render, which draws no panel group at all;
+  // `percentOf` answers with the fallback band for it, and for any width a
+  // browser reports as zero.
+  const width = groupWidth ?? 0;
+  // The BANDS follow the observed width. `?? width` is the no-observer answer —
+  // jsdom, an older WebView, or the render before the observer has delivered
+  // anything — and it is the mount-time measurement, which is what every band
+  // was derived from before `useElementWidth` existed. `??` rather than a
+  // truthiness test because the floor in `useElementWidth` is 1, so a reported
+  // width is never falsy, but `null` genuinely means "nothing observed".
+  const bandWidth = observedWidth ?? width;
+
+  // ==========================================================================
+  // THE RE-FIT ON A WIDTH CHANGE (GitHub issue #23). See decision 1.
+  // ==========================================================================
+  // The group's imperative handle, for the one `setLayout` below.
+  const groupRef = useRef<ImperativePanelGroupHandle | null>(null);
+  // The band width the group last COMMITTED at, or `null` before a group has
+  // existed. A report that arrives while `bandWidth` differs from it was caused
+  // by the width change being committed right now — the library's own
+  // constraint re-evaluation, or the re-fit below — and not by a person.
+  const committedBandWidth = useRef<number | null>(null);
+  // The band width of the commit IN PROGRESS, published before any layout
+  // effect runs. It cannot be read from a closure: the library re-evaluates
+  // constraints from pane 1's layout effect and reports on every panel from
+  // there, before panes 2 and 3 have installed this render's `onResize` — so
+  // their reports arrive through the PREVIOUS render's callbacks, whose
+  // `bandWidth` is the old one. Found by "writes nothing to storage when only the
+  // width changed" failing against the closure version. An insertion effect runs
+  // in the mutation phase, ahead of every layout effect in the tree, which is
+  // the one ordering that holds here; it writes a ref and schedules nothing.
+  const liveBandWidth = useRef(bandWidth);
+  useInsertionEffect(() => {
+    liveBandWidth.current = bandWidth;
+  }, [bandWidth]);
+  // The group's layout as it stood before any width change moved it, and
+  // whether a person arranged it. Both describe the CURRENT group membership
+  // only, which is why an effect below clears the flag whenever pane 1 joins or
+  // leaves the group.
+  const sessionLayout = useRef<Record<PaneId, number>>({ ...restoredSizes });
+  const isUserArranged = useRef(false);
 
   const selectNavNode = useCallback(
     (nodeId: string): void => {
@@ -668,7 +762,12 @@ export function ShellLayout({
    * write pane sizes from the extension surface, whose group excludes pane 1".
    */
   const persistPaneSize = useCallback(
-    (pane: PaneId, size: number, previousSize: number | undefined): void => {
+    (
+      pane: PaneId,
+      size: number,
+      previousSize: number | undefined,
+      isWidthDriven: boolean,
+    ): void => {
       if (isNavCollapsed || surface !== 'full') {
         return;
       }
@@ -677,7 +776,10 @@ export function ShellLayout({
       const next: Record<PaneId, number> = { ...known };
       next[pane] = size;
       announcedLayout.current = next;
-      if (!isKnownChange) {
+      // A width change is LEARNED above and never WRITTEN: a person who only
+      // resized their window has not chosen a layout, and writing the corrected
+      // one would overwrite the layout they did choose. GitHub issue #23.
+      if (!isKnownChange || isWidthDriven) {
         return;
       }
       engine.setSlot('paneSizes', {
@@ -687,6 +789,31 @@ export function ShellLayout({
       });
     },
     [engine, isNavCollapsed, surface],
+  );
+
+  /**
+   * Every panel's `onResize`, and the one place a report is classified.
+   *
+   * A report caused by a width change is neither learned as the session layout
+   * nor written: it is the correction, not the intent. Any other report is the
+   * group's layout as it now stands, and one carrying a previous size is a
+   * person moving a divider — the mount announcement is the only report with
+   * none, and a membership change is cleared by the effect that follows it. See
+   * decision 1.
+   */
+  const reportPaneSize = useCallback(
+    (pane: PaneId, size: number, previousSize: number | undefined): void => {
+      const committed = committedBandWidth.current;
+      const isWidthDriven = committed !== null && committed !== liveBandWidth.current;
+      if (!isWidthDriven) {
+        const next: Record<PaneId, number> = { ...sessionLayout.current };
+        next[pane] = size;
+        sessionLayout.current = next;
+        isUserArranged.current = isUserArranged.current || previousSize !== undefined;
+      }
+      persistPaneSize(pane, size, previousSize, isWidthDriven);
+    },
+    [persistPaneSize],
   );
 
   useEffect(() => {
@@ -765,89 +892,56 @@ export function ShellLayout({
     }
   }, [activation, activeId, engine, registry, revision, showChrome]);
 
-  // `?? 0` is the not-yet-measured render, which draws no panel group at all;
-  // `percentOf` answers with the fallback band for it, and for any width a
-  // browser reports as zero.
-  const width = groupWidth ?? 0;
-  // The BANDS, and only the bands, follow the observed width. `?? width` is the
-  // no-observer answer — jsdom, an older WebView, or the render before the
-  // observer has delivered anything — and it is the mount-time measurement, which
-  // is what every band was derived from before this hook existed. `??` rather
-  // than a truthiness test because the floor in `useElementWidth` is 1, so a
-  // reported width is never falsy, but `null` genuinely means "nothing observed".
-  const bandWidth = observedWidth ?? width;
-  const navMinPercent = percentOf(PANE_PX.navMin, bandWidth, PANE_FALLBACK_PERCENT.navMin);
-  const navMaxPercent = percentOf(PANE_PX.navMax, bandWidth, PANE_FALLBACK_PERCENT.navMax);
-  const listMinPercent = percentOf(PANE_PX.listMin, bandWidth, PANE_FALLBACK_PERCENT.listMin);
-  const listMaxPercent = percentOf(PANE_PX.listMax, bandWidth, PANE_FALLBACK_PERCENT.listMax);
-  const detailMinPercent = percentOf(PANE_PX.detailMin, bandWidth, PANE_FALLBACK_PERCENT.detailMin);
-
-  // A restored size wins over the pixel-derived default, and is held to the same
-  // band that default would have been held to — see decision 6. With nothing
-  // restored the arithmetic is exactly what it always was, so a shell nobody has
-  // resized still opens on the pixel intent in `PANE_PX`.
-  const navDefaultPercent = hasRestoredLayout
-    ? clampToBand(restoredSizes.pane1, navMinPercent, navMaxPercent)
-    : percentOf(PANE_PX.navDefault, width, PANE_FALLBACK_PERCENT.navDefault);
-  // A RESTORED PANE-2 SHARE IS RE-BASED ONTO THE GROUP THAT IS ACTUALLY LIVE,
-  // and this is arithmetic rather than taste. The record stores three
-  // percentages of one width. The extension surface's group holds two of those
-  // panes, so `restoredSizes.pane2` is a share of a denominator this group does
-  // not have: handed over unchanged it would ask for roughly three quarters of
-  // what the user chose, the two panels would sum to well under 100, and
-  // `react-resizable-panels` would renormalise them into proportions nobody
-  // picked. Dividing by the pair's own total is the same layout expressed
-  // against the width it is being laid out in.
-  //
-  // The denominator cannot be zero: the engine clamps every stored slot into
-  // `[MIN_PANE_PERCENT, MAX_PANE_PERCENT]`, whose floor is above zero, so the
-  // division is safe on every record the engine can produce — including the
-  // untouched defaults. It is evaluated unconditionally and `hasRestoredLayout`
-  // decides only whether the RESULT is used; that is worth stating, because the
-  // guard sits on the next expression and reads at a glance as if it guarded
-  // this one.
   // WHETHER PANE 1 IS A MEMBER OF THE GROUP THESE PERCENTAGES ARE HANDED TO,
-  // which is not the same question as whether the shell is drawing chrome.
-  //
-  // GitHub issue #114. This used to read `showChrome`, and that is right on the
-  // extension surface and wrong when navigation is COLLAPSED on the chrome
-  // surface: the rail is a fixed 48px `div` rendered outside `shell-panes`, so
-  // the group holds pane 2 and pane 3 alone and its members must sum to 100. At
-  // 1440px the old expression produced 25 and 58.333 — `react-resizable-panels`
-  // renormalised them and warned `Invalid layout total size: 25%,
-  // 58.33333333333334%` on every load, and pane 2 opened about a fifth wider
-  // than the 360px `PANE_PX` asks for.
-  //
-  // Nothing here is new arithmetic. It is the same rebase the restored path
-  // already documents three paragraphs down, applied to the predicate that
-  // decides it rather than to only one of its two uses.
+  // which is not the same question as whether the shell is drawing chrome: a
+  // collapsed pane 1 is a fixed 48px track outside the group (GitHub issue
+  // #114), and on the extension surface it is in another document.
   const paneOneIsInGroup = showChrome && !isNavCollapsed;
-  const restoredListPercent = paneOneIsInGroup
-    ? restoredSizes.pane2
-    : (restoredSizes.pane2 / (restoredSizes.pane2 + restoredSizes.pane3)) * 100;
-  const listDefaultPercent = hasRestoredLayout
-    ? clampToBand(restoredListPercent, listMinPercent, listMaxPercent)
-    : percentOf(PANE_PX.listDefault, width, PANE_FALLBACK_PERCENT.listDefault);
-  // Declared rather than left implicit: the library warns about a panel with no
-  // `defaultSize`, and the remainder is what pane 3 would have been given anyway.
-  // It is floored at the pane's own minimum so that two wide defaults cannot ask
-  // for a negative share. The remainder is also what makes a CLAMPED restore add
-  // up: when pane 1 or pane 2 was corrected above, pane 3 absorbs the difference
-  // rather than the three of them summing to something the library has to
-  // renormalise.
-  //
-  // **The pane-1 term is zero whenever pane 1 is not a member of this group**,
-  // and leaving it in would be the same denominator error one paragraph up, in
-  // the other direction: the remainder pane 3 gets is everything the list did
-  // not take rather than everything the list and a pane that is not here did
-  // not take. That is true on the extension surface, where pane 1 lives in
-  // another document, AND when navigation is collapsed to its 48px rail, where
-  // pane 1 is a fixed-width `div` outside the group. The second case is #114.
-  const paneOneShare = paneOneIsInGroup ? navDefaultPercent : 0;
-  const detailDefaultPercent = Math.max(
-    detailMinPercent,
-    100 - paneOneShare - listDefaultPercent,
+  const bands = paneBandsAt(bandWidth);
+  // The mount-time layout: the restored snapshot, or `PANE_PX` at the measured
+  // width when nothing was chosen, held to the live bands. `intentFromRecord`
+  // and `fitPaneLayout` carry the arithmetic and the reasons for it — the rebase
+  // of a restored pane-2 share, pane 3 as the remainder, and the pane-1 term
+  // that is zero when pane 1 is not in the group — and the re-fit below calls
+  // the same two functions, which is what makes a live resize and a reload agree.
+  const mountLayout = fitPaneLayout(
+    intentFromRecord(restoredSizes, paneOneIsInGroup, width),
+    bands,
+    paneOneIsInGroup,
   );
+
+  // Pane 1 joining or leaving the group makes the library renormalise and report
+  // on every panel. That is a new membership, not an arrangement: what a person
+  // did to the previous membership's shares does not describe this one. A
+  // LAYOUT effect, so it runs after the panels' own — which is where the library
+  // reports — and before the re-fit below, in the same commit.
+  useLayoutEffect(() => {
+    isUserArranged.current = false;
+  }, [paneOneIsInGroup]);
+
+  // THE RE-FIT. When the width the bands are derived from changes, the layout is
+  // fitted again from what was ASKED for — the session layout a person arranged,
+  // or else the persisted record exactly as a reload would read it — rather than
+  // left as whatever the library's own re-clamp made of the previous width's
+  // numbers. Nothing it causes is written; see `reportPaneSize`.
+  useLayoutEffect(() => {
+    const group = groupRef.current;
+    if (group === null) {
+      return;
+    }
+    const previous = committedBandWidth.current;
+    if (previous !== null && previous !== bandWidth) {
+      const session = sessionLayout.current;
+      const intent: PaneIntent = isUserArranged.current
+        ? { nav: session.pane1, list: session.pane2 }
+        : intentFromRecord(engine.getState().paneSizes, paneOneIsInGroup, bandWidth);
+      const fitted = fitPaneLayout(intent, paneBandsAt(bandWidth), paneOneIsInGroup);
+      group.setLayout(
+        paneOneIsInGroup ? [fitted.nav, fitted.list, fitted.detail] : [fitted.list, fitted.detail],
+      );
+    }
+    committedBandWidth.current = bandWidth;
+  }, [bandWidth, engine, paneOneIsInGroup]);
 
   const hostCommands: readonly HostCommand[] = [
     {
@@ -1029,11 +1123,11 @@ export function ShellLayout({
         id="pane2"
         order={2}
         className="min-h-0 min-w-0"
-        defaultSize={listDefaultPercent}
-        minSize={listMinPercent}
-        maxSize={listMaxPercent}
+        defaultSize={mountLayout.list}
+        minSize={bands.list.min}
+        maxSize={bands.list.max}
         onResize={(size, previousSize) => {
-          persistPaneSize('pane2', size, previousSize);
+          reportPaneSize('pane2', size, previousSize);
         }}
       >
         <PaneWrapper
@@ -1064,10 +1158,10 @@ export function ShellLayout({
         id="pane3"
         order={3}
         className="min-h-0 min-w-0"
-        defaultSize={detailDefaultPercent}
-        minSize={detailMinPercent}
+        defaultSize={mountLayout.detail}
+        minSize={bands.detail.min}
         onResize={(size, previousSize) => {
-          persistPaneSize('pane3', size, previousSize);
+          reportPaneSize('pane3', size, previousSize);
         }}
       >
         <PaneWrapper
@@ -1301,18 +1395,23 @@ export function ShellLayout({
             ) : null}
             <div ref={attachGroup} className="flex min-h-0 min-w-0 flex-1">
               {groupWidth === null ? null : (
-                <PanelGroup id="shell-panes" direction="horizontal" className="flex min-w-0 flex-1">
+                <PanelGroup
+                  ref={groupRef}
+                  id="shell-panes"
+                  direction="horizontal"
+                  className="flex min-w-0 flex-1"
+                >
                   {isNavCollapsed || !showChrome ? null : (
                     <>
                       <Panel
                         id="pane1"
                         order={1}
                         className="min-h-0 min-w-0"
-                        defaultSize={navDefaultPercent}
-                        minSize={navMinPercent}
-                        maxSize={navMaxPercent}
+                        defaultSize={mountLayout.nav}
+                        minSize={bands.nav.min}
+                        maxSize={bands.nav.max}
                         onResize={(size, previousSize) => {
-                          persistPaneSize('pane1', size, previousSize);
+                          reportPaneSize('pane1', size, previousSize);
                         }}
                       >
                         <PaneWrapper
