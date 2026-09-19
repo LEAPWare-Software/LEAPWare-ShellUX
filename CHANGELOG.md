@@ -392,6 +392,14 @@ from so a reader can check it.
   made it possible:** the previous fix copied the command's declared `allowed-tools`,
   which do not list the subagent tool that the command's own steps use. **Not proven here**, for the same
   reason as before: the action skips a PR that changes its own workflow.
+- **The Claude review job is a direct prompt, not the `code-review` plugin.** After the
+  subagent fix it still posted nothing on #150 (run 35415153661: 7 turns, 1 denial).
+  The plugin can stop early by design or be denied a tool, and the run log does not say
+  which, so three SUCCESS runs gave no signal either way. The prompt now reviews against
+  `CLAUDE.md` and ADR-0003 and must always end with one `Claude review:` summary
+  comment. The plugin marketplace URL, which could not be pinned, is gone. **What made
+  it possible:** a job that can succeed silently was treated as a reviewer. **Not proven
+  here:** the next PR shows whether it comments.
 - **Chart titles overprinted the plot and ignored the theme; the chart contrast rows
   were measured on a background nothing painted** (GitHub #112, #113; #111 addressed).
   The title is no longer drawn into the ECharts canvas: the `<figcaption>` is the
