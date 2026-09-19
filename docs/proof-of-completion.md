@@ -1,0 +1,292 @@
+# Proof of completion, before LEAPWare BuildCraft can enforce it
+
+**Status: design adopted, not built.** Nothing below exists in the repository yet except
+this document; plan step 0c tracks the build. Revision r12, audited adversarially in twelve
+rounds by agents that did not write it; the last round found no Blocker, and its Majors and
+Minors (X1-X9) are folded in. Author: agent, under the owner's CTO delegation of
+2026-09-18 (D-50).
+
+Repository facts this plan relies on (measured 2026-09-18/19): LEAPWare-Software/
+LEAPWare-ShellUX is public; the organisation is on the `free` plan; ruleset 23685990 on
+`~DEFAULT_BRANCH` requires a PR (0 approvals), five strict required checks (Verify on
+ubuntu, macos and windows; Browser tests (chromium); Declared Node floor (22.13.0)) and a
+merge queue (ALLGREEN, SQUASH, 10-minute response timeout); the GitHub Actions app id is
+15368; artifact retention is 90 days; `ci.yml`, `browser.yml`, `desktop.yml` and
+`audit-dependencies.yml` use `concurrency: group: ${{ github.workflow }}-${{ github.ref }},
+cancel-in-progress: true` (X6).
+
+Audit history: Blockers per round 2, 3, 2, 2, 2, 5, 7, 2, 2, 1, 1, **0**. Round 8 accepted
+the threat model below; round 12 found no Blocker.
+
+## 1. Threat model
+
+The three incidents of 2026-09-18 were honest mistakes: (I1) "zero open pull requests"
+(HANDOFF #128, plan `44edac1`); (I2) "npm 10.9.8 crashes on this lockfile" (CLAUDE,
+traps heading, HANDOFF, #128); (I3) "0 sourcemaps packaged" (agent report). Each was an
+assertion checked once or never.
+
+This protocol defends against the honest mistake. It does not defend against a writer
+who sets out to defeat it: on the free plan with 0 approvals, anyone who can merge can
+edit any in-repository gate, and no design here removes that; BuildCraft R4 or a second
+approver can. One honest mistake sits at the edge and is named: an agent that loosens a
+row's check or the linter to get green. The defences are the `Gate changes:` and
+`Rows reviewed:` lines, which make the change visible, and a review under the same
+identity. That is weak, and it is a guardrail. No part of this protocol is an integrity
+control; the merge queue is entry-point validation; everything else is a guardrail.
+
+## 2. Guarantees (against the honest mistake)
+
+G1. **"Done" has one recording form: a ticked task item in `docs/plans/**`.** A PR that
+    adds a tick, or changes a ticked item's text or tag, fails unless the item cites a
+    register row in `active` whose `box` equals the item text and which passes in that
+    PR's run (`repo`/`github`), or is a `manual` row with its evidence file present.
+G2. **What is checked is the row's `expect` list, not the item's prose.** A row declares
+    expectations such as `{ "key": "handoff_bytes", "op": "<=", "value": 3000 }`; its
+    checks print `key=value` lines; the prover evaluates each expectation. Numbers in the
+    item's prose are not checked, spelled out or not; a measured value belongs in
+    `expect`, and prose may repeat it only as a bound.
+G3. **Every `repo` and `github` row is re-run on every completed main run** (`push` to
+    `main` and the daily `schedule`; a pending push run may be superseded by a newer one,
+    which checks a tree containing it, X7). A failing row, a structural failure, ruleset drift, or a
+    crashed run files one issue. `manual` rows are never re-run; they are dated.
+G4. **Step heading counts `(x/y)` equal the item counts**, and a PR that removes or
+    rewords an item, or deletes or moves a plan file, must name each one.
+G5. **Every PR carries evidence, "Not done", and a review record for its head SHA.**
+G6. **Status answers come from `npm run status`,** whose rendering rules are in §3.6. It
+    never prints "proven", and it re-checks structure locally before trusting any run.
+
+Not guaranteed: free prose (HANDOFF, CHANGELOG, a plain bullet such as today's "(done
+2026-09-18, reason on the PR)", a table mark, a plan file outside `docs/plans/**`) is not
+recorded as done by this protocol; the status report ignores it, an advisory lint (§3.8)
+annotates likely cases on the PR, and review decides. The rule in `CLAUDE.md` and the PR
+template: prose may point to an item, not declare one done. I2 is prose and is covered
+by ADR-0003 rule 2 and review, not by the machine. A row's check can be weaker than its
+item; probes narrow that for `repo` rows. A PR that breaks an old tick is caught by the
+next completed main run, not by that PR.
+
+## 3. Components
+
+### 3.1 Register: `docs/claims.json`
+
+`{ "schemaVersion": 1, "active": Row[], "retired": Row[] }`. "The row exists" means it is
+in `active`.
+
+Row = `{ id, box, class, checks?, expect?, probe?, evidence?, provenOn, addedBy }`:
+- `id`: `C-` plus digits, unique across `active` and `retired`.
+- `box`: the item text (§3.2).
+- `class`:
+  - `repo`: reads the tree only. `probe` required: a named mutation, applied in a
+    scratch worktree, that must turn a check red; a row whose probe leaves it green is
+    rejected as vacuous.
+  - `github`: reads named GitHub objects, one object per command, by number or SHA; list
+    and search endpoints are rejected.
+  - `manual`: `evidence` names a committed file of raw output; `provenOn` its date; never
+    re-run; its `expect` values render as `STATED`, never as checked.
+- `rowHash` (computed, not stored): sha256 of the canonical JSON of `box`, `class`,
+  `checks`, `expect` and `probe` (X2).
+- `checks`: a list of argv arrays; all must exit 0; their concatenated stdout is the
+  row's output. Each `expect` key must appear exactly once as `key=<value>`, else the row
+  fails; numbers compare after stripping thousands separators; `op` is one of `==`,
+  `<=`, `>=`, `<`, `>`.
+- Retiring: a row leaves `active` only by entering `retired` with `retiredBy` and
+  `reason`.
+
+**Argv allowlist** (exact shape; a fixture for every rejected form):
+- `node <path>`: the path, after normalisation, lies under `scripts/claims/checks/`;
+  argv[1] may not be `-e`, `--eval`, `-p`, `--print`, `--import`, `--require`, `-r`.
+- `git <sub> ...`: argv[1] is one of `ls-files`, `show`, `grep`, `rev-parse`,
+  `cat-file`, `diff`; rejected anywhere: `-c`, `-C`, `--git-dir`, `--work-tree`,
+  `--exec-path`, `--ext-diff`, `--output`, `-O`, `--open-files-in-pager`. (`ls-remote`
+  is not allowed: `repo` rows read the tree.)
+- `gh` (`github` rows only): `gh api <path>` with no flags except `--jq <expr>`; rejected:
+  `-X`, `--method` other than GET, `-f`, `-F`, `--field`, `--raw-field`, `--input`,
+  `--paginate`, and the path `graphql`, in joined and split forms (`-XPOST`,
+  `--method=POST`). Also `gh pr view <n>`, `gh run view <id>`, `gh issue view <n>`, each
+  with `--json`/`--jq` only.
+- Any argv containing `verify`, `test:coverage` or `test:browser` is rejected.
+
+**Network confinement for `repo` rows**: on the Linux runner they run as
+`sudo unshare --net -- sudo -u runner -E "$(command -v node)" ...` (ubuntu-24.04 restricts
+unprivileged user namespaces through AppArmor; not yet measured on a runner). If the
+wrapper fails the job fails; it never falls back to running unconfined. Local runs are
+unconfined and print that they are.
+
+### 3.2 Box linter: `scripts/claims/lint-boxes.mjs`
+
+- **Finding items.** `remark-parse` + `remark-gfm`, and a raw-line scan
+  `^\s*(>\s*)*([-*+]|\d+[.)])[\s ]+\[[ xX]\]` (Unicode whitespace). Raw hits inside
+  remark `code`, `html` or `definition` nodes are dropped; any remaining disagreement
+  fails as "ambiguous task item", including a line inside a paragraph that looks like a
+  task item. Fixtures: GitHub `POST /markdown` (gfm) renderings captured once and
+  committed; must-pass for fenced, indented, comment and link-definition cases; must-fail
+  for paragraph continuation and the NBSP case.
+- **Item text.** The source slice from just after the checkbox's `]` and its following
+  whitespace to the end of the item's first paragraph; remove the `[C-nn]` tag, then
+  collapse whitespace and trim. Fixtures for items that start with bold, code and plain
+  text.
+- **Structural checks, every ticked item, every run:** exactly one `[C-nn]`; the row is in
+  `active`; its `box` equals the item text.
+- **Execution, diff-scoped:** items whose tick, text or tag changed, and rows added or
+  changed, over `origin/main...HEAD` (`pull_request`) or `HEAD~1..HEAD` (`merge_group`,
+  after asserting `HEAD` has one parent and `main.json`'s `merge_method` is `SQUASH`):
+  the row's checks pass and its `expect` holds, or it is `manual` with evidence present.
+  Probes run for rows added or changed.
+- **Headings:** each `(x/y)` equals checked/total task items from that heading to the next
+  heading of the same or higher level, sub-sections included.
+- **Removal or rewording:** base item text absent on the head, or a plan file deleted or
+  moved, is reported to the evidence gate (§3.3), which enforces it.
+
+### 3.3 PR evidence gate: `.github/workflows/pr-evidence.yml`, job `PR evidence`
+
+Reads the PR body through the API (so a re-run sees the current body) and fails unless
+it has:
+- `## Evidence` with a line `VERIFY_EXIT=0`;
+- `## Not done` with at least one line;
+- `## Review` with `Reviewer:`, `Reviewed SHA:` equal to the PR head SHA (under
+  `merge_group`, the head SHA read via API), `Verdict:` not `DO NOT MERGE`;
+- `Rows reviewed:` naming every added, changed or cited row (or `none`);
+- `Items removed or reworded:` naming each such item by its base line number, when §3.2
+  reports any;
+- `Gate changes:` naming every changed file under `scripts/claims/**`, the schema of
+  `docs/claims.json`, `claims.yml`, `pr-evidence.yml` or `.github/rulesets/**`, when any.
+Dependabot: exempt only when every commit from `GET /pulls/{n}/commits` has
+`author.login == 'dependabot[bot]'` and `commit.verification.verified == true`; the box
+linter still runs. `.github/PULL_REQUEST_TEMPLATE.md` gains these headings, the
+prose-points-to-items rule, a note that any push or rebase makes `Reviewed SHA:` stale,
+and a correction of its stale "CI runs fewer steps than `verify`" paragraph.
+
+### 3.4 Workflows and required-check hygiene
+
+`claims.yml` (job `Prove claims`) and `pr-evidence.yml` (job `PR evidence`):
+- run from the PR head, like every other check here; no base-commit execution, so a gate
+  change cannot deadlock the queue (X8);
+- trigger on `pull_request` (types `opened, synchronize, reopened, edited`) and
+  `merge_group`, with no `paths`, `paths-ignore`, `branches` or `branches-ignore` under
+  either; `claims.yml` also on `push: branches: [main]` and `schedule` (daily);
+- skip only inside a step that exits 0 and prints its reason;
+- under `merge_group`, parse the PR number from `merge_group.head_ref`
+  (`refs/heads/gh-readonly-queue/main/pr-<N>-<base-sha>`) and fail if unresolvable;
+- `actions/checkout` with `fetch-depth: 0`; a fixture shows the diff helper failing
+  loudly in a depth-1 clone;
+- permissions: `contents`, `pull-requests`, `actions`, `issues` all `read`; issue filing
+  is a separate job (§3.5);
+- concurrency (W2, M3): `pull_request` and `merge_group` keep the per-ref group with
+  cancellation; `push` and `schedule` use a separate group `claims-main` with
+  `cancel-in-progress: false`. GitHub keeps at most one pending run per group and cancels
+  an older pending one when a newer arrives; that is safe, because the newer run checks a
+  tree that contains the older one, and cancelled runs are never reference runs (§3.6).
+- job outcome (W4): on `pull_request` and `merge_group`, any failing diff-scoped row or
+  structural failure fails the job; on `push` and `schedule`, the job records every
+  result in the `claims-results` artifact and succeeds unless it crashes.
+`scripts/__tests__/required-checks.test.mjs` (in `test:scripts`; `yaml` declared as a
+devDependency) expands `strategy.matrix` into job names, maps every ruleset-required
+context to a job, and asserts the trigger, filter, `edited` and concurrency rules above;
+it passes on today's workflows before the new ones exist; the concurrency assertions
+apply to the two new workflows only (X6). A timing test fails if the
+summed measured per-row times for a PR or queue run exceed 4 minutes (the queue's CI run
+measured 4m18s of its 10 minutes). Main runs are not queue-bound: `timeout-minutes: 30`,
+and the timing test also sums the whole register plus every probe under 30 minutes (X4).
+
+### 3.5 Main runs and issue filing
+
+Each `push` to `main` and each daily `schedule` run: every `repo` and `github` row
+(checks, `expect`, probes), every structural check, and the ruleset comparison, each
+recorded in `claims-results` as `{ rowId, rowHash, pass, output }`, with structural
+failures and ruleset drift recorded as synthetic rows `S-structure` and `S-ruleset` (W3).
+
+**Ruleset comparison** against `.github/rulesets/main.json`, read with the job's read-only
+token: the set of rule types must be equal; for each rule, every parameter key `main.json`
+declares must be equal, and declared arrays (`allowed_merge_methods`,
+`required_status_checks`) must be equal as a whole; undeclared keys are ignored.
+`bypass_actors` is not compared, because GitHub returns it only to callers with write
+access to the ruleset (measured: the unauthenticated response omits it): a bypass actor
+added in the UI is not detected. If the read-only response omits `integration_id`, it is
+excluded too, and that gap is stated. Fixture: today's unauthenticated response, which
+round 11 measured as equal under these rules.
+
+**Issue job** (`issues: write`, `needs: prove`, `if: ${{ !cancelled() }}`, on `push` and
+`schedule` only; X5): files or comments one issue, "Claims register is failing", when the
+check job's result is `failure`, or its artifact is missing, or any row (synthetic rows
+included) failed. A run cancelled by hand or by concurrency files nothing. The
+find-or-comment step is the one `audit-schedule.yml` uses (proven by #142); this job
+form (separate job, `needs`, artifact download) is new and is proven in rollout step 3.
+
+### 3.6 Status: `scripts/status.mjs`, `npm run status`
+
+1. `git fetch origin main`.
+2. **Local structure first (W1):** run §3.2's structural checks and heading counts on the
+   working tree it reads. Any ticked item without exactly one tag, whose row is not in
+   `active`, or whose `box` differs from the item text renders `UNPROVEN`, whatever any
+   run says.
+3. **Reference run:** among `claims.yml` runs whose runs-API record has event `schedule` or
+   `push`, `head_branch` `main`, `head_repository.id` equal to the repository id, status
+   `completed` and conclusion not `cancelled` or `skipped`, the one with the highest
+   `run_number`. Only then is its result read. Pull-request and merge-queue runs are never
+   candidates.
+4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
+   its `expect` values marked `STATED` (X1: manual rows never enter a run); newest
+   completed main run cancelled by `timeout-minutes`, `FAILING RUN <id>` (X4); reference
+   run conclusion not `success`, `FAILING RUN <id>` for every row, deliberately, because a
+   crashed run's partial results are not trusted (X9); reference run `updated_at` more than 48 hours ago,
+   `STALE`; its `head_sha` unknown locally or not an ancestor of `origin/main`,
+   `UNPROVEN`; the row's `rowHash` in the artifact not equal to the local row's,
+   `UNPROVEN`; recorded `fail`, `FAILING C-nn`; recorded `pass`, `PASSING C-nn run <id>`,
+   followed by each checked expectation as measured (`handoff_bytes=1928 <= 3000`, X8).
+
+### 3.7 Chat
+
+The agent's status answers come from `npm run status` run at answer time. "Done" in chat
+names the item and its `PASSING` run id. This is held by memory and review.
+
+### 3.8 Advisory prose lint
+
+`scripts/claims/lint-prose.mjs` (ported from the r6 prototype, whose source is committed
+in PR A) scans added blocks of `HANDOFF.md`, `CLAUDE.md`, `README.md`, `docs/traps.md`,
+`docs/DECISIONS.md` and `docs/plans/**` for completion and state wording and emits GitHub
+warning annotations. It never fails a check. Reviewers answer each annotation in the
+review record.
+
+## 4. Migration (PR A)
+
+- The register, `scripts/claims/**`, `scripts/status.mjs`, `npm run status`, the tests
+  above, devDependencies `yaml`, `remark-parse`, `remark-gfm`, `unified`, both workflows
+  and the template changes.
+- The 14 ticked items in `v1-production.md` each get a row (with an `expect` list where
+  the item states a measured value), or are unticked with a note. Live values in item
+  prose (`(2,137)`, `(199)`) become bounds.
+- Step 3's heading reads `(0/9)` with 3 ticked: corrected.
+- `CLAUDE.md` and the template gain the prose-points-to-items rule.
+
+## 5. Rollout, each step proven before the next
+
+1. PR A as above. The two new checks are **not required**.
+2. Throwaway PRs, each result pasted with its run id. Cases (b) to (k) run on
+   `pull_request` only and are closed unmerged, because a queued bad case would land on
+   main while the checks are not required; (a) and (l), with passing content, go through
+   the queue. (a) both jobs report on `merge_group`; (b) ticking an item without a row
+   fails; (c) citing a row with a different `box` fails; (d) an `expect` key printed zero
+   times or twice fails; (d2) a row whose `expect` bound is exceeded fails (X3); (e) a heading count off by one fails; (f) removing or rewording
+   an item without `Items removed or reworded:` fails; (g) a missing review record fails;
+   (h) a body edit re-runs the evidence gate; (i) under the `unshare` wrapper a
+   network-calling `repo` row fails, a tree-only row passes, and `node --version` prints
+   the `.nvmrc` version (M2); (j) the NBSP task item fails as ambiguous; (k) a PR changing
+   `claims.yml` without `Gate changes:` fails; (l) a two-entry queue group passes.
+3. Three consecutive green main runs; then one forced failing row files the issue, and
+   one forced crash renders `FAILING RUN` in `npm run status` and files the issue (W3).
+4. Before PR B, every open PR gets a review record. PR B adds both checks to `main.json`
+   with `integration_id: 15368`. Order (M5): merge PR B, then immediately apply it with
+   `scripts/apply-rulesets.mjs` and read it back with `gh api`; the main run between the
+   merge and the apply reports `S-ruleset` drift and files the issue, which the read-back
+   closes with a comment.
+5. When BuildCraft R4/R5 enforce, retire these item by item (`docs/sdlc.md`).
+
+## 6. Known limits
+
+- A writer who edits the gate, the register or the review record on purpose is outside
+  the threat model. Closed only by BuildCraft R4 or a second approver.
+- Free prose is not machine-checked.
+- A row's check can be weaker than its item.
+- A PR that breaks an old tick is caught by the next completed main run.
+- `manual` rows are dated, not re-proven.
+- A bypass actor added to the ruleset outside `main.json` is not detected.
+- The `unshare` wrapper is unmeasured on a runner until rollout step 2(i).

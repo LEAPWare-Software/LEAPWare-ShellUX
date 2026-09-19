@@ -16,6 +16,14 @@ from so a reader can check it.
 
 ### Added
 
+- **The proof-of-completion protocol, as a design** (D-50,
+  `docs/proof-of-completion.md`). "Done" is to be recorded only as a ticked plan item
+  citing a register row whose check passes; every row is re-run on main and daily; a
+  PR carries evidence, "Not done" and a review record bound to its head SHA; and
+  `npm run status` renders each tick from the latest main run, never "proven". Audited
+  in twelve adversarial rounds until one found no Blocker. **Nothing is built yet:**
+  plan step 0c tracks the build. Its threat model is the honest mistake; it states
+  plainly that a writer can defeat any in-repository gate until BuildCraft R4.
 - **A crash now leaves a report someone can read, and the bundle declares its target**
   (GitHub #86, #85; Electron half). `electron/main/diagnosticsLog.ts` writes a rotating
   log (1 MiB, two backups) under `app.getPath('logs')`; main records

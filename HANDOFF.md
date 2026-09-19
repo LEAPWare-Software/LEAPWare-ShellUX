@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `c62a3b5` (#150, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `7a8eb67` (#151, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -21,16 +21,17 @@ with a merge queue.
 - #148: charts repaired (#112, #113; #111 addressed); #146 filed.
 - #149: the review job may launch its subagents.
 - #150: crash diagnostics log (#86, in part) and the Chromium build target (#85).
-- This change: the Claude review is a direct prompt that must post a summary.
+- #151: the Claude review is a direct prompt that must post a summary.
+- This change: the proof-of-completion design (D-50); milestones v1.0.0 and 1.1 (D-51).
 
 ## In flight
 
-- **Proof of completion:** a register of claims with CI checks. Its design passed a
-  twelfth audit round with no Blocker; the document lands next, then its build.
+- **Proof of completion, PR A** (plan step 0c): register, linters, status report and
+  workflows, being built in `feat/proof-of-completion-pr-a`.
 
 ## The next step
 
-1. Land the protocol document; prove the review job comments.
+1. Prove the review job comments (this PR is its first run as a direct prompt).
 2. Build the protocol (its PR A), then roll it out step by step.
 3. Plan steps 3b to 9; the 1.0 tag waits for BuildCraft.
 
