@@ -1,5 +1,8 @@
 name: Claims
 
+# rollout QA case k: trivial comment-only edit, deliberately undisclosed under
+# Gate changes: in the PR body, to exercise the PR evidence gate.
+#
 # The proof-of-completion register, re-proven (docs/proof-of-completion.md §3.4, §3.5).
 #
 # On a pull request or a merge-queue entry, `Prove claims` runs the structural checks on
