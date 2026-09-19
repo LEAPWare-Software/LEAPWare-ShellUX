@@ -107,7 +107,8 @@ Each run does one unit of work, then exits.
      - anything needing the packaged app, the Windows VM or a release;
      - reversing an owner-made decision row.
    - **How to ask:** open an issue labelled `needs-owner`, with one question and the options with a recommended default. Never mention or notify any other GitHub account: the owner uses `LEAPWare-HQ` only. To alert the owner, send one **Claude mobile push notification** (the PushNotification tool) naming the issue number and the question in one line. Add the issue to the watchdog's list. Then move to your next item; never wait.
-   - **The owner answers** by commenting `OWNER: <answer>` on that issue. The next run of the affected lane reads it, acts on it, records it and closes the issue.
+   - **The owner decides only through an inline survey** (the owner's order, 2026-09-19: "all decisions must be inline survey only"). Write each `needs-owner` issue as a survey: one question and 2 to 4 labelled options, the recommended option first. A Claude session the owner opens presents it as an inline survey and posts the owner's pick as an `OWNER: <answer>` comment.
+   - **The owner's answer** arrives as that `OWNER: <answer>` comment on the issue. The next run of the affected lane reads it, acts on it, records it and closes the issue.
 9. **Stop conditions:**
    - the same item fails review 3 times;
    - an owner-only question from the list above;
