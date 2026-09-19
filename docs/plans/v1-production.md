@@ -172,12 +172,12 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 - [ ] Heuristic review against VS Code, Linear, Raycast and Outlook/Teams by an `lw-verifier` that did not build the UI. Every finding is fixed or filed with evidence (rule 7).
 - [ ] Operator sessions on the packaged app, with owner sign-off recorded in DECISIONS.md.
 
-## Step 7 — Production hardening  (1/5)  — `sonnet`
+## Step 7 — Production hardening  (4/5)  — `sonnet`
 - [ ] #86 observability, minimum version (logging and asar exclusion landed with the hardening PR; attaching sourcemaps to the release waits for step 8): `onerror`/`unhandledrejection` in the renderer and `process.on('uncaughtException')` in main, logged to a rotating file under `app.getPath('logs')`. Sourcemaps kept out of the asar and attached to the release. **No telemetry leaves the machine** (no endpoint exists or is declared).
 - [x] #85 for Electron: set Vite `build.target` to the Chromium version Electron 43 ships. The Safari half is moot because the target is Electron only. Verify that `base` is correct for `file://` loading by launching the packaged app. `chrome150`, measured from Electron 43.2.0; the packaged renderer loads over the `shellux://` scheme, not `file://`. The packaged launch is recorded in #150 and is not re-checked by the row. [C-26]
-- [ ] Contract items not covered by Step 6b ship as documented limits (D-35, now narrowed to exclude #16, #17, #28, #32, #57, #68 and #80).
-- [ ] `DEVELOPER.md` gets a "Known limits at 1.0" section that names each deferred issue. `README.md`/`PRODUCT.md` state accessibility honestly: WCAG target withdrawn, no assistive technology ever run (#60).
-- [ ] `docs/INSTALL.md` for operators: install per-user, the SmartScreen "More info → Run anyway" path for an unsigned build, where the logs live, and how updates arrive (partly covers #43).
+- [x] Contract items not covered by Step 6b ship as documented limits (D-13's list, narrowed by D-36 to exclude #16, #17, #28, #32, #57, #68 and #80; the plan first cited D-35 here in error). The one remaining, #91, is named in `DEVELOPER.md`'s "Known limits at 1.0". [C-34]
+- [x] `DEVELOPER.md` gets a "Known limits at 1.0" section that names each deferred issue. `README.md`/`PRODUCT.md` state accessibility honestly: WCAG target withdrawn, no assistive technology ever run (#60). The section names #91, #65, #55, #61, #66 and #60 and promises no 1.1 fix; README and PRODUCT already said the rest and are unchanged. [C-35]
+- [x] `docs/INSTALL.md` for operators: install per-user, the SmartScreen "More info → Run anyway" path for an unsigned build, where the logs live, and how updates arrive (partly covers #43). Written with those sections plus uninstalling, and linked from the README; the update section says the feed is not live yet. [C-36]
 
 ## Step 8 — Release engineering  (0/6)  — `sonnet`
 - [ ] App icon (`build/icon.ico`, 256px) and the `icon` key in `electron-builder.yml`. Check that the build log no longer says `default Electron icon is used`.

@@ -125,6 +125,7 @@ follows are in [`CLAUDE.md`](CLAUDE.md) and
 | Testing, coverage and the browser lane | [`docs/testing.md`](docs/testing.md) |
 | Performance targets (unmeasured) | [`docs/performance.md`](docs/performance.md) |
 | Cutting a release | [`docs/RELEASE.md`](docs/RELEASE.md) |
+| Installing the packaged app as an operator (per-user, SmartScreen, logs, updates) | [`docs/INSTALL.md`](docs/INSTALL.md) |
 | Why it is built this way | [`docs/adr/`](docs/adr/) |
 | What changed, and what made each defect possible | [`CHANGELOG.md`](CHANGELOG.md) |
 | This README before 2026-09-18 | [`docs/history/readme-status-2026-08.md`](docs/history/readme-status-2026-08.md) |

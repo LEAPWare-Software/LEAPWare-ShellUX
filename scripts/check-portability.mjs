@@ -305,6 +305,21 @@ const ALLOWLIST = [
       'no longer the response it claims to be. Scoped to this one file and to ' +
       'hardcoded-hostname only; every other rule still applies.',
   },
+  {
+    files: ['docs/INSTALL.md'],
+    rules: ['environment-home-reference'],
+    reason:
+      'This is an operator-facing document describing where the PACKAGED, INSTALLED ' +
+      'application (Windows only at 1.0, D-15) writes its own diagnostics log at ' +
+      'runtime, measured from `app.getPath(\'logs\')` in `electron/main/diagnosticsLog.ts` ' +
+      'and `electron/main/index.ts` — it is not a build input, a script this repository ' +
+      'runs, or a path any tracked file assumes exists on the machine running `npm run ' +
+      'verify`. Naming the concrete Windows Roaming-profile resolution is the whole ' +
+      'point of the section; the symbolic `app.getPath(\'logs\')` form used elsewhere ' +
+      '(`docs/adr/0006-runtime-plugin-host.md`) would not tell an operator where to look. ' +
+      'Scoped to this one file and to environment-home-reference only; every other rule, ' +
+      'including hostname and other path rules, still applies here.',
+  },
 ];
 
 // ---------------------------------------------------------------------------

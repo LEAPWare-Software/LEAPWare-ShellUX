@@ -16,6 +16,15 @@ from so a reader can check it.
 
 ### Added
 
+- **An operator install guide and the 1.0 known limits** (plan step 7).
+  `docs/INSTALL.md` covers the per-user install, the SmartScreen path for an unsigned
+  build, where the diagnostics log lives, how updates will arrive (the feed is not live
+  yet, and the guide says so), and uninstalling; the README links it. `DEVELOPER.md`
+  gains "Known limits at 1.0", naming #91, #65, #55, #61, #66 and #60 with what each
+  means for a plugin author, and promising no 1.1 fix. README and PRODUCT already
+  stated accessibility honestly (keyboard gate for 1.0, screen readers not done, #60)
+  and are unchanged.
+
 - **The `.lwplugin` validator and the `hostApiVersion` rule** (ADR-0006 step 3).
   `electron/main/plugins/` reads a package (one JSON document of at most 8 MiB, read
   through one file handle, non-blocking where the platform supports it, into a read
