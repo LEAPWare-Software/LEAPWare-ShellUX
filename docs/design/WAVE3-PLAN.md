@@ -144,7 +144,10 @@ under its probe is not a guard and is rewritten or deleted.
   status line under the title pairs a mark (`aria-hidden`, a character glyph) with a
   word in status ink — warning triangle "Below reorder point", success dot "Delivered",
   danger mark "Delivery overdue", info dot "Awaiting supplier" — never colour alone.
-  `word` is a required prop, so the mark cannot render without one.
+  `word` is a required prop, so a caller cannot omit the sentence and still get the
+  mark. A **guardrail**, not more: `word: string` accepts `''`, so it holds against
+  the honest omission and not against an empty string, and no test asserts otherwise.
+  `RowStatus.tsx`'s banner carries the full argument and the open question it leaves.
 - Adopted in both mock row renderers, honestly and not identically. `DatabasePlugin.tsx`
   is the one mock that models inventory, so it is where all four statuses are
   exercised: "Below reorder point" from the existing live stock-vs-reorder check, and
