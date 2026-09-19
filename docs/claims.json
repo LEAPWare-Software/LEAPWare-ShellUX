@@ -1446,6 +1446,71 @@
       "provenOn": "2026-09-19",
       "addedBy": "wave 3 increment 1 (refactor/split-shelllayout)"
     }
+    ,
+    {
+      "id": "C-92",
+      "box": "Rollout QA case i: a throwaway repo row whose check makes a real network call, to confirm it fails under the `unshare --net` wrapper on CI.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/rollout-case-i-network.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "network_ok",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "rollout QA case i network probe (never expected to run under CI: baseline is red there)",
+        "edits": [
+          {
+            "file": "scripts/claims/checks/rollout-case-i-network.mjs",
+            "replace": [
+              "https://api.github.com",
+              "https://api.github.com/"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "rollout QA (rollout/case-i)"
+    },
+    {
+      "id": "C-93",
+      "box": "Rollout QA case i: a throwaway repo row that reads the tree only, to confirm a normal row still passes in the same run as the network-blocked C-92.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/rollout-case-i-treeonly.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "fixture_value",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "change the fixture value",
+        "edits": [
+          {
+            "file": "scripts/claims/checks/rollout-case-i-fixture.txt",
+            "replace": [
+              "1",
+              "2"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "rollout QA (rollout/case-i)"
+    }
   ],
   "retired": []
 }
