@@ -44,16 +44,32 @@ in parallel.
 | Increment | Edits `ShellLayout.tsx`? | Owns (no other increment edits these) |
 |---|---|---|
 | W3-0 | yes, first | `paneSizing.ts`, `e2e/pane-refit.spec.ts` |
-| W3-1 | no | `src/core/theme/tokenClasses.ts`, new `src/components/ui/Banner.tsx`, new `src/components/ui/buttonClasses.ts` |
+| W3-1 | no | `src/core/theme/tokenClasses.ts` (the **only** increment that edits it; see below), new `src/components/ui/Banner.tsx`, new `src/components/ui/buttonClasses.ts` |
 | W3-2 | no | `src/components/shared/VirtualizedList.tsx`, `src/components/ui/RowMetric.tsx`, the row renderers in `src/mocks/**` |
 | W3-3 | yes, second | `src/components/layout/ShellNavigation.tsx`, `src/components/ui/shellIcons.tsx` |
 | W3-4 | yes, third | `src/components/layout/PaneWrapper.tsx`, `src/components/layout/ShellResizeHandle.tsx` |
 | W3-5 | no | `src/components/ledger/LedgerBlock.tsx`, `src/components/ledger/BlockLedger.tsx`, new `src/components/ui/Switch.tsx` |
 | W3-6 | no | `src/components/command/CommandPalette.tsx`, `commandListItem.tsx`, `ContextBar.tsx`, `FloatingToolbar.tsx` |
 | W3-7 | yes, fourth | new `src/components/command/NotificationPopover.tsx`, new undo-strip component |
-| W3-8 | no | `src/components/error/FaultBoundary.tsx`, `src/components/layout/ExtensionPane.tsx`, `src/components/command/OmniboxComposer.tsx` |
+| W3-8 | **yes, fifth** — the two `EmptyPane` texts are children written in `ShellLayout.tsx` (the list pane's and the detail pane's), so teaching empty states edit it | `src/components/error/FaultBoundary.tsx`, `src/components/layout/ExtensionPane.tsx`, `src/components/command/OmniboxComposer.tsx` |
 
-W3-1 lands before W3-5, W3-6 and W3-8, which consume `Banner` and the button classes.
+W3-1 lands before every other increment except W3-0, because it is the one change to
+`tokenClasses.ts`. **W3-1 adds every `TOKEN_CLASS` entry the whole wave needs**, so no
+later increment edits that file. Measured 2026-09-19 with `grep -rn` over `src/`: these
+generated tokens have zero consumers today and W3-2 to W3-8 need them —
+`--row-h-comfortable` (W3-2), `--rail-w` (W3-3), `--pane-header-h`, `--accent-border`
+(W3-4), `--context-bar-h`, `--status-danger-subtle` (W3-6), `--text-disabled` (W3-1,
+W3-5), `--accent-solid-hover` (W3-1). If an increment finds it needs one more entry,
+it does not edit `tokenClasses.ts` in parallel: it waits and the entry lands as its own
+serialised change.
+
+`ShellLayout.tsx` is reached from the command surfaces only through props
+(`<ContextBar registry context>`, `<CommandPalette registry context open onOpenChange>`,
+`<FloatingToolbar>`, `<OmniboxComposer>`). W3-6's states and the composer placeholder
+live inside those components, so W3-6 is planned with **no** `ShellLayout.tsx` edit. If
+inline command failure turns out to need a new prop (the registry's execute result
+reaching the palette), W3-6 joins the serialised queue after W3-8 rather than editing
+it in parallel.
 Each e2e case below goes in the spec file named; two increments that name the same spec
 file are serialised on it the same way.
 
@@ -72,12 +88,17 @@ under its probe is not a guard and is rewritten or deleted.
   its pixel band when a restored layout is narrowed live", "returns to the dragged widths
   when a narrowed window is widened again, and never rewrites the stored layout", "keeps
   an untouched navigation pane on its 240px intent across a live resize, where a reload
-  opens it". The first stays green with the whole change reverted, because the bands
+  opens it", and, added after review, "narrow, drag the second divider, widen, reload:
+  pane 1 keeps the width the user chose" (red against the first version of this
+  change, which wrote the corrected width of a pane nobody moved). The first stays green with the whole change reverted, because the bands
   were already live; it goes red only when the bands are frozen. Stated, not hidden.
 
 ### W3-1 — State primitives: pressed, disabled, focus, banners. Planned.
 
-- R6, R7. One focus mechanism (the two-tone ring on `:focus-visible` only), the brief's
+- R6, R7, and the v4 *States* screen's **button Loading state**: the label is
+  replaced in place by the in-progress verb ("Reordering") with a determinate or
+  indeterminate bar along the button's bottom edge, the button keeps its width, and it
+  is not a centred spinner. One focus mechanism (the two-tone ring on `:focus-visible` only), the brief's
   §8 "cut to one". Pressed as one surface step past hover. Disabled uses
   `--text-disabled`, never opacity. `Banner` in four statuses: status wash, icon, a
   bold first line, no border, no side stripe.
@@ -91,20 +112,28 @@ under its probe is not a guard and is rewritten or deleted.
   paints a different background from hover (probe: drop the pressed class); a disabled
   button's text is `--text-disabled` and its computed opacity is 1 (probe: restore
   `opacity-40`); an error banner has a zero-width border on all four sides (probe: add
-  `border-l-2`); every banner's text clears 4.5:1 on its wash in all three themes.
+  `border-l-2`); every banner's text clears 4.5:1 on its wash in all three themes; a
+  loading button measures the same width as its idle state and paints its bar inside
+  its own box (probe: swap the label for a spinner of a different width).
 
 ### W3-2 — List rows at 32px (D-29). Planned.
 
 - Two-line row at `--row-h-comfortable`; hover grey on pointer rest (today the primary
   list has none); selected grey plus focus-weight title, no outline; keyboard focus ring
-  inside the row edge.
-- Tokens: `--row-h-comfortable`, `--surface-hover`, `--surface-selected`,
+  inside the row edge. The v4 **row status vocabulary**: a status line under the title
+  pairs a mark with a word in status ink — warning triangle "Below reorder point",
+  success dot "Delivered", danger mark "Delivery overdue", info dot "Awaiting
+  supplier" — never colour alone (DESIGN.md: every status colour has a word or a mark).
+- Tokens: `--row-h-comfortable`, `--status-{warning,success,danger,info}`,
+  `--text-warning`, `--text-success`, `--text-danger`, `--surface-hover`, `--surface-selected`,
   `--text-primary`, `--text-muted`, `--focus-ring`.
 - e2e, new `e2e/list-rows.spec.ts`: a row measures 32px tall (probe: the old height
   class); a pointer resting on a row changes its painted background (probe: remove the
   hover class); a selected row has no outline and a heavier title weight; the focus ring
   of the current row is inside the list's clip, not cut by it (probe: ring outside the
-  edge — this is the ribbon-overflow class of defect).
+  edge — this is the ribbon-overflow class of defect); every status line renders its
+  mark and its word and the word clears 4.5:1 on the row in all three themes (probe:
+  drop the mark).
 
 ### W3-3 — Navigation tree and the 48px rail. Planned. Serialised on `ShellLayout.tsx`.
 
@@ -179,7 +208,7 @@ under its probe is not a guard and is rewritten or deleted.
   exactly the ribbon-overflow defect); Esc returns focus to the bell (focus assertion,
   real browser).
 
-### W3-8 — States: empty, loading, crashed, composer. Planned.
+### W3-8 — States: empty, loading, crashed, composer. Planned. Serialised on `ShellLayout.tsx` (fifth).
 
 - R9. Empty states teach: what would appear and the one action that makes it appear.
   Loading is skeleton rows or an in-place bar, never a centred spinner, and is a

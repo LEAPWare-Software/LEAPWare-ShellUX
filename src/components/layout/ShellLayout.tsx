@@ -173,7 +173,11 @@ import { useHostPalette } from './useHostPalette';
  *    the record when pane 1 is collapsed", "keeps a collapsed-group layout a
  *    person arranged, which is never persisted, across a width change" and
  *    "fits the stored layout, not the renormalised one, once pane 1 has collapsed
- *    and come back"; `e2e/pane-refit.spec.ts` — "keeps every pane inside its
+ *    and come back" and "records the width the user chose for pane 1, not its
+ *    correction, when the second divider is dragged after a narrowing" — all
+ *    arithmetic over stubbed widths; `e2e/pane-refit.spec.ts` — "narrow, drag the
+ *    second divider, widen, reload: pane 1 keeps the width the user chose",
+ *    "keeps every pane inside its
  *    pixel band when a restored layout is narrowed live", "returns to the dragged
  *    widths when a narrowed window is widened again, and never rewrites the
  *    stored layout" and "keeps an untouched navigation pane on its 240px intent
@@ -782,10 +786,22 @@ export function ShellLayout({
       if (!isKnownChange || isWidthDriven) {
         return;
       }
+      // WHAT IS WRITTEN IS THE INTENT, NOT THE LIVE LAYOUT. After a width change
+      // the live layout holds corrections — pane 1 lifted to its minimum, say —
+      // and one divider moves only two panes, so writing the live layout would
+      // save the correction of a pane nobody moved. `sessionLayout` holds the
+      // panes this drag moved at their new size and every other pane at the size
+      // the person chose. If the correction means those no longer divide the
+      // whole, pane 3 — the remainder pane — takes the difference, so the record
+      // still sums to 100. Found in review of the first #23 change: narrowed to
+      // 800px, dragged divider 2, and a reload at 1000px opened pane 1 at the
+      // 800px minimum.
+      const intent = sessionLayout.current;
+      const isWhole = Math.abs(intent.pane1 + intent.pane2 + intent.pane3 - 100) < 0.01;
       engine.setSlot('paneSizes', {
-        pane1: clampPanePercent(next.pane1),
-        pane2: clampPanePercent(next.pane2),
-        pane3: clampPanePercent(next.pane3),
+        pane1: clampPanePercent(intent.pane1),
+        pane2: clampPanePercent(intent.pane2),
+        pane3: clampPanePercent(isWhole ? intent.pane3 : 100 - intent.pane1 - intent.pane2),
       });
     },
     [engine, isNavCollapsed, surface],

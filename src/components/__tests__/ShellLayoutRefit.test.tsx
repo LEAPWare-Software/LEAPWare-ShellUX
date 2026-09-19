@@ -116,9 +116,18 @@ async function nudgeFirstDivider(
   user: ReturnType<typeof userEvent.setup>,
   keys: string,
 ): Promise<void> {
-  const [first] = screen.getAllByRole('separator');
+  await nudgeDivider(user, 0, keys);
+}
+
+/** Focus the divider at `index` and drive `keys` through it. */
+async function nudgeDivider(
+  user: ReturnType<typeof userEvent.setup>,
+  index: number,
+  keys: string,
+): Promise<void> {
+  const divider = screen.getAllByRole('separator')[index];
   act(() => {
-    (first as HTMLElement).focus();
+    (divider as HTMLElement).focus();
   });
   await user.keyboard(keys);
 }
@@ -133,7 +142,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('ShellLayout — re-fitting the panes when the group width changes', () => {
+describe('ShellLayout — re-fitting the panes on a width change, as arithmetic over stubbed widths, not verified in a browser', () => {
   it('fits an untouched layout to the pixel intent at the new width, rather than scaling the old shares', () => {
     measureAt(1000);
     render(<Harness engine={createHydrationEngine({ storage: null })} />);
@@ -262,5 +271,27 @@ describe('ShellLayout — re-fitting the panes when the group width changes', ()
     // renormalisation for an arrangement would give back `renormalised`.
     resizeTo(1200);
     expect(panelSizes()).toEqual(chosen);
+  });
+  it('records the width the user chose for pane 1, not its correction, when the second divider is dragged after a narrowing', async () => {
+    measureAt(1000);
+    const user = userEvent.setup();
+    const engine = createHydrationEngine({ storage: memoryStorage().storage });
+    render(<Harness engine={engine} />);
+    // Pane 1 chosen at its 1000px minimum, 17.6%.
+    await nudgeFirstDivider(user, '{ArrowLeft}');
+    expect(panelSizes()[0]).toBeCloseTo(17.6, 1);
+
+    // At 800px that is lifted to 22% — a correction, not a choice.
+    resizeTo(800);
+    expect(panelSizes()[0]).toBeCloseTo(22, 1);
+
+    // The person moves the SECOND divider only. Pane 1 was not touched.
+    await nudgeDivider(user, 1, '{ArrowLeft}');
+    const stored = engine.getState().paneSizes;
+    expect(stored.pane1).toBeCloseTo(17.6, 1);
+    expect(stored.pane1 + stored.pane2 + stored.pane3).toBeCloseTo(100, 5);
+
+    resizeTo(1000);
+    expect(panelSizes()[0]).toBeCloseTo(17.6, 1);
   });
 });

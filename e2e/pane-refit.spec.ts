@@ -179,4 +179,45 @@ test.describe('the pane layout after a live window resize', () => {
       );
     }
   });
+  test('narrow, drag the second divider, widen, reload: pane 1 keeps the width the user chose', async ({
+    page,
+  }) => {
+    await openShell(page);
+    await activateExtension(page, 'Mail');
+
+    const navDivider = page.getByRole('separator', { name: 'Resize the navigation pane' });
+    expect((await dragHorizontally(page, navDivider, -40)).sawDragState).toBe(true);
+    await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
+    const chosenNav = await paneWidth(page, 'pane1');
+
+    // Narrowed, pane 1 is lifted to its minimum: a correction nobody chose.
+    await page.setViewportSize({ width: 900, height: 900 });
+    await expect
+      .poll(async () => paneWidth(page, 'pane1'))
+      .toBeGreaterThanOrEqual(bandFloor(NAV_MIN, 900) - 0.5);
+
+    // Only the SECOND divider is dragged, and to the RIGHT: at 900px pane 2 sits
+    // on its own 240px minimum, so a leftward drag moves nothing and writes
+    // nothing — measured, and it made the first draft of this case pass against
+    // the defect. Pane 1 is not touched.
+    const listBefore = await paneWidth(page, 'pane2');
+    const listDivider = page.getByRole('separator', { name: 'Resize the list pane' });
+    expect((await dragHorizontally(page, listDivider, 40)).sawDragState).toBe(true);
+    expect(await paneWidth(page, 'pane2'), 'the second divider did not move').toBeGreaterThan(
+      listBefore + 20,
+    );
+    await page.waitForTimeout(PERSIST_DEBOUNCE_MS * 3);
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await expect.poll(async () => paneWidth(page, 'pane1')).toBeCloseTo(chosenNav, 0);
+
+    // The record is what a reload reads, and it must hold the choice, not the
+    // 900px correction.
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Navigation' })).toBeVisible();
+    expect(
+      await paneWidth(page, 'pane1'),
+      'the reload opened pane 1 at the width correction, not the width the user chose',
+    ).toBeCloseTo(chosenNav, 0);
+  });
 });
