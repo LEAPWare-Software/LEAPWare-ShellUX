@@ -9,13 +9,13 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { REPO_ROOT, defaultRunner, loadRegister, rowHash, runProbe, runRow, snapshotCommit } from '../claims/lib.mjs';
-import { MAIN_BUDGET_MS, QUEUE_BUDGET_MS, parseArgs, prove, selectRows, timingFailure } from '../claims/prove-claims.mjs';
+import { MAIN_BUDGET_MS, QUEUE_BUDGET_MS, assertInjection, parseArgs, prove, selectRows, timingFailure } from '../claims/prove-claims.mjs';
 
 const scratch = [];
 after(() => {
@@ -41,6 +41,20 @@ describe('row selection', () => {
     assert.deepEqual(push.run.map((r) => r.id), ['C-1', 'C-2', 'C-4'], 'manual rows are never re-run');
     assert.deepEqual(push.probe.map((r) => r.id), ['C-1', 'C-4']);
     assert.deepEqual(selectRows('schedule', register, diff).run.length, 3);
+    assert.deepEqual(selectRows('workflow_dispatch', register, diff).run.map((r) => r.id), ['C-1', 'C-2', 'C-4'], 'a dispatch is a main run');
+  });
+
+  it('refuses an injection on pull_request, merge_group, push and schedule, and a dispatch from any ref but main', () => {
+    for (const mode of ['pull_request', 'merge_group', 'push', 'schedule']) {
+      for (const inject of ['failing-row', 'crash']) {
+        assert.throws(() => assertInjection(mode, inject, 'refs/heads/main'), /accepted only on a workflow_dispatch run from main, not on/, `${mode} ${inject}`);
+      }
+      assert.doesNotThrow(() => assertInjection(mode, 'none', 'refs/heads/feature'));
+    }
+    assert.throws(() => assertInjection('workflow_dispatch', 'none', 'refs/heads/feature'), /proves main only; GITHUB_REF is refs\/heads\/feature/);
+    assert.throws(() => assertInjection('workflow_dispatch', 'crash', undefined), /GITHUB_REF is unset/);
+    assert.throws(() => assertInjection('workflow_dispatch', 'explode', 'refs/heads/main'), /--inject must be one of none, failing-row, crash/);
+    for (const inject of ['none', 'failing-row', 'crash']) assert.doesNotThrow(() => assertInjection('workflow_dispatch', inject, 'refs/heads/main'));
   });
 
   it('holds a change run to 4 minutes and a main run to 30', () => {
@@ -51,7 +65,8 @@ describe('row selection', () => {
   });
 
   it('parses its arguments', () => {
-    assert.deepEqual(parseArgs(['--mode', 'push', '--out', 'x.json', '--only', 'C-1,C-2']), { mode: 'push', out: 'x.json', only: ['C-1', 'C-2'] });
+    assert.deepEqual(parseArgs(['--mode', 'push', '--out', 'x.json', '--only', 'C-1,C-2']), { mode: 'push', out: 'x.json', only: ['C-1', 'C-2'], inject: 'none' });
+    assert.equal(parseArgs(['--mode', 'workflow_dispatch', '--inject', 'crash']).inject, 'crash');
     assert.throws(() => parseArgs(['--what']), /unrecognised/);
   });
 });
@@ -157,6 +172,31 @@ describe('a whole run', () => {
     assert.match(ruleset.output, /rule types differ/);
     const unreadable = prove({ mode: 'schedule', cwd, env: {}, log: () => {}, fetchRuleset: () => { throw new Error('HTTP 403'); } });
     assert.match(unreadable.report.results.find((r) => r.rowId === 'S-ruleset').output, /could not read the live ruleset: HTTP 403/);
+  });
+
+  it('records one failed S-injected row beside every real row on a failing-row dispatch from main, and still succeeds', () => {
+    const cwd = makeProject();
+    const lines = [];
+    const main = { GITHUB_REF: 'refs/heads/main' };
+    const { exitCode, report } = prove({ mode: 'workflow_dispatch', inject: 'failing-row', cwd, env: main, log: (l) => lines.push(l), fetchRuleset: (declared) => declared });
+    assert.equal(exitCode, 0, 'a main run fails only on a crash');
+    assert.equal(report.inject, 'failing-row');
+    assert.deepEqual(report.results.map((r) => [r.rowId, r.pass]), [['C-1', true], ['S-structure', true], ['S-ruleset', true], ['S-injected', false]]);
+    assert.ok(lines.includes('FAIL S-injected'));
+    const plain = prove({ mode: 'workflow_dispatch', cwd, env: main, log: () => {}, fetchRuleset: (declared) => declared }).report;
+    assert.equal(plain.results.some((r) => r.rowId === 'S-injected'), false, 'inject=none adds nothing');
+    assert.throws(() => prove({ mode: 'push', inject: 'failing-row', cwd, env: main, log: () => {} }), /accepted only on a workflow_dispatch run/);
+  });
+
+  it('crashes a crash dispatch from main before any result file is written', () => {
+    const cwd = makeProject();
+    const out = path.join(cwd, 'claims-results.json');
+    const env = { ...process.env, GITHUB_REF: 'refs/heads/main' };
+    delete env.CLAIMS_NET_RESTRICT;
+    const cli = spawnSync(process.execPath, [path.join(REPO_ROOT, 'scripts', 'claims', 'prove-claims.mjs'), '--mode', 'workflow_dispatch', '--inject', 'crash', '--out', out], { cwd, encoding: 'utf8', env });
+    assert.equal(cli.status, 2, cli.stderr);
+    assert.match(cli.stderr, /prove-claims crashed: .*injected crash/);
+    assert.equal(existsSync(out), false, 'no artifact to upload');
   });
 
   it('refuses an unknown mode, and the wrapper off Linux', () => {

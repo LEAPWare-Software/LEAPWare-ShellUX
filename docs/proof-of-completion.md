@@ -173,7 +173,24 @@ and a correction of its stale "CI runs fewer steps than `verify`" paragraph.
   change cannot deadlock the queue (X8);
 - trigger on `pull_request` (types `opened, synchronize, reopened, edited`) and
   `merge_group`, with no `paths`, `paths-ignore`, `branches` or `branches-ignore` under
-  either; `claims.yml` also on `push: branches: [main]` and `schedule` (daily);
+  either; `claims.yml` also on `push: branches: [main]`, `schedule` (daily) and
+  `workflow_dispatch` (added 2026-09-19 for rollout step 3: one `choice` input `inject`,
+  `none | failing-row | crash`, default `none`). A dispatch is a main run only from
+  `refs/heads/main`: the artifact upload and the issue job require that ref, and the
+  prover refuses a dispatch from any other ref. The workflow passes `inject` to the
+  prover only when the event is `workflow_dispatch` (`'none'` on every other event), and
+  the prover refuses any `--inject` but `none` on `pull_request`, `merge_group`, `push`
+  and `schedule`. `failing-row` records one extra failed synthetic row `S-injected` while
+  every real row runs as normal; `crash` exits non-zero before the result file exists.
+  The required check `Prove claims` is never skipped; a dispatch run carries a different
+  name, `Prove claims (dispatch)`, so a dispatch on a PR branch or a queue ref can never
+  produce, skip or satisfy the required context. The job has no job-level `if`.
+  Limit: the runs API records a dispatch by `head_branch` alone; that a dispatch from a
+  tag named `main` would be told apart from `refs/heads/main` is not measured. Such a run
+  fails in the prover and, if its `head_branch` reads `main`, renders `FAILING RUN` until
+  the next successful main run.
+  A guardrail against the honest mistake: whoever can edit `claims.yml` can remove it.
+  *Tests:* scripts/__tests__/claims-prove.test.mjs — "refuses an injection on pull_request, merge_group, push and schedule, and a dispatch from any ref but main".
 - skip only inside a step that exits 0 and prints its reason;
 - under `merge_group`, parse the PR number from `merge_group.head_ref`
   (`refs/heads/gh-readonly-queue/main/pr-<N>-<base-sha>`) and fail if unresolvable;
@@ -182,12 +199,15 @@ and a correction of its stale "CI runs fewer steps than `verify`" paragraph.
 - permissions: `contents`, `pull-requests`, `actions`, `issues` all `read`; issue filing
   is a separate job (§3.5);
 - concurrency (W2, M3): `pull_request` and `merge_group` keep the per-ref group with
-  cancellation; `push` and `schedule` use a separate group `claims-main` with
+  cancellation; `push`, `schedule` and a `workflow_dispatch` from `refs/heads/main` use a
+  separate group `claims-main` (a dispatch from any other ref keeps a per-ref group, so it
+  never replaces a pending main run) with
   `cancel-in-progress: false`. GitHub keeps at most one pending run per group and cancels
   an older pending one when a newer arrives; that is safe, because the newer run checks a
   tree that contains the older one, and cancelled runs are never reference runs (§3.6).
 - job outcome (W4): on `pull_request` and `merge_group`, any failing diff-scoped row or
-  structural failure fails the job; on `push` and `schedule`, the job records every
+  structural failure fails the job; on `push`, `schedule` and a `workflow_dispatch` from
+  `main`, the job records every
   result in the `claims-results` artifact and succeeds unless it crashes.
 `scripts/__tests__/required-checks.test.mjs` (in `test:scripts`; `yaml` declared as a
 devDependency) expands `strategy.matrix` into job names, maps every ruleset-required
@@ -215,8 +235,8 @@ added in the UI is not detected. If the read-only response omits `integration_id
 excluded too, and that gap is stated. Fixture: today's unauthenticated response, which
 round 11 measured as equal under these rules.
 
-**Issue job** (`issues: write`, `needs: prove`, `if: ${{ !cancelled() }}`, on `push` and
-`schedule` only; X5): files or comments one issue, "Claims register is failing", when the
+**Issue job** (`issues: write`, `needs: prove`, `if: ${{ !cancelled() }}`, on `push`,
+`schedule` and a `workflow_dispatch` from `main` only; X5): files or comments one issue, "Claims register is failing", when the
 check job's result is `failure`, or its artifact is missing, or any row (synthetic rows
 included) failed. A run cancelled by hand or by concurrency files nothing. The
 find-or-comment step is the one `audit-schedule.yml` uses (proven by #142); this job
@@ -229,11 +249,23 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    working tree it reads. Any ticked item without exactly one tag, whose row is not in
    `active`, or whose `box` differs from the item text renders `UNPROVEN`, whatever any
    run says.
-3. **Reference run:** among `claims.yml` runs whose runs-API record has event `schedule` or
-   `push`, `head_branch` `main`, `head_repository.id` equal to the repository id, status
+3. **Reference run:** among `claims.yml` runs whose runs-API record has event `schedule`,
+   `push` or `workflow_dispatch`, `head_branch` `main`, `head_repository.id` equal to the repository id, status
    `completed` and conclusion not `cancelled` or `skipped`, the one with the highest
    `run_number`. Only then is its result read. Pull-request and merge-queue runs are never
    candidates.
+   *Note, 2026-09-19 (rollout step 3):* `workflow_dispatch` joined the candidate events,
+   because step 3 requires a forced crash to render `FAILING RUN`, and a run status never
+   reads cannot render anything. The same `head_branch` and `head_repository.id` filters
+   hold, so a dispatch from any other branch is never a candidate. Consequence: a
+   `failing-row` dispatch concludes `success` and becomes the reference run until the
+   next main run; its `S-injected` row is recorded but, like `S-structure` and
+   `S-ruleset`, no ticked item cites it, so status renders the real rows as that run
+   recorded them. A `crash` dispatch renders `FAILING RUN <id>` for every row until the
+   next main run succeeds. Any later successful main run clears `FAILING RUN`, a
+   dispatch with `inject=none` included; so a flaky crash hidden by a later green run is
+   seen only through the issue it filed, which stays open until someone closes it.
+   *Tests:* scripts/__tests__/status.test.mjs — "takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch".
 4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
    its `expect` values marked `STATED` (X1: manual rows never enter a run); newest
    completed main run cancelled by `timeout-minutes`, `FAILING RUN <id>` (X4); reference
@@ -284,6 +316,8 @@ review record.
    `claims.yml` without `Gate changes:` fails; (l) a two-entry queue group passes.
 3. Three consecutive green main runs; then one forced failing row files the issue, and
    one forced crash renders `FAILING RUN` in `npm run status` and files the issue (W3).
+   Forced through `workflow_dispatch` on `main` with `inject=failing-row`, then
+   `inject=crash` (§3.4), so no broken tree lands on `main`.
 4. Before PR B, every open PR gets a review record. PR B adds both checks to `main.json`
    with `integration_id: 15368`. Order (M5): merge PR B, then immediately apply it with
    `scripts/apply-rulesets.mjs` and read it back with `gh api`; the main run between the

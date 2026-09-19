@@ -9,6 +9,10 @@
  *   merge_group   the same over HEAD~1..HEAD, after asserting the squash queue shape.
  *   push          structure, every repo and github row, every probe, the ruleset
  *   schedule      comparison. Every result is recorded; the run fails only on a crash.
+ *   workflow_dispatch  the same as push, and only from refs/heads/main. The one mode that
+ *                 accepts `--inject` (rollout step 3, §5): `failing-row` records one extra
+ *                 failed synthetic row S-injected beside the real rows; `crash` throws
+ *                 before any result file is written. Every other mode refuses `--inject`.
  *
  * Results go to a JSON file (`--out`, default claims-results.json) as
  * `{ rowId, rowHash, pass, output, ... }`, with structural failures and ruleset drift
@@ -21,6 +25,7 @@
  *
  * Usage:
  *   node scripts/claims/prove-claims.mjs --mode pull_request [--out file] [--only C-01,C-02]
+ *   node scripts/claims/prove-claims.mjs --mode workflow_dispatch --inject failing-row
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -42,7 +47,10 @@ import {
 import { checkStructure, diffScope, readCommit, readWorkingTree, resolveBase } from './lint-boxes.mjs';
 import { RULESET_FILE, compareRuleset, fetchLiveRuleset } from './compare-ruleset.mjs';
 
-export const MODES = ['pull_request', 'merge_group', 'push', 'schedule'];
+export const MODES = ['pull_request', 'merge_group', 'push', 'schedule', 'workflow_dispatch'];
+/** Forced failures for rollout step 3; `none` is the only value outside workflow_dispatch. */
+export const INJECTIONS = ['none', 'failing-row', 'crash'];
+export const MAIN_REF = 'refs/heads/main';
 /** A PR or queue run must fit the queue's 10 minutes beside CI's measured 4m18s. */
 export const QUEUE_BUDGET_MS = 4 * 60 * 1000;
 /** Main runs carry `timeout-minutes: 30`. */
@@ -69,6 +77,17 @@ export function selectRows(mode, register, diff) {
   return { run, probe: run.filter((row) => row.class === 'repo' && changed.has(row.id)) };
 }
 
+/**
+ * Refuse a dispatch from any ref but main, and any injection outside a dispatch from main.
+ * A guardrail against the honest mistake: whoever can edit claims.yml can remove it.
+ * *Tests:* scripts/__tests__/claims-prove.test.mjs — "refuses an injection on pull_request, merge_group, push and schedule, and a dispatch from any ref but main".
+ */
+export function assertInjection(mode, inject, ref) {
+  if (!INJECTIONS.includes(inject)) throw new Error(`--inject must be one of ${INJECTIONS.join(', ')}`);
+  if (mode === 'workflow_dispatch' && ref !== MAIN_REF) throw new Error(`a workflow_dispatch run proves main only; GITHUB_REF is ${ref ?? 'unset'}`);
+  if (inject !== 'none' && mode !== 'workflow_dispatch') throw new Error(`--inject ${inject} is accepted only on a workflow_dispatch run from main, not on ${mode}`);
+}
+
 /** Sum measured times and hold them to the budget for the mode. */
 export function timingFailure(mode, results) {
   const total = results.reduce((sum, r) => sum + (r.ms ?? 0), 0);
@@ -83,6 +102,7 @@ export function timingFailure(mode, results) {
 export function prove({
   mode,
   only = null,
+  inject = 'none',
   cwd = REPO_ROOT,
   run = defaultRunner,
   env = process.env,
@@ -91,6 +111,10 @@ export function prove({
   now = Date.now,
 }) {
   if (!MODES.includes(mode)) throw new Error(`--mode must be one of ${MODES.join(', ')}`);
+  assertInjection(mode, inject, env.GITHUB_REF);
+  // Before any row runs and before the result file exists, so the artifact is missing
+  // and the job fails: what a real crash looks like to the issue job and to status.
+  if (inject === 'crash') throw new Error('injected crash (--inject crash, rollout step 3); no result file is written');
   const restrict = networkRestriction(env);
   assertRestrictionWorks(restrict, run);
   log(restrict.restricted ? 'repo rows run under unshare --net' : 'repo rows run UNRESTRICTED (local run, or CLAIMS_NET_RESTRICT is not set)');
@@ -168,6 +192,11 @@ export function prove({
     results.push({ rowId: 'S-ruleset', rowHash: null, pass: drift.length === 0, output: [...notes.map((n) => `note: ${n}`), ...drift].join('\n'), failures: drift });
   }
 
+  if (inject === 'failing-row') {
+    const why = 'injected failure (--inject failing-row, rollout step 3); every other row ran as normal';
+    results.push({ rowId: 'S-injected', rowHash: null, pass: false, output: why, failures: [why] });
+  }
+
   for (const r of results) {
     const mark = r.pass ? 'PASS' : 'FAIL';
     const timing = r.ms !== undefined ? ` (${r.ms}ms)` : '';
@@ -186,6 +215,7 @@ export function prove({
     mode,
     headSha: git(['rev-parse', 'HEAD'], { cwd, run }).trim(),
     restricted: restrict.restricted,
+    inject,
     diff: isChangeMode(mode) ? diff : null,
     results,
   };
@@ -194,10 +224,11 @@ export function prove({
 }
 
 export function parseArgs(argv) {
-  const options = { mode: null, out: 'claims-results.json', only: null };
+  const options = { mode: null, out: 'claims-results.json', only: null, inject: 'none' };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--mode') options.mode = argv[(i += 1)];
+    else if (arg === '--inject') options.inject = argv[(i += 1)];
     else if (arg === '--out') options.out = argv[(i += 1)];
     else if (arg === '--only') options.only = (argv[(i += 1)] ?? '').split(',').filter(Boolean);
     else throw new Error(`unrecognised argument: ${arg}`);
