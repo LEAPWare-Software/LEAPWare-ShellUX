@@ -16,6 +16,25 @@ from so a reader can check it.
 
 ### Added
 
+- **The `.lwplugin` validator and the `hostApiVersion` rule** (ADR-0006 step 3).
+  `electron/main/plugins/` reads a package (one JSON document of at most 8 MiB, read
+  through one non-blocking file handle with at most the limit plus one byte in memory,
+  a non-regular file refused before any read), validates its manifest (unknown keys,
+  control and bidi characters and blank titles refused; untrusted values echoed at
+  most 64 characters, quoted), checks the bundle against the manifest `sha512`, and
+  marks a plugin incompatible on a different major or a newer minor. The hash check is
+  **entry-point validation** against a damaged or mismatched package: a bundle and hash
+  replaced together are accepted, and a test pins that limit. Main mirrors
+  `HOST_API_VERSION` and a drift test holds it to the SDK baseline.
+  `electron/main/plugins/**` joins the 100% coverage gate. *Tests:* "refuses a package
+  whose bundle does not match its manifest sha512"; "accepts a package whose bundle and
+  manifest were altered together, because the hash travels with the bundle"; "marks a
+  plugin incompatible when its major differs"; "marks a plugin incompatible when it
+  needs a newer minor than the host offers". **Not done:** nothing installs yet (step
+  4), so the check is not yet a property of the shell; the registry's own text check
+  has the gap this one closes, filed as #172; the real-FIFO test runs on the Linux and
+  macOS CI legs only.
+
 - **Proof-of-completion rollout step 3 is complete** (plan step 0c item 4, row C-31).
   Three consecutive green main runs; a forced failing row on `main` filed issue #174
   through the issue job; a forced crash failed its run, commented on #174, and turned

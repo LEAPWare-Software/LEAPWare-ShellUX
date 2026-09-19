@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `5cd60b0` (#175, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `1237aee` (#176, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -22,7 +22,8 @@ with a merge queue.
 - Rollout step 2 complete (#171, row C-30).
 - The rollout step 3 harness (#173); step 3 run on main (it filed #174, now no longer open);
   plan step 0c item 4 ticked (#175, row C-31).
-- This change: #23 re-fit (W3-0) and the wave-3 plan; plan step 5 items 1 and 3 ticked.
+- #23 re-fit (W3-0) and the wave-3 plan (#176); plan step 5 items 1 and 3 ticked.
+- This change: the `.lwplugin` validator (ADR-0006 step 3).
 
 ## In flight
 
