@@ -49,7 +49,14 @@ from so a reader can check it.
   decision row to supersede D-45 and for C-24 to cite it. **That ledger work is not in
   this change**: no decision row is written, C-24's citation is untouched, and so nothing
   yet builds "per the approved gate-4 wireframe" — ADR-0006 step 9 and wave 4 wait for the
-  row, which is the order the answer itself sets out.
+  row, which is the order the answer itself sets out. **The counts also disagree and this
+  change does not reconcile them:** D-45 approves "the six gate-4 screens" on 2026-09-18,
+  while this record is the v4 set of **nine** numbered pages published 2026-09-19, adding
+  the resolved critique and the D-48 plugin state; the nine are not six screens plus three
+  state sheets, since `canvas.json` numbers all nine as pages. D-45 may therefore be about
+  an earlier artefact rather than a mislaid approval of this one, and #189's answer repeats
+  the ambiguity by reading "the six gate-4 screens (v4, `docs/design/gate4/`)". The
+  decision row, when someone writes it, should name the screens it approves.
 - **Cloud lanes can merge** (`.github/workflows/auto-queue.yml`, docs/cloud/runbook.md lane C item 0a). Cloud routines cannot enable auto-merge through their proxy. This workflow runs in GitHub Actions after the required `PR evidence` check succeeds. It adds a pull request to the merge queue only when all of these hold:
   - the pull request is open and not a draft;
   - it carries a `lane-*` label;

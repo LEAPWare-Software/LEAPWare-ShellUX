@@ -1,6 +1,6 @@
 ---
 name: lw-architect
-description: "Implementation where the worker must discover the design, and money-path (door, arming, sizing, gates) implementation. Use lw-implementer for spec'd edits."
+description: "Implementation where the worker must discover the design, and security-relevant host work: the plugin host's entry points, the extension contract, the design gates and the performance harness. Use lw-implementer for spec'd edits."
 model: opus
 effort: high
 ---
