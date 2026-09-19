@@ -9,13 +9,23 @@ LEAPWare-SessionKeeper's own `docs/maintainers/repository-settings.md`, with
 the CI job names, repo name and one review-count justification changed to
 this repository's own.
 
-**This ruleset is NOT yet applied.** The repository is currently private
-(D-42/D-43, licence and public visibility, are still open owner decisions),
-and `gh api repos/{owner}/{repo}/rulesets` on a private repo without the
-right plan/permissions can behave differently from a public one — the safe
-order is: repo goes public, THEN this file's script runs. Applying it is the
-owner's own action; nothing in CI or in this script does it automatically.
-See "Bootstrap is owner-only" below.
+**This ruleset is applied, and the decisions behind it are answered.** Measured
+2026-09-19 against the live repository: `gh api
+repos/LEAPWare-Software/LEAPWare-ShellUX --jq '{visibility, license:
+.license.spdx_id}'` returns `public` and `Apache-2.0`, and `gh api
+repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets` returns exactly one ruleset —
+`main`, id `23685990`, `enforcement: active` — whose seven
+`required_status_checks` entries each carry `integration_id: 15368`. D-42 (the
+Apache-2.0 licence) and D-43 (public visibility) were both answered by the owner
+on 2026-09-18; neither is open.
+
+The ordering that got it here, kept because re-applying repeats it: `gh api
+repos/{owner}/{repo}/rulesets` on a private repo without the right
+plan/permissions can behave differently from a public one, so the repo went
+public first and this file's script ran second. Applying or re-applying is the
+owner's/integrator's own action; nothing in CI or in this script does it
+automatically. See "Bootstrap is owner-only" below, and "Applying rollout step 4
+(PR B) and reading it back" for the read-back's pass condition.
 
 ## What `main.json` enforces
 
@@ -227,9 +237,14 @@ required" has an answer in the same place every other ruleset decision does.
 
 ## Bootstrap is owner-only
 
-Nothing in this repo — no script, no CI job, no agent — flips the repository
-from private to public or picks a licence: the visibility flip (D-42) and the
-licence choice (D-43) are each the owner's own action.
+No script, CI job or agent in this repository *decides* to flip the repository
+from private to public or to pick a licence. Both were owner calls — **D-43**
+(the repository goes public) and **D-42** (the licence is Apache-2.0), each
+answered 2026-09-18 — and both have since been carried out. D-43's own row
+records how: the owner directed the CTO agent to make the repository public
+under that day's delegation, and the agent did so. So "owner-only" here means
+the decision is the owner's and an agent acts only on a delegation the decision
+names; it does not mean no agent has ever touched the setting.
 
 One job does enable auto-merge: `.github/workflows/auto-queue.yml` adds a
 cloud-lane PR to the merge queue once `scripts/cloud/auto-queue.mjs` finds it
