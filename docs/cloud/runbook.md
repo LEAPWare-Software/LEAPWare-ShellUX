@@ -104,7 +104,7 @@ Each run does one unit of work, then exits.
      - approving gate 4 or any other design sign-off;
      - anything needing the packaged app, the Windows VM or a release;
      - reversing an owner-made decision row.
-   - **How to ask:** open an issue labelled `needs-owner`, with one question and the options with a recommended default. Start its body with `@oz-mannyramos`: the owner's second account, so the owner gets a phone notification, because the owner gets no notification for the owner's own login. Add the issue to the watchdog's list. Then move to your next item; never wait.
+   - **How to ask:** open an issue labelled `needs-owner`, with one question and the options with a recommended default. Never mention or notify any other GitHub account: the owner uses `LEAPWare-HQ` only. To alert the owner, send one **Claude mobile push notification** (the PushNotification tool) naming the issue number and the question in one line. Add the issue to the watchdog's list. Then move to your next item; never wait.
    - **The owner answers** by commenting `OWNER: <answer>` on that issue. The next run of the affected lane reads it, acts on it, records it and closes the issue.
 9. **Stop conditions:**
    - the same item fails review 3 times;
