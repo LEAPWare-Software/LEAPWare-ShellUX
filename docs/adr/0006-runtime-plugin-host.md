@@ -579,8 +579,11 @@ isolation", and that is the ceiling of every claim this ADR makes about it.
   > registry that has not declared it, returning `{ ok: false }` with
   > `ShellUXError('INVALID_FIELD', …, 'lifecycle')`. This is **entry-point
   > validation** at the registry door — the one door all registrations pass
-  > (`.register(` has exactly two non-test callers: `src/paneview/PaneViewShell.tsx`
-  > and `src/dev/DevShell.tsx`, both indirectly through `App`) — and a
+  > (`.register(` has exactly two non-test callers: `src/paneview/PaneViewShell.tsx`,
+  > mounted directly by `src/paneview/main.paneview.tsx` and never through `App`
+  > by design (that entry point's own docblock: "it adapts the transport itself
+  > rather than importing host chrome's adapter"), and `src/dev/DevShell.tsx`,
+  > which does go through `App`) — and a
   > **guardrail** against the honest mistake, because the default refuses
   > rather than silently running plugin code. It is not an integrity control:
   > `runsPluginCode` is a prop and any caller may pass `true`. The flag is
