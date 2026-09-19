@@ -7,6 +7,7 @@ import type { PanelProps } from 'react-resizable-panels';
 import { ShellHostProvider } from '../../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
 import { useShellStore } from '../../core/ShellAPI';
+import { TOKEN_CLASS } from '../../core/theme/tokenClasses';
 import {
   DEFAULT_SHELL_STATE,
   SCHEMA_VERSION,
@@ -295,9 +296,10 @@ describe('ShellLayout — restoring a persisted layout', () => {
     // One render of the expanded tree would put `pane1` in this list.
     expect(renderedPaneIds()).toEqual(['pane2', 'pane3']);
     expect(DEFAULT_SHELL_STATE.isPane1Collapsed).toBe(false);
+    // Wave 3, W3-3: `TOKEN_CLASS.railWidth` (`--rail-w`), not an inline style.
     expect(
-      (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).style.width,
-    ).toBe('48px');
+      (container.querySelector('[data-shell-region="nav-track"]') as HTMLElement).className,
+    ).toContain(TOKEN_CLASS.railWidth);
     expect(screen.getAllByRole('separator')).toHaveLength(1);
   });
 

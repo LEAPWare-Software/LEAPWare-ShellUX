@@ -283,11 +283,10 @@ describe('painters: the real repository', () => {
     assert.equal(set.roles.size, declared.length);
   });
 
-  it('holds every W3-1 exemption true: built, and painted by no shipped module', () => {
+  it('holds every remaining W3-1 exemption true: built, and painted by no shipped module', () => {
     for (const token of [
       '--accent-solid',
       '--accent-solid-hover',
-      '--accent-subtle',
       '--status-danger-subtle',
       '--status-warning-subtle',
       '--status-success-subtle',
@@ -298,6 +297,16 @@ describe('painters: the real repository', () => {
     }
     assert.equal(isPainted(set, '--surface-pane'), true);
     assert.equal(isPainted(set, '--surface-sunken'), true);
+  });
+
+  it('W3-3 gave --accent-subtle its first shipped consumer, so the W3-1 exemption no longer holds', () => {
+    // `ShellNavigation.tsx`'s current-node fill (`TOKEN_CLASS.navCurrentSurface`)
+    // and its fallback identity tile (`identityTileSurface`) both name it, and
+    // that file is reachable from `src/main.tsx` through `App.tsx` and
+    // `ShellLayout.tsx`. `design/check-contrast.mjs`'s own `STALE EXEMPTION`
+    // check is what makes leaving the old exemption in place impossible rather
+    // than merely undesirable — it fails the moment this stops being true.
+    assert.equal(isPainted(set, '--accent-subtle'), true);
   });
 
   it('runs the checker to exit 0 end to end', () => {

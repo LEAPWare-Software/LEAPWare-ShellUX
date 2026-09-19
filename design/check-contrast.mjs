@@ -93,17 +93,19 @@ const FAIL = 'FAIL';
  * that the only option.
  *
  * Wave-3 increment W3-1 (`docs/design/WAVE3-PLAN.md`) BUILT the primitives
- * behind seven of these, and they stay exempt: until a later increment gives
- * them a shipped consumer they are rendered only by the dev fixture
- * `states.html`, which is exactly the condition #111 was.
+ * behind these, and they stay exempt: until a later increment gives them a
+ * shipped consumer they are rendered only by the dev fixture `states.html`,
+ * which is exactly the condition #111 was. `--accent-subtle` was one of the
+ * seven W3-1 built; W3-3 gave it its first shipped consumer
+ * (`ShellNavigation.tsx`'s current-node fill and its fallback identity tile),
+ * so its entry is removed here rather than left to go stale — the docblock
+ * above names this the only option.
  */
 const UNBUILT_BACKGROUNDS = Object.freeze({
   '--accent-solid':
     'The primary-button fill. Built in W3-1 (buttonClasses.ts), rendered only by states.html until W3-5 or W3-8 ships a primary button.',
   '--accent-solid-hover':
     'The primary-button hover and pressed fill. Built in W3-1, rendered only by states.html until W3-5 or W3-8 ships a primary button.',
-  '--accent-subtle':
-    'The accent wash behind a current item. TOKEN_CLASS roles declared in W3-1, consumed by W3-3 (nav, identity tile) and W3-6 (palette active row).',
   '--status-danger-subtle':
     'The danger banner wash. Built in W3-1 (Banner.tsx), rendered only by states.html until W3-5 ships the block error.',
   '--status-warning-subtle':

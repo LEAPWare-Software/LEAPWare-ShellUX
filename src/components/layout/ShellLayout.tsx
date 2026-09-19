@@ -37,7 +37,6 @@ import { FaultBoundary } from '../error/FaultBoundary';
 import { EmptyPane, ExtensionPane } from './ExtensionPane';
 import { PaneWrapper } from './PaneWrapper';
 import {
-  PANE_PX,
   clampPanePercent,
   fitPaneLayout,
   intentFromRecord,
@@ -212,9 +211,25 @@ import { useHostPalette } from './useHostPalette';
  *    ISSUE-002 requires pane 1 to collapse to a 48px icon track and says
  *    explicitly that this is "a distinct state, not merely a small width". A
  *    collapsed pane 1 is therefore rendered OUTSIDE the panel group as a fixed
- *    `w-12` track — 48px exactly, in CSS, on every viewport — and its `Panel`
- *    and the divider beside it leave the group. Panels carry `order`, which is
- *    what makes a conditionally rendered panel legal in this library.
+ *    track — 48px exactly, in CSS, on every viewport — and its `Panel` and the
+ *    divider beside it leave the group. Panels carry `order`, which is what
+ *    makes a conditionally rendered panel legal in this library.
+ *
+ *    **Wave 3, W3-3: the track's width is `TOKEN_CLASS.railWidth` (`w-rail`,
+ *    `--rail-w`: 48px), not the inline style this paragraph used to name.**
+ *    This comment used to read "a fixed `w-12` track", naming a class the file
+ *    never actually applied — the width was always an inline `style`, and
+ *    `e2e/shell-layout.spec.ts` measures it rather than trusting a class for
+ *    exactly that reason. `--rail-w` is now the width's real, painted home, and
+ *    it is a SECOND home for the number 48 rather than a replacement for the
+ *    first: `PANE_PX.navCollapsed` in `paneSizing.ts` is unchanged and is still
+ *    what the JS pixel/percent arithmetic elsewhere in this file reads. Kept
+ *    equal by convention and not by a check, the same limit `docs/design/
+ *    WAVE3-PLAN.md`'s W3-2 row already accepted for `ROW_HEIGHT_COMFORTABLE`;
+ *    `paneSizing.ts` is owned by W3-0 under rule 6, so its own docblock — which
+ *    still says the pixel table is "the 48px in the specification['s] ...
+ *    exactly one home" — is not edited here and is therefore slightly stale
+ *    until that file's own next change.
  *
  *    This is also the answer to "collapse toggled while a drag is in flight":
  *    the drag is owned by the library's own handle, and collapsing unmounts that
@@ -1478,8 +1493,7 @@ export function ShellLayout({
             {showChrome && isNavCollapsed ? (
               <div
                 data-shell-region="nav-track"
-                className="flex-none"
-                style={{ width: `${PANE_PX.navCollapsed}px` }}
+                className={`flex-none ${TOKEN_CLASS.railWidth}`}
               >
                 <PaneWrapper paneId="pane1" label="Navigation">
                   {navigationPane}

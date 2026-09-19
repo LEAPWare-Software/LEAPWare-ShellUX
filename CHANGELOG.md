@@ -16,6 +16,52 @@ from so a reader can check it.
 
 ### Added
 
+- **Wave-3 navigation tree and the 48px rail** (W3-3, `docs/design/WAVE3-PLAN.md`,
+  R4/D-40). The current navigation node fills with `--accent-subtle` and names its
+  ink through `--text-primary` explicitly (`TOKEN_CLASS.navCurrentSurface` /
+  `navCurrentText`, replacing `navSelectedSurface`); the full 1px outline that made a
+  selected row read as an input field (`REDESIGN-SPEC.md` finding #10) is deleted,
+  carrying W3-2's reading of R7 ("no side stripe, no outline") from list rows to the
+  tree, while the rule and the semibold weight that were already clearing WCAG 1.4.11
+  on their own are unmoved. A child level now hangs off a 1px `--border-subtle` guide
+  rule at a widened `pl-3` indent, rather than bare `pl-2` whitespace. A row with no
+  declared icon — the fallback identity tile, R4/D-40 — paints its own fixed
+  `--accent-subtle`/`--accent-text` fill in place of the bare monogram that used to sit
+  on whatever the button's own state happened to paint. The collapsed rail's 32px
+  targets each carry a tooltip (`@radix-ui/react-tooltip`, a dependency with zero
+  consumers before this change) showing the row's label; it is portalled to
+  `document.body` — the same fix `ContextBar.tsx`'s overflow menu already uses for the
+  same ribbon-overflow class of defect, since the rail track and the shell root above
+  it are both `overflow-hidden` — and shows the title alone, since neither a
+  `NavigationNode` nor a `LEAPExtensionBlueprint` carries a hotkey field yet
+  (`describeHotkey` exists in `src/core/hotkeys.ts`, but step 6c is what would give a
+  rail row something to read one from). The 48px track's width moved from an inline
+  style to `TOKEN_CLASS.railWidth` (`--rail-w`); `PANE_PX.navCollapsed` in
+  `paneSizing.ts` (owned by W3-0, not edited here) is unchanged and remains a second,
+  JS-side home for the number 48, kept equal by convention rather than by a check —
+  the same limit W3-2 already accepted for `ROW_HEIGHT_COMFORTABLE`.
+  All seven tokens `docs/design/WAVE3-PLAN.md` names for W3-3 are consumed:
+  `--accent-subtle`, `--accent-text`, `--text-secondary` (the tooltip's own ink),
+  `--border-subtle`, `--rail-w`, `--surface-overlay` and `--shadow-popover` (the
+  tooltip's surface and elevation). *Tests:*
+  `src/components/__tests__/ShellNavigationRail.test.tsx` — "fills the current node
+  with the accent-subtle surface and names the ink explicitly", "hangs a child level
+  off a 1px border-subtle rule at the indent", "paints the same fixed fill and ink on
+  an icon-less collapsed row whether or not it is aria-current" and "wires a collapsed
+  row through a tooltip trigger that opens on focus, showing the title alone";
+  `e2e/shell-layout.spec.ts` — "measures every rail target 32 by 32, fully inside the
+  48px track", "paints the fallback identity tile with a filled background and a
+  one-letter text node" and "shows an unclipped tooltip that owns its own centre point
+  on hover", all three mutation-probed as a chain on `Browser tests (chromium)`: run
+  [35457577642](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35457577642/job/105935520995)
+  (probe 1, red on the 32px-target case), run
+  [35457746931](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35457746931/job/105935937068)
+  (probe 2, red on the fallback-tile case), run
+  [35457979186](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35457979186/job/105936550551)
+  (probe 3, red on the tooltip case) and run
+  [35458176461](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/actions/runs/35458176461/job/105937085886)
+  (all three reverted, green, 76 passed) — PR #198 has the full table.
+
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
   `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while
