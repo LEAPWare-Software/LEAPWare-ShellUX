@@ -520,7 +520,7 @@ function rowStatus(
     case 'delivered':
       return { kind: 'success', word: 'Delivered' };
     case 'overdue':
-      return { kind: 'danger', word: '' };
+      return { kind: 'danger', word: 'Delivery overdue' };
     case 'awaiting':
       return { kind: 'info', word: 'Awaiting supplier' };
     case null:
