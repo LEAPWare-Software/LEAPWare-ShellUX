@@ -31,18 +31,19 @@ with a merge queue.
 - Wave-3 W3-1, the state primitives (#184).
 - Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
 - Proof rows C-38 to C-43 for work already built (#186).
+- Cloud lanes can merge: the auto-queue workflow (#192, lane C item 0a).
 - This change: the cloud runbook, the `lw-*` roles and the gate-4 record (D-52).
 
 ## In flight
 
-- Cloud routines build the plan in three lanes while the owner travels. The protocol is
-  [`docs/cloud/runbook.md`](docs/cloud/runbook.md); the shared state is issue #187.
-- Gate 4: #189 carries an `OWNER: gate 4 approved` answer. Its decision row and C-24's
+- Cloud lanes build in parallel while the owner travels. Protocol:
+  [`docs/cloud/runbook.md`](docs/cloud/runbook.md). Shared state: #187.
+- Gate 4: #189 has an `OWNER: gate 4 approved` answer; its decision row and C-24's
   citation are still to do, so step 9 and wave 4 wait. Record: `docs/design/gate4/`.
 
 ## The next step
 
-1. ADR-0006 steps 6 to 11, and W3-2 onward, once the owner says go.
+1. ADR-0006 steps 6 to 11, and W3-2 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
