@@ -19,7 +19,16 @@
  * The enqueue passes `--match-head-commit`, so a push after the check cannot slip in.
  * A guardrail, not an integrity control: every routine posts under the owner's login, so
  * the comment proves a review exists at the head, not which routine wrote it.
- * *Tests:* scripts/__tests__/auto-queue.test.mjs.
+ *
+ * *Tests:* scripts/__tests__/auto-queue.test.mjs. The head-pinned enqueue is pinned by
+ * *Test:* "calls gh pr merge --squash --auto pinned to the head only when ready".
+ * The readiness rules above are pinned by
+ * *Test:* "ignores a forged review comment from any other account",
+ * *Test:* "refuses a review comment made at an older head", and
+ * *Test:* "lets a later rejection at the same head win over an earlier MERGE".
+ * Every one of them drives `readiness()` and `main()` against an injected fake `gh`.
+ * None asserts what the merge queue does with an entry once it is queued: that is
+ * GitHub's behaviour, not this script's, and no test here covers it.
  */
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
