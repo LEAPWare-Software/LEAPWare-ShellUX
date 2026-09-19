@@ -182,6 +182,10 @@ and a correction of its stale "CI runs fewer steps than `verify`" paragraph.
   the prover refuses any `--inject` but `none` on `pull_request`, `merge_group`, `push`
   and `schedule`. `failing-row` records one extra failed synthetic row `S-injected` while
   every real row runs as normal; `crash` exits non-zero before the result file exists.
+  `Prove claims` carries one job-level `if`,
+  `github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'`: true on
+  every other event, so the check is never skipped; a dispatch from any other ref (a
+  branch, or a tag named `main`) is skipped rather than failed.
   A guardrail against the honest mistake: whoever can edit `claims.yml` can remove it.
   *Tests:* scripts/__tests__/claims-prove.test.mjs — "refuses an injection on pull_request, merge_group, push and schedule, and a dispatch from any ref but main".
 - skip only inside a step that exits 0 and prints its reason;
@@ -192,7 +196,9 @@ and a correction of its stale "CI runs fewer steps than `verify`" paragraph.
 - permissions: `contents`, `pull-requests`, `actions`, `issues` all `read`; issue filing
   is a separate job (§3.5);
 - concurrency (W2, M3): `pull_request` and `merge_group` keep the per-ref group with
-  cancellation; `push`, `schedule` and `workflow_dispatch` use a separate group `claims-main` with
+  cancellation; `push`, `schedule` and a `workflow_dispatch` from `refs/heads/main` use a
+  separate group `claims-main` (a dispatch from any other ref keeps a per-ref group, so it
+  never replaces a pending main run) with
   `cancel-in-progress: false`. GitHub keeps at most one pending run per group and cancels
   an older pending one when a newer arrives; that is safe, because the newer run checks a
   tree that contains the older one, and cancelled runs are never reference runs (§3.6).
@@ -253,7 +259,9 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    next main run; its `S-injected` row is recorded but, like `S-structure` and
    `S-ruleset`, no ticked item cites it, so status renders the real rows as that run
    recorded them. A `crash` dispatch renders `FAILING RUN <id>` for every row until the
-   next main run succeeds.
+   next main run succeeds. Any later successful main run clears `FAILING RUN`, a
+   dispatch with `inject=none` included; so a flaky crash hidden by a later green run is
+   seen only through the issue it filed, which stays open until someone closes it.
    *Tests:* scripts/__tests__/status.test.mjs — "takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch".
 4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
    its `expect` values marked `STATED` (X1: manual rows never enter a run); newest

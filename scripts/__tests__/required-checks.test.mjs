@@ -107,7 +107,12 @@ describe('the proof-of-completion workflows (§3.4)', () => {
         const steps = wf.jobs[job].steps;
         const checkout = steps.find((s) => String(s.uses ?? '').startsWith('actions/checkout@'));
         assert.equal(checkout.with['fetch-depth'], 0);
-        assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
+        if (file === 'claims.yml') {
+          // The single exception, pinned whole: it cannot skip a change run or a main run.
+          assert.equal(wf.jobs[job].if, "github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'");
+        } else {
+          assert.equal(wf.jobs[job].if, undefined, 'the checked job itself has no if:');
+        }
       });
 
       it('is not required yet (rollout step 1)', () => {
@@ -126,7 +131,7 @@ describe('the proof-of-completion workflows (§3.4)', () => {
     const { group, 'cancel-in-progress': cancel } = workflows['claims.yml'].concurrency;
     const evaluate = (event) => {
       const main = event === 'push' || event === 'schedule' || event === 'workflow_dispatch';
-      assert.match(group, /github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'\) && 'claims-main' \|\| format\('\{0\}-\{1\}', github\.workflow, github\.ref\)/);
+      assert.match(group, /github\.event_name == 'push' \|\| github\.event_name == 'schedule' \|\| \(github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'\)\) && 'claims-main' \|\| format\('\{0\}-\{1\}', github\.workflow, github\.ref\)/);
       assert.match(cancel, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'/);
       return { group: main ? 'claims-main' : 'per-ref', cancel: !main };
     };
@@ -137,7 +142,7 @@ describe('the proof-of-completion workflows (§3.4)', () => {
     assert.deepEqual(evaluate('merge_group'), { group: 'per-ref', cancel: true });
   });
 
-  it('claims.yml takes a workflow_dispatch with an inject choice, and passes it to the prover on that event only', () => {
+  it('claims.yml takes a workflow_dispatch with an inject choice, and pins the INJECT expression to that event', () => {
     const on = triggers(workflows['claims.yml']);
     const inject = on.workflow_dispatch.inputs.inject;
     assert.equal(inject.type, 'choice');
@@ -166,6 +171,7 @@ describe('the proof-of-completion workflows (§3.4)', () => {
   it('claims.yml gives main runs 30 minutes and uploads claims-results on main events only', () => {
     const prove = workflows['claims.yml'].jobs.prove;
     assert.match(String(prove['timeout-minutes']), /&& 30 \|\| 10/);
+    assert.match(String(prove['timeout-minutes']), /\(github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'\)\) && 30/);
     const upload = prove.steps.find((s) => String(s.uses ?? '').startsWith('actions/upload-artifact@'));
     assert.equal(upload.with.name, 'claims-results');
     assert.match(upload.if, /github\.event_name == 'push' \|\| github\.event_name == 'schedule'/);

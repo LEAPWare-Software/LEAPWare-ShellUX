@@ -41,21 +41,28 @@ permissions:
   actions: read
   issues: read
 
-# PR and queue runs: one per ref, a newer push cancels the older run. Main runs: one
-# group, never cancelled in progress. GitHub keeps at most one pending run per group and
+# PR and queue runs: one per ref, a newer push cancels the older run. Main runs (push,
+# schedule, and a dispatch from refs/heads/main only): one group, never cancelled in
+# progress. A dispatch from any other ref stays in its own per-ref group, so it can never
+# replace a pending main run. GitHub keeps at most one pending run per group and
 # cancels an older pending one; the newer run checks a tree that contains the older one,
 # and cancelled runs are never reference runs for `npm run status`.
 concurrency:
-  group: ${{ (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'claims-main' || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && 'claims-main' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
 jobs:
   prove:
     name: Prove claims
+    # The one job-level if: always true on pull_request, merge_group, push and schedule,
+    # so the required check is never skipped. A dispatch from any ref but refs/heads/main
+    # (a branch, or a tag named main) is skipped, not failed, and a skipped run is never
+    # a reference run for `npm run status`.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     # Queue-bound runs must fit the merge queue's 10-minute response window; main runs are
     # not queue-bound and may take the whole register plus every probe.
-    timeout-minutes: ${{ (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 30 || 10 }}
+    timeout-minutes: ${{ (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) && 30 || 10 }}
 
     steps:
       - name: Checkout
