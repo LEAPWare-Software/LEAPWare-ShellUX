@@ -165,6 +165,15 @@ from so a reader can check it.
 
 ### Changed
 
+- **A claim about npm 10.9.8 was too broad, and is corrected everywhere it was made**
+  (`CLAUDE.md`, `HANDOFF.md`, `README.md`, `docs/getting-started.md`,
+  `docs/traps.md`, and this file). It said npm 10.9.8 "crashes on this lockfile".
+  Reproduced in throwaway worktrees: `npm@10.9.8 audit fix` crashes on the pre-#126
+  lockfile (`148217b`) and does not on `d74e5d0`; `npm update` crashes on neither from
+  a fresh install. **What made it possible:** a crash observed once, in a tree whose
+  `node_modules` npm 10 had installed, was written down as a lasting property of the
+  lockfile without a reproduction. It was caught by a per-claim audit the owner asked
+  for.
 - **The licence is Apache-2.0** (decision D-42), replacing MIT: `LICENSE` carries the
   Apache 2.0 text, a `NOTICE` is added, and `package.json` and the README say so.
 - **Eight owner rulings recorded** in `docs/DECISIONS.md`, D-42 to D-48: the licence;
@@ -328,9 +337,12 @@ from so a reader can check it.
   `npm audit`, both "found 0 vulnerabilities", run with npm 11.16.0. **Not done:**
   `audit:all` is not a `verify` stage, and the issue-filing step has not yet been
   seen to fire, because it only runs on a scheduled failure. **Found on the way:**
-  `npm audit fix` and `npm update` crash under npm 10.9.8 with `Cannot read
-  properties of null (reading 'edgesOut')` against this lockfile; npm 11.16.0 —
-  the version `packageManager` declares — does not.
+  `npm audit fix` crashed under npm 10.9.8 with `Cannot read properties of null
+  (reading 'edgesOut')` against the lockfile of that time; npm 11.16.0, the version
+  `packageManager` declares, did not. **Corrected later the same day:** the crash
+  reproduces on the pre-#126 lockfile (`148217b`) and not on the current one, and an
+  `npm update` crash also reported here did not reproduce on a fresh install. See
+  `docs/traps.md`.
 
 - **The omnibox was never docked, and the word "docked" was already in this file
   describing it (GitHub issue #110).** `PaneWrapper`'s body was a flex ITEM of a

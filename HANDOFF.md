@@ -39,4 +39,4 @@ Decisions (none open for v1):
 - Steps run one at a time: every landing edits this file and `CHANGELOG.md`.
 - One git writer in the main tree. Throwaway worktrees go in a `.workspaces/`
   directory beside the repository.
-- Use npm 11.16.0 (`packageManager`). npm 10.9.8 crashes on this lockfile.
+- Use npm 11.16.0 (`packageManager`). See `docs/traps.md` for the npm 10 history.

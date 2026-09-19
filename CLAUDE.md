@@ -132,7 +132,7 @@ touching the area named.
 - **`--sequence.shuffle` proves one file order at one seed**, not order-independence.
 - **`coverage/.tmp` ENOENT**: delete `coverage/` and re-run once.
 - **`audit:prod` fails at random with a false lockfile message.** Re-run; never `npm install` on its word.
-- **npm 10.9.8 crashes on this lockfile** (`edgesOut` of null). Use npm 11.16.0, the declared `packageManager`.
+- **Use npm 11.16.0**, the declared `packageManager`. npm 10.9.8 `audit fix` crashed (`edgesOut` of null) on the lockfile before #126; not on today's. `docs/traps.md`.
 
 ---
 

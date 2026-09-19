@@ -143,22 +143,23 @@ audit.
 
 ---
 
-### npm 10.9.8 crashes on this lockfile
+### npm 10.9.8 crashed on an earlier lockfile: use 11.16.0
 
-**Added 2026-09-18, not moved from `CLAUDE.md`.** Measured while clearing the red
-production audit (PR #126): with npm 10.9.8, both `npm audit fix` and `npm update
-<packages>` stopped with
+**Added 2026-09-18, corrected the same day.** The first version of this entry said
+"npm 10.9.8 crashes on this lockfile", covering both `npm audit fix` and `npm update`.
+An audit of the session's claims reproduced it in throwaway worktrees and found that
+statement too broad:
 
-```
-npm error Cannot read properties of null (reading 'edgesOut')
-```
+| Lockfile | `npm@10.9.8 audit fix` | `npm@10.9.8 update <pkgs>`, fresh install |
+|---|---|---|
+| before #126 (`148217b`) | **crashes**: `npm error Cannot read properties of null (reading 'edgesOut')` | no crash |
+| after #141 (`d74e5d0`) | no crash: "found 0 vulnerabilities" | no crash |
 
-and changed nothing. The same commands under npm 11.16.0, the version
-`packageManager` declares and the one the lockfile was written with, completed:
-`npx -y npm@11.16.0 update ...`. The debug log carried no further detail, so the
-cause inside npm 10 is not established; the working rule is only that this lockfile
-is maintained with 11.16.0. **What this does not say:** that npm 10 cannot run
-`npm ci` here. `verify` and CI were not observed failing under npm 10.
+The original `npm update` crash happened in a working tree whose `node_modules` had
+been installed by npm 10.9.8; that condition was not isolated, so it is recorded as
+observed, not as reproduced. **The rule that survives:** maintain the lockfile with npm
+11.16.0, the version `packageManager` declares and the one it was written with. The
+reason is the declaration, not a known crash on today's lockfile.
 
 ---
 
