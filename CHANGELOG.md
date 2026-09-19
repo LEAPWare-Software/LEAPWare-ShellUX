@@ -21,7 +21,7 @@ from so a reader can check it.
   `/shared/sdk.js` beside `/shared/react.js` and `/shared/react-jsx-runtime.js`, built in
   the same build as both documents so a plugin shares the extension surface's React.
   `src/sdk/api-surface.json` records the contract (SDK exports, blueprint and `IShellAPI`
-  keys with required and optional kept apart, the hotkey and id allowlists, registry
+  keys with required and optional kept apart, the hotkey allowlist and denylists, the reserved ids and the id pattern, registry
   limits, the shared modules' export names and React's major), and a test fails when it
   changes without the bump the change requires, one step at a time. That test is a
   guardrail: a hand-edited baseline defeats it, and a behavioural narrowing with no
@@ -33,12 +33,6 @@ from so a reader can check it.
   (`docs/measurements/shared-modules-2026-09-19.json`). **Not done:** no plugin loads
   yet (ADR-0006 step 6); only Windows was measured; the modules were imported by code in
   the page, not by a plugin bundle's static import.
-- **The proof-of-completion rollout, step 2, recorded**
-  (`docs/claims-evidence/rollout-step2-2026-09-19.md`, landed beside this change).
-  Eleven throwaway PRs (#157 to #168) each broke one rule and each failed for exactly
-  that reason; editing a failing body re-ran the gate and passed it; both jobs ran on the
-  merge queue for #156. Every run id is in the file.
-
 - **The proof-of-completion protocol, PR A** (D-50, plan step 0c). `docs/claims.json`
   holds 27 rows proving every ticked item in `docs/plans/v1-production.md`; the box
   linter (`scripts/claims/lint-boxes.mjs`) fails a tick without a row whose `box` equals
