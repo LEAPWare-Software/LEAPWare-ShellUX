@@ -351,7 +351,7 @@ covered; stated, not fixed.
 >   them; the smoke activates both, hovers the Database chart until its tooltip
 >   shows, and drags a divider. Under `style-src 'self'` that raised 21
 >   `style-src-attr` and 1 `style-src-elem` violation on the extension surface. In
->   isolation against ECharts' own build: 13 `style-src-attr` for one tooltip, 13
+>   a standalone probe against ECharts' own build: 13 `style-src-attr` for one tooltip, 13
 >   with only `style-src-elem` relaxed, 0 with `style-src 'self' 'unsafe-inline'`.
 > - With the shipped policy, the same driven run recorded **0 violations on each
 >   surface**, and both positive controls — an inline `<script>`, a `data:` image —

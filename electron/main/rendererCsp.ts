@@ -60,7 +60,7 @@ import { join, sep } from 'node:path';
  *       `style="…"` attributes. In the PACKAGED app, with `style-src 'self'`,
  *       activating the Database fixture and hovering its chart raised 21
  *       `style-src-attr` and 1 `style-src-elem` violation on the extension
- *       surface. In isolation (`scripts/csp-echarts-probe.mjs`, ECharts' own
+ *       surface. Standalone (`scripts/csp-echarts-probe.mjs`, ECharts' own
  *       browser build): 13 under `style-src 'self'`, 13 with only
  *       `style-src-elem` relaxed, 0 under this directive.
  *   What the grant admits is injected CSS; what CSS could use to send anything

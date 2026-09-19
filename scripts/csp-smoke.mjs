@@ -352,7 +352,13 @@ try {
       ),
     driven: r.afterReload.driven,
   }));
-  const ok = summary.every((s) => s.headerPresent && s.violations === 0 && s.controlsRegistered);
+  // A zero only counts if the driven steps happened: an activation that silently
+  // failed would measure an empty surface and pass (review finding R1).
+  const drove = (s) =>
+    s.surface === 'chrome'
+      ? s.driven?.paletteOpen === true
+      : s.driven?.mail?.ok === true && s.driven?.database?.ok === true && s.driven?.tooltipShown === true && s.driven?.dragged === true;
+  const ok = summary.every((s) => s.headerPresent && s.violations === 0 && s.controlsRegistered && drove(s));
   process.stdout.write(`${JSON.stringify({ ok, summary, results }, null, 2)}\n`);
   exitCode = ok ? 0 : 1;
 } catch (error) {
