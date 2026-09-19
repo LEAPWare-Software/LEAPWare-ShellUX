@@ -291,6 +291,17 @@ const ALLOWLIST = [
       'finding recorded above it, so this does not reopen that. Scoped to these two files ' +
       'and to hardcoded-hostname only; every other rule still applies to both.',
   },
+  {
+    files: ['scripts/__tests__/fixtures/claims/ruleset-23685990-unauthenticated.json'],
+    rules: ['hardcoded-hostname'],
+    reason:
+      'A verbatim capture of GitHub\'s unauthenticated REST response for this repository\'s ' +
+      'ruleset (docs/proof-of-completion.md §3.5), committed so the ruleset comparison is ' +
+      'tested against what GitHub actually returns. Its `_links` name the API and web hosts ' +
+      'as data; nothing reads or contacts them, and editing them out would make the fixture ' +
+      'no longer the response it claims to be. Scoped to this one file and to ' +
+      'hardcoded-hostname only; every other rule still applies.',
+  },
 ];
 
 // ---------------------------------------------------------------------------

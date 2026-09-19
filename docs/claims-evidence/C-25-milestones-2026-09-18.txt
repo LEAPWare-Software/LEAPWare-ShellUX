@@ -1,0 +1,76 @@
+# Evidence for register row C-25: milestones v1.0.0 and 1.1, and every open issue on a milestone.
+# Captured 2026-09-18 (UTC 2026-09-19) with an authenticated gh 2.92.0,
+# after #112 and #113 (closed by #148) and #74 and #103 (closed, and marked done by the plan's
+# Step 3 README item) were moved from Phase 2 onto v1.0.0. Counts are mutable; this is the
+# state at capture. Each command is shown before its raw output.
+
+$ gh api "repos/LEAPWare-Software/LEAPWare-ShellUX/milestones?state=all" --jq '.[] | "\(.number) \(.title) state=\(.state) open=\(.open_issues) closed=\(.closed_issues)"'
+1 Phase 2 — Production Readiness state=open open=0 closed=19
+2 v1.0.0 state=open open=30 closed=4
+3 1.1 state=open open=26 closed=0
+
+$ gh api repos/LEAPWare-Software/LEAPWare-ShellUX/milestones/2 --jq '"v1_0_0_title=\(.title)", "v1_0_0_open_issues=\(.open_issues)", "v1_0_0_closed_issues=\(.closed_issues)"'
+v1_0_0_title=v1.0.0
+v1_0_0_open_issues=30
+v1_0_0_closed_issues=4
+
+$ gh api repos/LEAPWare-Software/LEAPWare-ShellUX/milestones/3 --jq '"m1_1_title=\(.title)", "m1_1_open_issues=\(.open_issues)"'
+m1_1_title=1.1
+m1_1_open_issues=26
+
+$ gh api "repos/LEAPWare-Software/LEAPWare-ShellUX/issues?milestone=none&state=open&per_page=100" --jq 'map(select(.pull_request|not)) | "unmilestoned_open_issues=\(length)"'
+unmilestoned_open_issues=0
+
+# Every issue or PR number docs/plans/v1-production.md mentions, and its milestone:
+$ for n in <each #N in the plan>; do gh api repos/LEAPWare-Software/LEAPWare-ShellUX/issues/$n --jq '"#\(.number) \(if .pull_request then "PR" else "issue" end) \(.state) milestone=\(.milestone.title // "none")"'; done
+#13 issue closed milestone=none
+#16 issue open milestone=v1.0.0
+#17 issue open milestone=v1.0.0
+#23 issue open milestone=v1.0.0
+#28 issue open milestone=v1.0.0
+#32 issue open milestone=v1.0.0
+#41 issue open milestone=1.1
+#43 issue open milestone=v1.0.0
+#54 issue open milestone=1.1
+#57 issue open milestone=v1.0.0
+#60 issue open milestone=1.1
+#61 issue open milestone=1.1
+#62 issue open milestone=v1.0.0
+#65 issue open milestone=1.1
+#68 issue open milestone=v1.0.0
+#74 issue closed milestone=v1.0.0
+#80 issue open milestone=v1.0.0
+#85 issue open milestone=v1.0.0
+#86 issue open milestone=v1.0.0
+#91 issue open milestone=v1.0.0
+#95 issue open milestone=v1.0.0
+#103 issue closed milestone=v1.0.0
+#105 issue open milestone=1.1
+#106 issue open milestone=1.1
+#111 issue open milestone=v1.0.0
+#112 issue closed milestone=v1.0.0
+#113 issue closed milestone=v1.0.0
+#115 PR closed milestone=none
+#117 PR closed milestone=none
+#118 PR closed milestone=none
+#119 PR closed milestone=none
+#120 PR closed milestone=none
+#125 PR closed milestone=none
+#126 PR closed milestone=none
+#130 PR closed milestone=none
+#131 PR closed milestone=none
+#132 PR closed milestone=none
+#133 PR closed milestone=none
+#134 PR closed milestone=none
+#135 PR closed milestone=none
+#136 PR closed milestone=none
+#137 PR closed milestone=none
+#138 PR closed milestone=none
+#139 PR closed milestone=none
+#140 PR closed milestone=none
+#141 PR closed milestone=none
+#146 issue open milestone=v1.0.0
+#150 PR closed milestone=none
+
+# Read by the capturer, not by a machine: no issue the plan mentions is left on Phase 2.
+# #13 in the plan is BuildCraft's PR #13, another repository, and has no milestone here.

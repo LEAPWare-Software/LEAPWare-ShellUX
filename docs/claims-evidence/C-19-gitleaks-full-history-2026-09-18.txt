@@ -1,0 +1,59 @@
+# Evidence for register row C-19: a secret scan of the published history.
+# Captured 2026-09-18 (UTC 2026-09-19) in a clone of LEAPWare-Software/LEAPWare-ShellUX.
+# origin/main = 5528993dd7faa268d97e202a58e1781023ca4682. Tool: gitleaks 8.30.1, a standalone binary
+# run once, not a tracked dependency (ADR-0002). Raw output of each command follows it.
+#
+# Commit counts, and why gitleaks reports fewer commits than git rev-list:
+#   git rev-list origin/main --count             = 81
+#   git rev-list origin/main --no-merges --count = 67
+#   git rev-list --all --no-merges --count       = 130
+#   gitleaks reads 'git log -p', which carries no patch for a merge commit, so it counts
+#   non-merge commits only (67 of 67 on origin/main below). On --all it reads one fewer
+#   than rev-list: e6af25c (branch fix/js-yaml-audit, never on main) changes only
+#   package-lock.json, which .gitattributes marks -diff, so its patch has no text. The
+#   first capture's 121 of 122 was the same commit.
+# Known gap: for the same reason no historical version of package-lock.json is
+# scanned by 'gitleaks git'. The lockfile as it stands on origin/main is scanned
+# separately below with 'gitleaks dir'.
+
+$ gitleaks git --log-opts=origin/main --redact --no-color .
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+11:22PM INF 67 commits scanned.
+11:22PM INF scanned ~5172547 bytes (5.17 MB) in 369ms
+11:22PM INF no leaks found
+PUBLISHED_HISTORY_EXIT=0
+
+$ git show origin/main:package-lock.json > lock-main.json && gitleaks dir --redact --no-color lock-main.json
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+11:22PM INF scanned ~312546 bytes (312.55 KB) in 44.8ms
+11:22PM INF no leaks found
+LOCKFILE_EXIT=0
+
+# The same scan over every ref in this clone (--all) also covers unmerged branches,
+# including the branch that adds this file. It finds two generic-api-key matches, both
+# in docs/claims.json on that branch: the JSON field name "key" followed by an
+# expectation name ("pr148_verdict_merge", "d40_gate_points"). Neither is a secret.
+$ gitleaks git --log-opts=--all --redact --no-color .
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+11:22PM INF 129 commits scanned.
+11:22PM INF scanned ~8284953 bytes (8.28 MB) in 580ms
+11:22PM WRN leaks found: 2
+ALL_REFS_EXIT=1

@@ -20,7 +20,7 @@ Numbered same as ADR-0003, so "rule 4b" mean same thing everywhere in repo.
 
 1. **Adversarial review precedes merge.** Never after wave.
 2. **Evidence, not assertion.** Pasted output, full test title, or stated
-   measurement. Nothing else count.
+   measurement. Nothing else count. Prose point to plan item, never declare done (`docs/proof-of-completion.md`).
 3. **Documentation lands in the commit that makes it true.** Not sweep.
 4. **A green suite is not evidence where the suite cannot observe the behaviour.**
    See "jsdom is blind" below — this one cost most.

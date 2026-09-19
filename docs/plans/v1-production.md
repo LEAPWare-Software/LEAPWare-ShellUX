@@ -79,47 +79,47 @@ Measured today:
 ---
 
 ## Step 0 — Land what is in flight  (6/6)
-- [x] Adversarial review of PR #115 (rule 1), by an `lw-verifier` (sonnet) that did not write it. Verdict MERGE AFTER FIXES; record on the PR, 2026-09-18.
-- [x] Fix the findings (`899fa66`, three prose findings). Gates on the fix: `check:portability` and `check:citations` exit 0; CI 5 of 5 green. The full `verify` was not re-run for a two-file prose change.
-- [x] Merge #115: merged as `148217b`. **HANDOFF §1 was NOT updated in that landing**; it is carried into the docs-recast change instead, which is a rule-3 miss recorded rather than hidden.
-- [x] **Clear the red production audit** (found 2026-09-18: failing every Monday since 2026-08-10 on `js-yaml`), close the unaudited dev tree, and make a failing scheduled audit file an issue. PR #126: `verify` exit 0, review MERGE, Medium finding fixed; merged `e00ea93`, all seven checks green.
-- [x] Triage the Dependabot PRs. **Done 2026-09-18:** #117 and the group #131 merged green on every leg; the D-28 pin landed in `.github/dependabot.yml` (#130); declined with reasons and an ignore rule: #118, #119, #120, #132, #133, #134, #135, #136, #137, #138, #139, #140, each confirmed `CLOSED` with `gh pr view`. **What "done" means here:** every Dependabot pull request opened through 2026-09-18 is merged or declined. It does not mean the queue stays empty: Dependabot opened #140 minutes after this line was first written as "zero open", which was true only at that moment:
+- [x] Adversarial review of PR #115 (rule 1), by an `lw-verifier` (sonnet) that did not write it. Verdict MERGE AFTER FIXES; record on the PR, 2026-09-18. [C-01]
+- [x] Fix the findings (`899fa66`, three prose findings). Gates on the fix: `check:portability` and `check:citations` exit 0; CI 5 of 5 green. The full `verify` was not re-run for a two-file prose change. [C-02]
+- [x] Merge #115: merged as `148217b`. **HANDOFF §1 was NOT updated in that landing**; it is carried into the docs-recast change instead, which is a rule-3 miss recorded rather than hidden. [C-03]
+- [x] **Clear the red production audit** (found 2026-09-18: failing every Monday since 2026-08-10 on `js-yaml`), close the unaudited dev tree, and make a failing scheduled audit file an issue. PR #126: `verify` exit 0, review MERGE, Medium finding fixed; merged `e00ea93`, all seven checks green. [C-04]
+- [x] Triage the Dependabot PRs. **Done 2026-09-18:** #117 and the group #131 merged green on every leg; the D-28 pin landed in `.github/dependabot.yml` (#130); declined with reasons and an ignore rule: #118, #119, #120, #132, #133, #134, #135, #136, #137, #138, #139, #140, each confirmed `CLOSED` with `gh pr view`. **What "done" means here:** every Dependabot pull request opened through 2026-09-18 is merged or declined. It does not mean the queue stays empty: Dependabot opened #140 minutes after this line was first written as "zero open", which was true only at that moment: [C-05]
   - **#125** (minor/patch group): merge if green on every leg.
   - **#117** globals, **#118** jsdom 30, **#119** eslint 10: take each only if all legs are green. Otherwise close it with the failing leg quoted.
   - **#120** react-resizable-panels 2→4: **decline, deferred to after 1.0** (done 2026-09-18, reason on the PR). It is a migration of the divider/layout engine, which is where both data-destroying defects lived. Wave 3 already rewrites that surface, so the substrate should not move under it.
-- [x] React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0. React 18 has no known defect in this tree.
+- [x] React 19 (#106) and `eslint-plugin-react-refresh` 0.5 (#105) stay deferred to after 1.0. React 18 has no known defect in this tree. [C-06]
 
 ## Step 0b — Withdrawn
 The BuildCraft pilot is not part of this plan (D-44). The 1.0 tag still waits for BuildCraft (D-39).
 
-## Step 0c — Proof of completion, before BuildCraft  (1/5)
+## Step 0c — Proof of completion, before BuildCraft  (2/5)
 Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until its PR B lands, a tick here is recorded under the old convention.
-- [x] Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50.
-- [ ] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items.
+- [x] Design audited adversarially until a round found no Blocker (round 12 of 12), and recorded as D-50. [C-07]
+- [x] PR A: register, box linter, evidence gate, status report, both workflows (not required), template and `CLAUDE.md` rule, migration of today's ticked items. [C-28]
 - [ ] Rollout step 2: every throwaway-PR case shown with its run id.
 - [ ] Rollout step 3: three green main runs, a forced failing row and a forced crash each file the issue.
 - [ ] PR B: both checks required with `integration_id: 15368`, applied and read back.
 
-## Step 1 — Record the decisions before acting on them  (0/2)
+## Step 1 — Record the decisions before acting on them  (1/2)
 - [ ] In `docs/DECISIONS.md`, add D-31 through D-34 (one per row above, "Called by: Owner, 2026-09-18"). Strike through the superseded D-09, D-11 (as the v1 gate), D-12 and D-27, and rewrite §3 as the new line of sight: this plan's steps. Add D-35: **contract gaps ship as documented limits** (#16, #17, #28, #32, #57, #80, #91). This is consistent with D-23 (no third parties). #65 is re-scoped to the 1.1 milestone.
-- [ ] Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it. Everything else goes to **1.1** or stays on Phase 2. The milestone then *is* the gate, and it can be counted.
+- [x] Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it. Everything else goes to **1.1** or stays on Phase 2. The milestone then *is* the gate, and it can be counted. [C-25]
 
 ## Step 2 — Context files within their caps  (4/4)
-- [x] HANDOFF.md → ≤3000 bytes (2,137). It keeps only the transition: where main is, what landed, what is in flight, the next step. §2–§12 move verbatim to `docs/history/handoff-archive-2026-08.md`.
-- [x] CLAUDE.md → ≤200 lines (199). The "Traps" and "jsdom is blind" bodies move to `docs/traps.md`, and CLAUDE.md keeps one-line pointers plus the rules.
-- [x] The caps lint: `scripts/__tests__/context-caps.test.mjs` in `test:scripts`, so inside `verify` with no new stage. Mutation-probed both halves.
-- [x] `git add` the new files before running `verify` (the portability trap). Citations must still resolve: moved text keeps its `*Tests:*` markers.
+- [x] HANDOFF.md → ≤3000 bytes. It keeps only the transition: where main is, what landed, what is in flight, the next step. §2–§12 move verbatim to `docs/history/handoff-archive-2026-08.md`. [C-08]
+- [x] CLAUDE.md → ≤200 lines. The "Traps" and "jsdom is blind" bodies move to `docs/traps.md`, and CLAUDE.md keeps one-line pointers plus the rules. [C-09]
+- [x] The caps lint: `scripts/__tests__/context-caps.test.mjs` in `test:scripts`, so inside `verify` with no new stage. Mutation-probed both halves. [C-10]
+- [x] `git add` the new files before running `verify` (the portability trap). Citations must still resolve: moved text keeps its `*Tests:*` markers. [C-11]
 
-## Step 3 — Go public, on the `leapware-sessionkeeper` pattern  (0/9)
+## Step 3 — Go public, on the `leapware-sessionkeeper` pattern  (6/9)
 
 The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (checked with `gh repo view`). Copy its open-source scaffolding, but **not** its plugin or dual-host parts: `.claude-plugin/`, `.agents/`, `.codex/`, `AGENTS.md`, `.github/apps/lws-*.json`, `docs/install-claude.md` and `docs/install-codex.md` have no equivalent here.
 
-- [ ] Scan the full history for secrets with `npx gitleaks detect --log-opts="--all"`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated** before the repository is flipped. Deleting it from history is not enough.
-- [x] Content review of tracked files for anything that must not be public: customer names, internal hosts, credentials in docs. Two found and repaired: a personal-looking contact in `CODE_OF_CONDUCT.md`, a wrong org in `CODEOWNERS`.
-- [ ] **Licence.** Sessionkeeper ships `LICENSE` (Apache-2.0, 201 lines) and a `NOTICE`, and its README carries a license line. ShellUX's `package.json` says `MIT`. **Owner picks one**; the default is Apache-2.0 to match the house pattern. That means the `LICENSE` and `NOTICE` files, `package.json` `license`, and the README line, all in one commit.
-- [x] Community files mirroring sessionkeeper's shape: `CODE_OF_CONDUCT.md`, and `.github/ISSUE_TEMPLATE/bug.yml` + `feature.yml` (form-based). `CONTRIBUTING.md` and `SECURITY.md` already exist and get re-aimed rather than replaced. `.editorconfig` and `.gitattributes` are added if missing; `.gitattributes` enforces LF, which `check:portability` already requires.
-- [x] `.github/CODEOWNERS` → `* @LEAPWare-Software`. The current `@LEAPWare-HQ` is inert (HANDOFF §5).
-- [ ] **Owner flips the visibility** (outward and hard to reverse, so no agent does it). Owner also confirms the Context risk statement.
+- [x] Scan the published history for secrets with gitleaks: every commit on `main`, plus the lockfile as it stands, which `gitleaks git` cannot read because `.gitattributes` marks it `-diff`. This is a one-off invocation, not a tracked dependency (ADR-0002). Any hit is **rotated**; deleting it from history is not enough. Run 2026-09-18 **after** the flip, because gitleaks could not run before it (D-43, whose pre-flip check was a grep of every commit): no leaks. Raw output, the commit counts, and the two false positives an all-refs scan finds are in the row's evidence file. [C-19]
+- [x] The two repairs from the public-content review hold: `CODE_OF_CONDUCT.md` names no personal contact and routes reports through `SECURITY.md`, and `CODEOWNERS` names no `@LEAPWare-HQ`. The review itself (customer names, internal hosts, credentials in docs) was by hand in #141 and is not re-run by the row. [C-12]
+- [x] **Licence.** Sessionkeeper ships `LICENSE` (Apache-2.0, 201 lines) and a `NOTICE`, and its README carries a license line. ShellUX's `package.json` says `MIT`. **Owner picks one**; the default is Apache-2.0 to match the house pattern. That means the `LICENSE` and `NOTICE` files, `package.json` `license`, and the README line, all in one commit. The owner picked Apache-2.0 (D-42). [C-20]
+- [x] Community files mirroring sessionkeeper's shape: `CODE_OF_CONDUCT.md`, and `.github/ISSUE_TEMPLATE/bug_report.yml` + `feature.yml` (form-based). `CONTRIBUTING.md` and `SECURITY.md` already exist and get re-aimed rather than replaced. `.editorconfig` and `.gitattributes` are added if missing; `.gitattributes` enforces LF, which `check:portability` already requires. [C-13]
+- [x] `.github/CODEOWNERS` → `* @LEAPWare-Software`. The current `@LEAPWare-HQ` is inert (HANDOFF §5). [C-14]
+- [x] **The repository is public.** Outward and hard to reverse, so it was the owner's call (D-43), executed by the CTO agent under the owner's 2026-09-18 delegation. The owner accepted the Context risk statement in D-34. [C-21]
 - [ ] **Ruleset as code, not classic branch protection.** Add `.github/rulesets/main.json` modelled on sessionkeeper's:
   - `~DEFAULT_BRANCH` with `bypass_actors: []`.
   - `deletion` and `non_fast_forward`.
@@ -131,18 +131,20 @@ The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (che
 - [ ] Enable private vulnerability reporting, secret scanning and Dependabot security updates. Rewrite `SECURITY.md` the way sessionkeeper does: a "Report a vulnerability" link first, then `leapware@outlook.com` (D-03), then scope notes (what the host does and does not claim, citing tests per Amendment G), then supported versions ("1.x: latest release only").
 - [ ] README top matter in sessionkeeper's order: a one-paragraph what-it-is, a license line, an Installing link (`docs/INSTALL.md`, Step 7), a Developing block (`npm ci && npm run verify`), and Contributing/Security links. The long body moves to `docs/`. Mark #74 and #103 done with evidence (API responses pasted). Also close the audit gap: add a full-tree `npm audit --audit-level=high` job to `audit-dependencies.yml` (HANDOFF §6.2).
 
-## Step 3b — Design gates 3 and 4 before any more redesign code  (0/5)  — `opus` + impeccable
+## Step 3b — Design gates 3 and 4 before any more redesign code  (3/6)  — `opus` + impeccable
 Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in impeccable's product register. **Gate 3 (`DESIGN.md`) and gate 4 (screens) were never produced.** No wireframe, mock or artifact exists, and wave 1 shipped without them. SHAPE-BRIEF says the mock step was skipped for lack of image generation; this session has impeccable, the `design` canvas skill and published artifacts, so that reason no longer holds.
-- [ ] Owner confirms or overrides the SHAPE-BRIEF gate points: §3 editorial voice, §4 the 11–13px scale, §9 palette arrow-keys, §13.1. Each goes into DECISIONS.md.
-- [ ] **Gate 3:** write `DESIGN.md` with impeccable, from real `design/generate.mjs` output. It covers type scale, spacing, planes, states and motion, and no hand-written hex (the token pipeline stays the only colour source).
+- [x] Owner confirms or overrides the SHAPE-BRIEF gate points: §3 editorial voice, §4 the 11–13px scale, §9 palette arrow-keys, §13.1. Each goes into DECISIONS.md. [C-22]
+- [x] **Gate 3:** write `DESIGN.md` with impeccable, from real `design/generate.mjs` output. It covers type scale, spacing, planes, states and motion, and no hand-written hex (the token pipeline stays the only colour source). [C-23]
 - [ ] **Gate 4:** wireframe every 1.0 surface as a `design` canvas published as an artifact, using real token values: shell at rest, the pane-1 nav and rail, the pane-2 list with Direction B instrument rows, pane-3 detail with charts and the docked composer, the palette, the context bar and floating toolbar, empty/loading/error/crashed-plugin states, **the plugin manager (Step 6b)**, and each theme. Include benchmark side-by-sides against VS Code, Linear, Raycast and Outlook/Teams.
 - [ ] Impeccable critique pass on the wireframes by an agent that did not draw them (D3). Findings resolved on the canvas, not in code.
-- [ ] **Owner approves gate 4.** Steps 4–6 and 6b's UI implement the approved wireframes, and a live impeccable pass on the running app checks the result against them.
+- [x] **Owner approves gate 4:** the six gate-4 screens are approved (D-45). [C-24]
+- [ ] Steps 4–6 and 6b's UI implement the approved wireframes, and a live impeccable pass on the running app checks the result against them.
 
-## Step 4 — Redesign wave 2: charts  (3/3)  — `opus`, design discovery
-- [x] Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: #112 (title overprint), #113 (title outside the token system, dark contrast), #111 (contrast gate measured against a background the app never paints). Landed in the charts PR; the contrast check now runs in `tokens:check`. #146 (Database chart clipped) filed, not fixed.
-- [x] Browser-lane cases, mutation-probed. Revert the fix and watch them go red. Whole-fix revert re-run at landing; result in the charts PR body.
-- [x] Review → `verify` → merge (per D-30). Record and `VERIFY_EXIT` in the charts PR body.
+## Step 4 — Redesign wave 2: charts  (4/4)  — `opus`, design discovery
+- [x] Stream A, disjoint files `echartsRenderer.ts`, `chart/*`, `e2e/chart.spec.ts`: repairs #112 (title overprint) and #113 (title outside the token system, dark contrast), and addresses #111 (contrast gate measured against a background the app never paints), which stays open. Landed in the charts PR. #146 (Database chart clipped) filed, not fixed. [C-15]
+- [x] The chart contrast check runs in `tokens:check`, and so inside `verify`. [C-27]
+- [x] Browser-lane cases, mutation-probed. Revert the fix and watch them go red. Whole-fix revert re-run at landing; result in the charts PR body. [C-16]
+- [x] Review → `verify` → merge (per D-30). Record and `VERIFY_EXIT` in the charts PR body. [C-17]
 
 ## Step 5 — Redesign wave 3: the system  (0/4)  — `opus`
 - [ ] Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6).
@@ -156,7 +158,7 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 - [ ] Review → `verify` → merge. Owner views the packaged build.
 
 ## Step 6b — Runtime plugin host  (1/7)  — `opus` (design discovery, security-relevant)
-- [x] **ADR-0006 first, before any code.** Accepted 2026-09-18 on D-46 to D-48, with ADR-0001 Amendment P; see `docs/adr/0006-runtime-plugin-host.md`. Covers the manifest format; where plugins live (per-user `app.getPath('userData')/plugins`); how they load (a custom protocol serving each plugin's bundle into the extension `WebContentsView`, with no `nodeIntegration` and a context-isolated preload); and install sources (a local `.lwplugin` package, plus a GitHub Release URL). The ADR must use ADR-0001 Amendment E vocabulary: a plugin runs **in the extension renderer, with no boundary between plugins**, which is crash containment, not isolation. D-23 stays: first-party plugins only.
+- [x] **ADR-0006 first, before any code.** Accepted 2026-09-18 on D-46 to D-48, with ADR-0001 Amendment P; see `docs/adr/0006-runtime-plugin-host.md`. Covers the manifest format; where plugins live (per-user `app.getPath('userData')/plugins`); how they load (a custom protocol serving each plugin's bundle into the extension `WebContentsView`, with no `nodeIntegration` and a context-isolated preload); and install sources (a local `.lwplugin` package, plus a GitHub Release URL). The ADR must use ADR-0001 Amendment E vocabulary: a plugin runs **in the extension renderer, with no boundary between plugins**, which is crash containment, not isolation. D-23 stays: first-party plugins only. [C-18]
 - [ ] Integrity: the manifest carries a `sha512` of the bundle, and the loader refuses a mismatch. This is **entry-point validation** at install, not an integrity control against a hostile local user. The claim is written only once a named test pins it.
 - [ ] Contract: lifecycle hooks (#17: `onActivate`/`onDeactivate`/`onRelease`); `hostApiVersion` in the manifest, with the host refusing a major mismatch (#28/#32, #68 closed with a decision row); a mutable nav tree (#16); badge clear (#80). #91 is decided or fixed.
 - [ ] A plugin-manager surface in host chrome (a palette command plus a pane-1 view): list, enable/disable, remove, and per-plugin error state with a retry.
@@ -172,7 +174,7 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 
 ## Step 7 — Production hardening  (1/5)  — `sonnet`
 - [ ] #86 observability, minimum version (logging and asar exclusion landed with the hardening PR; attaching sourcemaps to the release waits for step 8): `onerror`/`unhandledrejection` in the renderer and `process.on('uncaughtException')` in main, logged to a rotating file under `app.getPath('logs')`. Sourcemaps kept out of the asar and attached to the release. **No telemetry leaves the machine** (no endpoint exists or is declared).
-- [x] #85 for Electron: set Vite `build.target` to the Chromium version Electron 43 ships. The Safari half is moot because the target is Electron only. Verify that `base` is correct for `file://` loading by launching the packaged app. `chrome150`, measured from Electron 43.2.0; the packaged renderer loads over the `shellux://` scheme, not `file://`, and the packaged app starts.
+- [x] #85 for Electron: set Vite `build.target` to the Chromium version Electron 43 ships. The Safari half is moot because the target is Electron only. Verify that `base` is correct for `file://` loading by launching the packaged app. `chrome150`, measured from Electron 43.2.0; the packaged renderer loads over the `shellux://` scheme, not `file://`. The packaged launch is recorded in #150 and is not re-checked by the row. [C-26]
 - [ ] Contract items not covered by Step 6b ship as documented limits (D-35, now narrowed to exclude #16, #17, #28, #32, #57, #68 and #80).
 - [ ] `DEVELOPER.md` gets a "Known limits at 1.0" section that names each deferred issue. `README.md`/`PRODUCT.md` state accessibility honestly: WCAG target withdrawn, no assistive technology ever run (#60).
 - [ ] `docs/INSTALL.md` for operators: install per-user, the SmartScreen "More info → Run anyway" path for an unsigned build, where the logs live, and how updates arrive (partly covers #43).
@@ -224,5 +226,4 @@ Default `sonnet` (Steps 0–3, 7–10, and all reviews by `lw-verifier`). `opus`
 - BuildCraft readiness bar R1–R7. There is no size estimate, so there is no 1.0 date.
 
 ## Blocking now
-1. Adversarial review of PR #115 (nobody has done it).
-2. Owner actions in Step 3: accept the risk statement, pick the licence (Apache-2.0 per sessionkeeper, or MIT as `package.json` says today), flip visibility.
+Rendered by `npm run status`, not written here: this list went stale once already (it named PR #115's review and the Step 3 owner actions long after both were done).

@@ -1,0 +1,77 @@
+{
+  "capturedAt": "2026-09-18",
+  "source": "GitHub REST POST /markdown, mode gfm, via gh api",
+  "cases": [
+    {
+      "name": "plain",
+      "expect": "must-pass",
+      "markdown": "- [x] one\n- [ ] two\n",
+      "html": "<ul class=\"contains-task-list\">\n<li class=\"task-list-item\"><input type=\"checkbox\" id=\"\" disabled=\"\" class=\"task-list-item-checkbox\" aria-label=\"Completed task\" checked=\"\"> one</li>\n<li class=\"task-list-item\"><input type=\"checkbox\" id=\"\" disabled=\"\" class=\"task-list-item-checkbox\" aria-label=\"Incomplete task\"> two</li>\n</ul>",
+      "githubTaskItems": 2
+    },
+    {
+      "name": "fenced",
+      "expect": "must-pass",
+      "markdown": "```\n- [x] not an item\n```\n",
+      "html": "<pre class=\"notranslate\"><code class=\"notranslate\">- [x] not an item\n</code></pre>",
+      "githubTaskItems": 0
+    },
+    {
+      "name": "indented",
+      "expect": "must-pass",
+      "markdown": "Para\n\n    - [x] code\n",
+      "html": "<p>Para</p>\n<pre class=\"notranslate\"><code class=\"notranslate\">- [x] code\n</code></pre>",
+      "githubTaskItems": 0
+    },
+    {
+      "name": "comment",
+      "expect": "must-pass",
+      "markdown": "<!--\n- [x] hidden\n-->\n",
+      "html": "",
+      "githubTaskItems": 0
+    },
+    {
+      "name": "link-definition",
+      "expect": "must-pass",
+      "markdown": "[a]: /url \"title\n- [x] b\"\n\n[a]\n",
+      "html": "<p>[a]: /url \"title</p>\n<ul class=\"contains-task-list\">\n<li class=\"task-list-item\"><input type=\"checkbox\" id=\"\" disabled=\"\" class=\"task-list-item-checkbox\" aria-label=\"Completed task\" checked=\"\"> b\"</li>\n</ul>\n<p>[a]</p>",
+      "githubTaskItems": 1
+    },
+    {
+      "name": "link-definition-x",
+      "expect": "must-fail",
+      "markdown": "[x]: /url\n\n- [x] item\n",
+      "html": "<ul>\n<li><a href=\"/url\">x</a> item</li>\n</ul>",
+      "githubTaskItems": 0
+    },
+    {
+      "name": "blockquote",
+      "expect": "must-pass",
+      "markdown": "> - [x] quoted\n",
+      "html": "<blockquote>\n<ul class=\"contains-task-list\">\n<li class=\"task-list-item\"><input type=\"checkbox\" id=\"\" disabled=\"\" class=\"task-list-item-checkbox\" aria-label=\"Completed task\" checked=\"\"> quoted</li>\n</ul>\n</blockquote>",
+      "githubTaskItems": 1
+    },
+    {
+      "name": "ordered-paren",
+      "expect": "must-pass",
+      "markdown": "1) [x] ordered\n",
+      "html": "<ol class=\"contains-task-list\">\n<li class=\"task-list-item\"><input type=\"checkbox\" id=\"\" disabled=\"\" class=\"task-list-item-checkbox\" aria-label=\"Completed task\" checked=\"\"> ordered</li>\n</ol>",
+      "githubTaskItems": 1
+    },
+    {
+      "name": "paragraph-continuation",
+      "expect": "must-fail",
+      "markdown": "Text\n2. [x] not an item\n",
+      "html": "<p>Text<br>\n2. [x] not an item</p>",
+      "githubTaskItems": 0
+    },
+    {
+      "name": "nbsp",
+      "expect": "must-fail",
+      "markdown": "- [x] nbsp\n",
+      "html": "<p>- [x] nbsp</p>",
+      "githubTaskItems": 0
+    }
+  ],
+  "note": "expect is this repository's verdict, not GitHub's: must-pass means the box linter must agree with GitHub's rendering, must-fail means the source is ambiguous and the linter must refuse it. link-definition-x is must-fail because GitHub renders no checkbox while remark reads a task item."
+}

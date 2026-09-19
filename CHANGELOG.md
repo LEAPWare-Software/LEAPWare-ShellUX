@@ -16,6 +16,21 @@ from so a reader can check it.
 
 ### Added
 
+- **The proof-of-completion protocol, PR A** (D-50, plan step 0c). `docs/claims.json`
+  holds 27 rows proving every ticked item in `docs/plans/v1-production.md`; the box
+  linter (`scripts/claims/lint-boxes.mjs`) fails a tick without a row whose `box` equals
+  the item, a wrong heading count, or an ambiguous task item; the prover
+  (`scripts/claims/prove-claims.mjs`) runs each row's allowlisted read-only checks and
+  probes (a mutation that must turn the row red); the evidence gate
+  (`scripts/claims/pr-evidence.mjs`) checks a PR body's Evidence, Not done and Review
+  record against its head SHA; `npm run status` renders each tick from the newest main
+  run and never prints "proven". Two workflows (`claims.yml`, `pr-evidence.yml`) run
+  them; **neither is a required check yet** (rollout step 4). Adversarial review of the
+  first version found two ticks weaker than their rows, a stale milestone claim and an
+  allowlist bypass by abbreviated git options; all were fixed before this landed, which
+  is the protocol catching its own first case. **Not done:** no rollout step has run on
+  GitHub; the `unshare` network restriction, the issue job and a timed-out run are
+  unmeasured on a runner.
 - **A Content-Security-Policy on every response the packaged renderer's scheme serves**
   (ADR-0006 step 1). `default-src 'self'; script-src 'self'; object-src 'none';
   base-uri 'none'; frame-ancestors 'none'; connect-src 'self'; style-src 'self'
