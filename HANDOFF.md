@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `31257bf` (#185, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `904e8bc` (#186, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
@@ -36,7 +36,9 @@ with a merge queue.
 
 - **Start here:** [`docs/handoff/next-session.md`](docs/handoff/next-session.md) (the plan, done and not done) and issue #187 (the cloud run's live state).
 
-- Nothing. Work stops here for the owner's instructions.
+- Three cloud lanes run unattended under `docs/cloud/runbook.md` (on branch
+  `cloud/runbook` until #188 lands). Gate 4 is approved (D-53, the owner's answer on
+  #189), so ADR-0006 step 9 and wave 4 are no longer blocked on it.
 
 ## The next step
 

@@ -1734,6 +1734,58 @@
       "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — tightened 2026-09-19 (proof audit): the old check only asked whether a DESIGN.md hex appeared ANYWHERE in the generated stylesheet, which a wrong-but-still-generated hex would satisfy; it also missed 3/8-digit hex and rgb()/hsl()/oklch() forms entirely. The new check binds each named colour to the CSS custom property named beside it in the body and compares against that property's own generated value."
     },
     {
+      "id": "C-24",
+      "box": "**Owner approves gate 4:** the six gate-4 screens are approved. D-45 recorded this on 2026-09-18; the owner did not recognise that row on 2026-09-19, so it was raised as #189 rather than settled by a routine; the owner answered #189 the same day and approved the screens, recorded as D-53, which is the row this tick cites.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/design-gates.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "d45_owner",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d45_screens_approved",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d53_owner",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d53_screens_approved",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d53_cites_189",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "gate 4 not yet approved (strikes the approval sentence in both D-45 and D-53)",
+        "edits": [
+          {
+            "file": "docs/DECISIONS.md",
+            "replace": [
+              "gate-4 screens are approved",
+              "gate-4 screens are awaiting approval"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-19",
+      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a) — retired on 2026-09-19 by the proof audit, because D-45 recorded an owner approval the owner did not then recognise; restored the same day when the owner answered #189 and approved gate 4. The row now also requires D-53, the row carrying that answer, so the tick no longer rests on D-45 alone."
+    },
+    {
       "id": "C-25",
       "box": "Create GitHub milestone **v1.0.0** and move every issue this plan closes onto it; what is deferred goes to **1.1**. The milestone is the gate, live-checked: 0 open issues currently carry no milestone.",
       "class": "github",
@@ -3086,45 +3138,5 @@
       "addedBy": "plan step 6b tick (docs/proof-rows-done-work) — tightened 2026-09-19 (proof audit): install_mismatch_test and serve_mismatch_test only grepped the test file for the title string, so they stayed green even when the install-time comparison was inverted (measured: git show + sed inversion left both =1 on the old check). They now run each named Vitest test for real (spawnSync to node_modules/vitest/vitest.mjs, not through the argv allowlist, which governs only the row's own registered command) and assert exit 0."
     }
   ],
-  "retired": [
-    {
-      "id": "C-24",
-      "box": "**Owner approves gate 4:** the six gate-4 screens are approved (D-45).",
-      "class": "repo",
-      "checks": [
-        [
-          "node",
-          "scripts/claims/checks/design-gates.mjs"
-        ]
-      ],
-      "expect": [
-        {
-          "key": "d45_owner",
-          "op": "==",
-          "value": 1
-        },
-        {
-          "key": "d45_screens_approved",
-          "op": "==",
-          "value": 1
-        }
-      ],
-      "probe": {
-        "name": "D-45 not yet approved",
-        "edits": [
-          {
-            "file": "docs/DECISIONS.md",
-            "replace": [
-              "gate-4 screens are approved",
-              "gate-4 screens are awaiting approval"
-            ]
-          }
-        ]
-      },
-      "provenOn": "2026-09-18",
-      "addedBy": "proof-of-completion PR A (feat/proof-of-completion-pr-a)",
-      "retiredBy": "proof audit 2026-09-19 (item 32)",
-      "reason": "D-45 recorded an owner approval the owner does not recognise as theirs; the row cited that approval as proven fact. The plan item is unticked (docs/plans/v1-production.md, Step 3b) with a one-line reason and a link to the screens for real owner review. D-45 is corrected in place (struck through, annotated, not deleted) rather than rewritten."
-    }
-  ]
+  "retired": []
 }

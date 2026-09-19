@@ -54,9 +54,9 @@ nothing else counts.
 | 0b | withdrawn | | |
 | 0c Proof of completion | 5/5 | nothing; the protocol is in force | |
 | 1 Record the decisions | 1/2 | strike D-27 in `docs/DECISIONS.md` with its reversal written; then item 1 can be ticked (it is currently false on that clause only) | agent |
-| 2 Context-file caps | 4/4 | nothing | |
+| 2 Context-file caps | 4/5 | the "jsdom is blind" body still has to move from `CLAUDE.md` to `docs/traps.md`, leaving a pointer behind. It is the half of C-09 the proof audit split off and left unticked, and the plan file heads this step `(4/5)` for it | agent |
 | 3 Go public | 11/15 | (a) the D-27 reversal write-up (same edit as step 1); (b) `SECURITY.md` reordered as the item says, with "1.x: latest release only"; (c) paste raw API responses on #74 and #103; (d) README top matter, long body moved to `docs/` | agent |
-| 3b Design gates 3 and 4 | 3/6 | gate-4 wireframes and the critique exist as a published artifact but are **not recorded in the repo**, so they cannot be ticked: commit the canvas source or a record under `docs/design/` with the critique, then add rows. The live impeccable pass on the running app comes after the UI steps | agent, owner looks |
+| 3b Design gates 3 and 4 | 3/6 | the owner approved gate 4 on 2026-09-19 (answer on #189, recorded as D-53), so that item is ticked. What is left: the gate-4 wireframes and the critique exist as a published artifact but are **not recorded in the repo**, so neither can be ticked — PR #188 lands the canvas source, the PNGs and a README under `docs/design/gate4/`, and the rows follow it. The live impeccable pass on the running app comes after the UI steps | agent, owner looks |
 | 4 Charts | 4/4 | nothing | |
 | 5 Wave 3 | 3/4 | W3-2 to W3-8 (table below), then **the owner looks at the packaged app** | agent, owner |
 | 6 Wave 4 instrument layer | 0/3 | per-row series with threshold bands, list minimap, overview state; browser cases and `tokens:check`; owner views the packaged build | agent, owner |
@@ -157,10 +157,10 @@ edits `HANDOFF.md` and `CHANGELOG.md`, so landings serialise.
 Two independent `lw-verifier` agents audited all 43 ticked rows at `904e8bc` on 2026-09-19. They found 3 FALSE (C-09, C-25, C-32), 11 WEAK and about 17 UNDERPROVEN. The owner ordered **all of them fixed, none handed off**.
 
 - Items 1–14 (the false and weak rows) are in commit `9f47f87` on branch `docs/handoff-package`.
-- Items 15–32 (the underproven rows, the C-22 CTO wording, the C-24 untick with the D-45 correction, and the gitleaks triage) were in progress when the laptop shut down. Their work in progress is committed on the same branch, **unverified**.
+- Items 15–32 (the underproven rows, the C-22 CTO wording, the C-24 and D-45 gate-4 question, and the gitleaks triage) were in progress when the laptop shut down. Their work in progress is committed on the same branch, **unverified**.
 - **The cloud lane C conductor finishes them first:** the item list is in `docs/cloud/runbook.md`.
 - #172 was milestoned v1.0.0.
-- C-24: the owner does not recognise the gate-4 approval recorded in D-45. It stays unticked until the owner reviews the screens.
+- C-24: the owner did not recognise the gate-4 approval recorded in D-45 on 2026-09-19, so it was raised as #189 rather than settled by a routine. **The owner answered #189 the same day and approved gate 4**; the answer is recorded as D-53 and C-24 is ticked citing it. ADR-0006 step 9 and redesign wave 4 are unblocked by that answer, each still subject to its own sequencing.
 
 ## 6. How to report status
 

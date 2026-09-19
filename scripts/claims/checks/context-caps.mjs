@@ -10,13 +10,22 @@ import { spawnSync } from 'node:child_process';
  * at `5b3a6ff~1` section by section, allowing only the relative-link rewrites the move
  * itself needed (`](docs/...)` / `](CLAUDE.md)` become `](../...)` / `](../../CLAUDE.md)`
  * from the archive's new home under docs/history/). Any other diff fails the row.
+ *
+ * "I compared them and they differ" and "I could not compare them" are deliberately NOT
+ * the same value. This comparison needs `5b3a6ff~1` in the local object store, and
+ * actions/checkout's default depth-1 clone does not have it: the check returned a bare
+ * 0, the row went red on all three CI runners, and the message read as a real mismatch
+ * in a tree where nothing had changed. `unreadable:<why>` is not a number, so the row is
+ * still red — it just says which of the two happened. `.github/workflows/ci.yml` now
+ * checks out full history; this keeps the next such environment honest rather than
+ * silent.
  */
 function verbatimArchiveMatch() {
   const preRecast = spawnSync('git', ['show', '5b3a6ff~1:HANDOFF.md'], { encoding: 'utf8' });
-  if (preRecast.status !== 0) return { archiveVerbatim: 0, reason: 'could not read 5b3a6ff~1:HANDOFF.md' };
+  if (preRecast.status !== 0) return { archiveVerbatim: 'unreadable:no-5b3a6ff-in-history' };
   const oldLines = preRecast.stdout.split('\n');
   const oldStart = oldLines.findIndex((l) => l.startsWith('## 2. '));
-  if (oldStart === -1) return { archiveVerbatim: 0, reason: 'no "## 2." heading in the pre-recast HANDOFF.md' };
+  if (oldStart === -1) return { archiveVerbatim: 'unreadable:no-section-2-heading-in-source' };
   const oldSection = oldLines.slice(oldStart).join('\n');
 
   if (!existsSync('docs/history/handoff-archive-2026-08.md')) return { archiveVerbatim: 0, reason: 'archive file missing' };

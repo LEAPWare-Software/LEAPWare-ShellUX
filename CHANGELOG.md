@@ -16,6 +16,20 @@ from so a reader can check it.
 
 ### Added
 
+- **Gate 4 is approved, and the approval is recorded where a routine cannot have written
+  it** (D-53; register row C-24; the question was #189). D-45 recorded an owner approval
+  of the six gate-4 screens on 2026-09-18 which the owner did not recognise on
+  2026-09-19. A gate sign-off and the reversal of an owner decision row are both
+  owner-only, so no routine settled it either way: the conflict was filed as #189 and
+  gate 4 was treated as unapproved meanwhile, which blocked ADR-0006 step 9 and redesign
+  wave 4. The owner answered #189 on 2026-09-19 and approved the screens. **D-53 carries
+  that answer and is the row the approval now rests on**; D-45 stands as written, because
+  the answer confirmed it rather than contradicting it. C-24 is restored from the retired
+  rows and now checks D-53 as well as D-45 — that D-53 exists, that its caller is the
+  owner, and that it names the issue the answer arrived on — so the tick can no longer
+  rest on D-45 alone. Both ADR-0006 step 9 and wave 4 are unblocked by the answer, each
+  still subject to its own sequencing.
+
 - **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
   settings, read back as enabled (private vulnerability reporting re-proven on every
@@ -60,6 +74,21 @@ from so a reader can check it.
 
 ### Fixed
 
+- **`verify` could not run the register's C-08 row in CI, and the failure looked like a
+  real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
+  clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast
+  original by reading `git show 5b3a6ff~1:HANDOFF.md`, and a depth-1 clone does not carry
+  that commit, so `test:scripts` failed on all three runners while passing on every full
+  clone — including `claims.yml`, which already took `fetch-depth: 0` for its own reason.
+  Reproduced with `git clone --depth 1` before the fix. The checkout now takes full
+  history. **What made it possible:** the check conflated "I compared them and they
+  differ" with "I could not compare them" — both printed `0` — so the message named a
+  mismatch in a tree where nothing had changed, and no environment difference was
+  visible. The unreadable case now prints `unreadable:no-5b3a6ff-in-history`, which is
+  still red but says which of the two happened, and two cases pin both branches.
+  *Tests:* "prints 1 on this tree, where the pre-recast commit is readable",
+  "names the unreadable history instead of reporting a mismatch".
+
 - **Proof audit: three false claims corrected (C-09, C-25, C-32), eleven checks
   tightened (C-07, C-10, C-12, C-14, C-18, C-23, C-29, C-30, C-33, C-41, C-42).** C-09
   claimed the "jsdom is blind" body had moved to `docs/traps.md`; it had not, and the
@@ -78,6 +107,8 @@ from so a reader can check it.
   test title instead of running the test. Each tightened check was probed red on the
   defect it now catches, then green after the fix. `docs/claims.json` and
   `scripts/claims/checks/*` carry the detail.
+
+- **`SECURITY.md` said private vulnerability reporting did not exist here.** It was
   true while the repository was private; after it went public the form was enabled
   (`{"enabled":true}`, read 2026-09-19) and the file was not updated. It now names the
   form beside the email address, and the old note is in the past tense.
