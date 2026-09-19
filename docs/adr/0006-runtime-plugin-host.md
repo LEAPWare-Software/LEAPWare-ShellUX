@@ -223,8 +223,11 @@ main a renderer-supplied path).
 > sha512, fault } } }`, where `fault` is `null` or `{ state: "files-changed" |
 > "crashed", reason, at }` — D-48 keeps "files changed" apart from a crash, so
 > the "crash record" above is a fault record with its state named. It is read
-> with `JSON.parse` and validated, and one that fails refuses every operation
-> and is never overwritten. `plugin.json` is `serializeManifest` of the
+> with `JSON.parse` and validated. One that reads but fails is renamed to
+> `state.json.corrupt-<time>`, reported to the diagnostics log, and the store
+> starts empty — its plugins unlisted until reinstalled, their directories left
+> on disk; one that cannot be read at all refuses the operation. Every write is
+> flushed before the rename that publishes it. `plugin.json` is `serializeManifest` of the
 > validated manifest, never the package's bytes — the step-3 invariant.
 > Transient `.staging-*` and `.retired-*` directories start with `.`, which no
 > id can. An incompatible package **is installed**, listed as incompatible with
@@ -240,8 +243,12 @@ main a renderer-supplied path).
 > old version, switches state.json, then deletes the old directory", "a
 > reinstall of the same version clears the files-changed state";
 > `electron/__tests__/pluginIpc.test.ts` — "installs from the path main's
-> picker returns, and takes no path from the renderer". **Not built:** the GitHub
-> URL source (step 11), and any sweep of a `.staging-*` left by a crash mid-install.
+> picker returns, and takes no path from the renderer";
+> `electron/__tests__/pluginScheme.test.ts` — "sets aside a state.json that is
+> not UTF-8 JSON, reports it, and starts empty", "flushes state.json to disk
+> before renaming it into place". **Not built:** the GitHub URL source (step
+> 11), and any sweep of a `.staging-*` or `.retired-*` directory left by a
+> crash mid-install, or of a directory a set-aside `state.json` orphaned.
 
 ### 3. The versioned contract: one number, checked before the bundle is ever served — #68 decided
 
@@ -399,6 +406,11 @@ design statement and no document may cite the check as a property of the shell.*
 > on disk after install", "serves a bundle whose file and state.json record were
 > rewritten together, because state.json is as writable as the bundle". Both
 > doors now exist in code; no plugin reaches a renderer before step 6.
+> **A stated limit:** every serve reads and hashes the entry on main's thread,
+> with no cache and no rate limit, so the extension surface can make main do
+> that work — up to 8 MiB a request — as often as it asks. A cache keyed on
+> mtime and size was rejected: it would pass a same-size edit that kept its
+> mtime, and the read it cannot save is most of the cost.
 
 **Rejected for 1.0 (owner, D-47):** signing packages (Ed25519 via `node:crypto`, key
 in CI). It is the one mechanism here that would make D-23 checkable at the URL door,

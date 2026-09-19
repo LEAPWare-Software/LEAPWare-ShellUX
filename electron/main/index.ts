@@ -436,7 +436,14 @@ function registerRendererProtocol(plugins: PluginStore): void {
  * ============================================================================
  */
 function openPluginStore(): PluginStore {
-  return createPluginStore({ root: join(app.getPath('userData'), 'plugins'), fs: nodePluginStoreFs, warn });
+  return createPluginStore({
+    root: join(app.getPath('userData'), 'plugins'),
+    fs: nodePluginStoreFs,
+    warn,
+    report: (message) => {
+      logDiagnostics({ source: 'main', kind: 'plugin-state-quarantined', message });
+    },
+  });
 }
 
 /**

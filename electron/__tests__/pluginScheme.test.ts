@@ -8,6 +8,7 @@ import { HOST_API_VERSION } from '../main/plugins/hostContract';
 import { PACKAGE_ENTRY, PACKAGE_FORMAT, serializeManifest } from '../main/plugins/pluginPackage';
 import { createPluginRoute, isPluginRequest, pluginEntryPath } from '../main/plugins/pluginRoute';
 import {
+  CORRUPT_SUFFIX,
   FILES_CHANGED_REASON,
   MANIFEST_FILE,
   STATE_FILE,
@@ -84,7 +85,10 @@ interface Harness {
   readonly state: () => Json;
 }
 
-function harness(fs: PluginStoreFs = nodePluginStoreFs, hostVersion = '1.0'): Harness {
+/** `state.json.corrupt-` plus the harness clock's time, colons and dots made dashes. */
+const CORRUPT_NAME = `${STATE_FILE}${CORRUPT_SUFFIX}2026-09-19T12-00-00-000Z`;
+
+function harness(fs: PluginStoreFs = nodePluginStoreFs, hostVersion = '1.0', reports: string[] = []): Harness {
   const base = mkdtempSync(join(tmpdir(), 'shellux-plugins-'));
   cleanup.push(base);
   const root = join(base, 'userData', 'plugins');
@@ -105,6 +109,7 @@ function harness(fs: PluginStoreFs = nodePluginStoreFs, hostVersion = '1.0'): Ha
     warn,
     hostVersion,
     now: () => new Date('2026-09-19T12:00:00.000Z'),
+    report: (message) => reports.push(message),
   });
   const handle = createRendererHandler({
     root: dist,
@@ -457,16 +462,50 @@ describe('the plugin store', () => {
     ['a fault reason that is not a string', JSON.stringify({ format: STATE_FORMAT, plugins: { mail: { ...good, fault: { state: 'crashed', reason: 1, at: '' } } } })],
     ['a fault reason over the bound', JSON.stringify({ format: STATE_FORMAT, plugins: { mail: { ...good, fault: { state: 'crashed', reason: 'x'.repeat(1025), at: '' } } } })],
     ['a fault time that is not a string', JSON.stringify({ format: STATE_FORMAT, plugins: { mail: { ...good, fault: { state: 'files-changed', reason: '', at: 0 } } } })],
-  ])('refuses every operation over a state.json that is %s, and never overwrites it', async (_what, text) => {
+  ])('sets aside a state.json that is %s, and starts empty', (_what, text) => {
     const h = harness();
     mkdirSync(h.root, { recursive: true });
     writeFileSync(join(h.root, STATE_FILE), text);
-    expect(reasonOf(h.store.list())).toMatch(/^state\.json could not be read: /);
-    expect(reasonOf(h.store.install(h.pkg('mail.lwplugin', packageText())))).toMatch(/^state\.json could not be read: /);
-    expect(reasonOf(h.store.setEnabled('mail', true))).toMatch(/^state\.json could not be read: /);
-    expect(reasonOf(h.store.remove('mail'))).toMatch(/^state\.json could not be read: /);
+    expect(valueOf(h.store.list())).toEqual([]);
+    expect(readFileSync(join(h.root, CORRUPT_NAME), 'utf-8')).toBe(text);
+    expect(existsSync(join(h.root, STATE_FILE))).toBe(false);
+  });
+
+  it('sets aside a state.json that is not UTF-8 JSON, reports it, and starts empty', async () => {
+    const reports: string[] = [];
+    const h = harness(nodePluginStoreFs, '1.0', reports);
+    h.install(packageText());
+    writeFileSync(join(h.root, STATE_FILE), '{');
+    // Nothing is served on the word of a state.json that does not validate.
     expect((await h.serve(pluginEntryPath('mail', '1.0.0'))).status).toBe(404);
-    expect(readFileSync(join(h.root, STATE_FILE), 'utf-8')).toBe(text);
+    expect(readFileSync(join(h.root, CORRUPT_NAME), 'utf-8')).toBe('{');
+    expect(reports).toEqual([
+      `plugin store: state.json could not be read (it is not a UTF-8 JSON document); moved to ${join(h.root, CORRUPT_NAME)} and starting with no plugins installed.`,
+    ]);
+    expect(h.warnings).toContain(reports[0]);
+    // Not locked: the store works again, and a reinstall recovers the plugin.
+    expect(valueOf(h.store.list())).toEqual([]);
+    expect(h.install(packageText()).status).toBe('enabled');
+    expect(await (await h.serve(pluginEntryPath('mail', '1.0.0'))).text()).toBe(BUNDLE);
+  });
+
+  it('refuses, and overwrites nothing, when a state.json that does not validate cannot be set aside', () => {
+    const h = harness(faultyFs([], (op, path) => (op === 'renameSync' && path.startsWith(`${STATE_FILE} -> `) ? new Error('locked') : undefined)));
+    mkdirSync(h.root, { recursive: true });
+    writeFileSync(join(h.root, STATE_FILE), '[]');
+    expect(reasonOf(h.store.list())).toBe(
+      'state.json could not be read (it is not a shellux-plugin-state/1 document) and could not be set aside: locked',
+    );
+    expect(readFileSync(join(h.root, STATE_FILE), 'utf-8')).toBe('[]');
+  });
+
+  it('flushes state.json to disk before renaming it into place', () => {
+    const log: string[] = [];
+    const h = harness(faultyFs(log));
+    h.install(packageText());
+    const flushed = log.indexOf('fsyncFile .state.json.tmp');
+    expect(flushed).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf(`renameSync .state.json.tmp -> ${STATE_FILE}`)).toBe(flushed + 1);
   });
 
   it('refuses a state.json that is not a regular file', () => {
@@ -475,7 +514,7 @@ describe('the plugin store', () => {
     expect(reasonOf(h.store.list())).toBe('state.json could not be read: the state.json is not a regular file');
   });
 
-  it('uses the host contract and the clock by default', () => {
+  it('uses the host contract, the clock and a silent report by default', () => {
     const base = mkdtempSync(join(tmpdir(), 'shellux-plugins-'));
     cleanup.push(base);
     const store = createPluginStore({ root: join(base, 'plugins'), fs: nodePluginStoreFs, warn: () => undefined });
@@ -486,6 +525,10 @@ describe('the plugin store', () => {
     const fault = (JSON.parse(readFileSync(join(base, 'plugins', STATE_FILE), 'utf-8')) as { plugins: { mail: { fault: { at: string } } } })
       .plugins.mail.fault;
     expect(Number.isNaN(Date.parse(fault.at))).toBe(false);
+    // With no diagnostics log given, a set-aside state.json is still set aside.
+    writeFileSync(join(base, 'plugins', STATE_FILE), '{');
+    expect(valueOf(store.list())).toEqual([]);
+    expect(readdirSync(join(base, 'plugins')).some((name) => name.startsWith(`${STATE_FILE}${CORRUPT_SUFFIX}`))).toBe(true);
   });
 });
 
@@ -516,6 +559,10 @@ function faultyFs(log: string[], fail: (op: string, path: string) => unknown = (
     writeFileSync: (path, data) => {
       check('writeFileSync', rel(path));
       nodePluginStoreFs.writeFileSync(path, data);
+    },
+    fsyncFile: (path) => {
+      log.push(`fsyncFile ${rel(path)}`);
+      nodePluginStoreFs.fsyncFile(path);
     },
     renameSync: (from, to) => {
       const line = `${rel(from)} -> ${rel(to)}`;

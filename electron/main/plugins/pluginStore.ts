@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compareHostApiVersion, quoteUntrusted } from './compatibility.js';
 import { EXTENSION_ID_PATTERN, HOST_API_VERSION, RESERVED_IDS } from './hostContract.js';
@@ -83,13 +83,29 @@ import type { PluginManifest, PluginPackageFs } from './pluginPackage.js';
  * writable as the bundle".
  *
  * ---------------------------------------------------------------------------
+ * A `state.json` THAT DOES NOT VALIDATE IS SET ASIDE, NOT OBEYED AND NOT FATAL.
+ * ---------------------------------------------------------------------------
+ * It is renamed to `state.json.corrupt-<time>`, reported to the diagnostics log
+ * (`report`) and to `warn`, and the store starts empty: every plugin is then
+ * unlisted and unserved until it is reinstalled, and its directory stays on
+ * disk. Every write of `state.json` is flushed (`fsyncFile`) before the rename
+ * that publishes it. *Tests:* `electron/__tests__/pluginScheme.test.ts` —
+ * "sets aside a state.json that is not UTF-8 JSON, reports it, and starts
+ * empty", "flushes state.json to disk before renaming it into place".
+ *
+ * ---------------------------------------------------------------------------
  * NOTHING HERE THROWS, AND EVERY OPERATION IS SYNCHRONOUS.
  * ---------------------------------------------------------------------------
  * Each operation returns a result or one reason. The filesystem is synchronous
  * and injected (`PluginStoreFs`, the seam `diagnosticsLog.ts` and
  * `pluginPackage.ts` use), so an operation runs to completion inside one turn
  * of main's event loop and two IPC calls cannot interleave inside one. The cost,
- * accepted: a serve reads and hashes up to 8 MiB on main's thread.
+ * accepted and NOT bounded: every serve reads and hashes the entry — up to
+ * 8 MiB — on main's thread, and nothing caches the hash or limits the rate, so
+ * the extension surface, where plugin code runs, can make main do that work as
+ * often as it requests the URL. A cache keyed on mtime and size was rejected: it
+ * would skip the rehash for a same-size edit that kept its mtime, and the read
+ * it would not save is most of the cost. A stated limit, not a fix.
  * ============================================================================
  */
 
@@ -117,6 +133,8 @@ export const FILES_CHANGED_REASON = "the installed files no longer match this pl
 const STAGING_PREFIX = '.staging-';
 const RETIRED_PREFIX = '.retired-';
 const STATE_TEMP_FILE = '.state.json.tmp';
+/** `state.json.corrupt-<time>`: carries a `.`, so no id can name it. */
+export const CORRUPT_SUFFIX = '.corrupt-';
 
 /** A fault main recorded. `crashed` is decision 9's, written from step 6; `files-changed` is D-48's. */
 export interface PluginFault {
@@ -164,6 +182,8 @@ export interface PluginStoreFs extends PluginPackageFs {
   /** Creates a directory named `prefix` plus a unique suffix, and returns its path. */
   mkdtempSync: (prefix: string) => string;
   writeFileSync: (path: string, data: Uint8Array) => void;
+  /** Flush a written file's contents to the disk before it is renamed into place. */
+  fsyncFile: (path: string) => void;
   renameSync: (from: string, to: string) => void;
   /** Recursive and forced: a missing path is not an error. */
   rmSync: (path: string) => void;
@@ -180,6 +200,14 @@ export const nodePluginStoreFs: PluginStoreFs = {
   writeFileSync: (path, data) => {
     writeFileSync(path, data);
   },
+  fsyncFile: (path) => {
+    const fd = openSync(path, 'r+');
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+  },
   renameSync,
   rmSync: (path) => {
     rmSync(path, { recursive: true, force: true });
@@ -193,8 +221,13 @@ export interface PluginStoreOptions {
   readonly warn: (message: string) => void;
   /** The host's contract; a test passes another to put a plugin on either side of the rule. */
   readonly hostVersion?: string;
-  /** When a fault is recorded. */
+  /** When a fault is recorded, and the suffix a quarantined `state.json` gets. */
   readonly now?: () => Date;
+  /**
+   * The diagnostics log (`index.ts` passes `logDiagnostics`): where a
+   * quarantined `state.json` is reported, because `warn` reaches only stderr.
+   */
+  readonly report?: (message: string) => void;
 }
 
 export interface PluginStore {
@@ -301,13 +334,18 @@ export function createPluginStore(options: PluginStoreOptions): PluginStore {
   const { root, fs, warn } = options;
   const hostVersion = options.hostVersion ?? HOST_API_VERSION;
   const now = options.now ?? ((): Date => new Date());
+  const report = options.report ?? ((): void => undefined);
   const statePath = join(root, STATE_FILE);
 
   function versionDirectory(id: string, version: string): string {
     return join(root, id, version);
   }
 
-  /** Every operation starts here: a `state.json` that cannot be read refuses the operation, and is never overwritten. */
+  /**
+   * Every operation starts here. A `state.json` that cannot be READ — not a
+   * regular file, over the bound, an I/O error — refuses the operation and is
+   * left alone; one that reads but does not parse or validate is quarantined.
+   */
   function readState(): Map<string, PluginRecord> {
     if (!fs.existsSync(statePath)) return new Map();
     const read = readBoundedFile(fs, statePath, MAX_STATE_BYTES, STATE_FILE);
@@ -315,16 +353,41 @@ export function createPluginStore(options: PluginStoreOptions): PluginStore {
     try {
       return parseState(read.bytes);
     } catch (error) {
-      refuse(`${STATE_FILE} could not be read: ${describeError(error)}`);
+      return quarantineState(describeError(error));
     }
   }
 
-  /** Write beside, then rename over: a reader sees the old file or the new one, never half of one. */
+  /**
+   * A `state.json` that read but did not parse or validate is renamed aside to
+   * `state.json.corrupt-<time>`, reported, and replaced by an empty store, so
+   * one bad write does not lock every operation for good. It is renamed, never
+   * deleted: the operator keeps the evidence. If the rename fails, nothing is
+   * overwritten and the operation is refused.
+   */
+  function quarantineState(detail: string): Map<string, PluginRecord> {
+    const aside = join(root, `${STATE_FILE}${CORRUPT_SUFFIX}${now().toISOString().replace(/[:.]/g, '-')}`);
+    try {
+      fs.renameSync(statePath, aside);
+    } catch (error) {
+      refuse(`${STATE_FILE} could not be read (${detail}) and could not be set aside: ${describeError(error)}`);
+    }
+    const message = `plugin store: ${STATE_FILE} could not be read (${detail}); moved to ${aside} and starting with no plugins installed.`;
+    warn(message);
+    report(message);
+    return new Map();
+  }
+
+  /**
+   * Write beside, flush, then rename over: a reader sees the old file or the new
+   * one, never half of one, and the flush means the rename does not reach the
+   * disk before the contents it names.
+   */
   function writeState(records: ReadonlyMap<string, PluginRecord>): void {
     const temp = join(root, STATE_TEMP_FILE);
     try {
       fs.mkdirSync(root);
       fs.writeFileSync(temp, serializeState(records));
+      fs.fsyncFile(temp);
       fs.renameSync(temp, statePath);
     } catch (error) {
       refuse(`${STATE_FILE} could not be written: ${describeError(error)}`);

@@ -79,8 +79,14 @@ const LISTENER_REGISTRATION = /(?:add|remove)EventListener/i;
  * Anchored, so `onmessage`, `onViolation` and `once`-containing words are not
  * swept in: the claim is about a registration call, not about a name that
  * happens to start with `on`.
+ *
+ * `handle`, `handleOnce` and `removeHandler` are the invoke-channel spellings
+ * (`ipcMain.handle`, `protocol.handle`): not `EventEmitter` methods, but a
+ * registration of a handler for a message from outside the process all the
+ * same, so they are counted with the rest (ADR-0006 step 4 added the first
+ * `ipcMain.handle`).
  */
-const EMITTER_REGISTRATION = /^(?:on|once|off|addListener|prependListener|removeListener)$/;
+const EMITTER_REGISTRATION = /^(?:on|once|off|addListener|prependListener|removeListener|handle|handleOnce|removeHandler)$/;
 
 /** The escape hatch's event name; see claim 3. */
 const BEFORE_INPUT_EVENT = /^before-input-event$/;
@@ -100,7 +106,12 @@ const EMITTER_OCCURRENCES: Readonly<Record<string, Readonly<Record<string, numbe
     // `window-all-closed` — plus the two process-level fault handlers GitHub
     // issue #86 added: `process.on('uncaughtException', ...)` and
     // `process.on('unhandledRejection', ...)`.
-    'main/index.ts': Object.freeze({ on: 9 }),
+    'main/index.ts': Object.freeze({ on: 9, handle: 1 }),
+    // `protocol.handle` above is the shellux:// scheme handler. Here: the five
+    // plugin-management invoke channels, registered through the ONE `ipc.handle`
+    // call inside `guarded`, and — as in `portAdapter.ts` below — one
+    // DECLARATION: the `PluginIpcMain` interface restates `handle`.
+    'main/plugins/pluginIpc.ts': Object.freeze({ handle: 2 }),
     // The escape hatch, and nothing else. Claim 3 pins it to this file.
     'main/paneKeyBridge.ts': Object.freeze({ on: 1 }),
     // The window and both views: two navigation rules, three diagnostics, the

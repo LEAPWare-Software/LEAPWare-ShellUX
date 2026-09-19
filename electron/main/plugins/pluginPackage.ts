@@ -68,9 +68,9 @@ import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS }
  * `PluginPackageFs` is the seam: production passes `nodePluginPackageFs`, a
  * test passes an in-memory fake, and nothing stubs `node:fs` globally. The file
  * is opened once and `fstat`ed on that descriptor (a FIFO or a device is
- * refused: its size reads 0 and says nothing), then read into a buffer of
- * `MAX_PACKAGE_BYTES + 1`, so memory is bounded by that buffer whatever the file
- * does between the stat and the read. *Tests:*
+ * refused: its size reads 0 and says nothing), then read into a buffer of its
+ * stated size plus one byte — at most `MAX_PACKAGE_BYTES + 1` — so memory is
+ * bounded by that buffer whatever the file does between the stat and the read. *Tests:*
  * `electron/__tests__/pluginPackage.test.ts` — "stops reading at the limit when
  * a file yields more than its stat said", "refuses a path that is not a regular
  * file".
@@ -360,11 +360,14 @@ export type BoundedReadResult =
   | { readonly ok: false; readonly reason: string };
 
 /**
- * Read the file at `path` through one descriptor, never buffering more than
- * `limit + 1` bytes. A path that is not a regular file is refused before a read;
- * a size over `limit` is refused from `fstat`; and the read stops at `limit + 1`,
- * so a file that grows between the stat and the read is refused without being
- * buffered whole. A failure to open or read is a refusal, not a throw. `noun`
+ * Read the file at `path` through one descriptor, buffering `fstat`'s size plus
+ * one byte — never `limit + 1` for a small file. A path that is not a regular
+ * file is refused before a read; a size over `limit` is refused from `fstat`;
+ * and the read stops one byte past the stated size, so a file that grows
+ * between the stat and the read is refused without being buffered whole.
+ * *Tests:* `electron/__tests__/pluginPackage.test.ts` — "allocates for the
+ * file's size, not for the limit", "stops reading at the limit when a file
+ * yields more than its stat said". A failure to open or read is a refusal, not a throw. `noun`
  * names the file in the reason. The package reader below and the plugin store's
  * serve-time read (`pluginStore.ts`) share it, so the bound is one rule.
  */
@@ -377,15 +380,17 @@ export function readBoundedFile(fs: PluginPackageFs, path: string, limit: number
       if (stat.size > limit) {
         return { ok: false, reason: `${noun} is ${String(stat.size)} bytes; the limit is ${String(limit)}` };
       }
-      const buffer = new Uint8Array(limit + 1);
+      // One byte past what `fstat` said, so a file that grew is seen without
+      // being buffered: the read stops at `stat.size + 1`.
+      const buffer = new Uint8Array(stat.size + 1);
       let total = 0;
       while (total < buffer.byteLength) {
         const read = fs.readSync(fd, buffer, total, buffer.byteLength - total, total);
         if (read === 0) break;
         total += read;
       }
-      if (total > limit) {
-        return { ok: false, reason: `${noun} is ${String(total)} bytes; the limit is ${String(limit)}` };
+      if (total > stat.size) {
+        return { ok: false, reason: `${noun} grew while it was read: fstat said ${String(stat.size)} bytes` };
       }
       return { ok: true, bytes: buffer.subarray(0, total) };
     } finally {
