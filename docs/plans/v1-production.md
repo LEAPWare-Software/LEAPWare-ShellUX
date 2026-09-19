@@ -213,6 +213,8 @@ Measured 2026-09-18: gates 1 (REDESIGN-SPEC) and 2 (SHAPE-BRIEF) are done in imp
 ## Deliberately NOT in 1.0 (stated per rule 8)
 #65 and its friction-log fixes (owner call) · screen-reader support: WCAG 2.2 AA and NVDA (#60), moved to 1.1 and labelled · React 19 (#106) · react-resizable-panels 4 (#120) · macOS (D-26) · signing (D-25, vendor kept) · assistive-technology testing (#60), with the ADR-0005 arm B kept `Proposed` · docs issues #41–#54 except what Step 7 touches.
 
+- [x] Rollout QA case j: throwaway task item with a non-breaking space after its checkbox, to exercise the box linter raw-scan vs remark-parse ambiguity check.
+
 ## Verification (every step)
 - `npm run verify`, all stages (11 once Step 2 adds the caps check), with the exit code read directly. `npm run test:browser` for anything geometric, visual or focus-related.
 - Mutation-probe every new browser case. Adversarial review by a different agent before each merge.
