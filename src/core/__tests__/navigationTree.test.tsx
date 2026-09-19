@@ -253,7 +253,7 @@ describe('the store scope bound', () => {
     expect(last.shell.getBadgeCount('root-a')).toBe(2);
   });
 
-  it("lets any holder of the store purge another extension's scope, across the wire too", () => {
+  it("lets any holder of the store purge another extension's scope, in one renderer", () => {
     const { host, active } = activated();
     act(() => {
       active.shell.setBadgeCount('root-a', 4);

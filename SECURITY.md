@@ -275,7 +275,7 @@ repository *claims* otherwise is genuinely valuable — see below.
   `src/core/__tests__/navigationTree.test.tsx` — "refuses a scope beyond
   MAX_SCOPES through the public store, and frees one on purge", "refuses a new
   scope through an extension's own handle once 1024 are held" and "lets any
-  holder of the store purge another extension's scope, across the wire too";
+  holder of the store purge another extension's scope, in one renderer";
   `src/core/ipc/__tests__/replicaStore.test.ts` — "lets any holder of the store
   purge another extension's scope, across the wire too".
 - **`unregister` has no authorisation model.** Any holder of the registry can

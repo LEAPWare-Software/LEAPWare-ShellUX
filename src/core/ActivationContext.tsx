@@ -643,30 +643,34 @@ export function ShellHostProvider({
    */
   const callHook = useCallback(
     (extensionId: string, hook: LifecycleHookName, invoke: () => unknown): void => {
+      // The whole call, INCLUDING reading and calling a returned `then`, is
+      // inside the counted window: `then` is plug-in code too, and running it
+      // after the guard dropped let it re-enter the controller. *Tests:*
+      // `src/core/__tests__/lifecycle.test.tsx` — "refuses an activate made from
+      // inside a hook's returned then".
       hookDepth.current += 1;
-      let returned: unknown;
       try {
-        returned = invoke();
+        const returned: unknown = invoke();
+        if (typeof returned !== 'object' || returned === null) {
+          return;
+        }
+        const onRejected = (error: unknown): void => {
+          reportFault({ extensionId, hook, error });
+        };
+        try {
+          const then: unknown = (returned as { then?: unknown }).then;
+          if (typeof then === 'function') {
+            (then as (fulfilled: undefined, rejected: (error: unknown) => void) => unknown).call(
+              returned,
+              undefined,
+              onRejected,
+            );
+          }
+        } catch (error) {
+          onRejected(error);
+        }
       } finally {
         hookDepth.current -= 1;
-      }
-      if (typeof returned !== 'object' || returned === null) {
-        return;
-      }
-      const onRejected = (error: unknown): void => {
-        reportFault({ extensionId, hook, error });
-      };
-      try {
-        const then: unknown = (returned as { then?: unknown }).then;
-        if (typeof then === 'function') {
-          (then as (fulfilled: undefined, rejected: (error: unknown) => void) => unknown).call(
-            returned,
-            undefined,
-            onRejected,
-          );
-        }
-      } catch (error) {
-        onRejected(error);
       }
     },
     [reportFault],

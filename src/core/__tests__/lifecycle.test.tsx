@@ -526,6 +526,33 @@ describe('re-entry and async hooks', () => {
     expect(activate(host, 'mail-ext').id).toBe('mail-ext');
   });
 
+  it("refuses an activate made from inside a hook's returned then", () => {
+    const host = mountHost();
+    const inner: string[] = [];
+    register(
+      host,
+      makeBlueprint({
+        id: 'a-ext',
+        lifecycle: {
+          onDeactivate: (): unknown => ({
+            then(): void {
+              const outcome = host.current.activation.activate('c-ext');
+              inner.push(outcome.ok ? 'ok' : outcome.error.code);
+            },
+          }),
+        },
+      }),
+    );
+    register(host, makeBlueprint({ id: 'b-ext' }));
+    register(host, makeBlueprint({ id: 'c-ext' }));
+    activate(host, 'a-ext');
+    const b = activate(host, 'b-ext');
+
+    expect(inner).toEqual(['LIFECYCLE_REENTRY']);
+    expect(host.current.activation.getActive()).toBe(b);
+    expect(host.current.store.getContext().activeExtensionId).toBe('b-ext');
+  });
+
   it('does not report ok for an extension whose onActivate unregistered it', () => {
     const host = mountHost();
     const onRelease = vi.fn();
