@@ -269,6 +269,18 @@ from so a reader can check it.
 
 ### Changed
 
+- **`ShellLayout.tsx` is split before wave 3 edits it** (plan step 5, part of #95).
+  The pane-size helpers (`paneSizing.ts`), the navigation (`ShellNavigation.tsx`), the
+  panes (`ExtensionPane.tsx`), the resize handle (`ShellResizeHandle.tsx`) and the
+  palette hook (`useHostPalette.ts`) now live in their own modules; the file goes from
+  1,916 to 1,368 lines. No behaviour change: the moved code is byte-identical apart from
+  `export`, import and comment lines (checked by the reviewer against the old file), all
+  1,770 existing tests and the 57 browser tests pass unchanged, and the pane-size helpers
+  gain 11 direct unit tests (`src/components/__tests__/paneSizing.test.ts`). **What made
+  it possible:** one 1,916-line file mixed the sizing arithmetic, the navigation rows and
+  the persistence logic, and it is where both data-destroying defects were found. **Not
+  done:** the persistence-hook extraction #95 argues for; #95 stays open.
+
 - **A claim about npm 10.9.8 was too broad, and is corrected everywhere it was made**
   (`CLAUDE.md`, `HANDOFF.md`, `README.md`, `docs/getting-started.md`,
   `docs/traps.md`, and this file). It said npm 10.9.8 "crashes on this lockfile".
