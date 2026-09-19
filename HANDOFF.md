@@ -30,7 +30,7 @@ with a merge queue.
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1, the state primitives (#184).
 - Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
-- This change: proof rows C-38 to C-42 for work already built.
+- This change: proof rows C-38 to C-43 for work already built.
 
 ## In flight
 

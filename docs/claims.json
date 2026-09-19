@@ -2275,23 +2275,9 @@
     },
     {
       "id": "C-39",
-      "box": "Private vulnerability reporting, secret scanning and Dependabot security updates are enabled on the repository, measured with `gh api repos/LEAPWare-Software/LEAPWare-ShellUX` (`security_and_analysis`) and `gh api repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting`.",
+      "box": "Private vulnerability reporting is enabled on the repository, measured with `gh api repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting`.",
       "class": "github",
       "checks": [
-        [
-          "gh",
-          "api",
-          "repos/LEAPWare-Software/LEAPWare-ShellUX",
-          "--jq",
-          "\"secret_scanning=\\(.security_and_analysis.secret_scanning.status)\""
-        ],
-        [
-          "gh",
-          "api",
-          "repos/LEAPWare-Software/LEAPWare-ShellUX",
-          "--jq",
-          "\"dependabot_security_updates=\\(.security_and_analysis.dependabot_security_updates.status)\""
-        ],
         [
           "gh",
           "api",
@@ -2302,21 +2288,31 @@
       ],
       "expect": [
         {
-          "key": "secret_scanning",
-          "op": "==",
-          "value": "enabled"
-        },
-        {
-          "key": "dependabot_security_updates",
-          "op": "==",
-          "value": "enabled"
-        },
-        {
           "key": "private_vuln_reporting",
           "op": "==",
           "value": "true"
         }
       ],
+      "provenOn": "2026-09-19",
+      "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
+    },
+    {
+      "id": "C-43",
+      "box": "Secret scanning and Dependabot security updates are enabled on the repository, read with an admin token on 2026-09-19 (`security_and_analysis`). CI's read-only token gets `null` for these fields, so this row is dated, not re-proven, and CI would not notice either being turned off.",
+      "class": "manual",
+      "expect": [
+        {
+          "key": "SECRET_SCANNING",
+          "op": "==",
+          "value": "enabled"
+        },
+        {
+          "key": "DEPENDABOT_SECURITY_UPDATES",
+          "op": "==",
+          "value": "enabled"
+        }
+      ],
+      "evidence": "docs/claims-evidence/C-43-security-and-analysis-2026-09-19.txt",
       "provenOn": "2026-09-19",
       "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
     },

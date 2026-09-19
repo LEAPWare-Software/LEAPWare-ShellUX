@@ -16,9 +16,11 @@ from so a reader can check it.
 
 ### Added
 
-- **Five proof rows for work already built** (C-38 to C-42). The ruleset as code and
+- **Six proof rows for work already built** (C-38 to C-43). The ruleset as code and
   its applier and settings doc, not classic branch protection; the three GitHub security
-  settings, read back as enabled; #74 and #103 closed; the full-tree audit job; and the
+  settings, read back as enabled (private vulnerability reporting re-proven on every
+  run; secret scanning and Dependabot security updates dated, because CI's read-only
+  token cannot see them); #74 and #103 closed; the full-tree audit job; and the
   plugin bundle's sha512, refused at install and re-checked on every serve, each half
   pinned by a named test. Each row's check was probed red, and a review tightened two
   that could pass on an honest mistake (a wrong ruleset target, an applier that never

@@ -1,0 +1,6 @@
+# C-43 evidence: read with the repository owner's admin token, 2026-09-19T11:08:43Z
+# CI's read-only GITHUB_TOKEN gets security_and_analysis = null (PR #186 Prove claims run), so this row is manual.
+$ gh api repos/LEAPWare-Software/LEAPWare-ShellUX --jq .security_and_analysis
+{"dependabot_security_updates":{"status":"enabled"},"secret_scanning":{"status":"enabled"},"secret_scanning_non_provider_patterns":{"status":"disabled"},"secret_scanning_push_protection":{"status":"enabled"},"secret_scanning_validity_checks":{"status":"disabled"}}
+SECRET_SCANNING=enabled
+DEPENDABOT_SECURITY_UPDATES=enabled
