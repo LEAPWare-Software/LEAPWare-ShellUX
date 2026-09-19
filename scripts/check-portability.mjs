@@ -775,7 +775,19 @@ function moduleBasenameOf(file) {
  * to compile.
  */
 function checkModuleCaseCollisions(files) {
-  /** @type {Map<string, Map<string, {basename: string, file: string}>>} */
+  // Keyed by directory, then by lowercased basename. The value is EVERY file
+  // already seen under that key, not just the first one — a fixture of three
+  // files, two spellings (`Button.tsx`, `Button.js`, `button.ts`) is what
+  // earlier retained only the first-seen entry and then never updated it: git
+  // iterates `Button.js`, `Button.tsx`, `button.ts`; `Button.js` was kept,
+  // `Button.tsx` was skipped by the "same spelling" guard below WITHOUT being
+  // recorded anywhere, so `button.ts` was compared only against `Button.js` and
+  // the pair a reader most needs — `button.ts` vs `Button.tsx`, the `.ts`/`.tsx`
+  // shape of the incident this rule exists for — was never reported. Retaining
+  // every file, and comparing each new one against all of them, means every
+  // distinct-spelling pair in a directory gets its own report, not just one
+  // representative pair standing in for the rest.
+  /** @type {Map<string, Map<string, Array<{basename: string, file: string}>>>} */
   const seenByDirectory = new Map();
   for (const file of files) {
     const basename = moduleBasenameOf(file);
@@ -788,15 +800,23 @@ function checkModuleCaseCollisions(files) {
       seenByDirectory.set(directory, seen);
     }
     const key = basename.toLowerCase();
-    const previous = seen.get(key);
-    if (previous === undefined) {
-      seen.set(key, { basename, file });
-    } else if (previous.basename !== basename) {
-      // Same basename, same extension (e.g. two files both spelled exactly
-      // `Button`) is `previous.basename === basename` and is deliberately not
-      // reported here — that pair, if it exists, differs only in EXTENSION
-      // (`Button.tsx` vs `Button.ts`), which is an ordinary, if odd, pair of
-      // modules, not the case collision this rule looks for.
+    let entries = seen.get(key);
+    if (entries === undefined) {
+      entries = [];
+      seen.set(key, entries);
+    }
+    for (const previous of entries) {
+      if (previous.basename === basename) {
+        // Same basename, same extension (e.g. two files both spelled exactly
+        // `Button`) is `previous.basename === basename` and is deliberately not
+        // reported here — that pair, if it exists, differs only in EXTENSION
+        // (`Button.tsx` vs `Button.ts`), which is an ordinary, if odd, pair of
+        // modules, not the case collision this rule looks for. The pair is
+        // still skipped only against THIS ONE previous entry, not against the
+        // whole key — a third file with yet another spelling is still compared
+        // against it below, on its own turn through this loop.
+        continue;
+      }
       report(
         file,
         1,
@@ -808,6 +828,13 @@ function checkModuleCaseCollisions(files) {
         `${file} vs ${previous.file}`,
       );
     }
+    // Recorded unconditionally, same spelling as an earlier entry or not — a
+    // later file needs to be compared against THIS file specifically, not just
+    // against whichever file first wore this spelling. That is exactly the
+    // fact the three-file fixture above depends on: `button.ts` must reach
+    // both `Button.js` and `Button.tsx`, and both must be sitting in `entries`
+    // for it to reach.
+    entries.push({ basename, file });
   }
 }
 

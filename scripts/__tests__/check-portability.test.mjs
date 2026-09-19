@@ -630,6 +630,55 @@ describe('module-case-collision', () => {
     const report = run(root);
     assert.equal(report.status, 0);
   });
+
+  it('reports the third file against BOTH earlier spellings, not just the first one retained', () => {
+    // Three files, two spellings. `Button.js` and `Button.tsx` share a spelling,
+    // so that pair is correctly silent (the extension-only exclusion above). Git
+    // lists tracked files sorted by path, uppercase before lowercase, so this
+    // checker sees them in the order `Button.js`, `Button.tsx`, `button.ts` — the
+    // exact order that once let `Button.tsx` be skipped by the "same spelling as
+    // what's retained" guard WITHOUT being retained itself, leaving `button.ts`
+    // compared only against `Button.js`. Both `Button.js` and `Button.tsx` are
+    // genuine, independent collisions with `button.ts`; a reader deciding which
+    // file to rename needs to be told about both, so this must be two reports,
+    // not one standing in for the pair.
+    const root = newRepo('module-case-three-files-two-spellings');
+    track(
+      root,
+      write(root, 'src/widgets/Button.tsx', 'export const Button = 1;\n'),
+      write(root, 'src/widgets/Button.js', 'export const Button2 = 2;\n'),
+      write(root, 'src/widgets/button.ts', 'export const button = 3;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 1);
+    const collisions = report.violations.filter((v) => v.rule === 'module-case-collision');
+    assert.equal(collisions.length, 2, JSON.stringify(collisions));
+    assert.ok(collisions.some((v) => v.text.includes('Button.tsx') && v.text.includes('button.ts')));
+    assert.ok(collisions.some((v) => v.text.includes('Button.js') && v.text.includes('button.ts')));
+  });
+
+  it('reports every unordered pair once when three files each use a different spelling', () => {
+    // Three distinct spellings of the same name: BUTTON, Button, button. Every one
+    // of the three unordered pairs is a genuine collision — none of them share a
+    // spelling, so none of the extension-only exclusion applies to any pair — and
+    // each must be reported exactly once, not zero times (under-reported) and not
+    // twice (the same pair reported from both directions).
+    const root = newRepo('module-case-three-spellings');
+    track(
+      root,
+      write(root, 'src/widgets/BUTTON.js', 'export const a = 1;\n'),
+      write(root, 'src/widgets/Button.ts', 'export const b = 2;\n'),
+      write(root, 'src/widgets/button.tsx', 'export const c = 3;\n'),
+    );
+    const report = run(root);
+    assert.equal(report.status, 1);
+    const collisions = report.violations.filter((v) => v.rule === 'module-case-collision');
+    assert.equal(collisions.length, 3, JSON.stringify(collisions));
+    const pairs = collisions.map((v) => v.text).sort();
+    assert.ok(pairs.some((p) => p.includes('BUTTON.js') && p.includes('Button.ts')));
+    assert.ok(pairs.some((p) => p.includes('BUTTON.js') && p.includes('button.tsx')));
+    assert.ok(pairs.some((p) => p.includes('Button.ts') && p.includes('button.tsx')));
+  });
 });
 
 describe('unreadable-tracked-file', () => {

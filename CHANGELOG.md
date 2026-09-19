@@ -186,7 +186,13 @@ from so a reader can check it.
   basename that differs only in case is one module to `tsc` and two to the
   filesystem. A separate rule, `module-case-collision`, now reports two tracked
   module sources in one directory whose basenames collide once the extension is
-  stripped; the checker's count goes 20 rules to 21, and it reports 0 violations
+  stripped — **every distinct-spelling pair in a directory, not one
+  representative pair standing in for the rest**, which is what a first draft of
+  the rule did and what a review caught: it retained only the first spelling
+  seen, so with three colliding files the pair it named could be the least
+  useful one and the `.ts`/`.tsx` pair a reader needs could go unreported. The
+  directory still failed in that draft, so nothing was ever silently passed;
+  the report was incomplete, not absent. The checker's count goes 20 rules to 21, and it reports 0 violations
   over the whole tracked tree (405 files on the day this landed — a count that
   moves with every commit, so it is dated here rather than stated as a standing
   fact; the rule's result, 0 violations, is what does not move).
