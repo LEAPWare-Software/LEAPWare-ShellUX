@@ -1875,7 +1875,7 @@
     },
     {
       "id": "C-32",
-      "box": "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6). Written as `docs/design/WAVE3-PLAN.md`: nine increments, W3-0 to W3-8, reconciled with the v4 gate-4 screens, with a file-ownership table; only W3-0 is built.",
+      "box": "Wave plan from `docs/design/SHAPE-BRIEF.md`: rows (D-29, 32px), nav, rail, tables, forms, palette, states. Serialised on `ShellLayout.tsx` (rule 6). Written as `docs/design/WAVE3-PLAN.md`: nine increments, W3-0 to W3-8, one per critique resolution R1 to R9 of the v4 gate-4 screens, with a file-ownership table; only W3-0 is built.",
       "class": "repo",
       "checks": [
         [
@@ -1886,6 +1886,11 @@
       "expect": [
         {
           "key": "wave3_plan_increments",
+          "op": "==",
+          "value": 9
+        },
+        {
+          "key": "wave3_plan_critique_rows",
           "op": "==",
           "value": 9
         },
@@ -1912,7 +1917,7 @@
     },
     {
       "id": "C-33",
-      "box": "Also fold in #23 (re-clamp the layout on window resize). It is user-visible in a resizable desktop window, and wave 3 owns that file. Done as W3-0: the panes re-fit to the live width from the layout the user chose, pinned by four browser-lane cases in `e2e/pane-refit.spec.ts` and by unit cases over stubbed widths. #23 stays open until the owner sees it in the packaged app.",
+      "box": "Also fold in #23 (re-clamp the layout on window resize). It is user-visible in a resizable desktop window, and wave 3 owns that file. Done as W3-0: the panes re-fit to the live width from the layout the user chose, pinned by five browser-lane cases in `e2e/pane-refit.spec.ts` and by unit cases over stubbed widths; a report arriving during a width change is passed on as a correction and not saved. #23 stays open until the owner sees it in the packaged app.",
       "class": "repo",
       "checks": [
         [
@@ -1924,7 +1929,7 @@
         {
           "key": "pane_refit_e2e_titles",
           "op": "==",
-          "value": 4
+          "value": 5
         },
         {
           "key": "pane_refit_unit_file",
@@ -1932,19 +1937,24 @@
           "value": 1
         },
         {
-          "key": "refit_uses_fit_pane_layout",
+          "key": "refit_sets_layout_on_width_change",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "refit_marks_corrections",
           "op": "==",
           "value": 1
         }
       ],
       "probe": {
-        "name": "stop re-fitting through fitPaneLayout",
+        "name": "remove the re-fit's setLayout",
         "edits": [
           {
             "file": "src/components/layout/ShellLayout.tsx",
             "replace": [
-              "fitPaneLayout(",
-              "fitPaneLayoutRemoved("
+              "group.setLayout(",
+              "group.setLayoutRemoved("
             ]
           }
         ]

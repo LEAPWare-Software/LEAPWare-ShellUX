@@ -481,11 +481,12 @@ from so a reader can check it.
 - **A window resize no longer overwrites the saved pane layout** (GitHub #23, plan
   step 5). The panes re-fit to the live width from the layout the user chose, with
   every pane inside its minimum and maximum and summing to 100 above about 700px;
-  widening again brings the chosen layout back, and a reload at any width opens on what
-  a live resize to that width shows. A layout corrected when the shell opens narrow, or
+  widening again brings the chosen layout back, and at any width where every minimum
+  fits, a reload opens a saved layout on what a live resize to that width shows. A layout corrected when the shell opens narrow, or
   rebuilt by the library when pane 1 collapses and expands, is not saved as a choice,
   and re-expansion shows the chosen layout. An untouched shell keeps its 240px
-  navigation width at every width. **What made it possible:** the library's own
+  navigation width wherever the other panes' minimums allow (it gives way below that,
+  pane 1 first). **What made it possible:** the library's own
   re-clamp on a narrower window reached `onResize` looking exactly like a drag, so it
   was saved; review then found two more routes to the same save (opening narrow, and
   the re-expansion rebuild), each now pinned by a test. *Tests:* `e2e/pane-refit.spec.ts`,
