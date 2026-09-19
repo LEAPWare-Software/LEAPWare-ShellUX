@@ -6,13 +6,20 @@ rounds by agents that did not write it; the last round found no Blocker, and its
 Minors (X1-X9) are folded in. Author: agent, under the owner's CTO delegation of
 2026-09-18 (D-50).
 
-Repository facts this plan relies on (measured 2026-09-18/19): LEAPWare-Software/
-LEAPWare-ShellUX is public; the organisation is on the `free` plan; ruleset 23685990 on
-`~DEFAULT_BRANCH` requires a PR (0 approvals), five strict required checks (Verify on
-ubuntu, macos and windows; Browser tests (chromium); Declared Node floor (22.13.0)) and a
-merge queue (ALLGREEN, SQUASH, 10-minute response timeout); the GitHub Actions app id is
-15368; artifact retention is 90 days (`gh api repos/{r}/actions/permissions/artifact-and-log-retention`
-returned `{"days":90}`); `ci.yml`, `browser.yml`, `desktop.yml` and
+Repository facts this plan relies on, each with the command that measured it
+(2026-09-18/19; `{r}` is `LEAPWare-Software/LEAPWare-ShellUX`):
+- public, and the organisation is on the `free` plan: `gh api repos/{r} --jq .visibility`
+  returned `public`; `gh api orgs/LEAPWare-Software --jq .plan.name` returned `free`;
+- ruleset `23685990` (`gh api repos/{r}/rulesets --jq '.[]|"\(.id) \(.name)"'` returned
+  `23685990 main`), whose content is `.github/rulesets/main.json`: on `~DEFAULT_BRANCH`, a
+  PR (0 approvals), five strict required checks (Verify on ubuntu, macos and windows;
+  Browser tests (chromium); Declared Node floor (22.13.0)) and a merge queue (ALLGREEN,
+  SQUASH, 10-minute response timeout);
+- the GitHub Actions app id is 15368:
+  `gh api repos/{r}/commits/main/check-runs --jq '.check_runs[0].app.id'` returned `15368`;
+- artifact retention is 90 days:
+  `gh api repos/{r}/actions/permissions/artifact-and-log-retention` returned `{"days":90}`;
+- concurrency: `ci.yml`, `browser.yml`, `desktop.yml` and
 `audit-dependencies.yml` use `concurrency: group: ${{ github.workflow }}-${{ github.ref }},
 cancel-in-progress: true` (X6).
 
@@ -33,7 +40,10 @@ approver can. One honest mistake sits at the edge and is named: an agent that lo
 row's check or the linter to get green. The defences are the `Gate changes:` and
 `Rows reviewed:` lines, which make the change visible, and a review under the same
 identity. That is weak, and it is a guardrail. No part of this protocol is an integrity
-control; the merge queue is entry-point validation; everything else is a guardrail.
+control, and every component this design builds is a guardrail. The merge queue is
+GitHub's, not this design's; it is observed working (the `merge_group` runs that landed
+#143 and #144), and no test in this repository exercises it, so no stronger word is
+claimed for it here (ADR-0001 Amendment G).
 
 ## 2. Guarantees (against the honest mistake)
 
