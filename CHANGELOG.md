@@ -24,10 +24,19 @@ from so a reader can check it.
   reference run's identity, conclusion, sha and ancestry had all been read successfully;
   only the artifact download had failed. Now, when the reference run concluded `success`
   but the download or the read-back of its artifact fails, `loadRunContext` reproduces
-  the same push-mode rows locally (`node scripts/claims/prove-claims.mjs --mode push
-  --out <tmpfile>`, given the same 30-minute `MAIN_BUDGET_MS` a real `push`-mode main run
-  gets in CI rather than the 5-minute default meant for an ordinary subprocess call, read
-  back in the artifact's own `{ results: [...] }` shape) and `renderRow` labels a row
+  the reference run's rows locally with `node scripts/claims/prove-claims.mjs --mode push
+  --out <tmpfile>` — this is where `npm run status` stops being a passive read of
+  runs-API state: it runs every configured repo/github row's real check command,
+  mutation-probes each repo row in a scratch worktree, and fetches the live ruleset from
+  the GitHub API for the S-ruleset comparison, the same commands `prove-claims --mode
+  push` always runs, now triggered as a side effect of checking status. The reference
+  run itself may have run as `push`, `schedule` or
+  `workflow_dispatch` (`claims.yml` sets `MODE: ${{ github.event_name }}`), but
+  `isChangeMode()` treats all three identically for row selection and budget, and `push`
+  sidesteps an extra `GITHUB_REF` requirement `workflow_dispatch` alone carries — given the
+  same 30-minute `MAIN_BUDGET_MS` any of the three gets in CI rather than the 5-minute
+  default meant for an ordinary subprocess call, read back in the artifact's own
+  `{ results: [...] }` shape) and `renderRow` labels a row
   resolved that way `MEASURED LOCALLY <id>`, never `PASSING <id> run <id>`, because no CI
   run vouches for it — though it does not say whether the row ran under the same
   `unshare --net` restriction its CI counterpart would have (docs/proof-of-completion.md

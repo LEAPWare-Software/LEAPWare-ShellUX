@@ -280,11 +280,24 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    sandbox, always, because the outbound proxy blocks it), or the downloaded file cannot be
    parsed — `loadRunContext` falls back to reproducing the same rows locally:
    `node scripts/claims/prove-claims.mjs --mode push --out <tmpfile>` in the working tree,
-   read back in the same `{ results: [...] }` shape as the artifact. `push` is the mode the
-   reference run itself runs on `main` (§3.5), given the same `timeout: MAIN_BUDGET_MS`
-   (30 minutes, §3.4) a real `push`-mode main run gets in CI rather than the 5-minute
-   default meant for an ordinary subprocess call. **One documented way it can still
-   diverge:** repo rows run under the `unshare --net` guardrail only when
+   read back in the same `{ results: [...] }` shape as the artifact. This is where
+   `npm run status` stops being a passive read of runs-API state: it runs every configured
+   repo/github row's real check command, mutation-probes each repo row in a scratch
+   worktree, and fetches the live ruleset from the GitHub API for the S-ruleset comparison
+   — the same commands `prove-claims --mode push` always runs, now triggered as a side
+   effect of checking status rather than of an explicit invocation, and usually
+   unrestricted in this sandbox (below). The reference run
+   itself may have run as `push`, `schedule` or `workflow_dispatch` — `claims.yml` sets
+   `MODE: ${{ github.event_name }}`, and step 3 above accepts all three as reference runs
+   — so `--mode push` here is not necessarily the mode the reference run actually used;
+   `isChangeMode()` treats those three identically for row selection and budget (any mode
+   other than `pull_request`/`merge_group` takes the whole-register branch and the same
+   `MAIN_BUDGET_MS`), so the choice makes no difference to which rows run, and `push`
+   avoids `assertInjection`'s extra `GITHUB_REF` requirement that `workflow_dispatch`
+   alone carries. It runs with `timeout: MAIN_BUDGET_MS` (30 minutes, §3.4), the same
+   budget any of the three gets in CI, rather than the 5-minute default meant for an
+   ordinary subprocess call. **One documented way it can still diverge:** repo rows run
+   under the `unshare --net` guardrail only when
    `CLAIMS_NET_RESTRICT=unshare` is set, prove-claims logs which mode it ran in, and this
    sandbox is exactly the case unlikely to have that set — that disclosure is not
    surfaced on a successful local run, so `MEASURED LOCALLY` does not say whether the row

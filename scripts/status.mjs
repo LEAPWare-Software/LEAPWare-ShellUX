@@ -109,9 +109,24 @@ export function renderRow(row, context) {
 }
 
 /**
- * Reproduce the reference run's push-mode rows locally: same rows and mode the CI
- * reference run itself runs on `main` (§3.5). `--out` (see the top-of-file usage comment
- * in scripts/claims/prove-claims.mjs) writes its JSON report to `out` instead of stdout,
+ * This is where `npm run status` stops being a passive read: it runs every configured
+ * repo/github row's real check command, mutation-probes each repo row in a scratch
+ * worktree (`git stash create`, scripts/claims/lib.mjs's `runProbe`), and fetches the
+ * live ruleset from the GitHub API for the S-ruleset comparison — the same commands
+ * `prove-claims --mode push` always runs, just triggered here as a side effect of asking
+ * for status rather than of an explicit `npm run` invocation, and (see below) usually
+ * unrestricted in this sandbox.
+ *
+ * Reproduce the reference run's rows locally with `--mode push`. The reference run
+ * itself may have run as `push`, `schedule` or `workflow_dispatch` (§3.6 step 3 accepts
+ * all three; `claims.yml` sets `MODE: ${{ github.event_name }}`) — `push` is not
+ * necessarily the mode it actually used, but `isChangeMode()` treats every one of those
+ * three identically (whole-register row selection, the same `MAIN_BUDGET_MS` budget), so
+ * which of the three this reproduces under makes no difference to which rows run or their
+ * budget. `push` also sidesteps `assertInjection`'s extra `GITHUB_REF` requirement for
+ * `workflow_dispatch`, which this sandbox has no reason to satisfy. `--out` (see the
+ * top-of-file usage comment in scripts/claims/prove-claims.mjs) writes its JSON report to
+ * `out` instead of stdout,
  * in the same `{ results: [...] }` shape as `claims-results.json`. Throws with
  * prove-claims's own stderr (or stdout, for a crash that never reaches stderr) on a
  * nonzero exit or a result file that will not parse.
