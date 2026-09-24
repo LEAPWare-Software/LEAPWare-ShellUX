@@ -320,6 +320,21 @@ const ALLOWLIST = [
       'Scoped to this one file and to environment-home-reference only; every other rule, ' +
       'including hostname and other path rules, still applies here.',
   },
+  {
+    files: ['docs/decisions/debates/D-54-issue-183-plugin-lifecycle-ownership.md'],
+    rules: ['home-directory-path'],
+    reason:
+      'This file is a debate record whose own header says it is reproduced "Verbatim ' +
+      'below, exactly as each dispatch returned it" — CTO and QA each cited file:line ' +
+      'evidence and one pasted a real command\'s failing output, both against a checkout ' +
+      'rooted at a per-user home directory on the machine that session happened to run on. ' +
+      'Editing the quoted paths out would make the transcript no longer what either ' +
+      'dispatch actually returned, which ' +
+      'is the same reasoning the ruleset-fixture and LICENSE/NOTICE entries above rest on. ' +
+      'Nothing here is a build input or a path any tracked file assumes exists; it is a ' +
+      'record of what was read, once, in one session. Scoped to this one file and to ' +
+      'home-directory-path only; every other rule still applies to it.',
+  },
 ];
 
 // ---------------------------------------------------------------------------

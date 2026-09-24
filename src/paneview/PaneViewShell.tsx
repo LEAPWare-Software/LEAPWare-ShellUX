@@ -204,7 +204,7 @@ export interface PaneViewShellProps {
  */
 export function PaneViewShell({ store }: PaneViewShellProps = {}): ReactElement {
   return (
-    <ExtensionRegistryProvider>
+    <ExtensionRegistryProvider runsPluginCode>
       <ShellHostProvider store={store}>
         <Registrar />
         <ExtensionSurface />

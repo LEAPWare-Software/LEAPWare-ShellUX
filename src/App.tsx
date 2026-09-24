@@ -357,16 +357,25 @@ export interface AppProps {
    * inverting it throws at mount.
    */
   readonly children?: ReactNode;
+  /**
+   * Forwarded to `ExtensionRegistryProvider`. True only for a document that
+   * hosts plugin code — one whose registry's `register` may legitimately be
+   * asked to hold a blueprint's `lifecycle` hooks. Defaults to `false`: this
+   * document's registry may hold plugin data but must never be asked to run
+   * a plugin's lifecycle. See ADR-0006 decision 6's amendment for issue #183.
+   */
+  readonly runsPluginCode?: boolean | undefined;
 }
 
 export default function App({
   surface = HOST_WIRING.surface,
   store = HOST_WIRING.store,
   children,
+  runsPluginCode = false,
 }: AppProps = {}): ReactElement {
   return (
     <RootBoundary>
-      <ExtensionRegistryProvider>
+      <ExtensionRegistryProvider runsPluginCode={runsPluginCode}>
         <ShellHostProvider store={store}>
           {children}
           <ShellLayout surface={surface} />

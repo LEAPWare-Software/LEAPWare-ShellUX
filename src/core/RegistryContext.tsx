@@ -1617,8 +1617,11 @@ export interface ExtensionRegistry {
  * The registry API and the registry's revision counter live in SEPARATE
  * contexts on purpose.
  *
- * The API object's identity is stable for the provider's whole lifetime, so a
- * plugin can safely write `useEffect(() => { registry.register(bp); },
+ * The API object's identity is stable for the provider's whole lifetime AS
+ * LONG AS `runsPluginCode` does not change between renders — `register` lists
+ * it as a dependency (ADR-0006 decision 6's amendment for issue #183), and
+ * every real caller passes a literal, never a variable. So a plugin can
+ * safely write `useEffect(() => { registry.register(bp); },
  * [registry])`. Had the counter been folded into the same object, every
  * registration would change that identity, re-fire the effect, and — for the
  * register/unregister effect pair that StrictMode encourages — spin into an
@@ -1634,10 +1637,27 @@ function revisionReducer(current: number): number {
 
 export interface ExtensionRegistryProviderProps {
   readonly children: ReactNode;
+  /**
+   * Declares that THIS document actually executes plugin code, so a
+   * blueprint's `lifecycle` hooks registered here may legitimately fire.
+   * Defaults to `false`: a registry may hold plugin data without this flag,
+   * but `register` refuses any blueprint that carries `lifecycle` unless the
+   * provider says it runs plugin code. See ADR-0006 decision 6's amendment
+   * for issue #183 — this is entry-point validation at the registry door,
+   * not an integrity control; any caller may pass `true`.
+   *
+   * Read fresh on every `register()` call, not pinned at mount: a caller
+   * that flips this prop mid-life changes what the NEXT registration is
+   * checked against, but does not retroactively re-validate a blueprint
+   * this registry already holds. Both real call sites pass a literal
+   * today, so this is a documented limit, not a reachable defect.
+   */
+  readonly runsPluginCode?: boolean | undefined;
 }
 
 export function ExtensionRegistryProvider({
   children,
+  runsPluginCode = false,
 }: ExtensionRegistryProviderProps): ReactElement {
   // A Map, deliberately, not an object literal. Keys come from untrusted
   // plugin manifests; a Map has no prototype chain, so writing a key named
@@ -1677,6 +1697,26 @@ export function ExtensionRegistryProvider({
       // reaches the store.
       const { record, id, source } = normalizeBlueprint(blueprint);
 
+      // Entry-point validation at the one door all registrations pass
+      // through: a registry that has not declared it runs plugin code
+      // refuses any blueprint carrying lifecycle hooks, rather than
+      // silently holding hooks nothing here will ever call (or that a
+      // sibling registry might call too, double-firing them). Reads only
+      // the host-owned, already-normalised `record` — no plugin code runs
+      // to EVALUATE it here; normalisation above has already run the
+      // payload's getters. Not an integrity control: `runsPluginCode`
+      // is a prop, and any caller may pass `true`.
+      if (record.lifecycle !== undefined && !runsPluginCode) {
+        return {
+          ok: false,
+          error: new ShellUXError(
+            'INVALID_FIELD',
+            'This registry does not run plugin code and cannot hold lifecycle hooks; pass runsPluginCode on ExtensionRegistryProvider if this document actually executes the plugin.',
+            'lifecycle',
+          ),
+        };
+      }
+
       const existing = store.get(id);
       if (existing !== undefined) {
         // ---- React StrictMode double-invocation --------------------------
@@ -1712,7 +1752,7 @@ export function ExtensionRegistryProvider({
     } catch (error) {
       return { ok: false, error: toShellUXError(error) };
     }
-  }, [store]);
+  }, [store, runsPluginCode]);
 
   // A `Set` of listeners, held in a ref for the provider's lifetime. See
   // `onBeforeUnregister`.
@@ -1803,8 +1843,10 @@ export function ExtensionRegistryProvider({
 }
 
 /**
- * Access the registry API. The returned object keeps a stable identity, so it
- * is safe to list in a dependency array.
+ * Access the registry API. The returned object keeps a stable identity as
+ * long as the provider's `runsPluginCode` prop does not change, so it is
+ * safe to list in a dependency array — every real provider passes
+ * `runsPluginCode` as a literal.
  *
  * @throws when called outside `ExtensionRegistryProvider`.
  */
