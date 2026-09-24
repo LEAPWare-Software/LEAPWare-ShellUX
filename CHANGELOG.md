@@ -35,12 +35,13 @@ from so a reader can check it.
   chunks — decision 1's "one bundle, not a file tree"), hashes it and writes
   `dist-plugins/<id>.lwplugin` in decision 1's exact shape:
   `{ format: "lwplugin/1", manifest, bundle: <base64> }`. Verified against the
-  real validator, not a copy of it: each of the three built packages parses and
-  hash-checks under `electron/main/plugins/pluginPackage.ts`'s own
-  `parsePluginPackage`, and reports `compatibility: { state: "compatible" }`
-  against this tree's `HOST_API_VERSION` (`1.1`) — run manually and pasted into
-  this change's PR body, because nothing in `npm run verify` calls
-  `plugins:build` yet. `FIXTURE_EXTENSIONS` is deleted from
+  real validator, not a copy of it: `npm run plugins:build`, then a throwaway
+  `node:test`-style case calling `electron/main/plugins/pluginPackage.ts`'s own
+  `parsePluginPackage` directly on each of the three built files — full output
+  (manifest, bundle byte length, `compatibility: { state: "compatible" }`
+  against this tree's `HOST_API_VERSION`, `1.1`) pasted into this change's PR
+  body, because nothing in `npm run verify` calls `plugins:build` yet.
+  `FIXTURE_EXTENSIONS` is deleted from
   `src/paneview/PaneViewShell.tsx`: the packaged extension surface registers no
   plugin of its own now, and installs none of the three by default. `src/dev/
   DevShell.tsx` still registers `MailPlugin` and `DatabasePlugin`, importing
