@@ -16,6 +16,66 @@ from so a reader can check it.
 
 ### Added
 
+- **`npm run plugin:check <path>` — the conformance kit, and its CI job**
+  (ADR-0006 decision 10 / step 8, #57). `scripts/build-plugins.mjs`'s own
+  docblock had said since step 7 that checking a built `.lwplugin` against the
+  real validator was "a separate, manual step" with no automation; this closes
+  that gap. It is a plain Node CLI (`scripts/plugin-check.mjs`) that takes its
+  target from `process.argv[2]` only — never an environment variable
+  (ADR-0002) — accepting either a `.lwplugin` file directly or a directory
+  holding exactly one, and runs six checks in ADR-0006's own order, stopping at
+  the first failure: **Package** and **Contract version**, both by calling
+  `electron/main/plugins/pluginPackage.ts`'s real `readPluginPackage` (the
+  exact module the main-process installer uses, not a second copy of its
+  rules); **Imports**, by parsing the bundle with the TypeScript compiler —
+  the same technique `src/__tests__/pluginImportGraph.test.ts` uses — for any
+  static import outside the three `/shared/` modules or any dynamic
+  `import()`; **Registration**, by loading the bundle as a real ES module
+  (`/shared/*` resolved to the real `react`, `react/jsx-runtime` and
+  `src/sdk/index.ts` through a Vite SSR server) and handing its default export
+  to `RegistryContext.tsx`'s own exported `validateBlueprint`; **Lifecycle**,
+  by driving activate → deactivate → release against a real
+  `createRevocableShellAPI` handle under a small purpose-built fake clock
+  (`createFakeClock`, documented in the script as deliberately narrower than
+  `vi.useFakeTimers()`, which needs a Vitest worker this CLI does not run
+  under); and **Render**, by mounting each pane view with `react-dom/client`'s
+  `createRoot` into a `jsdom` container against a real live shell and an empty
+  context, plus every command's `isVisible` against the same context. *Tests:*
+  `scripts/__tests__/plugin-check.test.mjs` — "passes every check for a
+  well-formed plugin (package, contract-version, imports, registration,
+  lifecycle, render)", "Check 1 (Package) — refuses a bundle whose sha512 does
+  not match its manifest", "Check 2 (Contract version) — refuses a plugin
+  built for a newer major than this checkout offers", "Check 3 (Imports) —
+  refuses a bundle that statically imports something other than a /shared/
+  module", "Check 4 (Registration) — refuses a default export whose id
+  differs from the manifest", "Check 5 (Lifecycle) — refuses a plugin whose
+  onRelease does not clear a running interval", "Check 5 (Lifecycle) —
+  refuses a plugin whose onActivate throws", "Check 6 (Render) — refuses a
+  plugin whose pane view throws on first render with an empty context", and
+  "Check 6 (Render) — refuses a plugin whose command isVisible throws on an
+  empty context". `.github/workflows/ci.yml` now runs `npm run plugins:build`
+  then `npm run plugin:check` against each of the three migrated plugins'
+  built output, on all three operating systems. **Not in scope, stated so a
+  green kit is not read wider:** layout, painted pixels, focus order, pointer
+  behaviour and contrast (owed to the browser lane); whether a plugin is
+  well-behaved towards its siblings; and anything about the network.
+
+- **Fixed: `npm run plugins:build` emitted a `bundle.js` with NO export
+  statement at all**, for any plugin whose source declares a named export and
+  nothing in the bundle re-imports it — which is every one of the three
+  first-party plugins, since the entry module IS the plugin's manifest.
+  Rollup's default tree-shaking for a non-library client build does not
+  preserve an unused entry export, discovered while building `plugin:check`'s
+  Registration check: `import()`ing a built `hello-example.lwplugin` bundle
+  gave a module with no `default` (and no named export at all), so ADR-0006
+  §7's "the surface `import()`s each, validates the default export through
+  the real `register`" could never have worked once step 6 lands. The failure
+  mode was a missing `preserveEntrySignatures: 'strict'` in
+  `scripts/build-plugins.mjs`'s `rollupOptions`; `plugins/hello/src/HelloExtension.tsx`,
+  `plugins/mail/src/MailPlugin.tsx` and `plugins/database/src/DatabasePlugin.tsx`
+  each gained an additive `export default` of the same manifest object their
+  existing named export already carries, so no existing importer changed.
+
 - **The three first-party plugins move to `plugins/*`, and `npm run plugins:build`
   emits a `.lwplugin` per plugin** (ADR-0006 step 7). `src/mocks/MailPlugin.tsx`,
   `src/mocks/DatabasePlugin.tsx` and `src/examples/HelloExtension.tsx` are now

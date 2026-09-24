@@ -137,6 +137,27 @@ jobs:
       - name: Test the gate scripts
         run: npm run test:scripts
 
+      # ADR-0006 decision 10 / step 8 (#57): the conformance kit, run against
+      # every plugin `npm run plugins:build` actually produces. Deliberately
+      # NOT part of `npm run verify` — nothing else in `verify` needs a build
+      # step of its own first, and `scripts/__tests__/plugin-check.test.mjs`
+      # (run by `test:scripts` above) already exercises the kit itself against
+      # planted-bad fixtures. This step is the OTHER half rule 5 asks for:
+      # running it against the three real, shipped plugins, on all three
+      # operating systems, so a plugin that only fails to build or to conform
+      # on one platform is not missed by running this on Ubuntu alone.
+      - name: Build plugins
+        run: npm run plugins:build
+
+      - name: Check plugin conformance (hello-example)
+        run: npm run plugin:check -- dist-plugins/hello-example.lwplugin
+
+      - name: Check plugin conformance (mail)
+        run: npm run plugin:check -- dist-plugins/mail.lwplugin
+
+      - name: Check plugin conformance (inventory-db)
+        run: npm run plugin:check -- dist-plugins/inventory-db.lwplugin
+
       - name: Build
         run: npm run build
 

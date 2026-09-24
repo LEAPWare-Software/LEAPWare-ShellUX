@@ -166,6 +166,18 @@ async function bundlePlugin(config) {
       write: true,
       rollupOptions: {
         input: entry,
+        // Without this, Rollup's default client-build behaviour strips the
+        // entry module's own exports outright when nothing in the bundle
+        // imports them — which is every plugin here, since the entry IS the
+        // plugin's manifest and nothing else in the bundle references it.
+        // Measured, not assumed: before this line the emitted `bundle.js` for
+        // `plugins/hello` was `Object.freeze({ ... });` with NO `export`
+        // statement at all, so `import()`ing it gave `{}` — the running
+        // surface's `import()` (ADR-0006 §7) and `plugin:check`'s Registration
+        // check (decision 10 / step 8) would both have read `undefined` off
+        // it, forever. `'strict'` keeps the entry's declared exports exactly
+        // as declared, named and default alike.
+        preserveEntrySignatures: 'strict',
         external: ['react', 'react/jsx-runtime', '@shellux/sdk'],
         output: {
           format: 'es',
