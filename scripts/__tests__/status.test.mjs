@@ -238,6 +238,24 @@ describe('reading runs through gh', () => {
     assert.equal(rendered.detail, 'k=2 <= 3');
   });
 
+  it('logs that it is starting the local reproduction, and that it can take up to 30 minutes, before running it', () => {
+    const lines = [];
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        assert.ok(lines.some((l) => /30 minutes/.test(l)), 'the log line must be written before the up-to-30-minute subprocess call, not after');
+        writeFileSync(args[args.indexOf('--out') + 1], JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    loadRunContext({ run: fake, repo: 'o/r', log: (l) => lines.push(l) });
+    assert.ok(lines.some((l) => /reproducing it locally with prove-claims --mode push/.test(l) && /30 minutes/.test(l)));
+  });
+
   it('gives the local prove-claims run the same 30-minute budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary subprocess calls', () => {
     const fake = (cmd, args, opts) => {
       const key = `${cmd} ${args.join(' ')}`;

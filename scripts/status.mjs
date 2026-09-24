@@ -22,8 +22,11 @@
  * downloaded file that will not parse — the same push-mode rows are reproduced locally by
  * running `node scripts/claims/prove-claims.mjs --mode push` in the working tree. Rows resolved
  * that way render MEASURED LOCALLY, never PASSING, because no CI run vouched for them
- * (docs/proof-of-completion.md §3.6). If the local reproduction fails too, the row-level
- * fallback gives up and every row degrades to UNPROVEN, same as any other unreadable run.
+ * (docs/proof-of-completion.md §3.6). Starting that reproduction logs a line first — it
+ * can take up to 30 minutes and `spawnSync` captures its output rather than streaming it,
+ * so without that line the wait looks identical to a hang. If the local reproduction
+ * fails too, the row-level fallback gives up and every row degrades to UNPROVEN, same as
+ * any other unreadable run.
  *
  * Usage: npm run status
  */
@@ -140,7 +143,7 @@ function runLocalProveClaims({ cwd, run }) {
 }
 
 /** Read the runs, the reference run's artifact and its ancestry, through gh and git. */
-export function loadRunContext({ repo = DEFAULT_REPO, cwd = REPO_ROOT, run = defaultRunner }) {
+export function loadRunContext({ repo = DEFAULT_REPO, cwd = REPO_ROOT, run = defaultRunner, log = () => {} }) {
   const gh = (args) => {
     const result = run('gh', args, { cwd });
     if (result.status !== 0) throw new Error(`gh ${args.join(' ')} failed: ${result.stderr.trim()}`);
@@ -181,6 +184,7 @@ export function loadRunContext({ repo = DEFAULT_REPO, cwd = REPO_ROOT, run = def
       // truer than discarding everything the runs API already told us; renderRow labels
       // every row this produces MEASURED LOCALLY, never PASSING, so it can never read as
       // CI's word.
+      log(`could not read run ${reference.id}'s artifact (${downloadError.message}); reproducing it locally with prove-claims --mode push, which can take up to ${MAIN_BUDGET_MS / 60_000} minutes and prints nothing until it finishes`);
       try {
         results = runLocalProveClaims({ cwd, run });
         resultsLocal = true;
@@ -251,7 +255,7 @@ export function main({ cwd = REPO_ROOT, run = defaultRunner, log = console.log, 
   let runContext = { reference: null, newest: null, newestTimedOut: false, results: null, isAncestor: false, resultsLocal: false };
   if (token) {
     try {
-      runContext = loadRunContext({ cwd, run });
+      runContext = loadRunContext({ cwd, run, log });
     } catch (error) {
       log(`warning: could not read runs (${error.message}); rows render UNPROVEN`);
     }
