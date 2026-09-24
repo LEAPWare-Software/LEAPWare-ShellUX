@@ -39,10 +39,14 @@ from so a reader can check it.
   behaviour (§3.6 step 4's no-reference-run rule), rather than crashing `npm run status`.
   *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims
   --mode push when the reference run artifact cannot be downloaded, and renders the row
-  MEASURED LOCALLY"; scripts/__tests__/status.test.mjs — "throws an error naming both
+  MEASURED LOCALLY"; scripts/__tests__/status.test.mjs — "falls back to a local run of
+  prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed";
+  scripts/__tests__/status.test.mjs — "throws an error naming both
   failures when the artifact download and the local reproduction both fail";
-  scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0
-  when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "names the parse failure rather than the download when
+  gh run download succeeds but its artifact cannot be parsed and the local reproduction also
+  fails"; scripts/__tests__/status.test.mjs — "prints one warning naming both failures and
+  exits 0 when the artifact download and the local reproduction both fail";
   scripts/__tests__/status.test.mjs — "renders UNPROVEN when there is no reference run, or
   the row is absent from it".
 

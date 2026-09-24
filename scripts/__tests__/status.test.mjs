@@ -246,6 +246,50 @@ describe('reading runs through gh', () => {
     );
   });
 
+  it('falls back to a local run of prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed', () => {
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) {
+        const dir = args[args.indexOf('--dir') + 1];
+        writeFileSync(path.join(dir, 'claims-results.json'), '{not valid json');
+        return ok('');
+      }
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        const out = args[args.indexOf('--out') + 1];
+        writeFileSync(out, JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    const context = loadRunContext({ run: fake, repo: 'o/r' });
+    assert.equal(context.resultsLocal, true);
+    assert.deepEqual(context.results, [passing]);
+  });
+
+  it('names the parse failure rather than the download when gh run download succeeds but its artifact cannot be parsed and the local reproduction also fails', () => {
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) {
+        const dir = args[args.indexOf('--dir') + 1];
+        writeFileSync(path.join(dir, 'claims-results.json'), '{not valid json');
+        return ok('');
+      }
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') return { status: 2, stdout: '', stderr: 'prove-claims crashed: boom' };
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    assert.throws(
+      () => loadRunContext({ run: fake, repo: 'o/r' }),
+      (error) =>
+        !/HTTP 403|proxy blocked/.test(error.message) &&
+        /JSON/.test(error.message) &&
+        /reproducing it locally also failed.*prove-claims crashed: boom/s.test(error.message),
+    );
+  });
+
   // This test's fake gives workingPlanFiles an empty `git ls-files`, so no row is ever
   // rendered here to assert against; that a row renders UNPROVEN once `reference` is
   // null (main()'s catch never reassigns runContext past its all-null default) is

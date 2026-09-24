@@ -290,7 +290,9 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    4's no-reference-run rule, since `main()`'s catch leaves `reference` at its unset
    default) — it never crashes `npm run status`.
    *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims --mode push when the reference run artifact cannot be downloaded, and renders the row MEASURED LOCALLY".
+   *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed".
    *Tests:* scripts/__tests__/status.test.mjs — "throws an error naming both failures when the artifact download and the local reproduction both fail".
+   *Tests:* scripts/__tests__/status.test.mjs — "names the parse failure rather than the download when gh run download succeeds but its artifact cannot be parsed and the local reproduction also fails".
    *Tests:* scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0 when the artifact download and the local reproduction both fail".
    *Tests:* scripts/__tests__/status.test.mjs — "renders UNPROVEN when there is no reference run, or the row is absent from it".
 4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
