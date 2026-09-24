@@ -36,7 +36,7 @@ from so a reader can check it.
   `dist-plugins/<id>.lwplugin` in decision 1's exact shape:
   `{ format: "lwplugin/1", manifest, bundle: <base64> }`. Verified against the
   real validator, not a copy of it: `npm run plugins:build`, then a throwaway
-  `node:test`-style case calling `electron/main/plugins/pluginPackage.ts`'s own
+  `vitest` case calling `electron/main/plugins/pluginPackage.ts`'s own
   `parsePluginPackage` directly on each of the three built files — full output
   (manifest, bundle byte length, `compatibility: { state: "compatible" }`
   against this tree's `HOST_API_VERSION`, `1.1`) pasted into this change's PR
