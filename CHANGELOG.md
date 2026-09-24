@@ -16,6 +16,59 @@ from so a reader can check it.
 
 ### Added
 
+- **`npm run status` falls back to a local `prove-claims` run when the reference run's
+  artifact cannot be downloaded** (`scripts/status.mjs`, docs/cloud/runbook.md lane C item
+  0e). In this project's cloud sandbox `gh run download <id> --name claims-results` always
+  fails — an outbound proxy blocks it — and until now that made `loadRunContext` throw,
+  which `main()` caught and degraded **every** row to `UNPROVEN`, even though the
+  reference run's identity, conclusion, sha and ancestry had all been read successfully;
+  only the artifact download had failed. Now, when the reference run concluded `success`
+  but the download or the read-back of its artifact fails, `loadRunContext` reproduces
+  the reference run's rows locally with `node scripts/claims/prove-claims.mjs --mode push
+  --out <tmpfile>` — this is where `npm run status` stops being a passive read of
+  runs-API state: it runs every configured repo/github row's real check command,
+  mutation-probes each repo row in a scratch worktree, and fetches the live ruleset from
+  the GitHub API for the S-ruleset comparison, the same commands `prove-claims --mode
+  push` always runs, now triggered as a side effect of checking status. The reference
+  run itself may have run as `push`, `schedule` or
+  `workflow_dispatch` (`claims.yml` sets `MODE: ${{ github.event_name }}`), but
+  `isChangeMode()` treats all three identically for row selection and budget, and `push`
+  sidesteps an extra `GITHUB_REF` requirement `workflow_dispatch` alone carries — given the
+  same 30-minute `MAIN_BUDGET_MS` any of the three gets in CI rather than the 5-minute
+  default meant for an ordinary subprocess call, read back in the artifact's own
+  `{ results: [...] }` shape) and `renderRow` labels a row
+  resolved that way `MEASURED LOCALLY <id>`, never `PASSING <id> run <id>`, because no CI
+  run vouches for it — though it does not say whether the row ran under the same
+  `unshare --net` restriction its CI counterpart would have (docs/proof-of-completion.md
+  §3.6 documents this open caveat). Because that subprocess call can itself run for up to
+  those same 30 minutes with its output captured rather than streamed, `loadRunContext`
+  logs one line naming the reference run and the wait before starting it, so the fallback
+  never looks like a hang. *Tests:* scripts/__tests__/status.test.mjs — "logs that it is
+  starting the local reproduction, and that it can take up to 30 minutes, before running
+  it". Staleness and the ancestor-of-`origin/main` check are skipped for those rows, since
+  both judge whether an *old CI run* is still trustworthy and neither question has an
+  answer for a number computed just now against the working tree; `rowHash` matching and
+  the `FAILING` branch are unchanged either way. *Tests:* scripts/__tests__/status.test.mjs
+  — "skips staleness and the ancestor check for a locally-measured row, even against a
+  stale reference run whose head is not known to be an ancestor". If the local reproduction
+  also fails (nonzero exit, or a result file that will not parse), `loadRunContext` throws
+  naming both failures and every row degrades to the existing `UNPROVEN`-with-reason
+  behaviour (§3.6 step 4's no-reference-run rule), rather than crashing `npm run status`.
+  *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims
+  --mode push when the reference run artifact cannot be downloaded, and renders the row
+  MEASURED LOCALLY"; scripts/__tests__/status.test.mjs — "falls back to a local run of
+  prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed";
+  scripts/__tests__/status.test.mjs — "gives the local prove-claims run the same 30-minute
+  budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary
+  subprocess calls"; scripts/__tests__/status.test.mjs — "throws an error naming both
+  failures when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "names the parse failure rather than the download when
+  gh run download succeeds but its artifact cannot be parsed and the local reproduction also
+  fails"; scripts/__tests__/status.test.mjs — "prints one warning naming both failures and
+  exits 0 when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "renders UNPROVEN when there is no reference run, or
+  the row is absent from it".
+
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
   `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while
