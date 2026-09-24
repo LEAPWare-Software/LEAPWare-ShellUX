@@ -106,6 +106,13 @@ describe('rendering (§3.6 step 4)', () => {
   it('treats a run exactly 48 hours old as fresh', () => {
     assert.equal(renderRow(repoRow, base({ reference: run({ updated_at: new Date(NOW - STALE_MS).toISOString() }) })).state, 'PASSING C-1 run 1000');
   });
+
+  it('skips staleness and the ancestor check for a locally-measured row, even against a stale reference run whose head is not known to be an ancestor', () => {
+    const stale = run({ updated_at: new Date(NOW - STALE_MS - 1).toISOString() });
+    const rendered = renderRow(repoRow, base({ reference: stale, isAncestor: false, resultsLocal: true }));
+    assert.equal(rendered.state, 'MEASURED LOCALLY C-1');
+    assert.equal(rendered.detail, 'k=2 <= 3');
+  });
 });
 
 describe('the report', () => {

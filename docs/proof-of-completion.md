@@ -306,6 +306,7 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    expectation detail — never `PASSING ... run <id>`, because no CI run vouched for it
    (CLAUDE.md's vocabulary section: a claim must render as what actually attests it).
    *Tests:* scripts/__tests__/status.test.mjs — "applies the rendering rules in the order the design fixes".
+   *Tests:* scripts/__tests__/status.test.mjs — "skips staleness and the ancestor check for a locally-measured row, even against a stale reference run whose head is not known to be an ancestor".
 
 ### 3.7 Chat
 
