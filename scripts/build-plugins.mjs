@@ -23,7 +23,12 @@
  *      `{ format: "lwplugin/1", manifest, bundle: <base64> }` — the exact shape
  *      `electron/main/plugins/pluginPackage.ts`'s `parsePluginPackage` reads,
  *      unchanged; this script does not reimplement that validator, and does not
- *      need to, because `--verify` below calls the real one.
+ *      call it either. This script has no `--verify` flag. Checking a built
+ *      `.lwplugin` against the real validator is, today, a separate, manual
+ *      step run outside this file (see the PR that added this script for the
+ *      command and its output) — not something `npm run plugins:build` does
+ *      for you. That gap is `plugin:check` (ADR-0006 decision 10 / step 8),
+ *      which has not landed yet.
  *
  * ---------------------------------------------------------------------------
  * `hostApiVersion` COMES FROM THE SDK BARREL'S OWN SOURCE, READ AS TEXT
@@ -38,8 +43,9 @@
  * decision 3, step 3): it makes an edit to one side without the other loud, at
  * the moment this script runs, and does not stop a hand edit to both sides
  * together. `EXTENSION_ID_PATTERN` and `RESERVED_IDS` are mirrored the same way,
- * from `src/core/types.ts`'s published values, restated here rather than parsed,
- * because a plugin's `id` has to be validated before a byte is written and this
+ * from `src/core/RegistryContext.tsx`'s published values (`types.ts` only
+ * references them in prose), restated here rather than parsed, because a
+ * plugin's `id` has to be validated before a byte is written and this
  * script has no compiled `electron/main/plugins/hostContract.js` to import from
  * (that only exists after `npm run build:desktop`, which this script does not
  * require).
@@ -51,11 +57,9 @@
  * not attach anything to a GitHub Release — ADR-0006 decision 2's install
  * sources and the release-asset step are main-process and CI concerns
  * respectively, both out of scope here. It does not run `plugin:check`
- * (ADR-0006 decision 10 / step 8), which has not landed yet: this script's own
- * `--verify` flag below is a narrower thing, is written for THIS step,
- * and calls only the package validator that already exists
- * (`electron/main/plugins/pluginPackage.ts`), not a conformance kit that does
- * not.
+ * (ADR-0006 decision 10 / step 8), which has not landed yet, and it does not
+ * check its own output against `pluginPackage.ts`'s validator either — see
+ * the note under "3." above.
  * ============================================================================
  */
 
@@ -83,7 +87,7 @@ function readHostApiVersion() {
   return match[1];
 }
 
-/** Mirrors `src/core/types.ts`'s published `EXTENSION_ID_PATTERN`. See the banner. */
+/** Mirrors `src/core/RegistryContext.tsx`'s published `EXTENSION_ID_PATTERN`. See the banner. */
 const EXTENSION_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** Mirrors the registry's `RESERVED_IDS` (`src/core/RegistryContext.tsx`). */

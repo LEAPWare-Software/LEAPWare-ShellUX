@@ -64,8 +64,9 @@ from so a reader can check it.
   surface loader that would read `state.json` and `import()` an installed
   plugin into the running extension surface (ADR-0006 step 6) has not landed,
   so nothing loads a plugin in the packaged application yet; `plugin:check`
-  (step 8) does not exist, so `plugins:build`'s own `--verify`-style check above
-  is a narrower, hand-run substitute, not that conformance kit; and attaching
+  (step 8) does not exist, and `plugins:build` has no `--verify` flag of its own
+  — the `parsePluginPackage` run described above is a narrower, hand-run
+  substitute, not that conformance kit; and attaching
   the three `.lwplugin` files to a GitHub Release, or installing them in the
   end-to-end lane (step 10/11), is unattempted and unreachable from this
   sandbox, which cannot launch a packaged Electron app or publish a release.
