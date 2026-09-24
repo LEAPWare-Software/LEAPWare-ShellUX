@@ -91,13 +91,32 @@ function writeFixture(name, { id = name, bundleText = GOOD_BUNDLE.replace('ID_PL
   return path;
 }
 
-/** Run the real CLI against `path`, exactly as `npm run plugin:check` does. */
-function runCli(path) {
+/**
+ * Run the real CLI against `path`, exactly as `npm run plugin:check` does.
+ * `timeout`, when given, is `execFileSync`'s own subprocess timeout in
+ * milliseconds — a fixed upper bound so a regression of the `advance()` hang
+ * this file's fake-clock tests guard against kills the CLI subprocess and
+ * fails this test loudly, rather than hanging `node --test` (and, unguarded,
+ * the CI job the reviewer named).
+ *
+ * **`killSignal: 'SIGKILL'`, not the default `SIGTERM`, when a `timeout` is
+ * given.** Measured, not assumed: the CLI's own Vite dev server registers
+ * process-level signal listeners of its own, which makes Node route SIGTERM
+ * through the (JS) event loop rather than take the default immediate-exit
+ * action — and a process stuck in the exact synchronous `advance()` infinite
+ * loop this option exists to guard against never yields the event loop to
+ * receive it. Confirmed by hand: a hung `plugin-check.mjs` sent `SIGTERM`
+ * directly was still alive two seconds later; `SIGKILL` is unconditional at
+ * the OS level and does not depend on the stuck process ever running JS
+ * again.
+ */
+function runCli(path, { timeout } = {}) {
   try {
     const stdout = execFileSync(process.execPath, [CLI, path], {
       encoding: 'utf8',
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...(timeout === undefined ? {} : { timeout, killSignal: 'SIGKILL' }),
     });
     return { status: 0, stdout, stderr: '' };
   } catch (error) {
@@ -226,6 +245,18 @@ describe('plugin-check — the home-grown fake clock', () => {
     clock.restore();
     assert.equal(globalThis.setTimeout, realSetTimeout);
   });
+
+  // Regression for the review finding on scripts/plugin-check.mjs line 288
+  // (PR #221): a zero-delay setInterval used to re-arm at `dueAt === now`,
+  // which is still `<= deadline`, so `advance()`'s `for (;;)` picked the same
+  // timer again with `now` unmoved and never returned — a synchronous,
+  // single-threaded infinite loop. Deliberately NOT exercised here as a
+  // direct, in-process `clock.advance()` call: `node --test`'s own per-test
+  // `timeout` cannot preempt a synchronous loop that never yields the one JS
+  // thread it shares with the test runner itself, so a regression would hang
+  // this whole file, not merely fail one case. The CLI-level cases below
+  // exercise this exact scenario safely, through `execFileSync`'s subprocess
+  // `timeout`, which kills the child from OUTSIDE that blocked thread.
 });
 
 describe('plugin-check — the CLI, end to end, one planted-bad fixture per check row', () => {
@@ -323,6 +354,149 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.equal(result.status, 1);
     assert.match(result.stderr, /FAIL \[lifecycle\]/);
     assert.match(result.stderr, /onActivate threw: boom from onActivate/);
+  });
+
+  // Regression for the review finding on scripts/plugin-check.mjs line 288
+  // (PR #221): the plugin here does exactly what the finding named — an
+  // onActivate that schedules a zero-delay setInterval (`setInterval(fn, 0)`)
+  // and never clears it — which used to make `advance()` loop forever inside
+  // `checkLifecycle`, turning a bad plugin into a hung CI job with no
+  // `timeout-minutes` to save it. `timeout` on `runCli` bounds the subprocess
+  // so an unfixed regression fails this test fast instead of hanging the
+  // suite. Fixed, `advance()` terminates and this is an ordinary leaked-timer
+  // FAIL, same reason as "Check 5 (Lifecycle) — refuses a plugin whose
+  // onRelease does not clear a running interval" above.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate never clears a zero-delay interval', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'zero-delay-lifecycle',",
+      "  name: 'ZeroDelay',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate(shell) {',
+      // Deliberately never cleared, and deliberately delay 0 — the exact
+      // scenario the review finding named.
+      '      setInterval(() => { shell.setBadgeCount("leak", 1); }, 0);',
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('zero-delay-lifecycle', { bundleText, id: 'zero-delay-lifecycle' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /reached the handle after release/);
+  });
+
+  // Same scenario again, but via an OMITTED delay argument
+  // (`setInterval(fn)`, `delay === undefined`) rather than a literal `0` —
+  // `schedule()`'s `safeDelay` clamps both to the same zero delay, so this is
+  // the same code path, not a second bug, and is asserted here because the
+  // review finding is about `safeDelay`'s clamp in general, not only a
+  // literal `0` in plugin source. The negative-delay case below covers the
+  // clamp's other side.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate never clears an omitted-delay interval', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'omitted-delay-lifecycle',",
+      "  name: 'OmittedDelay',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate(shell) {',
+      '      setInterval(() => { shell.setBadgeCount("leak", 1); });',
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('omitted-delay-lifecycle', { bundleText, id: 'omitted-delay-lifecycle' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /reached the handle after release/);
+  });
+
+  // The clamp's other side: a NEGATIVE delay (`setInterval(fn, -100)`).
+  // `schedule()`'s `safeDelay` treats `delay >= 0` as the only valid case and
+  // clamps anything else — negative or non-numeric — to `0`, so this reaches
+  // the identical zero-delay `advance()` path as the two cases above through
+  // a third, distinct plugin-source shape.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate never clears a negative-delay interval', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'negative-delay-lifecycle',",
+      "  name: 'NegativeDelay',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate(shell) {',
+      '      setInterval(() => { shell.setBadgeCount("leak", 1); }, -100);',
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('negative-delay-lifecycle', { bundleText, id: 'negative-delay-lifecycle' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /reached the handle after release/);
+  });
+
+  // Regression for the independent review finding on PR #221 (a High-severity
+  // "MERGE WITH FIXES" verdict, not the line-288 finding above): an
+  // `onActivate` that defers STARTING its leak by one microtask
+  // (`somePromise.then(() => setInterval(...))`, an ordinary pattern) used to
+  // still be mid-flight when `checkLifecycle`'s `finally` ran `clock
+  // .restore()` — `lifecycle.onActivate?.(shell)` returning does not itself
+  // drain the microtask queue. The `setInterval` call then landed on the REAL
+  // timers, invisible to every check here, and this plugin printed a false
+  // PASS followed by an uncaught `REVOKED` crash roughly a second later, once
+  // the real interval fired against the already-revoked handle — exactly the
+  // defect class ADR-0006 decision 10 names this kit to catch. `timeout`
+  // bounds `runCli` in case a future regression brings back the real-timer
+  // delay this fixture's `setInterval(..., 1000)` would otherwise wait out.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate starts an uncleared interval from a microtask', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'async-leak-lifecycle',",
+      "  name: 'AsyncLeak',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate(shell) {',
+      '      Promise.resolve().then(() => {',
+      '        setInterval(() => { shell.setBadgeCount("leak", 1); }, 1000);',
+      '      });',
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('async-leak-lifecycle', { bundleText, id: 'async-leak-lifecycle' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /reached the handle after release/);
   });
 
   it('Check 6 (Render) — refuses a plugin whose pane view throws on first render with an empty context', () => {

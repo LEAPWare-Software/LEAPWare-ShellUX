@@ -60,6 +60,45 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
+- **Fixed: three review findings on `scripts/plugin-check.mjs`'s Lifecycle
+  check (#221), all reachable from `createFakeClock`/`checkLifecycle`, before
+  the conformance kit's first merge.**
+  1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
+     `dueAt = now + earliest.delay`; for a **zero-delay** interval
+     (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
+     `safeDelay` clamps all three the same way) that left `dueAt === now`, still
+     `<= deadline`, so `advance()`'s `for (;;)` picked the same timer again with
+     `now` unmoved and never returned — a plain bad plugin turning into a hung
+     CI job, since the step that runs `plugin:check` carries no
+     `timeout-minutes`. Fixed by clamping the refire to
+     `now + Math.max(earliest.delay, 1)`, so `dueAt` strictly increases every
+     time. *Tests:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
+     (Lifecycle) — refuses a plugin whose onActivate never clears a
+     zero-delay interval", "Check 5 (Lifecycle) — refuses a plugin whose
+     onActivate never clears an omitted-delay interval", and "Check 5
+     (Lifecycle) — refuses a plugin whose onActivate never clears a
+     negative-delay interval".
+  2. A plugin whose `onActivate` deferred STARTING its leak by one microtask
+     (`somePromise.then(() => setInterval(...))`, an ordinary pattern) was
+     still mid-flight when `checkLifecycle`'s `finally` ran `clock.restore()`
+     — calling `lifecycle.onActivate?.(shell)` does not itself drain the
+     microtask queue — so that `setInterval` landed on the REAL timers,
+     invisible to every check, and the CLI printed a false PASS followed by an
+     uncaught `REVOKED` crash once the real interval fired against the
+     already-revoked handle. Fixed by awaiting one real event-loop tick
+     (`flushMicrotasks`, via the real, unpatched `setImmediate`) after each of
+     `onActivate`/`onDeactivate`/`onRelease`, so a leak started from a
+     microtask chain of any depth lands on the fake clock as a synchronous one
+     does. The script's own banner now also states plainly what this does NOT
+     close: a leak whose start instead awaits real I/O outlives one tick and
+     is still outside it. *Test:* `scripts/__tests__/plugin-check.test.mjs` —
+     "Check 5 (Lifecycle) — refuses a plugin whose onActivate starts an
+     uncleared interval from a microtask".
+  3. `wrapWithCallLog`'s docblock used the word "structural", which
+     `CLAUDE.md`'s vocabulary section bans unconditionally from repo prose;
+     reworded to "the same shape a plug-in reads through" without changing the
+     claim.
+
 - **Fixed: `npm run plugins:build` emitted a `bundle.js` with NO export
   statement at all**, for any plugin whose source declares a named export and
   nothing in the bundle re-imports it — which is every one of the three

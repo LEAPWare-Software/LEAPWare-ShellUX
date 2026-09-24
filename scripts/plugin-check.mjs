@@ -98,6 +98,15 @@
  * can decide that. Anything about the network: the CSP settles that for
  * everyone, not this kit. A green run of this kit is evidence for exactly the
  * six rows above, and no wider a claim than that.
+ *
+ * Check 5 (Lifecycle) also does not catch every possible deferral: it awaits
+ * one real event-loop tick (`flushMicrotasks`, on `checkLifecycle`'s own
+ * banner) after each of `onActivate`/`onDeactivate`/`onRelease`, so a leak
+ * started from a microtask chain of any depth (`.then().then()…`) lands on
+ * the fake clock as if it were synchronous. A leak whose start instead awaits
+ * real I/O — a `fetch`, a file read, anything that outlives one tick — is
+ * still outside what this tick can catch; that gap is unclosed, not silently
+ * assumed away.
  * ============================================================================
  */
 
@@ -280,7 +289,16 @@ export function createFakeClock() {
       if (earliest.kind === 'timeout') {
         timers.delete(earliestId);
       } else {
-        earliest.dueAt = now + earliest.delay;
+        // `Math.max(earliest.delay, 1)`, not `earliest.delay` alone: a
+        // zero-delay interval (`setInterval(fn, 0)`, or an omitted delay —
+        // `schedule()`'s `safeDelay` clamps a non-number or negative delay to
+        // `0` too) would otherwise re-arm at `dueAt === now`, which is still
+        // `<= deadline`, and this `for (;;)` would pick the same timer again
+        // with `now` unmoved — forever. `plugin:check`'s whole reason to exist
+        // is to fail a badly-behaved plugin cleanly; a plugin that does this
+        // must come back as a `lifecycle` FAIL, not a hung CI job with no
+        // `timeout-minutes` to save it.
+        earliest.dueAt = now + Math.max(earliest.delay, 1);
       }
       earliest.callback(...earliest.args);
     }
@@ -320,7 +338,7 @@ function installMinimalDom() {
  * trap is required by the language to return that EXACT value for such a
  * property, and returning a wrapping closure instead is a `TypeError` at the
  * first read, not a silent pass-through. A fresh plain object has no such
- * invariant and satisfies the same structural shape a plug-in reads through —
+ * invariant and satisfies the same shape a plug-in reads through —
  * it never needs to BE the original object, only to behave like it.
  */
 function wrapWithCallLog(shell, phaseRef, calls) {
@@ -380,6 +398,32 @@ function createLiveShell(runtime, extensionId) {
 }
 
 /**
+ * Wait for the real event loop's microtask queue to drain, using the REAL
+ * `setImmediate` (never patched by `createFakeClock` — see its own banner:
+ * only `setTimeout`/`setInterval`/their `clear*` counterparts are installed).
+ * `setImmediate`'s callback runs only after every microtask queued before it
+ * has run, including ones a `.then()` callback itself queues, so this drains
+ * a promise chain of any depth in one await, not merely one hop of it.
+ *
+ * WHY THIS EXISTS. `checkLifecycle`'s own body, between one `await` and the
+ * next, runs as a single synchronous stretch of JS — calling
+ * `lifecycle.onActivate?.(shell)` does not, by itself, hand control back to
+ * the microtask queue. A plugin that defers starting a leaking timer by one
+ * microtask (`somePromise.then(() => setInterval(...))`, an ordinary
+ * pattern) would otherwise still be mid-flight when `clock.restore()` runs in
+ * this function's `finally`, so that `setInterval` call would install the
+ * REAL timer, not the fake one — silently outside every check below, and
+ * outside this whole CLI process's own control once it exits. Awaiting this
+ * after each lifecycle call gives such a deferred registration a chance to
+ * land on the FAKE clock, exactly where a synchronously-scheduled one does.
+ */
+function flushMicrotasks() {
+  return new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+}
+
+/**
  * Check 5 — Lifecycle. `activate` -> `deactivate` -> `release`, against a real
  * `createRevocableShellAPI` handle, with the fake clock advanced between each
  * step so a scheduled timer gets a chance to fire.
@@ -404,6 +448,7 @@ export async function checkLifecycle(server, blueprint) {
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onActivate threw: ${describeThrown(error)}` };
     }
+    await flushMicrotasks();
     phaseRef.phase = 'active';
     clock.advance(30_000);
 
@@ -412,6 +457,7 @@ export async function checkLifecycle(server, blueprint) {
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onDeactivate threw: ${describeThrown(error)}` };
     }
+    await flushMicrotasks();
     phaseRef.phase = 'active';
     clock.advance(30_000);
 
@@ -420,6 +466,7 @@ export async function checkLifecycle(server, blueprint) {
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onRelease threw: ${describeThrown(error)}` };
     }
+    await flushMicrotasks();
 
     // Revocation: exactly what ending an extension's liveness does in
     // `ActivationContext.tsx`'s `endLiveness` — the predicate flips, then the
