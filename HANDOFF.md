@@ -21,18 +21,19 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - Rollout step 2 (#171, C-30); step 3 harness (#173); step 0c item 4 (#175, C-31).
 - #23 re-fit (W3-0), the wave-3 plan (#176); `.lwplugin` validator (#177).
 - Operator install guide, 1.0 known limits, plan step 7 (#178).
-- PR B (#179): both proof-of-completion checks required.
-- Plan step 0c complete: the protocol is in force (#181, row C-37).
-- Plugin store (ADR-0006 step 4, #182).
-- Wave-3 W3-1 state primitives (#184).
-- Plugin lifecycle hooks, nav tree, badge clear (ADR-0006 step 5, #185).
-- Proof rows C-38 to C-43, work already built (#186).
-- Cloud lanes can merge (#192, lane C item 0a); runbook, `lw-*` roles, gate-4
-  record (#188, D-52).
-- Proof audit: false claims corrected. `npm run status`: `prove-claims`
-  fallback on artifact-download failure, `MEASURED LOCALLY` (lane C item 0e).
-- ADR-0006 step 7: `plugins/*`, `@shellux/sdk`-only imports, `plugins:build`,
-  `FIXTURE_EXTENSIONS` deleted.
+- PR B (#179): both proof-of-completion checks required and read back.
+- Plan step 0c complete (#181, C-37).
+- The plugin store, ADR-0006 step 4 (#182).
+- Wave-3 W3-1, the state primitives (#184).
+- Plugin lifecycle, nav tree, badge clear (#185).
+- Proof rows C-38–C-43 (#186).
+- Cloud lanes can merge (#192, lane C item 0a); the runbook, `lw-*` roles and
+  gate-4 record (#188, D-52).
+- Proof audit: false claims corrected, checks tightened; `npm run status` falls
+  back to a local `prove-claims` run (lane C item 0e).
+- D-27 struck as superseded by D-34: the branch-protection ruleset it once ruled
+  out is already applied (C-44).
+- ADR-0006 step 7: plugins moved to `plugins/*` (#217)
 
 ## In flight
 

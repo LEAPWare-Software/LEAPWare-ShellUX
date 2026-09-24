@@ -236,6 +236,23 @@ from so a reader can check it.
 
 ### Fixed
 
+- **D-27 ("no branch protection, and no spend to get it") is struck through as
+  superseded**, in `docs/DECISIONS.md` — plan step 1's last unticked bullet. Its premise
+  was that both branch-protection endpoints 403 on a private free-plan repository; that
+  is no longer true, because D-34 took the repository public and, per D-50 and plan step
+  0c row C-37, a ruleset (23685990, seven required contexts) is already applied — so the
+  row was left standing after the fact it stated stopped holding. Struck to the same
+  `~~claim~~ **Superseded by D-34, 2026-09-18.**` pattern already used on D-09, D-11 and
+  D-12; only the Decision-column cell changed, the row's original rationale stays as
+  historical record. **What made it possible:** nothing re-checked a superseded-by
+  relationship once its precondition (D-34) landed; a decision row is written once and
+  never revisited unless a later change happens to touch it. New proof row C-44
+  (`scripts/claims/checks/decisions-d27-strike.mjs`) checks D-27's cell is struck and
+  names D-34, guards that D-09/D-11/D-12 stay struck, and that D-31 through D-35 exist;
+  its probe un-strikes D-27 and is exercised, along with every other repo row's probe,
+  by the register's own generic per-row test, instantiated for C-44 as the register
+  stands committed. *Tests:* `scripts/__tests__/claims-prove.test.mjs`.
+
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast

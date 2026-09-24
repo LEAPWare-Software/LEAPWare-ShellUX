@@ -3121,6 +3121,58 @@
       },
       "provenOn": "2026-09-19",
       "addedBy": "plan step 6b tick (docs/proof-rows-done-work) — tightened 2026-09-19 (proof audit): install_mismatch_test and serve_mismatch_test only grepped the test file for the title string, so they stayed green even when the install-time comparison was inverted (measured: git show + sed inversion left both =1 on the old check). They now run each named Vitest test for real (spawnSync to node_modules/vitest/vitest.mjs, not through the argv allowlist, which governs only the row's own registered command) and assert exit 0."
+    },
+    {
+      "id": "C-44",
+      "box": "In `docs/DECISIONS.md`, add D-31 through D-34 (one per row above, \"Called by: Owner, 2026-09-18\"). Strike through the superseded D-09, D-11 (as the v1 gate), D-12 and D-27, and rewrite §3 as the new line of sight: this plan's steps. Add D-35: **contract gaps ship as documented limits** (#16, #17, #28, #32, #57, #80, #91). This is consistent with D-23 (no third parties). #65 is re-scoped to the 1.1 milestone.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/decisions-d27-strike.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "d27_struck",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d09_still_struck",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d11_still_struck",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d12_still_struck",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "d31_through_d35_present",
+          "op": "==",
+          "value": 5
+        }
+      ],
+      "probe": {
+        "name": "un-strike D-27, restoring its pre-supersession text",
+        "edits": [
+          {
+            "file": "docs/DECISIONS.md",
+            "replace": [
+              "~~**No branch protection, and no spend to get it** (#74, was D-07)~~ **Superseded by D-34, 2026-09-18.**",
+              "**No branch protection, and no spend to get it** (#74, was D-07)"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-24",
+      "addedBy": "plan step 1 tick (lane C, D-27 strike)"
     }
   ],
   "retired": []
