@@ -162,12 +162,13 @@ its own case is written in step 3.
 
 **One bundle, not a file tree.** The plugin build emits a single ES module
 (`output.codeSplitting: false` — rolldown's replacement for Rollup's
-`inlineDynamicImports`, which this repository's Vite major deprecates in favour of
-it; `scripts/build-plugins.mjs` step 7 is where this is actually built, and its own
-dated note below names the source that confirms the rename). One file means one
-hash, one served path and no archive paths to validate. The cost, accepted: no
-code-splitting inside a plugin, so a plugin cannot lazy-load its own panes. #29's
-lazy loading stays undelivered and is named as a 1.0 limit.
+`inlineDynamicImports`:
+`node_modules/rolldown/dist/shared/define-config-DjHYbH6S.d.mts:772` marks
+`inlineDynamicImports` `@deprecated Please use codeSplitting: false instead`;
+`scripts/build-plugins.mjs` step 7 is where this is actually built). One file
+means one hash, one served path and no archive paths to validate. The cost,
+accepted: no code-splitting inside a plugin, so a plugin cannot lazy-load its
+own panes. #29's lazy loading stays undelivered and is named as a 1.0 limit.
 
 **No `capabilities` field.** Every plugin runs in one document (decision 6). A
 permission one plugin declares cannot be enforced against a sibling in the same
@@ -866,11 +867,12 @@ bundle. The plugins' own tests move with them.
 > `/shared/sdk.js`, decision 5's build-time rewrite, unchanged. `npm run
 > plugins:build` reads each plugin's own `plugins/<name>/plugin.json` — `id`,
 > `version`, `title`, an optional `icon`, and which source file to bundle — bundles
-> it with Vite/Rollup into one `bundle.js` (`output.codeSplitting: false`, the
-> option that replaced `inlineDynamicImports` in the Vite major this repository is
-> on), hashes it, and writes `dist-plugins/<id>.lwplugin` in decision 1's exact
-> shape. Verified against the real validator, not a copy of it: every one of the
-> three parses and hash-checks under `electron/main/plugins/pluginPackage.ts`'s
+> it with Vite/Rollup into one `bundle.js` (`output.codeSplitting: false` — the
+> option that replaced `inlineDynamicImports`; decision 1 above cites the rolldown
+> source that confirms it), hashes it, and writes `dist-plugins/<id>.lwplugin` in
+> decision 1's exact shape. Verified against the real validator, not a copy of
+> it: every one of the three parses and hash-checks under
+> `electron/main/plugins/pluginPackage.ts`'s
 > own `parsePluginPackage`, and each reports `compatibility: { state:
 > "compatible" }` against this tree's `HOST_API_VERSION`. `FIXTURE_EXTENSIONS` is
 > deleted from `src/paneview/PaneViewShell.tsx`; the extension surface registers
