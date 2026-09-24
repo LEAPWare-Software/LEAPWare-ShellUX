@@ -57,7 +57,7 @@ function Harness(): ReactElement {
   );
 }
 
-describe('the copyable example in src/examples', () => {
+describe('the copyable example in plugins/hello', () => {
   it('is accepted by the registry the host actually uses', async () => {
     render(<Harness />);
     // Registration is the first thing a wrong manifest fails, and the extension

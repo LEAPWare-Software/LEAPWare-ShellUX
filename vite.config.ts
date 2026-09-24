@@ -18,8 +18,9 @@ import { SHARED_MODULES, sharedModuleSource } from './src/sdk/sharedModules.js';
  * `dev.html` before Vite's own HTML middleware sees it. It is installed under
  * `configureServer`, which Vite calls for `vite` and `vite preview` and never
  * during `vite build`, so no build output is affected. `dev.html`,
- * `src/dev/main.dev.tsx` and `src/mocks/` remain unreachable from anything a
- * user installs, because neither build input references them.
+ * `src/dev/main.dev.tsx` and the three plugins' source under `plugins/`
+ * remain unreachable from anything a user installs, because neither build
+ * input references them.
  *
  * **This banner used to say "`index.html` remains the only build input", and
  * that sentence is now false and has been rewritten rather than left standing.**
