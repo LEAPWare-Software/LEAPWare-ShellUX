@@ -30,14 +30,16 @@ from so a reader can check it.
   it. Staleness and the ancestor-of-`origin/main` check are skipped for those rows, since
   both judge whether an *old CI run* is still trustworthy and neither question has an
   answer for a number computed just now against the working tree; `rowHash` matching and
-  the `FAILING` branch are unchanged either way. If the local reproduction also fails
-  (nonzero exit, or a result file that will not parse), `loadRunContext` throws naming both
-  failures and every row degrades to the existing `UNPROVEN`-with-reason behaviour, rather
-  than crashing `npm run status`. *Tests:* scripts/__tests__/status.test.mjs — "falls back
-  to a local run of prove-claims --mode push when the reference run artifact cannot be
-  downloaded, and renders the row MEASURED LOCALLY"; scripts/__tests__/status.test.mjs —
-  "degrades a row to UNPROVEN rather than crash when both the artifact download and the
-  local reproduction fail"; scripts/__tests__/status.test.mjs — "prints one warning naming
+  the `FAILING` branch are unchanged either way. *Tests:* scripts/__tests__/status.test.mjs
+  — "skips staleness and the ancestor check for a locally-measured row, even against a
+  stale reference run whose head is not known to be an ancestor". If the local reproduction
+  also fails (nonzero exit, or a result file that will not parse), `loadRunContext` throws
+  naming both failures and every row degrades to the existing `UNPROVEN`-with-reason
+  behaviour, rather than crashing `npm run status`. *Tests:* scripts/__tests__/status.test.mjs
+  — "falls back to a local run of prove-claims --mode push when the reference run artifact
+  cannot be downloaded, and renders the row MEASURED LOCALLY"; scripts/__tests__/status.test.mjs
+  — "throws an error naming both failures when the artifact download and the local
+  reproduction both fail"; scripts/__tests__/status.test.mjs — "prints one warning naming
   both failures and exits 0 with every row UNPROVEN when the artifact download and the
   local reproduction both fail".
 

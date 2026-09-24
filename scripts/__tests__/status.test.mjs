@@ -231,7 +231,7 @@ describe('reading runs through gh', () => {
     assert.equal(rendered.detail, 'k=2 <= 3');
   });
 
-  it('degrades a row to UNPROVEN rather than crash when both the artifact download and the local reproduction fail', () => {
+  it('throws an error naming both failures when the artifact download and the local reproduction both fail', () => {
     const fake = (cmd, args) => {
       const key = `${cmd} ${args.join(' ')}`;
       if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };

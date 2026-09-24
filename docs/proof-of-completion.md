@@ -287,7 +287,7 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    every row degrades to `UNPROVEN` the same way any other unreadable run does — it never
    crashes `npm run status`.
    *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims --mode push when the reference run artifact cannot be downloaded, and renders the row MEASURED LOCALLY".
-   *Tests:* scripts/__tests__/status.test.mjs — "degrades a row to UNPROVEN rather than crash when both the artifact download and the local reproduction fail".
+   *Tests:* scripts/__tests__/status.test.mjs — "throws an error naming both failures when the artifact download and the local reproduction both fail".
    *Tests:* scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0 with every row UNPROVEN when the artifact download and the local reproduction both fail".
 4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
    its `expect` values marked `STATED` (X1: manual rows never enter a run); newest
