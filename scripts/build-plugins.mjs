@@ -40,13 +40,22 @@
  * pattern narrow enough that a change to the constant's own line either matches
  * or fails loudly — never silently reads a stale value. That mirror is a
  * **guardrail** in this repository's vocabulary (ADR-0006's dated note under
- * decision 3, step 3): it makes an edit to one side without the other loud, at
- * the moment this script runs, and does not stop a hand edit to both sides
- * together. `EXTENSION_ID_PATTERN` and `RESERVED_IDS` are mirrored the same way,
- * from `src/core/RegistryContext.tsx`'s published values (`types.ts` only
- * references them in prose), restated here rather than parsed, because a
- * plugin's `id` has to be validated before a byte is written and this
- * script has no compiled `electron/main/plugins/hostContract.js` to import from
+ * decision 3, step 3, where the same three constants are held to
+ * `src/sdk/api-surface.json` by `electron/__tests__/pluginPackage.test.ts`):
+ * it makes an edit to one side without the other loud, at the moment this
+ * script runs, and does not stop a hand edit to both sides together.
+ *
+ * `EXTENSION_ID_PATTERN` and `RESERVED_IDS`, below, are NOT mirrored the same
+ * way — narrowing this claim rather than restating it, per ADR-0001 Amendment
+ * G, since no test here exercises it. They are copy-pasted literals from
+ * `src/core/RegistryContext.tsx`'s published values (`types.ts` only
+ * references them in prose), not read from that file at build time, and
+ * nothing catches the two going out of sync if `RegistryContext.tsx` changes
+ * either value — no test anywhere imports `build-plugins.mjs`
+ * (`grep -rl "build-plugins" -- '*.test.ts' '*.test.tsx'` finds nothing).
+ * Restated rather than parsed because a plugin's `id` has to be validated
+ * before a byte is written and this script has no compiled
+ * `electron/main/plugins/hostContract.js` to import from
  * (that only exists after `npm run build:desktop`, which this script does not
  * require).
  *
