@@ -149,6 +149,12 @@ describe('the report', () => {
       assert.match(text, /PASSING C-1 run 1000|UNPROVEN/);
     }
   });
+
+  it('renders a locally-measured row in the full report, bucketed under MEASURED in the summary the same way FAILING RUN buckets under FAILING', () => {
+    const lines = statusReport({ tree: tree(plan), exists, token: true, runContext: base({ resultsLocal: true }), now: NOW });
+    assert.ok(lines.some((l) => /^MEASURED LOCALLY C-1\b/.test(l)));
+    assert.ok(lines.some((l) => /^summary:.*\bMEASURED 1\b/.test(l)), lines.find((l) => l.startsWith('summary:')));
+  });
 });
 
 describe('reading runs through gh', () => {

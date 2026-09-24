@@ -317,8 +317,14 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    followed by each checked expectation as measured (`handoff_bytes=1928 <= 3000`, X8);
    recorded `pass` from the local fallback, `MEASURED LOCALLY C-nn` with the same
    expectation detail — never `PASSING ... run <id>`, because no CI run vouched for it
-   (CLAUDE.md's vocabulary section: a claim must render as what actually attests it).
+   (CLAUDE.md's vocabulary section: a claim must render as what actually attests it). The
+   header's `summary:` line buckets a row by `state.split(' ')[0]` (unchanged by this
+   note), so `MEASURED LOCALLY C-nn` counts under a bare `MEASURED` bucket, the same way
+   `FAILING RUN <id>` already counts under `FAILING` — the summary line has never carried
+   more than a state's first word for any multi-word state; the full state still prints on
+   the row's own line.
    *Tests:* scripts/__tests__/status.test.mjs — "applies the rendering rules in the order the design fixes".
+   *Tests:* scripts/__tests__/status.test.mjs — "renders a locally-measured row in the full report, bucketed under MEASURED in the summary the same way FAILING RUN buckets under FAILING".
    *Tests:* scripts/__tests__/status.test.mjs — "skips staleness and the ancestor check for a locally-measured row, even against a stale reference run whose head is not known to be an ancestor".
 
 ### 3.7 Chat
