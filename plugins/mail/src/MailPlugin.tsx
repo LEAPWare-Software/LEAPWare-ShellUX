@@ -1,7 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import type { ReactElement } from 'react';
-import { RowMetric } from '../components/ui/RowMetric';
-import { TOKEN_CLASS } from '../core/theme/tokenClasses';
+import {
+  LEDGER_CONTEXT_KEY,
+  RowMetric,
+  TOKEN_CLASS,
+  useChannelPayload,
+} from '@shellux/sdk';
 import type {
   ExtensionViewProps,
   IShellAPI,
@@ -11,9 +15,7 @@ import type {
   RibbonAction,
   RibbonContext,
   StructuredPayload,
-} from '../core/types';
-import { useChannelPayload } from '../core/payload/PayloadChannel';
-import { LEDGER_CONTEXT_KEY } from '../core/ledger/ledgerIndex';
+} from '@shellux/sdk';
 
 /**
  * ============================================================================

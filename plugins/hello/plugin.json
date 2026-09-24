@@ -1,0 +1,7 @@
+{
+  "id": "hello-example",
+  "version": "1.0.0",
+  "title": "Hello Extension",
+  "icon": "add",
+  "source": "src/HelloExtension.tsx"
+}

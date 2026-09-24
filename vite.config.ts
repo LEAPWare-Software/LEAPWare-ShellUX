@@ -98,6 +98,22 @@ function serveSharedModules(): Plugin {
 
 export default defineConfig({
   plugins: [react(), serveFixtureAtRoot(), serveSharedModules()],
+  resolve: {
+    alias: {
+      // ADR-0006 step 7. `dev.html` imports the three plugins' SOURCE directly
+      // (`src/dev/DevShell.tsx`), and their source names the host only through
+      // `@shellux/sdk` — the bare specifier decision 3 and decision 5 give a
+      // plugin, never a relative path into `src/core/`. On the DEV SERVER this
+      // alias is what resolves it, to the same `src/sdk/index.ts` the built
+      // `/shared/sdk.js` module is one of the shared build inputs for below.
+      // `npm run plugins:build` (`scripts/build-plugins.mjs`) does NOT reuse this
+      // config: it marks `@shellux/sdk` EXTERNAL and rewrites it to
+      // `/shared/sdk.js` in the emitted `.lwplugin` bundle, which is the whole
+      // point of decision 5's build-time rewrite — an alias here would inline a
+      // second copy instead.
+      '@shellux/sdk': fileURLToPath(new URL('src/sdk/index.ts', import.meta.url)),
+    },
+  },
   server: {
     port: 5173,
   },

@@ -4,27 +4,34 @@ This is the onboarding guide for third parties building extensions against the
 LEAPWare-ShellUX host.
 
 > **START WITH THE EXAMPLE, NOT WITH THIS DOCUMENT.**
-> [`src/examples/HelloExtension.tsx`](src/examples/HelloExtension.tsx) is a
-> complete, working extension in about a hundred lines, most of which is comment.
-> Copy it, rename it, and change the two view components; the five manifest keys
-> and the one command are the whole contract you must satisfy.
+> [`plugins/hello/src/HelloExtension.tsx`](plugins/hello/src/HelloExtension.tsx)
+> is a complete, working extension in about a hundred lines, most of which is
+> comment. Copy it, rename it, and change the two view components; the five
+> manifest keys and the one command are the whole contract you must satisfy.
+> **It, and the two modules below, are first-party plugins under `plugins/*`
+> (ADR-0006 step 7)** — moved out of `src/` and built by `npm run plugins:build`
+> into a `.lwplugin` each, importing the host only through `@shellux/sdk`. They
+> are no longer compiled into the packaged application; it installs none of the
+> three by default.
 >
 > It is **registered and driven by a test** —
-> [`src/examples/__tests__/HelloExtension.test.tsx`](src/examples/__tests__/HelloExtension.test.tsx)
+> [`plugins/hello/__tests__/HelloExtension.test.tsx`](plugins/hello/__tests__/HelloExtension.test.tsx)
 > — so it cannot quietly stop being a working extension. *Tests:* "is accepted by
 > the registry the host actually uses", "renders both of its panes and moves the
 > selection between them", and "offers its command only when its predicate says
 > so, and the command clears the selection".
 >
-> **The two modules under `src/mocks/` are the wrong place to start** and this
-> guide used to leave that unsaid. They are *verification remotes*: their job is
-> to exercise the host's edges, so each is around a thousand lines carrying a
-> seeded catalogue, a running timer, a deliberately throwing renderer and the
-> structured payload channel. Read them **second**, when you want a feature the
-> example does not show. See #52.
+> **The two modules under `plugins/mail/` and `plugins/database/` are the wrong
+> place to start** and this guide used to leave that unsaid. They are
+> *verification remotes*: their job is to exercise the host's edges, so each is
+> around a thousand lines carrying a seeded catalogue, a running timer, a
+> deliberately throwing renderer and the structured payload channel. Read them
+> **second**, when you want a feature the example does not show. See #52.
 >
 > Then run the shell — `npm run dev` serves the demo with both remotes registered
-> at `/`.
+> at `/`, from their source (`src/dev/DevShell.tsx` imports `plugins/mail/` and
+> `plugins/database/` directly, for the same reason `dev.html` is not a build
+> input: a build per edit would be friction the browser dev loop does not need).
 
 ---
 
@@ -1743,8 +1750,9 @@ Consequences for your Pane 2 view:
   accepted)" in `src/__tests__/IntegrationSuite.test.tsx`.
 
 > **Neither shipped verification remote uses this component, and that is a gap
-> rather than a recommendation.** `src/mocks/MailPlugin.tsx` lists a dozen messages
-> and `src/mocks/DatabasePlugin.tsx` maps all 280 of its records into a plain
+> rather than a recommendation.** `plugins/mail/src/MailPlugin.tsx` lists a dozen
+> messages and `plugins/database/src/DatabasePlugin.tsx` maps all 280 of its
+> records into a plain
 > `<ul>` — so as things stand `VirtualizedList` has no consumer anywhere under
 > `src/` outside the integration suite's own test-authored extension. If you are
 > looking for a worked example to copy, there is not one yet; the props table above
@@ -2092,7 +2100,7 @@ export function makeShellStub(): IShellAPI {
 > has happened four times (three members → seven → nine → fourteen → sixteen);
 > this snippet itself sat at seven members through two of them, which is why its
 > member list is now pinned by a test that reads this file — *Test:*
-> `src/examples/__tests__/developerGuideStub.test.ts` — "lists exactly the
+> `src/__tests__/developerGuideStub.test.ts` — "lists exactly the
 > members a real IShellAPI has". That test compares names only; the snippet's
 > types are not compiled by this repository.
 
@@ -2207,9 +2215,9 @@ testing the wrong thing — or the contract has a genuine gap worth reporting.
 ### Four traps this repository walked into first, so you do not have to
 
 These were all found writing `src/__tests__/IntegrationSuite.test.tsx`, which
-drives the assembled shell through the two extensions in `src/mocks/`. They are
-about the *test environment*, not about the contract, and none of them is
-discoverable by reading a docblock.
+drives the assembled shell through the two extensions in `plugins/mail/` and
+`plugins/database/`. They are about the *test environment*, not about the
+contract, and none of them is discoverable by reading a docblock.
 
 **Your module state outlives a mount, and that is correct.** A well-written
 extension keeps its cache, its selection and its event log in module scope, so two

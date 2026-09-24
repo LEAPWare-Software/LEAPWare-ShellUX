@@ -1,13 +1,10 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useReducer, useEffect } from 'react';
 import type { ReactElement } from 'react';
 import { ShellLayout } from '../components/layout/ShellLayout';
 import { ShellHostProvider, useActivation } from '../core/ActivationContext';
-import { ExtensionRegistryProvider, useRegistry } from '../core/RegistryContext';
+import { ExtensionRegistryProvider } from '../core/RegistryContext';
 import { useShellContext } from '../core/ShellAPI';
 import type { ShellStateStore } from '../core/ShellAPI';
-import type { LEAPExtensionBlueprintInput } from '../core/types';
-import { DatabasePlugin } from '../mocks/DatabasePlugin';
-import { MailPlugin } from '../mocks/MailPlugin';
 
 /**
  * ============================================================================
@@ -79,12 +76,24 @@ import { MailPlugin } from '../mocks/MailPlugin';
  * ---------------------------------------------------------------------------
  * WHAT THIS FILE IS NOT, STATED SO IT IS NOT MISTAKEN FOR MORE
  * ---------------------------------------------------------------------------
- * **It registers the same two verification remotes `dev.html` does**, for the
- * same reason and with the same limit: the production shell registers no
- * extension, so a surface with an empty registry would render two empty panes
- * and prove nothing about the split. The blueprint itself does not cross the
- * boundary yet — `src/core/ipc/manifest.ts` implements the split that would let
- * it, and consuming that is the next piece of this seam rather than this one.
+ * **It registers no extension of its own.** Until ADR-0006 step 7 it registered
+ * `MailPlugin` and `DatabasePlugin` from `src/mocks/` directly, in the compiled
+ * bundle, because an empty registry would have rendered two empty panes and
+ * proven nothing about the process split (step 1's evidence needed something in
+ * pane 2 and pane 3 to measure a CSP violation against). Step 7 moved both
+ * plugins to `plugins/mail/` and `plugins/database/` and deleted that fixture
+ * list: **the packaged application installs none of the three first-party
+ * plugins by default.** What loads here now, once it does, is whatever
+ * `state.json` names as installed and enabled (ADR-0006 decision 2) — the
+ * surface loader that reads that list is step 6, and it has not landed, so
+ * today this document's registry starts and stays empty in the packaged app.
+ * `src/dev/DevShell.tsx` is the one surface that still registers the three
+ * plugins, from their **source**, for the browser dev loop — see its own
+ * banner for why that is not the same thing as this file doing it.
+ *
+ * The blueprint itself does not cross the process boundary either —
+ * `src/core/ipc/manifest.ts` implements the split that would let it, and
+ * consuming that remains a later piece of this seam.
  *
  * **It lives outside the 100% coverage gate**, in `src/paneview/`, beside
  * `src/dev/` and `src/main.tsx` for the same reason: it is composition, not
@@ -93,39 +102,6 @@ import { MailPlugin } from '../mocks/MailPlugin';
  * "assembles things that are tested elsewhere".
  * ============================================================================
  */
-
-/** The two verification remotes, in the order pane 1 lists them. */
-const FIXTURE_EXTENSIONS: readonly LEAPExtensionBlueprintInput[] = Object.freeze([
-  MailPlugin,
-  DatabasePlugin,
-]);
-
-/**
- * Registers each blueprint once, from inside the provider, exactly as a plug-in
- * would — the same shape `src/dev/DevShell.tsx` uses, and for the same reason.
- */
-function Registrar(): null {
-  const registry = useRegistry();
-  const registered = useRef(false);
-
-  useEffect(() => {
-    if (registered.current) {
-      return;
-    }
-    registered.current = true;
-    for (const blueprint of FIXTURE_EXTENSIONS) {
-      const result = registry.register(blueprint);
-      if (!result.ok) {
-        console.error(
-          `ShellUX extension surface: "${blueprint.id}" did not register.`,
-          result.error,
-        );
-      }
-    }
-  }, [registry]);
-
-  return null;
-}
 
 /**
  * Follow the replicated foreground, and render the panes underneath it.
@@ -206,7 +182,6 @@ export function PaneViewShell({ store }: PaneViewShellProps = {}): ReactElement 
   return (
     <ExtensionRegistryProvider>
       <ShellHostProvider store={store}>
-        <Registrar />
         <ExtensionSurface />
       </ShellHostProvider>
     </ExtensionRegistryProvider>

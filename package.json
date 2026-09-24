@@ -18,6 +18,7 @@
     "build:desktop": "tsc -p electron/tsconfig.json",
     "package:desktop": "electron-builder --publish never",
     "verify:desktop": "npm run build && npm run build:desktop && npm run package:desktop",
+    "plugins:build": "node scripts/build-plugins.mjs",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --sequence.shuffle src/__tests__/IntegrationSuite.test.tsx",

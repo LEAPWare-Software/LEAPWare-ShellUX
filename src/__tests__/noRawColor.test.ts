@@ -343,8 +343,6 @@ const KNOWN_MODULES = [
   'components/command/commandListItem.tsx',
   'core/theme/tokenClasses.ts',
   'core/theme/tokens.generated.ts',
-  'mocks/DatabasePlugin.tsx',
-  'mocks/MailPlugin.tsx',
 ];
 
 describe('src/ — every colour is a token, and no dark: variant survives', () => {

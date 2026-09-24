@@ -47,7 +47,7 @@ in parallel.
 |---|---|---|
 | W3-0 | yes, first | `paneSizing.ts`, `e2e/pane-refit.spec.ts` |
 | W3-1 | no | `src/core/theme/tokenClasses.ts` (the **only** increment that edits it; see below), new `src/components/ui/Banner.tsx`, new `src/components/ui/buttonClasses.ts`, new `src/components/ui/Button.tsx`, the dev-only fixture `states.html`, `src/dev/StatesFixture.tsx`, `src/dev/main.states.tsx`, and `design/lib/painters.mjs` |
-| W3-2 | no | `src/components/shared/VirtualizedList.tsx`, `src/components/ui/RowMetric.tsx`, the row renderers in `src/mocks/**` |
+| W3-2 | no | `src/components/shared/VirtualizedList.tsx`, `src/components/ui/RowMetric.tsx`, the row renderers in `plugins/mail/src/` and `plugins/database/src/` (moved from `src/mocks/**` by ADR-0006 step 7) |
 | W3-3 | yes, second | `src/components/layout/ShellNavigation.tsx`, `src/components/ui/shellIcons.tsx` |
 | W3-4 | yes, third | `src/components/layout/PaneWrapper.tsx`, `src/components/layout/ShellResizeHandle.tsx` |
 | W3-5 | no | `src/components/ledger/LedgerBlock.tsx`, `src/components/ledger/BlockLedger.tsx`, new `src/components/ui/Switch.tsx` |

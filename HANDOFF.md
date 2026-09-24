@@ -14,25 +14,25 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 ## What landed on 2026-09-18 and 19
 
 `git log --oneline` is the full list; the landmarks:
-- Public, Apache-2.0, ruleset and merge queue (#141); Claude review working (#151).
+- Public, ruleset/merge queue (#141); Claude review working (#151).
 - Proof of completion: design (#152, D-50), PR A (#156), rollout 2 (#169).
 - ADR-0006 Accepted (#145); steps 1 CSP (#154), 2 SDK (#170).
 - Charts (#148), crash log (#150), ShellLayout split (#160).
-- Rollout step 2 complete (#171, C-30); the step 3 harness (#173); plan step
-  0c item 4 ticked (#175, C-31).
+- Rollout step 2 (#171, C-30); step 3 harness (#173); step 0c item 4 (#175, C-31).
 - #23 re-fit (W3-0), the wave-3 plan (#176); `.lwplugin` validator (#177).
 - Operator install guide, 1.0 known limits, plan step 7 (#178).
-- PR B (#179): both proof-of-completion checks required and read back.
+- PR B (#179): both proof-of-completion checks required.
 - Plan step 0c complete: the protocol is in force (#181, row C-37).
-- The plugin store, ADR-0006 step 4 (#182).
-- Wave-3 W3-1, the state primitives (#184).
-- Plugin lifecycle hooks, nav tree, badge clear, ADR-0006 step 5 (#185).
-- Proof rows C-38 to C-43 for work already built (#186).
-- Cloud lanes can merge (#192, lane C item 0a); the runbook, `lw-*` roles and
-  gate-4 record (#188, D-52).
-- Proof audit: false claims corrected, checks tightened. `npm run status`:
-  `prove-claims` fallback on artifact-download failure, renders `MEASURED
-  LOCALLY` (lane C item 0e).
+- Plugin store (ADR-0006 step 4, #182).
+- Wave-3 W3-1 state primitives (#184).
+- Plugin lifecycle hooks, nav tree, badge clear (ADR-0006 step 5, #185).
+- Proof rows C-38 to C-43, work already built (#186).
+- Cloud lanes can merge (#192, lane C item 0a); runbook, `lw-*` roles, gate-4
+  record (#188, D-52).
+- Proof audit: false claims corrected. `npm run status`: `prove-claims`
+  fallback on artifact-download failure, `MEASURED LOCALLY` (lane C item 0e).
+- ADR-0006 step 7: `plugins/*`, `@shellux/sdk`-only imports, `plugins:build`,
+  `FIXTURE_EXTENSIONS` deleted.
 
 ## In flight
 
@@ -44,7 +44,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## The next step
 
-1. ADR-0006 steps 6 to 11, and W3-2 onward.
+1. ADR-0006 step 6, 8-11; W3-2 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

@@ -851,6 +851,45 @@ the three `.lwplugin` files as assets, and the end-to-end lane installs them.
 build per edit would be friction; it is `apply: 'serve'` and never reaches a packaged
 bundle. The plugins' own tests move with them.
 
+> **2026-09-24, step 7 landed — the move and the build, as built.** `src/mocks/`
+> and `src/examples/` no longer exist. `plugins/mail/src/MailPlugin.tsx`,
+> `plugins/database/src/DatabasePlugin.tsx` and `plugins/hello/src/HelloExtension.tsx`
+> import `RowMetric`, `TOKEN_CLASS`, `useChannelPayload`, `LEDGER_CONTEXT_KEY` and
+> every type they name through the bare specifier `@shellux/sdk` alone — never a
+> relative path into `src/core/`. `vite.config.ts` and `vitest.config.ts` resolve
+> that specifier to `src/sdk/index.ts` (a `resolve.alias`, for the dev server and
+> for tests); `scripts/build-plugins.mjs` does the opposite for a real build,
+> marking it (with `react` and `react/jsx-runtime`) EXTERNAL and rewriting it to
+> `/shared/sdk.js`, decision 5's build-time rewrite, unchanged. `npm run
+> plugins:build` reads each plugin's own `plugins/<name>/plugin.json` — `id`,
+> `version`, `title`, an optional `icon`, and which source file to bundle — bundles
+> it with Vite/Rollup into one `bundle.js` (`output.codeSplitting: false`, the
+> option that replaced `inlineDynamicImports` in the Vite major this repository is
+> on), hashes it, and writes `dist-plugins/<id>.lwplugin` in decision 1's exact
+> shape. Verified against the real validator, not a copy of it: every one of the
+> three parses and hash-checks under `electron/main/plugins/pluginPackage.ts`'s
+> own `parsePluginPackage`, and each reports `compatibility: { state:
+> "compatible" }` against this tree's `HOST_API_VERSION`. `FIXTURE_EXTENSIONS` is
+> deleted from `src/paneview/PaneViewShell.tsx`; the extension surface registers
+> nothing until a later step's surface loader reads `state.json`. `src/dev/
+> DevShell.tsx` is the one module under `src/` that still imports the three
+> plugins, from their source, by a relative path OUT of `src/dev/` into
+> `plugins/*/src/` — reached only from `dev.html`, which is not a build input.
+> *Tests:* `src/__tests__/pluginImportGraph.test.ts` — "reaches no module under
+> src/mocks or src/examples, which ADR-0006 step 7 deleted", walking the real
+> import graph from `paneview.html`'s own entry point, in
+> `crossDocumentIdref.test.ts`'s manner. The plugins' own tests moved with them:
+> `plugins/hello/__tests__/HelloExtension.test.tsx` is unchanged but for its
+> imports. `src/examples/__tests__/developerGuideStub.test.ts` did not move with
+> `HelloExtension` — it was never about it, reading `DEVELOPER.md` against
+> `src/core/ShellAPI.ts` — and now lives at `src/__tests__/developerGuideStub.test.ts`.
+> **Not built in this step, stated so it is not read wider:** the surface loader
+> that would read `state.json` and `import()` an installed plugin in the packaged
+> extension surface (step 6); `plugin:check` (step 8); attaching the three
+> `.lwplugin` files to a GitHub Release, or installing them in the end-to-end lane
+> (step 10/11) — none of that is reachable from this sandbox, which cannot launch
+> a packaged Electron app or publish a release.
+
 ---
 
 ## Implementation sequence

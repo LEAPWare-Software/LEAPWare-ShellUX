@@ -3,17 +3,17 @@ import type { ReactElement } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { ShellHostProvider } from '../../core/ActivationContext';
-import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
-import { createHydrationEngine } from '../../core/services/HydrationEngine';
-import { ShellLayout } from '../../components/layout/ShellLayout';
-import { HelloExtension } from '../HelloExtension';
+import { ShellHostProvider } from '../../../src/core/ActivationContext';
+import { ExtensionRegistryProvider, useRegistry } from '../../../src/core/RegistryContext';
+import { createHydrationEngine } from '../../../src/core/services/HydrationEngine';
+import { ShellLayout } from '../../../src/components/layout/ShellLayout';
+import { HelloExtension } from '../src/HelloExtension';
 
 /**
  * ============================================================================
  * THE EXAMPLE IS RUN, NOT PROMISED
  * ============================================================================
- * `src/examples/HelloExtension.tsx` exists to be copied by someone writing their
+ * `plugins/hello/src/HelloExtension.tsx` exists to be copied by someone writing their
  * first extension. An example that has drifted out of the contract is worse than
  * no example at all: it costs the reader the time to find out, and it does so
  * with the repository's authority behind it.
