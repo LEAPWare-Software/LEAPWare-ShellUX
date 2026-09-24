@@ -23,9 +23,10 @@ from so a reader can check it.
   which `main()` caught and degraded **every** row to `UNPROVEN`, even though the
   reference run's identity, conclusion, sha and ancestry had all been read successfully;
   only the artifact download had failed. Now, when the reference run concluded `success`
-  but the download specifically fails, `loadRunContext` reproduces the same push-mode rows
-  locally (`node scripts/claims/prove-claims.mjs --mode push --out <tmpfile>`, read back in
-  the artifact's own `{ results: [...] }` shape) and `renderRow` labels a row resolved that
+  but the download or the read-back of its artifact fails, `loadRunContext` reproduces the
+  same push-mode rows locally (`node scripts/claims/prove-claims.mjs --mode push --out
+  <tmpfile>`, read back in the artifact's own `{ results: [...] }` shape) and `renderRow`
+  labels a row resolved that
   way `MEASURED LOCALLY <id>`, never `PASSING <id> run <id>`, because no CI run vouches for
   it. Staleness and the ancestor-of-`origin/main` check are skipped for those rows, since
   both judge whether an *old CI run* is still trustworthy and neither question has an

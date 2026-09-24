@@ -18,8 +18,9 @@
  * is PASSING, with the run id that recorded it.
  *
  * If the reference run concluded `success` but its `claims-results` artifact cannot be
- * downloaded (loadRunContext), the same push-mode rows are reproduced locally by running
- * `node scripts/claims/prove-claims.mjs --mode push` in the working tree. Rows resolved
+ * downloaded and read back (loadRunContext) — the download itself failing, or a
+ * downloaded file that will not parse — the same push-mode rows are reproduced locally by
+ * running `node scripts/claims/prove-claims.mjs --mode push` in the working tree. Rows resolved
  * that way render MEASURED LOCALLY, never PASSING, because no CI run vouched for them
  * (docs/proof-of-completion.md §3.6). If the local reproduction fails too, the row-level
  * fallback gives up and every row degrades to UNPROVEN, same as any other unreadable run.
@@ -162,11 +163,12 @@ export function loadRunContext({ repo = DEFAULT_REPO, cwd = REPO_ROOT, run = def
     }
     if (downloadError) {
       // The reference run's identity, conclusion and sha are already known good (we would
-      // not be here otherwise); only its artifact is unreachable — in this project's cloud
-      // sandbox, always, because an outbound proxy blocks `gh run download` (lane C item
-      // 0e). Reproducing the same push-mode rows locally is truer than discarding
-      // everything the runs API already told us; renderRow labels every row this
-      // produces MEASURED LOCALLY, never PASSING, so it can never read as CI's word.
+      // not be here otherwise); only its artifact is unreachable or unreadable — in this
+      // project's cloud sandbox, always unreachable, because an outbound proxy blocks
+      // `gh run download` (lane C item 0e). Reproducing the same push-mode rows locally is
+      // truer than discarding everything the runs API already told us; renderRow labels
+      // every row this produces MEASURED LOCALLY, never PASSING, so it can never read as
+      // CI's word.
       try {
         results = runLocalProveClaims({ cwd, run });
         resultsLocal = true;
@@ -176,7 +178,7 @@ export function loadRunContext({ repo = DEFAULT_REPO, cwd = REPO_ROOT, run = def
         // partial read. isAncestor and results stay at their unset defaults; nothing below
         // reads them once this throws.
         throw new Error(
-          `could not download the claims-results artifact for run ${reference.id} (${downloadError.message}), and reproducing it locally also failed (${localError.message})`,
+          `could not download or read back the claims-results artifact for run ${reference.id} (${downloadError.message}), and reproducing it locally also failed (${localError.message})`,
         );
       }
     } else {

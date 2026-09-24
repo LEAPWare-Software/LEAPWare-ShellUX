@@ -274,15 +274,17 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    dispatch with `inject=none` included; so a flaky crash hidden by a later green run is
    seen only through the issue it filed, which stays open until someone closes it.
    *Tests:* scripts/__tests__/status.test.mjs — "takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch".
-   *Note, 2026-09-24 (lane C item 0e):* when the reference run concluded `success` but
-   `gh run download <id> --name claims-results` itself fails — in this project's cloud
-   sandbox, always, because the outbound proxy blocks it — `loadRunContext` falls back to
-   reproducing the same rows locally: `node scripts/claims/prove-claims.mjs --mode push
-   --out <tmpfile>` in the working tree, read back in the same `{ results: [...] }` shape
-   as the artifact. `push` is the mode the reference run itself runs on `main` (§3.5), so
-   the rows recomputed are the rows the artifact would have held. This is a fallback for
-   the download specifically: a missing reference run, a missing token, or any other
-   structural failure is unchanged. If the local run also fails (a nonzero exit, or a
+   *Note, 2026-09-24 (lane C item 0e):* when the reference run concluded `success` but its
+   `claims-results` artifact cannot be downloaded and read back — either the
+   `gh run download <id> --name claims-results` call itself fails (in this project's cloud
+   sandbox, always, because the outbound proxy blocks it), or the downloaded file cannot be
+   parsed — `loadRunContext` falls back to reproducing the same rows locally:
+   `node scripts/claims/prove-claims.mjs --mode push --out <tmpfile>` in the working tree,
+   read back in the same `{ results: [...] }` shape as the artifact. `push` is the mode the
+   reference run itself runs on `main` (§3.5), so the rows recomputed are the rows the
+   artifact would have held. This is a fallback for the download-or-read-back step
+   specifically: a missing reference run, a missing token, or any other structural failure
+   is unchanged. If the local run also fails (a nonzero exit, or a
    result file that does not parse), `loadRunContext` throws naming both failures, and
    every row degrades to `UNPROVEN` the same way any other unreadable run does (§3.6 step
    4's no-reference-run rule, since `main()`'s catch leaves `reference` at its unset
