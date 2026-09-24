@@ -875,9 +875,12 @@ bundle. The plugins' own tests move with them.
 > "compatible" }` against this tree's `HOST_API_VERSION`. `FIXTURE_EXTENSIONS` is
 > deleted from `src/paneview/PaneViewShell.tsx`; the extension surface registers
 > nothing until a later step's surface loader reads `state.json`. `src/dev/
-> DevShell.tsx` is the one module under `src/` that still imports the three
-> plugins, from their source, by a relative path OUT of `src/dev/` into
-> `plugins/*/src/` — reached only from `dev.html`, which is not a build input.
+> DevShell.tsx` is the one PRODUCTION module under `src/` that still imports
+> the three plugins, from their source, by a relative path OUT of `src/dev/`
+> into `plugins/*/src/` — reached only from `dev.html`, which is not a build
+> input. Two test files also import plugin source the same way, for their own
+> assertions: `src/__tests__/IntegrationSuite.test.tsx` and
+> `src/components/__tests__/ShellLayoutIcons.test.tsx`.
 > *Tests:* `src/__tests__/pluginImportGraph.test.ts` — "reaches no module under
 > src/mocks or src/examples, which ADR-0006 step 7 deleted", walking the real
 > import graph from `paneview.html`'s own entry point, in
