@@ -35,13 +35,15 @@ from so a reader can check it.
   stale reference run whose head is not known to be an ancestor". If the local reproduction
   also fails (nonzero exit, or a result file that will not parse), `loadRunContext` throws
   naming both failures and every row degrades to the existing `UNPROVEN`-with-reason
-  behaviour, rather than crashing `npm run status`. *Tests:* scripts/__tests__/status.test.mjs
-  — "falls back to a local run of prove-claims --mode push when the reference run artifact
-  cannot be downloaded, and renders the row MEASURED LOCALLY"; scripts/__tests__/status.test.mjs
-  — "throws an error naming both failures when the artifact download and the local
-  reproduction both fail"; scripts/__tests__/status.test.mjs — "prints one warning naming
-  both failures and exits 0 with every row UNPROVEN when the artifact download and the
-  local reproduction both fail".
+  behaviour (§3.6 step 4's no-reference-run rule), rather than crashing `npm run status`.
+  *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims
+  --mode push when the reference run artifact cannot be downloaded, and renders the row
+  MEASURED LOCALLY"; scripts/__tests__/status.test.mjs — "throws an error naming both
+  failures when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0
+  when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "renders UNPROVEN when there is no reference run, or
+  the row is absent from it".
 
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,

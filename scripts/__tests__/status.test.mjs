@@ -246,7 +246,13 @@ describe('reading runs through gh', () => {
     );
   });
 
-  it('prints one warning naming both failures and exits 0 with every row UNPROVEN when the artifact download and the local reproduction both fail', () => {
+  // This test's fake gives workingPlanFiles an empty `git ls-files`, so no row is ever
+  // rendered here to assert against; that a row renders UNPROVEN once `reference` is
+  // null (main()'s catch never reassigns runContext past its all-null default) is
+  // already proven directly by "renders UNPROVEN when there is no reference run, or the
+  // row is absent from it" above. This test proves only the process-level half: the
+  // warning names both failures, and main() still exits 0 rather than throwing.
+  it('prints one warning naming both failures and exits 0 when the artifact download and the local reproduction both fail', () => {
     const lines = [];
     const fake = (cmd, args) => {
       if (cmd === 'git' && args[0] === 'fetch') return { status: 0, stdout: '', stderr: '' };
