@@ -161,10 +161,13 @@ icon". Those pin the node-icon path; the manifest-icon path reuses the same look
 its own case is written in step 3.
 
 **One bundle, not a file tree.** The plugin build emits a single ES module
-(`inlineDynamicImports`). One file means one hash, one served path and no archive
-paths to validate. The cost, accepted: no code-splitting inside a plugin, so a
-plugin cannot lazy-load its own panes. #29's lazy loading stays undelivered and is
-named as a 1.0 limit.
+(`output.codeSplitting: false` — rolldown's replacement for Rollup's
+`inlineDynamicImports`, which this repository's Vite major deprecates in favour of
+it; `scripts/build-plugins.mjs` step 7 is where this is actually built, and its own
+dated note below names the source that confirms the rename). One file means one
+hash, one served path and no archive paths to validate. The cost, accepted: no
+code-splitting inside a plugin, so a plugin cannot lazy-load its own panes. #29's
+lazy loading stays undelivered and is named as a 1.0 limit.
 
 **No `capabilities` field.** Every plugin runs in one document (decision 6). A
 permission one plugin declares cannot be enforced against a sibling in the same
