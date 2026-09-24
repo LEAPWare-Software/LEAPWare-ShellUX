@@ -33,6 +33,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_REPO, REPO_ROOT, defaultRunner, formatExpectation, hasToken, rowHash } from './claims/lib.mjs';
 import { checkStructure, readWorkingTree } from './claims/lint-boxes.mjs';
+import { MAIN_BUDGET_MS } from './claims/prove-claims.mjs';
 
 export const STALE_MS = 48 * 60 * 60 * 1000;
 export const WORKFLOW = 'claims.yml';
@@ -106,18 +107,29 @@ export function renderRow(row, context) {
 
 /**
  * Reproduce the reference run's push-mode rows locally: same rows and mode the CI
- * reference run itself runs on `main` (§3.5), so the results are the ones the missing
- * artifact would have held. `--out` (see the top-of-file usage comment in
- * scripts/claims/prove-claims.mjs) writes its JSON report to `out` instead of stdout, in
- * the same `{ results: [...] }` shape as `claims-results.json`. Throws with prove-claims's
- * own stderr (or stdout, for a crash that never reaches stderr) on a nonzero exit or a
- * result file that will not parse.
+ * reference run itself runs on `main` (§3.5). `--out` (see the top-of-file usage comment
+ * in scripts/claims/prove-claims.mjs) writes its JSON report to `out` instead of stdout,
+ * in the same `{ results: [...] }` shape as `claims-results.json`. Throws with
+ * prove-claims's own stderr (or stdout, for a crash that never reaches stderr) on a
+ * nonzero exit or a result file that will not parse.
+ *
+ * One documented way this can still diverge from what the artifact would have held:
+ * prove-claims only runs repo rows under the `unshare --net` guardrail when
+ * `CLAIMS_NET_RESTRICT=unshare` is set (scripts/claims/lib.mjs's `networkRestriction`),
+ * logs which mode it ran in, and this sandbox is exactly the case unlikely to have that
+ * set. That disclosure lives in prove-claims's stdout, which this function reads only on
+ * a nonzero exit (below) — a successful local run does not surface it, so a row rendered
+ * `MEASURED LOCALLY` does not say whether it ran under the same network restriction its
+ * CI counterpart would have. `timeout: MAIN_BUDGET_MS` matches the 30-minute budget a
+ * real `push`-mode main run gets in CI (docs/proof-of-completion.md §3.4), not the 5-minute
+ * default meant for an ordinary subprocess call — a legitimately slow but correct
+ * reproduction must not be killed and mistaken for a failure.
  */
 function runLocalProveClaims({ cwd, run }) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'claims-status-local-'));
   const out = path.join(dir, 'claims-results.json');
   try {
-    const result = run('node', ['scripts/claims/prove-claims.mjs', '--mode', 'push', '--out', out], { cwd });
+    const result = run('node', ['scripts/claims/prove-claims.mjs', '--mode', 'push', '--out', out], { cwd, timeout: MAIN_BUDGET_MS });
     if (result.status !== 0) {
       throw new Error(`node scripts/claims/prove-claims.mjs --mode push exited ${result.status}: ${(result.stderr || result.stdout).trim()}`);
     }

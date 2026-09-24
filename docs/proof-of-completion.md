@@ -281,16 +281,23 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    parsed — `loadRunContext` falls back to reproducing the same rows locally:
    `node scripts/claims/prove-claims.mjs --mode push --out <tmpfile>` in the working tree,
    read back in the same `{ results: [...] }` shape as the artifact. `push` is the mode the
-   reference run itself runs on `main` (§3.5), so the rows recomputed are the rows the
-   artifact would have held. This is a fallback for the download-or-read-back step
-   specifically: a missing reference run, a missing token, or any other structural failure
-   is unchanged. If the local run also fails (a nonzero exit, or a
-   result file that does not parse), `loadRunContext` throws naming both failures, and
-   every row degrades to `UNPROVEN` the same way any other unreadable run does (§3.6 step
-   4's no-reference-run rule, since `main()`'s catch leaves `reference` at its unset
-   default) — it never crashes `npm run status`.
+   reference run itself runs on `main` (§3.5), given the same `timeout: MAIN_BUDGET_MS`
+   (30 minutes, §3.4) a real `push`-mode main run gets in CI rather than the 5-minute
+   default meant for an ordinary subprocess call. **One documented way it can still
+   diverge:** repo rows run under the `unshare --net` guardrail only when
+   `CLAIMS_NET_RESTRICT=unshare` is set, prove-claims logs which mode it ran in, and this
+   sandbox is exactly the case unlikely to have that set — that disclosure is not
+   surfaced on a successful local run, so `MEASURED LOCALLY` does not say whether the row
+   ran under the same network restriction its CI counterpart would have. This is a
+   fallback for the download-or-read-back step specifically: a missing reference run, a
+   missing token, or any other structural failure is unchanged. If the local run also
+   fails (a nonzero exit, or a result file that does not parse), `loadRunContext` throws
+   naming both failures, and every row degrades to `UNPROVEN` the same way any other
+   unreadable run does (§3.6 step 4's no-reference-run rule, since `main()`'s catch leaves
+   `reference` at its unset default) — it never crashes `npm run status`.
    *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims --mode push when the reference run artifact cannot be downloaded, and renders the row MEASURED LOCALLY".
    *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed".
+   *Tests:* scripts/__tests__/status.test.mjs — "gives the local prove-claims run the same 30-minute budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary subprocess calls".
    *Tests:* scripts/__tests__/status.test.mjs — "throws an error naming both failures when the artifact download and the local reproduction both fail".
    *Tests:* scripts/__tests__/status.test.mjs — "names the parse failure rather than the download when gh run download succeeds but its artifact cannot be parsed and the local reproduction also fails".
    *Tests:* scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0 when the artifact download and the local reproduction both fail".

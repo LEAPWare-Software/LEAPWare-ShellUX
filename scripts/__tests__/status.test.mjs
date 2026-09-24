@@ -6,6 +6,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { rowHash } from '../claims/lib.mjs';
+import { MAIN_BUDGET_MS } from '../claims/prove-claims.mjs';
 import { STALE_MS, loadRunContext, main, pickRuns, renderRow, statusReport } from '../status.mjs';
 
 const REPO_ID = 42;
@@ -229,6 +230,22 @@ describe('reading runs through gh', () => {
     const rendered = renderRow(repoRow, base({ ...context, now: NOW }));
     assert.equal(rendered.state, 'MEASURED LOCALLY C-1');
     assert.equal(rendered.detail, 'k=2 <= 3');
+  });
+
+  it('gives the local prove-claims run the same 30-minute budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary subprocess calls', () => {
+    const fake = (cmd, args, opts) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        assert.equal(opts.timeout, MAIN_BUDGET_MS, 'a slow but legitimate push-mode reproduction must not be killed early');
+        writeFileSync(args[args.indexOf('--out') + 1], JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    loadRunContext({ run: fake, repo: 'o/r' });
   });
 
   it('throws an error naming both failures when the artifact download and the local reproduction both fail', () => {
