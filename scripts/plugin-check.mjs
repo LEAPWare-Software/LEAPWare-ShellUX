@@ -107,6 +107,17 @@
  * real I/O — a `fetch`, a file read, anything that outlives one tick — is
  * still outside what this tick can catch; that gap is unclosed, not silently
  * assumed away.
+ *
+ * Check 5 is also, by design, STRICTER than the real host on one point: an
+ * `async` hook that rejects (the hooks are typed `=> void`, which an `async`
+ * function satisfies) is `await`ed here and its rejection turned into an
+ * ordinary `lifecycle` FAIL. The live host (`ActivationContext.tsx`'s
+ * `callHook`) does not do this — it is fire-and-forget on a rejecting hook,
+ * reporting the rejection through its own fault path without ever failing or
+ * un-failing the activation already returned. This kit's job is "does this
+ * hook misbehave", not "match the live host's leniency", so treating a
+ * rejecting hook as a conformance FAIL is a deliberate, and arguably better,
+ * departure — named here so it reads as a decision, not a discrepancy.
  * ============================================================================
  */
 
@@ -444,7 +455,19 @@ export async function checkLifecycle(server, blueprint) {
     const lifecycle = blueprint.lifecycle ?? {};
 
     try {
-      lifecycle.onActivate?.(shell);
+      // `await Promise.resolve(...)`, not a bare call: the hooks are typed
+      // `=> void`, which an `async` function satisfies (`ActivationContext
+      // .tsx`'s `callHook` docblock says so explicitly, and handles it by
+      // attaching its own rejection handler). A bare `lifecycle.onActivate?.
+      // (shell)` does not throw for an `async` hook that rejects — it
+      // returns an already-rejected promise, unattached, which is an
+      // unhandled rejection under this CLI's default `--unhandled-rejections
+      // =throw` and crashes the whole process with a raw stack instead of
+      // this check's own clean FAIL. Wrapping the call in `Promise.resolve`
+      // (harmless for a hook that returns nothing) and awaiting it inside
+      // this same `try` catches a synchronous throw and an async rejection
+      // through the one path.
+      await Promise.resolve(lifecycle.onActivate?.(shell));
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onActivate threw: ${describeThrown(error)}` };
     }
@@ -453,7 +476,7 @@ export async function checkLifecycle(server, blueprint) {
     clock.advance(30_000);
 
     try {
-      lifecycle.onDeactivate?.();
+      await Promise.resolve(lifecycle.onDeactivate?.());
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onDeactivate threw: ${describeThrown(error)}` };
     }
@@ -462,7 +485,7 @@ export async function checkLifecycle(server, blueprint) {
     clock.advance(30_000);
 
     try {
-      lifecycle.onRelease?.();
+      await Promise.resolve(lifecycle.onRelease?.());
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onRelease threw: ${describeThrown(error)}` };
     }

@@ -821,6 +821,73 @@ the browser lane; whether a plugin is well-behaved towards its siblings, which n
 in one realm can decide; and anything about the network, which the CSP settles for
 everyone. CI runs it against all three migrated plugins.
 
+> **2026-09-24, step 8 landed — the conformance kit, as built.**
+> `scripts/plugin-check.mjs` is one plain Node CLI, `runChecks` running the six
+> rows above in order and stopping at the first failure. Two mechanics this
+> section's table does not name: Registration loads the built bundle as a
+> real ES module through a Vite SSR server built for this one run
+> (`createCheckServer`), with `/shared/react.js`, `/shared/react-jsx-runtime.js`
+> and `/shared/sdk.js` resolved to the real modules `src/sdk/sharedModules.ts`
+> names — the same three specifiers decision 5's rewrite produces — so the
+> module graph is real, not stubbed; and Lifecycle runs against a home-grown
+> `createFakeClock`, not `vi.useFakeTimers()`, because this CLI is not a
+> Vitest worker and has no such runtime to borrow one from — its own banner
+> states it is a deliberately narrower tool, not a claim of parity. Check 4
+> hands the loaded bundle's default export to `RegistryContext.tsx`'s
+> exported `validateBlueprint`, not the full `register` — `register` is bound
+> to the live React registry and cannot be called standalone outside it, the
+> same class of narrowing this callout uses for `createFakeClock`.
+>
+> Four real defects surfaced while building and hardening this kit, each
+> fixed rather than filed (rule 7), each naming its own failure mode (rule
+> 10):
+> - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
+>   statement at all for a plugin whose only export is unused by anything
+>   re-imported into it — Rollup's default tree-shaking for a non-library
+>   build does not preserve an unused entry export. Fixed by
+>   `preserveEntrySignatures: 'strict'`; see step 7's own callout above.
+> - `createFakeClock`'s `advance()` re-armed a due interval at
+>   `now + delay`; for a zero, omitted, or negative delay (`schedule()`'s
+>   `safeDelay` clamps all three to `0`), that left `dueAt === now`, so the
+>   `for (;;)` loop inside `advance()` picked the same timer forever — a bad
+>   plugin turning into a hung CI job, since the step that runs
+>   `plugin:check` carries no `timeout-minutes`. Fixed by clamping the
+>   refire to `now + Math.max(delay, 1)`, so `dueAt` strictly increases.
+> - A plugin whose `onActivate` deferred STARTING a leak by one microtask
+>   (`somePromise.then(() => setInterval(...))`) was still mid-flight when
+>   `checkLifecycle`'s `finally` restored the real timers, so that
+>   `setInterval` landed on them instead of the fake clock — a false PASS
+>   followed by an uncaught `REVOKED` crash once the real interval later hit
+>   the revoked handle. Fixed by awaiting one real event-loop tick
+>   (`flushMicrotasks`, via the real, unpatched `setImmediate`) after each of
+>   `onActivate`/`onDeactivate`/`onRelease`, so a deferred registration lands
+>   on the fake clock instead. Stated as an open limit, not closed by this
+>   fix: a leak whose start instead awaits real I/O still outlives that one
+>   tick.
+> - The lifecycle hooks are typed `=> void`, which an `async` function
+>   satisfies (`ActivationContext.tsx`'s `callHook` docblock says so
+>   explicitly, and attaches its own rejection handler for exactly this
+>   reason). `checkLifecycle` called each hook bare; an `async` hook that
+>   rejects does not throw synchronously from a bare call, so its rejection
+>   went unattached — an unhandled rejection under this CLI's default
+>   `--unhandled-rejections=throw`, crashing the process with a raw stack
+>   instead of a clean `lifecycle` FAIL. Fixed by awaiting
+>   `Promise.resolve(hookCall)` inside the same `try`/`catch` at all three
+>   call sites, converging a synchronous throw and an asynchronous rejection
+>   onto the one FAIL path — deliberately stricter than the live host, which
+>   is fire-and-forget on a rejecting hook; named as a decision on the
+>   script's own banner, not left as an unexplained discrepancy.
+>
+> *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
+> against one hand-assembled, hash-matching `.lwplugin` fixture per row —
+> one passing every check, and one planted-bad fixture per failure named in
+> the table above and in the four defects just listed, plus the fake clock's
+> own pure-function cases (`createFakeClock`'s exported `advance`, refire and
+> cancellation behaviour) exercised directly, without a subprocess.
+> `.github/workflows/ci.yml` runs `npm run plugins:build` then
+> `npm run plugin:check` against each of the three migrated plugins' real
+> output, on all three operating systems.
+
 ### 11. The plugin manager — the gate-4 screen, and one delta
 
 DESIGN.md's *Plugin manager*: a host view (a pane-1 entry and a palette command)

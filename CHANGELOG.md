@@ -60,7 +60,7 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
-- **Fixed: three review findings on `scripts/plugin-check.mjs`'s Lifecycle
+- **Fixed: four review findings on `scripts/plugin-check.mjs`'s Lifecycle
   check (#221), all reachable from `createFakeClock`/`checkLifecycle`, before
   the conformance kit's first merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
@@ -94,10 +94,37 @@ from so a reader can check it.
      is still outside it. *Test:* `scripts/__tests__/plugin-check.test.mjs` —
      "Check 5 (Lifecycle) — refuses a plugin whose onActivate starts an
      uncleared interval from a microtask".
-  3. `wrapWithCallLog`'s docblock used the word "structural", which
+  3. The lifecycle hooks are typed `=> void`, which an `async` function
+     satisfies (`ActivationContext.tsx`'s `callHook` docblock says so
+     explicitly, and attaches its own rejection handler for exactly this
+     reason). `checkLifecycle` called each hook bare
+     (`lifecycle.onActivate?.(shell)`, and likewise for `onDeactivate` and
+     `onRelease`); an `async` hook that rejects does not throw synchronously
+     from a bare call, so its rejection went unattached — an unhandled
+     rejection under this CLI's default `--unhandled-rejections=throw`,
+     crashing the whole process with a raw stack instead of a clean
+     `lifecycle` FAIL. Fixed by awaiting `Promise.resolve(hookCall)` inside
+     the same `try`/`catch` at all three call sites, converging a
+     synchronous throw and an asynchronous rejection onto the one FAIL path.
+     This makes the check deliberately stricter than the live host, which is
+     fire-and-forget on a rejecting hook; the script's own banner now names
+     that as a decision, not a discrepancy. *Tests:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose onActivate rejects asynchronously", "Check 5
+     (Lifecycle) — refuses a plugin whose onDeactivate rejects
+     asynchronously", and "Check 5 (Lifecycle) — refuses a plugin whose
+     onRelease rejects asynchronously".
+  4. `wrapWithCallLog`'s docblock used the word "structural", which
      `CLAUDE.md`'s vocabulary section bans unconditionally from repo prose;
      reworded to "the same shape a plug-in reads through" without changing the
      claim.
+
+  `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
+  "step 8 landed — the conformance kit, as built" callout (matching steps 2,
+  4 and 7's own callouts in that file) naming all four defects above as the
+  doc of record, alongside what step 8 actually built beyond decision 10's
+  original text (the Vite SSR loader for Registration, `createFakeClock` for
+  Lifecycle, and the `validateBlueprint`-vs-`register` narrowing).
 
 - **Fixed: `npm run plugins:build` emitted a `bundle.js` with NO export
   statement at all**, for any plugin whose source declares a named export and

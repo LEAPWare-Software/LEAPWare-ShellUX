@@ -499,6 +499,84 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /reached the handle after release/);
   });
 
+  // Regression for a third review finding on PR #221, same function as the
+  // two above: the lifecycle hooks are typed `=> void`, which an `async`
+  // function satisfies (`ActivationContext.tsx`'s `callHook` docblock says so
+  // explicitly). A bare `lifecycle.onActivate?.(shell)` does not throw for an
+  // `async` hook that rejects — it returns an already-rejected promise,
+  // unattached — which used to be an unhandled rejection under this CLI's
+  // default `--unhandled-rejections=throw`, crashing the whole process with a
+  // raw stack instead of a clean FAIL. `timeout` bounds `runCli` in case a
+  // future regression brings back a crash this reporter cannot parse as the
+  // planted `[lifecycle]` failure.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate rejects asynchronously', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'async-reject-activate',",
+      "  name: 'AsyncRejectActivate',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      "  lifecycle: { onActivate: async () => { throw new Error('boom async activate'); } },",
+      '});',
+    ].join('\n');
+    const path = writeFixture('async-reject-activate', { bundleText, id: 'async-reject-activate' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /onActivate threw: boom async activate/);
+  });
+
+  // Same bug, the other two lifecycle hooks — checked rather than assumed
+  // symmetric, since each has its own call site in `checkLifecycle`.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onDeactivate rejects asynchronously', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'async-reject-deactivate',",
+      "  name: 'AsyncRejectDeactivate',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      "  lifecycle: { onDeactivate: async () => { throw new Error('boom async deactivate'); } },",
+      '});',
+    ].join('\n');
+    const path = writeFixture('async-reject-deactivate', { bundleText, id: 'async-reject-deactivate' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /onDeactivate threw: boom async deactivate/);
+  });
+
+  it('Check 5 (Lifecycle) — refuses a plugin whose onRelease rejects asynchronously', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'async-reject-release',",
+      "  name: 'AsyncRejectRelease',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      "  lifecycle: { onRelease: async () => { throw new Error('boom async release'); } },",
+      '});',
+    ].join('\n');
+    const path = writeFixture('async-reject-release', { bundleText, id: 'async-reject-release' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /onRelease threw: boom async release/);
+  });
+
   it('Check 6 (Render) — refuses a plugin whose pane view throws on first render with an empty context', () => {
     const bundleText = [
       "function Pane2() { throw new Error('render boom'); }",
