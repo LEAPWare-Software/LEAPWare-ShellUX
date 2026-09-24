@@ -16,6 +16,31 @@ from so a reader can check it.
 
 ### Added
 
+- **`npm run status` falls back to a local `prove-claims` run when the reference run's
+  artifact cannot be downloaded** (`scripts/status.mjs`, docs/cloud/runbook.md lane C item
+  0e). In this project's cloud sandbox `gh run download <id> --name claims-results` always
+  fails — an outbound proxy blocks it — and until now that made `loadRunContext` throw,
+  which `main()` caught and degraded **every** row to `UNPROVEN`, even though the
+  reference run's identity, conclusion, sha and ancestry had all been read successfully;
+  only the artifact download had failed. Now, when the reference run concluded `success`
+  but the download specifically fails, `loadRunContext` reproduces the same push-mode rows
+  locally (`node scripts/claims/prove-claims.mjs --mode push --out <tmpfile>`, read back in
+  the artifact's own `{ results: [...] }` shape) and `renderRow` labels a row resolved that
+  way `MEASURED LOCALLY <id>`, never `PASSING <id> run <id>`, because no CI run vouches for
+  it. Staleness and the ancestor-of-`origin/main` check are skipped for those rows, since
+  both judge whether an *old CI run* is still trustworthy and neither question has an
+  answer for a number computed just now against the working tree; `rowHash` matching and
+  the `FAILING` branch are unchanged either way. If the local reproduction also fails
+  (nonzero exit, or a result file that will not parse), `loadRunContext` throws naming both
+  failures and every row degrades to the existing `UNPROVEN`-with-reason behaviour, rather
+  than crashing `npm run status`. *Tests:* scripts/__tests__/status.test.mjs — "falls back
+  to a local run of prove-claims --mode push when the reference run artifact cannot be
+  downloaded, and renders the row MEASURED LOCALLY"; scripts/__tests__/status.test.mjs —
+  "degrades a row to UNPROVEN rather than crash when both the artifact download and the
+  local reproduction fail"; scripts/__tests__/status.test.mjs — "prints one warning naming
+  both failures and exits 0 with every row UNPROVEN when the artifact download and the
+  local reproduction both fail".
+
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
   `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while

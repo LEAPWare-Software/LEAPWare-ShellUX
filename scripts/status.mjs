@@ -17,6 +17,13 @@
  * It never reports an item as settled on its own authority: the strongest word it prints
  * is PASSING, with the run id that recorded it.
  *
+ * If the reference run concluded `success` but its `claims-results` artifact cannot be
+ * downloaded (loadRunContext), the same push-mode rows are reproduced locally by running
+ * `node scripts/claims/prove-claims.mjs --mode push` in the working tree. Rows resolved
+ * that way render MEASURED LOCALLY, never PASSING, because no CI run vouched for them
+ * (docs/proof-of-completion.md §3.6). If the local reproduction fails too, the row-level
+ * fallback gives up and every row degrades to UNPROVEN, same as any other unreadable run.
+ *
  * Usage: npm run status
  */
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -58,7 +65,7 @@ export function pickRuns(runs, repoId) {
  * *Tests:* scripts/__tests__/status.test.mjs — "applies the rendering rules in the order the design fixes".
  */
 export function renderRow(row, context) {
-  const { structuralError, token, newest, reference, newestTimedOut, results, now, isAncestor } = context;
+  const { structuralError, token, newest, reference, newestTimedOut, results, now, isAncestor, resultsLocal } = context;
   if (structuralError) return { state: 'UNPROVEN', detail: structuralError };
   if (!token) return { state: 'UNPROVEN', detail: 'no GitHub token, so no run can be read' };
   if (row.class === 'manual') {
@@ -70,14 +77,53 @@ export function renderRow(row, context) {
   if (reference.conclusion !== 'success') {
     return { state: `FAILING RUN ${reference.id}`, detail: `the reference run concluded ${reference.conclusion}; its partial results are not trusted` };
   }
-  if (now - Date.parse(reference.updated_at) > STALE_MS) return { state: 'STALE', detail: `run ${reference.id} is older than 48 hours` };
-  if (!isAncestor) return { state: 'UNPROVEN', detail: `run ${reference.id} head ${reference.head_sha.slice(0, 12)} is unknown here or not an ancestor of origin/main` };
+  // Staleness and ancestry judge whether the *reference run* is still fit to trust: an old
+  // run, or one whose head is not on origin/main's line, cannot speak for the row. Neither
+  // question has an answer for a locally reproduced row (loadRunContext's fallback): those
+  // numbers were computed just now, against this process's own working tree, not against
+  // `reference.head_sha` at some past time, so an old `updated_at` or an unmerged head says
+  // nothing about them. Skip both checks for that case; rowHash below still guards a row
+  // that changed underneath even that fresh run.
+  if (!resultsLocal) {
+    if (now - Date.parse(reference.updated_at) > STALE_MS) return { state: 'STALE', detail: `run ${reference.id} is older than 48 hours` };
+    if (!isAncestor) return { state: 'UNPROVEN', detail: `run ${reference.id} head ${reference.head_sha.slice(0, 12)} is unknown here or not an ancestor of origin/main` };
+  }
   const recorded = (results ?? []).find((r) => r.rowId === row.id);
   if (!recorded || recorded.rowHash !== rowHash(row)) {
-    return { state: 'UNPROVEN', detail: `run ${reference.id} did not check this row as it now reads (rowHash differs)` };
+    const who = resultsLocal ? `the local reproduction of run ${reference.id}` : `run ${reference.id}`;
+    return { state: 'UNPROVEN', detail: `${who} did not check this row as it now reads (rowHash differs)` };
   }
   if (!recorded.pass) return { state: `FAILING ${row.id}`, detail: (recorded.failures ?? []).join('; ') };
-  return { state: `PASSING ${row.id} run ${reference.id}`, detail: (recorded.expect ?? []).map(formatExpectation).join('; ') };
+  // A locally reproduced result is real (prove-claims ran the same push-mode rows this
+  // process itself just ran), but no CI run vouches for it, so it never renders as
+  // PASSING <id> run <id> — that state means a run recorded it. MEASURED LOCALLY says
+  // plainly where the number came from (CLAUDE.md vocabulary: never overclaim).
+  return resultsLocal
+    ? { state: `MEASURED LOCALLY ${row.id}`, detail: (recorded.expect ?? []).map(formatExpectation).join('; ') }
+    : { state: `PASSING ${row.id} run ${reference.id}`, detail: (recorded.expect ?? []).map(formatExpectation).join('; ') };
+}
+
+/**
+ * Reproduce the reference run's push-mode rows locally: same rows and mode the CI
+ * reference run itself runs on `main` (§3.5), so the results are the ones the missing
+ * artifact would have held. `--out` (see the top-of-file usage comment in
+ * scripts/claims/prove-claims.mjs) writes its JSON report to `out` instead of stdout, in
+ * the same `{ results: [...] }` shape as `claims-results.json`. Throws with prove-claims's
+ * own stderr (or stdout, for a crash that never reaches stderr) on a nonzero exit or a
+ * result file that will not parse.
+ */
+function runLocalProveClaims({ cwd, run }) {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'claims-status-local-'));
+  const out = path.join(dir, 'claims-results.json');
+  try {
+    const result = run('node', ['scripts/claims/prove-claims.mjs', '--mode', 'push', '--out', out], { cwd });
+    if (result.status !== 0) {
+      throw new Error(`node scripts/claims/prove-claims.mjs --mode push exited ${result.status}: ${(result.stderr || result.stdout).trim()}`);
+    }
+    return JSON.parse(readFileSync(out, 'utf8')).results;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** Read the runs, the reference run's artifact and its ancestry, through gh and git. */
@@ -102,18 +148,43 @@ export function loadRunContext({ repo = DEFAULT_REPO, cwd = REPO_ROOT, run = def
   }
   let results = null;
   let isAncestor = false;
+  let resultsLocal = false;
   if (reference && reference.conclusion === 'success') {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'claims-status-'));
+    let downloadError = null;
     try {
       gh(['run', 'download', String(reference.id), '--name', 'claims-results', '--dir', dir]);
       results = JSON.parse(readFileSync(path.join(dir, 'claims-results.json'), 'utf8')).results;
+    } catch (error) {
+      downloadError = error; // handled below, once the temp dir is gone
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-    const known = run('git', ['cat-file', '-e', `${reference.head_sha}^{commit}`], { cwd }).status === 0;
-    isAncestor = known && run('git', ['merge-base', '--is-ancestor', reference.head_sha, 'origin/main'], { cwd }).status === 0;
+    if (downloadError) {
+      // The reference run's identity, conclusion and sha are already known good (we would
+      // not be here otherwise); only its artifact is unreachable — in this project's cloud
+      // sandbox, always, because an outbound proxy blocks `gh run download` (lane C item
+      // 0e). Reproducing the same push-mode rows locally is truer than discarding
+      // everything the runs API already told us; renderRow labels every row this
+      // produces MEASURED LOCALLY, never PASSING, so it can never read as CI's word.
+      try {
+        results = runLocalProveClaims({ cwd, run });
+        resultsLocal = true;
+      } catch (localError) {
+        // Both the thing that should have worked and its fallback failed: say so and let
+        // main()'s existing catch degrade every row to UNPROVEN, rather than trust a
+        // partial read. isAncestor and results stay at their unset defaults; nothing below
+        // reads them once this throws.
+        throw new Error(
+          `could not download the claims-results artifact for run ${reference.id} (${downloadError.message}), and reproducing it locally also failed (${localError.message})`,
+        );
+      }
+    } else {
+      const known = run('git', ['cat-file', '-e', `${reference.head_sha}^{commit}`], { cwd }).status === 0;
+      isAncestor = known && run('git', ['merge-base', '--is-ancestor', reference.head_sha, 'origin/main'], { cwd }).status === 0;
+    }
   }
-  return { reference, newest, newestTimedOut, results, isAncestor };
+  return { reference, newest, newestTimedOut, results, isAncestor, resultsLocal };
 }
 
 /**
@@ -163,7 +234,7 @@ export function main({ cwd = REPO_ROOT, run = defaultRunner, log = console.log, 
   const fetched = run('git', ['fetch', 'origin', 'main', '--quiet'], { cwd });
   if (fetched.status !== 0) log(`warning: git fetch origin main failed (${fetched.stderr.trim()}); ancestry is judged against the local origin/main`);
   const token = hasToken(env, run);
-  let runContext = { reference: null, newest: null, newestTimedOut: false, results: null, isAncestor: false };
+  let runContext = { reference: null, newest: null, newestTimedOut: false, results: null, isAncestor: false, resultsLocal: false };
   if (token) {
     try {
       runContext = loadRunContext({ cwd, run });

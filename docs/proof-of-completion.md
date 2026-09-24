@@ -274,15 +274,38 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    dispatch with `inject=none` included; so a flaky crash hidden by a later green run is
    seen only through the issue it filed, which stays open until someone closes it.
    *Tests:* scripts/__tests__/status.test.mjs — "takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch".
+   *Note, 2026-09-24 (lane C item 0e):* when the reference run concluded `success` but
+   `gh run download <id> --name claims-results` itself fails — in this project's cloud
+   sandbox, always, because the outbound proxy blocks it — `loadRunContext` falls back to
+   reproducing the same rows locally: `node scripts/claims/prove-claims.mjs --mode push
+   --out <tmpfile>` in the working tree, read back in the same `{ results: [...] }` shape
+   as the artifact. `push` is the mode the reference run itself runs on `main` (§3.5), so
+   the rows recomputed are the rows the artifact would have held. This is a fallback for
+   the download specifically: a missing reference run, a missing token, or any other
+   structural failure is unchanged. If the local run also fails (a nonzero exit, or a
+   result file that does not parse), `loadRunContext` throws naming both failures, and
+   every row degrades to `UNPROVEN` the same way any other unreadable run does — it never
+   crashes `npm run status`.
+   *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims --mode push when the reference run artifact cannot be downloaded, and renders the row MEASURED LOCALLY".
+   *Tests:* scripts/__tests__/status.test.mjs — "degrades a row to UNPROVEN rather than crash when both the artifact download and the local reproduction fail".
+   *Tests:* scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0 with every row UNPROVEN when the artifact download and the local reproduction both fail".
 4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
    its `expect` values marked `STATED` (X1: manual rows never enter a run); newest
    completed main run cancelled by `timeout-minutes`, `FAILING RUN <id>` (X4); reference
    run conclusion not `success`, `FAILING RUN <id>` for every row, deliberately, because a
    crashed run's partial results are not trusted (X9); reference run `updated_at` more than 48 hours ago,
    `STALE`; its `head_sha` unknown locally or not an ancestor of `origin/main`,
-   `UNPROVEN`; the row's `rowHash` in the artifact not equal to the local row's,
-   `UNPROVEN`; recorded `fail`, `FAILING C-nn`; recorded `pass`, `PASSING C-nn run <id>`,
-   followed by each checked expectation as measured (`handoff_bytes=1928 <= 3000`, X8).
+   `UNPROVEN` — **both skipped when the results came from the local fallback above**,
+   because a number computed just now against this process's own working tree is neither
+   aged nor tied to `reference.head_sha`'s ancestry, so neither question has an answer for
+   it; the row's `rowHash` in the results not equal to the local row's, `UNPROVEN`;
+   recorded `fail`, `FAILING C-nn` (from either source, since a failure needs no elevated
+   trust to state); recorded `pass` from the downloaded artifact, `PASSING C-nn run <id>`,
+   followed by each checked expectation as measured (`handoff_bytes=1928 <= 3000`, X8);
+   recorded `pass` from the local fallback, `MEASURED LOCALLY C-nn` with the same
+   expectation detail — never `PASSING ... run <id>`, because no CI run vouched for it
+   (CLAUDE.md's vocabulary section: a claim must render as what actually attests it).
+   *Tests:* scripts/__tests__/status.test.mjs — "applies the rendering rules in the order the design fixes".
 
 ### 3.7 Chat
 
