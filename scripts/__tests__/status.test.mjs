@@ -6,6 +6,7 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { rowHash } from '../claims/lib.mjs';
+import { MAIN_BUDGET_MS } from '../claims/prove-claims.mjs';
 import { STALE_MS, loadRunContext, main, pickRuns, renderRow, statusReport } from '../status.mjs';
 
 const REPO_ID = 42;
@@ -106,6 +107,13 @@ describe('rendering (§3.6 step 4)', () => {
   it('treats a run exactly 48 hours old as fresh', () => {
     assert.equal(renderRow(repoRow, base({ reference: run({ updated_at: new Date(NOW - STALE_MS).toISOString() }) })).state, 'PASSING C-1 run 1000');
   });
+
+  it('skips staleness and the ancestor check for a locally-measured row, even against a stale reference run whose head is not known to be an ancestor', () => {
+    const stale = run({ updated_at: new Date(NOW - STALE_MS - 1).toISOString() });
+    const rendered = renderRow(repoRow, base({ reference: stale, isAncestor: false, resultsLocal: true }));
+    assert.equal(rendered.state, 'MEASURED LOCALLY C-1');
+    assert.equal(rendered.detail, 'k=2 <= 3');
+  });
 });
 
 describe('the report', () => {
@@ -140,6 +148,12 @@ describe('the report', () => {
       assert.doesNotMatch(text, /\bproven\b/i);
       assert.match(text, /PASSING C-1 run 1000|UNPROVEN/);
     }
+  });
+
+  it('renders a locally-measured row in the full report, bucketed under MEASURED in the summary the same way FAILING RUN buckets under FAILING', () => {
+    const lines = statusReport({ tree: tree(plan), exists, token: true, runContext: base({ resultsLocal: true }), now: NOW });
+    assert.ok(lines.some((l) => /^MEASURED LOCALLY C-1\b/.test(l)));
+    assert.ok(lines.some((l) => /^summary:.*\bMEASURED 1\b/.test(l)), lines.find((l) => l.startsWith('summary:')));
   });
 });
 
@@ -200,6 +214,144 @@ describe('reading runs through gh', () => {
 
   it('fails loudly when gh cannot read the repository', () => {
     assert.throws(() => loadRunContext({ run: () => ({ status: 1, stdout: '', stderr: 'no auth' }), repo: 'o/r' }), /no auth/);
+  });
+
+  it('falls back to a local run of prove-claims --mode push when the reference run artifact cannot be downloaded, and renders the row MEASURED LOCALLY', () => {
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        assert.deepEqual(args.slice(0, 3), ['scripts/claims/prove-claims.mjs', '--mode', 'push'], 'reproduces the reference run in push mode');
+        const out = args[args.indexOf('--out') + 1];
+        writeFileSync(out, JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    const context = loadRunContext({ run: fake, repo: 'o/r' });
+    assert.equal(context.resultsLocal, true);
+    assert.deepEqual(context.results, [passing]);
+    const rendered = renderRow(repoRow, base({ ...context, now: NOW }));
+    assert.equal(rendered.state, 'MEASURED LOCALLY C-1');
+    assert.equal(rendered.detail, 'k=2 <= 3');
+  });
+
+  it('logs that it is starting the local reproduction, and that it can take up to 30 minutes, before running it', () => {
+    const lines = [];
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        assert.ok(lines.some((l) => /30 minutes/.test(l)), 'the log line must be written before the up-to-30-minute subprocess call, not after');
+        writeFileSync(args[args.indexOf('--out') + 1], JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    loadRunContext({ run: fake, repo: 'o/r', log: (l) => lines.push(l) });
+    assert.ok(lines.some((l) => /reproducing it locally with prove-claims --mode push/.test(l) && /30 minutes/.test(l)));
+  });
+
+  it('gives the local prove-claims run the same 30-minute budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary subprocess calls', () => {
+    const fake = (cmd, args, opts) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        assert.equal(opts.timeout, MAIN_BUDGET_MS, 'a slow but legitimate push-mode reproduction must not be killed early');
+        writeFileSync(args[args.indexOf('--out') + 1], JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    loadRunContext({ run: fake, repo: 'o/r' });
+  });
+
+  it('throws an error naming both failures when the artifact download and the local reproduction both fail', () => {
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked (agent proxy)' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') return { status: 2, stdout: '', stderr: 'prove-claims crashed: boom' };
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    assert.throws(
+      () => loadRunContext({ run: fake, repo: 'o/r' }),
+      /proxy blocked \(agent proxy\).*reproducing it locally also failed.*prove-claims crashed: boom/s,
+    );
+  });
+
+  it('falls back to a local run of prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed', () => {
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) {
+        const dir = args[args.indexOf('--dir') + 1];
+        writeFileSync(path.join(dir, 'claims-results.json'), '{not valid json');
+        return ok('');
+      }
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') {
+        const out = args[args.indexOf('--out') + 1];
+        writeFileSync(out, JSON.stringify({ results: [passing] }));
+        return ok('');
+      }
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    const context = loadRunContext({ run: fake, repo: 'o/r' });
+    assert.equal(context.resultsLocal, true);
+    assert.deepEqual(context.results, [passing]);
+  });
+
+  it('names the parse failure rather than the download when gh run download succeeds but its artifact cannot be parsed and the local reproduction also fails', () => {
+    const fake = (cmd, args) => {
+      const key = `${cmd} ${args.join(' ')}`;
+      if (key.includes('run download')) {
+        const dir = args[args.indexOf('--dir') + 1];
+        writeFileSync(path.join(dir, 'claims-results.json'), '{not valid json');
+        return ok('');
+      }
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') return { status: 2, stdout: '', stderr: 'prove-claims crashed: boom' };
+      if (key.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+      if (key.includes('api repos/o/r')) return ok({ id: REPO_ID });
+      return ok('');
+    };
+    assert.throws(
+      () => loadRunContext({ run: fake, repo: 'o/r' }),
+      (error) =>
+        !/HTTP 403|proxy blocked/.test(error.message) &&
+        /JSON/.test(error.message) &&
+        /reproducing it locally also failed.*prove-claims crashed: boom/s.test(error.message),
+    );
+  });
+
+  // This test's fake gives workingPlanFiles an empty `git ls-files`, so no row is ever
+  // rendered here to assert against; that a row renders UNPROVEN once `reference` is
+  // null (main()'s catch never reassigns runContext past its all-null default) is
+  // already proven directly by "renders UNPROVEN when there is no reference run, or the
+  // row is absent from it" above. This test proves only the process-level half: the
+  // warning names both failures, and main() still exits 0 rather than throwing.
+  it('prints one warning naming both failures and exits 0 when the artifact download and the local reproduction both fail', () => {
+    const lines = [];
+    const fake = (cmd, args) => {
+      if (cmd === 'git' && args[0] === 'fetch') return { status: 0, stdout: '', stderr: '' };
+      if (cmd === 'gh' && args[0] === 'api') {
+        const p = args[1];
+        if (p.includes('actions/workflows')) return ok({ workflow_runs: [run()] });
+        return ok({ id: REPO_ID });
+      }
+      if (cmd === 'gh' && args[0] === 'run' && args[1] === 'download') return { status: 1, stdout: '', stderr: 'HTTP 403: proxy blocked' };
+      if (cmd === 'node' && args[0] === 'scripts/claims/prove-claims.mjs') return { status: 2, stdout: '', stderr: 'prove-claims crashed: boom' };
+      return { status: 0, stdout: '', stderr: '' };
+    };
+    assert.equal(main({ run: fake, log: (l) => lines.push(l), env: { GH_TOKEN: 'x' } }), 0);
+    assert.ok(lines.some((l) => /warning: could not read runs/.test(l) && /proxy blocked/.test(l) && /prove-claims crashed: boom/.test(l)));
   });
 
   it('prints a report and exits 0 with no token, after trying to fetch', () => {

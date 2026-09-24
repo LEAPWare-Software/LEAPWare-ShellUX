@@ -6,13 +6,13 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `713c97b` (#196, 2026-09-19). Mission: a best-in-class UI/UX shell hosting
+`main` at `916f14a` (#212, 2026-09-24). Mission: a best-in-class UI/UX shell hosting
 application plugins (D-31). Plan: [`docs/plans/v1-production.md`](docs/plans/v1-production.md).
 Decisions: [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public
 (Apache-2.0); `main` is protected by the ruleset in `.github/rulesets/main.json`,
 with a merge queue.
 
-## What landed on 2026-09-18 and 19
+## What landed, 2026-09-18 to 24
 
 `git log --oneline` is the full list; the landmarks:
 - Public, Apache-2.0, ruleset, merge queue, Claude review (#141, #151).
@@ -28,8 +28,10 @@ with a merge queue.
 - The cloud runbook, the `lw-*` roles and the gate-4 record (#188, D-52).
 - The proof audit: false claims corrected, checks tightened (#190).
 - Auto-queue enables auto-merge with the AUTO_QUEUE_TOKEN secret (#196).
-- This change: D-54, plugin lifecycle-hook ownership enforced at the registry
-  door (`runsPluginCode`), ADR-0006 decision 6 amendment, issue #183, lane A.
+- D-54, plugin lifecycle-hook ownership enforced at the registry door
+  (`runsPluginCode`), ADR-0006 decision 6 amendment, issue #183, lane A (#195, open).
+- `npm run status` falls back to a local `prove-claims` run on artifact-download
+  failure (#212, lane C item 0e).
 
 ## In flight
 
