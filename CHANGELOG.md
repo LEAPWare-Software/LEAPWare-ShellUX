@@ -27,7 +27,7 @@ from so a reader can check it.
   authored by GitHub login `claude[bot]` carries a `Reviewed SHA:` matching the current
   head and exactly `Verdict: MERGE` (`hasBotMergeComment`, tested against a missing
   comment, a stale SHA, a `MERGE WITH FIXES` verdict, and a `LEAPWare-HQ`-authored
-  comment impersonating the format — all five in
+  comment impersonating the format, each exercised by a named test in
   `scripts/__tests__/claims-pr-evidence.test.mjs`). `PR evidence` now also triggers on
   `issue_comment` (created), so it re-runs once that comment lands rather than staying
   stuck on the push-only trigger. **Stated precisely, because the obvious sentence
