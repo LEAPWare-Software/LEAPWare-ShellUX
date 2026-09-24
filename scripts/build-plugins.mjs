@@ -36,23 +36,27 @@
  * `src/sdk/index.ts` exports `HOST_API_VERSION` as a TypeScript module; this
  * script is plain Node ESM (`scripts/` glob in `eslint.config.js`) and does
  * not run it through a compiler to import it. So the constant is read the way
- * `electron/main/plugins/hostContract.ts` is: MIRRORED, from the same file, by a
- * pattern narrow enough that a change to the constant's own line either matches
- * or fails loudly — never silently reads a stale value. That mirror is a
- * **guardrail** in this repository's vocabulary (ADR-0006's dated note under
- * decision 3, step 3, where the same three constants are held to
- * `src/sdk/api-surface.json` by `electron/__tests__/pluginPackage.test.ts`):
- * it makes an edit to one side without the other loud, at the moment this
- * script runs, and does not stop a hand edit to both sides together.
+ * `electron/main/plugins/hostContract.ts` reads it: from the same file's own
+ * text, by a pattern narrow enough that a change to the constant's own line
+ * either matches or throws (`readHostApiVersion` below) — the code itself
+ * never silently reads a stale value.
  *
- * `EXTENSION_ID_PATTERN` and `RESERVED_IDS`, below, are NOT mirrored the same
- * way — narrowing this claim rather than restating it, per ADR-0001 Amendment
- * G, since no test here exercises it. They are copy-pasted literals from
- * `src/core/RegistryContext.tsx`'s published values (`types.ts` only
- * references them in prose), not read from that file at build time, and
- * nothing catches the two going out of sync if `RegistryContext.tsx` changes
- * either value — no test anywhere imports `build-plugins.mjs`
- * (`grep -rl "build-plugins" -- '*.test.ts' '*.test.tsx'` finds nothing).
+ * That is NOT, in this file, the **guardrail** ADR-0006's dated note under
+ * decision 3, step 3 describes — narrowing this claim rather than restating
+ * it, per ADR-0001 Amendment G. That note's guardrail is `hostContract.ts`'s
+ * mirror, held to `src/sdk/api-surface.json` by a real test
+ * (`electron/__tests__/pluginPackage.test.ts`). No test anywhere imports
+ * `build-plugins.mjs` — for `HOST_API_VERSION` here same as for
+ * `EXTENSION_ID_PATTERN`/`RESERVED_IDS` below (`grep -rl "build-plugins" --
+ * '*.test.ts' '*.test.tsx'` finds nothing) — so the throw-on-mismatch
+ * behavior is real, readable code, not a claim this file's own test suite
+ * backs.
+ *
+ * `EXTENSION_ID_PATTERN` and `RESERVED_IDS`, below, are weaker still: they
+ * are copy-pasted literals from `src/core/RegistryContext.tsx`'s published
+ * values (`types.ts` only references them in prose), not read from that file
+ * at build time at all, so nothing — no parse-or-throw, no test — catches
+ * the two going out of sync if `RegistryContext.tsx` changes either value.
  * Restated rather than parsed because a plugin's `id` has to be validated
  * before a byte is written and this script has no compiled
  * `electron/main/plugins/hostContract.js` to import from
