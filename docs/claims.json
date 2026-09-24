@@ -2978,6 +2978,63 @@
       "addedBy": "plan step 3 tick (docs/proof-rows-done-work)"
     },
     {
+      "id": "C-44",
+      "box": "`hasBotMergeComment` (scripts/claims/pr-evidence.mjs, D-53) considers only the single latest `claude[bot]` comment, sorted by `created_at`, and reads the LAST occurrence of `Reviewed SHA:` and `Verdict:` within it. This is **entry-point validation**, not an integrity control: it is real at the `PR evidence` check (a missing review, a stale SHA, or a review not authored by `claude[bot]` is rejected there), and it says nothing about any other route a comment claiming that login could arrive by.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/claude-bot-gate.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "no_review_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "stale_sha_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "leapware_hq_impersonation_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "quoted_earlier_merge_real_verdict_do_not_merge_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "superseded_stale_merge_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "genuine_latest_merge_accepted_passes",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "revert hasBotMergeComment to .some() over every comment ever posted, so a superseded stale MERGE satisfies the gate again",
+        "edits": [
+          {
+            "file": "scripts/claims/pr-evidence.mjs",
+            "replace": [
+              "  const botComments = (Array.isArray(comments) ? comments : [])\n    .filter((c) => c?.user?.login === 'claude[bot]')\n    .sort((a, b) => new Date(a?.created_at ?? 0) - new Date(b?.created_at ?? 0));\n  const latest = botComments.at(-1);\n  if (!latest) return false;\n  const text = String(latest?.body ?? '');\n  const sha = lastField(text, 'Reviewed SHA');\n  const verdict = lastField(text, 'Verdict');\n  return sha !== null && sha.toLowerCase() === String(headSha).toLowerCase() && verdict === 'MERGE';",
+              "  return (Array.isArray(comments) ? comments : []).some((c) => {\n    if (c?.user?.login !== 'claude[bot]') return false;\n    const text = String(c?.body ?? '');\n    const sha = lastField(text, 'Reviewed SHA');\n    const verdict = lastField(text, 'Verdict');\n    return sha !== null && sha.toLowerCase() === String(headSha).toLowerCase() && verdict === 'MERGE';\n  });"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-24",
+      "addedBy": "fix for PR #206 (lane-c/claude-bot-review-gate): the shellux-cloud-reviewer routine posted Verdict: DO NOT MERGE on the original hasBotMergeComment, reproducing a first-match-not-last-match bug in field parsing and a stale-approval-never-expires bug from .some() over every comment; docs/cloud/runbook.md §4 lane C item 3 asked for this probe row and it was missing."
+    },
+    {
       "id": "C-40",
       "box": "#74 (\"Branch protection is impossible on this repository...\") and #103 (\"Decide the update feed...\") are closed.",
       "class": "github",

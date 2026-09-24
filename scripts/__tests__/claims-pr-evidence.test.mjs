@@ -132,12 +132,13 @@ describe('the claude[bot] merge comment (entry-point validation, not an integrit
   const botComment = (overrides = {}) => ({
     user: { login: 'claude[bot]' },
     body: `Claude review: No findings\nReviewed SHA: ${SHA}\nVerdict: MERGE\n`,
+    created_at: '2026-09-19T10:00:00Z',
     ...overrides,
   });
 
   it('fails when there is no claude[bot] comment at all', () => {
     assert.equal(hasBotMergeComment([], SHA), false);
-    assert.equal(hasBotMergeComment([{ user: { login: 'someone' }, body: 'unrelated' }], SHA), false);
+    assert.equal(hasBotMergeComment([{ user: { login: 'someone' }, body: 'unrelated', created_at: '2026-09-19T10:00:00Z' }], SHA), false);
   });
 
   it('fails a claude[bot] comment at a stale SHA', () => {
@@ -165,8 +166,61 @@ describe('the claude[bot] merge comment (entry-point validation, not an integrit
   });
 
   it('finds the genuine comment among other, unrelated comments', () => {
-    const other = { user: { login: 'someone' }, body: 'unrelated comment' };
+    const other = { user: { login: 'someone' }, body: 'unrelated comment', created_at: '2026-09-19T09:00:00Z' };
     assert.equal(hasBotMergeComment([other, botComment()], SHA), true);
+  });
+
+  it('fails a single comment whose real, final verdict is DO NOT MERGE even though an earlier line in the same body quotes/discusses an earlier Verdict: MERGE', () => {
+    const quoting = botComment({
+      body: [
+        'Claude review: on re-reading this, an earlier pass of mine said "Verdict: MERGE" here,',
+        'but that was wrong given what I found on closer inspection.',
+        '',
+        `Reviewed SHA: ${SHA}`,
+        'Verdict: DO NOT MERGE',
+        '',
+      ].join('\n'),
+    });
+    assert.equal(hasBotMergeComment([quoting], SHA), false);
+  });
+
+  it('fails when an earlier claude[bot] comment said Verdict: MERGE at the head SHA but a later claude[bot] comment at the same SHA retracts it with Verdict: DO NOT MERGE', () => {
+    const earlierMerge = botComment({ created_at: '2026-09-19T10:00:00Z' });
+    const laterRetraction = botComment({
+      body: `Claude review: on further review I am retracting my earlier MERGE.\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`,
+      created_at: '2026-09-19T11:00:00Z',
+    });
+    assert.equal(hasBotMergeComment([earlierMerge, laterRetraction], SHA), false);
+  });
+
+  it('passes when an earlier claude[bot] comment said Verdict: DO NOT MERGE but a later claude[bot] comment at the head SHA gives a genuine Verdict: MERGE', () => {
+    const earlierReject = botComment({
+      body: `Claude review: findings to fix.\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`,
+      created_at: '2026-09-19T10:00:00Z',
+    });
+    const laterApproval = botComment({
+      body: `Claude review: fixes applied and verified.\nReviewed SHA: ${SHA}\nVerdict: MERGE\n`,
+      created_at: '2026-09-19T11:00:00Z',
+    });
+    assert.equal(hasBotMergeComment([earlierReject, laterApproval], SHA), true);
+  });
+
+  it('resolves the latest comment by created_at, not by its position in the input array', () => {
+    const laterRetraction = botComment({
+      body: `Claude review: retracting.\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`,
+      created_at: '2026-09-19T11:00:00Z',
+    });
+    const earlierMerge = botComment({ created_at: '2026-09-19T10:00:00Z' });
+    // laterRetraction appears FIRST in the array, despite its later created_at.
+    assert.equal(hasBotMergeComment([laterRetraction, earlierMerge], SHA), false);
+
+    const earlierReject = botComment({
+      body: `Claude review: findings to fix.\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`,
+      created_at: '2026-09-19T10:00:00Z',
+    });
+    const laterApproval = botComment({ created_at: '2026-09-19T11:00:00Z' });
+    // laterApproval appears FIRST in the array, despite being the later comment.
+    assert.equal(hasBotMergeComment([laterApproval, earlierReject], SHA), true);
   });
 });
 

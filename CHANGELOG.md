@@ -152,6 +152,31 @@ from so a reader can check it.
 
 ### Fixed
 
+- **`hasBotMergeComment` read the first matching field, not the last, and never expired
+  a stale approval** (`scripts/claims/pr-evidence.mjs`; D-53, row C-44). Two real bugs
+  the `shellux-cloud-reviewer` routine reproduced and posted `Verdict: DO NOT MERGE`
+  over on PR #206: (1) the shared `field()` helper's regex carries no `g` flag, so
+  `.match()` returned the FIRST `Reviewed SHA:`/`Verdict:` line in a `claude[bot]`
+  comment's body — a comment that quoted or discussed an earlier draft's
+  `Verdict: MERGE` could win over its own real, final `Verdict: DO NOT MERGE`, and `sha`
+  and `verdict` were each resolved independently of the other, so an early SHA line
+  could in principle pair with an unrelated later verdict line; (2) `hasBotMergeComment`
+  called `.some()` over every `claude[bot]` comment ever posted on the pull request, so a
+  comment that once said `Verdict: MERGE` at the head SHA kept satisfying the gate
+  forever, even after a later `claude[bot]` comment at the same SHA retracted it with
+  `Verdict: DO NOT MERGE`. `hasBotMergeComment` now filters to `claude[bot]` comments,
+  sorts them by `created_at` (not by array position), and considers only the single
+  latest one, reading the LAST occurrence of each field within it via a new local
+  `lastField()` helper (the shared `field()` is left unchanged, since its other callers
+  read already section-scoped text where first-vs-last cannot differ). New tests in
+  `scripts/__tests__/claims-pr-evidence.test.mjs` reproduce both bugs directly (the
+  quoted-earlier-MERGE case, the superseded-stale-MERGE case, the mirror
+  genuine-later-approval case, and out-of-order `created_at` resolving correctly by
+  timestamp, not array position). Row C-44 in `docs/claims.json` adds the probe
+  `docs/cloud/runbook.md` §4 lane C item 3 asked for and that was missing: a missing
+  review, a stale SHA, a `LEAPWare-HQ`-authored impersonation, and both bugs above each
+  fail, proven by `scripts/claims/checks/claude-bot-gate.mjs` exercising
+  `hasBotMergeComment` directly against constructed fixtures.
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast

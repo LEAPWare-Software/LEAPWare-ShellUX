@@ -111,7 +111,7 @@ Design: [`docs/proof-of-completion.md`](../proof-of-completion.md) (D-50). Until
 - [x] The caps lint: `scripts/__tests__/context-caps.test.mjs` in `test:scripts`, so inside `verify` with no new stage. Mutation-probed both halves. [C-10]
 - [x] Citations must still resolve: moved text keeps its `*Tests:*` markers. [C-11]
 
-## Step 3 — Go public, on the `leapware-sessionkeeper` pattern  (11/15)
+## Step 3 — Go public, on the `leapware-sessionkeeper` pattern  (12/16)
 
 The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (checked with `gh repo view`). Copy its open-source scaffolding, but **not** its plugin or dual-host parts: `.claude-plugin/`, `.agents/`, `.codex/`, `AGENTS.md`, `.github/apps/lws-*.json`, `docs/install-claude.md` and `docs/install-codex.md` have no equivalent here.
 
@@ -125,6 +125,7 @@ The template is `../leapware-sessionkeeper`, which is PUBLIC and Apache-2.0 (che
 - [ ] Write the D-27 reversal honestly in `docs/maintainers/repository-settings.md` or `docs/DECISIONS.md`: bootstrap is documented as owner-only there, but the D-27 "no branch protection, and no spend to get it" decision that this ruleset reverses is not named anywhere in the settings doc.
 - [x] Private vulnerability reporting is enabled on the repository, measured with `gh api repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting`. [C-39]
 - [x] Secret scanning and Dependabot security updates are enabled on the repository, read with an admin token on 2026-09-19 (`security_and_analysis`). CI's read-only token gets `null` for these fields, so this row is dated, not re-proven, and CI would not notice either being turned off. [C-43]
+- [x] `hasBotMergeComment` (D-53, docs/cloud/runbook.md §4 lane C item 3) considers only the single latest `claude[bot]` comment, sorted by `created_at`, and reads the LAST occurrence of `Reviewed SHA:` and `Verdict:` within it — probed against a missing review, a stale SHA, a `LEAPWare-HQ`-authored impersonation, a comment whose real, final verdict is `DO NOT MERGE` despite an earlier quoted `Verdict: MERGE` line, and a stale `MERGE` superseded by a later retraction. [C-44]
 - [ ] Rewrite `SECURITY.md` the way sessionkeeper does: a "Report a vulnerability" link first, then `leapware@outlook.com` (D-03), then scope notes (what the host does and does not claim, citing tests per Amendment G), then supported versions ("1.x: latest release only"). Measured 2026-09-19, after this change fixed the stale "repository is private" language: the section order is still wrong — `SECURITY.md` leads with "Supported versions" and "Reporting a vulnerability" is still the second-to-last section, not first — and "Supported versions" still doesn't say "1.x: latest release only" or an equivalent; it says "There has been no release" and a table of what's supported instead.
 - [x] #74 ("Branch protection is impossible on this repository...") and #103 ("Decide the update feed...") are closed. [C-40]
 - [ ] #74 and #103 are marked done with evidence (API responses pasted). Split from the README item on 2026-09-19: both closing comments state the read-back values in prose (visibility `PUBLIC`, ruleset 23685990 and its rules), and neither pastes a raw API response.

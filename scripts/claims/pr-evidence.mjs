@@ -86,6 +86,19 @@ function field(text, name) {
 }
 
 /**
+ * Like `field()`, but the LAST match in the text rather than the first (`field()`'s
+ * regex carries no `g`, so `.match()` stops at the first hit). Scoped to
+ * `hasBotMergeComment`'s comment parsing only: `field()` itself is left alone because
+ * its other callers read already section-scoped text, where first-vs-last cannot
+ * differ, and changing its behaviour there is not this fix's business.
+ */
+function lastField(text, name) {
+  const matches = [...text.matchAll(new RegExp(`^[ \\t]*[-*]?[ \\t]*\\**${name}:\\**[ \\t]*(.*)$`, 'gmi'))];
+  const m = matches.at(-1);
+  return m ? m[1].replace(/[`*]/g, '').trim() : null;
+}
+
+/**
  * Every rule of §3.3 against one body. Returns a list of failure messages.
  * *Tests:* scripts/__tests__/claims-pr-evidence.test.mjs — "fails a body whose Reviewed SHA is not the head SHA".
  */
@@ -183,27 +196,51 @@ export function ghPullComments(repo, number, run = defaultRunner) {
 }
 
 /**
- * Whether a comment authored by `claude[bot]` carries a clean `MERGE` verdict at the
- * current head. Uses `field()` so a comment is parsed the same way the body is.
+ * Whether the single LATEST comment authored by `claude[bot]` carries a clean `MERGE`
+ * verdict at the current head.
+ *
+ * Fixes two real bugs the independent reviewer reproduced on this PR, both of which
+ * let a superseded or quoted verdict satisfy the gate:
+ *
+ * 1. **First-match-not-last-match.** This used to call the shared `field()`, whose
+ *    regex has no `g` flag, so `.match()` returned the FIRST `Reviewed SHA:` /
+ *    `Verdict:` line in a comment's body. The review workflow's prompt puts these two
+ *    fields LAST, as the comment's final, authoritative lines — but a comment that
+ *    quotes or discusses an earlier draft (e.g. "an earlier pass said `Verdict: MERGE`,
+ *    but...") could carry an earlier matching line that was picked up instead of the
+ *    real, final verdict. `sha` and `verdict` were also each resolved independently of
+ *    the other, so an early `Reviewed SHA:` line could in principle pair with an
+ *    unrelated later `Verdict: MERGE` line. Fixed by reading the LAST occurrence of
+ *    each field within the one comment considered, via the new local `lastField()`.
+ * 2. **Stale approval never expires.** This used to `.some()` over every comment ever
+ *    posted, so a claude[bot] comment that once said `Verdict: MERGE` at the head SHA
+ *    kept satisfying the gate forever, even after a later claude[bot] comment at the
+ *    same SHA retracted it with `Verdict: DO NOT MERGE`. Fixed by considering only the
+ *    single latest claude[bot] comment (sorted by `created_at`, ascending, so this does
+ *    not depend on the input array's order) — a genuine change of mind, in either
+ *    direction, is now respected because only the last word counts.
  *
  * This is **entry-point validation, not an integrity control**: it is real at this one
  * door — a comment that is not authored by `claude[bot]`, that names a stale SHA, or
- * that lacks an exact `Verdict: MERGE`, is rejected here — and it says nothing about
- * any other route by which a comment claiming that login could arrive. Neither "cannot
- * forge" nor "cannot post as claude[bot]" is a claim this function, or anything that
- * calls it, is entitled to make: GitHub's API is the only source of `comment.user.login`
- * this script reads, and nothing here measures how hard that field is to fake upstream.
+ * whose latest verdict lacks an exact `Verdict: MERGE`, is rejected here — and it says
+ * nothing about any other route by which a comment claiming that login could arrive.
+ * Neither "cannot forge" nor "cannot post as claude[bot]" is a claim this function, or
+ * anything that calls it, is entitled to make: GitHub's API is the only source of
+ * `comment.user.login` this script reads, and nothing here measures how hard that
+ * field is to fake upstream.
  * *Tests:* scripts/__tests__/claims-pr-evidence.test.mjs — "passes a genuine claude[bot]
  * comment at the head SHA with a clean Verdict: MERGE".
  */
 export function hasBotMergeComment(comments, headSha) {
-  return (Array.isArray(comments) ? comments : []).some((c) => {
-    if (c?.user?.login !== 'claude[bot]') return false;
-    const text = String(c?.body ?? '');
-    const sha = field(text, 'Reviewed SHA');
-    const verdict = field(text, 'Verdict');
-    return sha !== null && sha.toLowerCase() === String(headSha).toLowerCase() && verdict === 'MERGE';
-  });
+  const botComments = (Array.isArray(comments) ? comments : [])
+    .filter((c) => c?.user?.login === 'claude[bot]')
+    .sort((a, b) => new Date(a?.created_at ?? 0) - new Date(b?.created_at ?? 0));
+  const latest = botComments.at(-1);
+  if (!latest) return false;
+  const text = String(latest?.body ?? '');
+  const sha = lastField(text, 'Reviewed SHA');
+  const verdict = lastField(text, 'Verdict');
+  return sha !== null && sha.toLowerCase() === String(headSha).toLowerCase() && verdict === 'MERGE';
 }
 
 /** Every commit authored by dependabot[bot] and verified. */
