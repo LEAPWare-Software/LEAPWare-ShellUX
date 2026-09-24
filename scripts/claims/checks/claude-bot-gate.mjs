@@ -29,16 +29,24 @@ const scenarios = {
   // The right SHA and a clean Verdict: MERGE, but authored by LEAPWare-HQ, not claude[bot].
   leapware_hq_impersonation_fails: hasBotMergeComment([comment({ user: { login: 'LEAPWare-HQ' } })], SHA) === false,
 
-  // Bug 1 (first-match-not-last-match): a single comment whose body quotes/discusses an
-  // earlier "Verdict: MERGE" line, but whose real, final lines are Reviewed SHA / a clean
-  // Verdict: DO NOT MERGE. Must fail: the LAST occurrence of each field wins.
+  // Bug 1 (first-match-not-last-match): a single comment body with TWO genuine,
+  // line-anchored Reviewed SHA:/Verdict: pairs — an earlier draft's Verdict: MERGE, then
+  // a revised, real, final Verdict: DO NOT MERGE. Both lines independently match
+  // field()'s `^...Verdict:` pattern (unlike a mid-sentence quote, which never matches
+  // either regime and so cannot tell the buggy and fixed code apart — the reviewer
+  // proved by mutation that the previous version of this fixture did not). Must fail:
+  // the LAST occurrence of each field wins.
   quoted_earlier_merge_real_verdict_do_not_merge_fails:
     hasBotMergeComment(
       [
         comment({
           body: [
-            'Claude review: an earlier pass of mine said "Verdict: MERGE" here, but that was',
-            'wrong given what I found on closer inspection.',
+            'Claude review: first pass, nothing blocking.',
+            '',
+            `Reviewed SHA: ${SHA}`,
+            'Verdict: MERGE',
+            '',
+            'On closer inspection I found a real defect and am revising my verdict.',
             '',
             `Reviewed SHA: ${SHA}`,
             'Verdict: DO NOT MERGE',

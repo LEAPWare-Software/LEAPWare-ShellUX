@@ -177,6 +177,21 @@ from so a reader can check it.
   review, a stale SHA, a `LEAPWare-HQ`-authored impersonation, and both bugs above each
   fail, proven by `scripts/claims/checks/claude-bot-gate.mjs` exercising
   `hasBotMergeComment` directly against constructed fixtures.
+- **The regression test written for the first-match-not-last-match bug above did not
+  actually exercise it** (`scripts/__tests__/claims-pr-evidence.test.mjs`,
+  `scripts/claims/checks/claude-bot-gate.mjs`; found by `shellux-cloud-reviewer`'s
+  `Verdict: MERGE WITH FIXES` on PR #206 at `78bba24`, proven by mutation). Its fixture
+  put the earlier "Verdict: MERGE" mid-sentence inside a quote, which never matches
+  `field()`'s line-anchored `^...Verdict:` pattern in the first place — so the test
+  passed identically whether `hasBotMergeComment` called the buggy `field()` or the
+  fixed `lastField()`, and could not have caught a regression of the fix. **Failure mode
+  (rule 10):** a test built to name a bug used prose that quoted the bug's *symptom*
+  ("said Verdict: MERGE") rather than reproducing its *shape* (a second, genuine,
+  line-anchored field pair) — the two look similar to a reader but are not similar to
+  the regex the code under test actually runs. Fixed by rewriting the fixture with two
+  real `Reviewed SHA:`/`Verdict:` pairs (an earlier draft's `MERGE`, a revised, final
+  `DO NOT MERGE`); confirmed to fail against the reverted, pre-fix `field()` call and
+  pass against the shipped `lastField()` one.
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast

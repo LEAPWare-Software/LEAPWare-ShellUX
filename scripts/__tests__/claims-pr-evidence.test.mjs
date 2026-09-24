@@ -170,11 +170,20 @@ describe('the claude[bot] merge comment (entry-point validation, not an integrit
     assert.equal(hasBotMergeComment([other, botComment()], SHA), true);
   });
 
-  it('fails a single comment whose real, final verdict is DO NOT MERGE even though an earlier line in the same body quotes/discusses an earlier Verdict: MERGE', () => {
+  it('fails a single comment body with two genuine, line-anchored Verdict: pairs whose real, final verdict is DO NOT MERGE, even though an earlier pair said Verdict: MERGE', () => {
+    // Both pairs independently match field()'s `^...Verdict:` pattern (unlike a
+    // mid-sentence quote, which matches neither the buggy nor the fixed parser and so
+    // cannot discriminate between them — reproduced by reverting hasBotMergeComment to
+    // call field() instead of lastField() and confirming a prior version of this
+    // fixture still passed).
     const quoting = botComment({
       body: [
-        'Claude review: on re-reading this, an earlier pass of mine said "Verdict: MERGE" here,',
-        'but that was wrong given what I found on closer inspection.',
+        'Claude review: first pass, nothing blocking.',
+        '',
+        `Reviewed SHA: ${SHA}`,
+        'Verdict: MERGE',
+        '',
+        'On closer inspection I found a real defect and am revising my verdict.',
         '',
         `Reviewed SHA: ${SHA}`,
         'Verdict: DO NOT MERGE',
