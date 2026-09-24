@@ -80,9 +80,10 @@ npm run dev            # the shell in a browser, on Vite's default port 5173
 npm run dev:desktop    # the shell as the native Electron window
 ```
 
-`npm run dev` serves the shell with the two verification plugins in `src/mocks/`
-registered. `/index.html` on the same server is the production composition root,
-which registers nothing.
+`npm run dev` serves the shell with the two verification plugins in
+`plugins/mail/` and `plugins/database/` registered, from their source
+(ADR-0006 step 7). `/index.html` on the same server is the production
+composition root, which registers nothing.
 
 ### The acceptance test
 
@@ -118,7 +119,7 @@ follows are in [`CLAUDE.md`](CLAUDE.md) and
 | How work moves from design to release, under BuildCraft | [`docs/sdlc.md`](docs/sdlc.md) |
 | Who this is for and what it must not look like | [`PRODUCT.md`](PRODUCT.md) |
 | The visual system: type, colour, planes, components | [`DESIGN.md`](DESIGN.md) |
-| Writing a plugin | [`DEVELOPER.md`](DEVELOPER.md), then `src/examples/HelloExtension.tsx` |
+| Writing a plugin | [`DEVELOPER.md`](DEVELOPER.md), then `plugins/hello/src/HelloExtension.tsx` |
 | What the shell does, in detail | [`docs/overview.md`](docs/overview.md) |
 | What is and is not a security control here | [`docs/security-posture.md`](docs/security-posture.md) and [`SECURITY.md`](SECURITY.md) |
 | Accessibility, and what is not done | [`docs/accessibility.md`](docs/accessibility.md) |

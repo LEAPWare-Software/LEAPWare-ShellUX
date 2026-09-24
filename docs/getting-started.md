@@ -51,15 +51,15 @@ npm run dev
 
 `npm run dev` starts the Vite dev server on its default port, 5173, and prints the
 URL. Opening it renders the three-pane shell **with ISSUE-005's two verification
-remotes from `src/mocks/` registered** — a navigation tree with entries in it,
-rows to select, contextual commands, and live badges. That is the working
-demo, and it is what the browser test lane drives.
+remotes from `plugins/mail/` and `plugins/database/` registered** — a navigation
+tree with entries in it, rows to select, contextual commands, and live badges.
+That is the working demo, and it is what the browser test lane drives.
 
 This is a **dev-server-only rewrite, not a change to what ships.** A middleware in
 `vite.config.ts` resolves `/` to `dev.html`; it is installed under
 `configureServer`, which `vite build` never calls, and `build.rollupOptions.input`
 is still at its default of `index.html` alone. So `dist/` contains exactly what it
-contained before, and `dev.html`, `src/dev/` and `src/mocks/` remain unreachable
+contained before, and `dev.html`, `src/dev/` and `plugins/` remain unreachable
 from anything a user installs. There is no flag to set and no environment
 variable — ADR-0002 forbids one without a working default; see
 `src/dev/DevShell.tsx`.

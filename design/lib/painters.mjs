@@ -18,8 +18,9 @@
  *  1. The entries are the `<script type="module" src>` of the two documents
  *     `vite.config.ts` builds, `index.html` and `paneview.html`, plus the
  *     `/shared/*` inputs it takes from `SHARED_MODULES`. `dev.html`
- *     and `states.html` are not entries, so `src/dev/**` and `src/mocks/**`
- *     are reached only if a production module imports them.
+ *     and `states.html` are not entries, so `src/dev/**` and the three
+ *     plugins' source under `plugins/` are reached only if a production
+ *     module imports them.
  *  2. From there, every RELATIVE run-time import is followed (`import … from
  *     './x'`, `export … from`, and a bare side-effect `import './x.css'`);
  *     `import type` and `export type` edges are not, because the build erases

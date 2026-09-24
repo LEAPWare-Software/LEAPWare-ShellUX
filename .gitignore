@@ -5,6 +5,12 @@ coverage/
 .vite/
 *.local
 
+# `npm run plugins:build`'s output (ADR-0006 step 7, scripts/build-plugins.mjs):
+# one `.lwplugin` per plugin under `plugins/*`. Generated, like `dist/`, and
+# rebuilt by that script — not tracked, and not what the release attaches (the
+# workflow that does is out of scope for this change; see the script's banner).
+dist-plugins/
+
 # The packaged desktop artefacts: installers, the unpacked application tree, and
 # electron-builder's own bookkeeping. A THIRD build directory, and the third one
 # is not an accident.

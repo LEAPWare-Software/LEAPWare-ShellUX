@@ -177,6 +177,9 @@ const SKIPPED_DIRECTORIES = new Set([
   '.git',
   'dist',
   'dist-electron',
+  // `npm run plugins:build`'s output (ADR-0006 step 7): three `.lwplugin`
+  // packages, each an emitted JS bundle with no prose of its own.
+  'dist-plugins',
   'release',
   'coverage',
   'build',

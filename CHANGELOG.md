@@ -16,6 +16,62 @@ from so a reader can check it.
 
 ### Added
 
+- **The three first-party plugins move to `plugins/*`, and `npm run plugins:build`
+  emits a `.lwplugin` per plugin** (ADR-0006 step 7). `src/mocks/MailPlugin.tsx`,
+  `src/mocks/DatabasePlugin.tsx` and `src/examples/HelloExtension.tsx` are now
+  `plugins/mail/src/MailPlugin.tsx`, `plugins/database/src/DatabasePlugin.tsx` and
+  `plugins/hello/src/HelloExtension.tsx`; `src/mocks/` and `src/examples/` no
+  longer exist. Each imports the host only through the bare specifier
+  `@shellux/sdk` — never a relative path into `src/core/` — which `vite.config.ts`
+  and `vitest.config.ts` now resolve (a `resolve.alias`) to `src/sdk/index.ts` for
+  the dev server and for tests; a real build does the opposite, in
+  `scripts/build-plugins.mjs`, which marks `react`, `react/jsx-runtime` and
+  `@shellux/sdk` EXTERNAL and rewrites them to `/shared/react.js`,
+  `/shared/react-jsx-runtime.js` and `/shared/sdk.js` — ADR-0006 decision 5's
+  build-time rewrite, applied to a plugin build for the first time. `npm run
+  plugins:build` reads each `plugins/<name>/plugin.json` (`id`, `version`,
+  `title`, an optional `icon`, and the source entry), bundles it with
+  Vite/Rollup into one `bundle.js` (`output.codeSplitting: false`, one file, no
+  chunks — decision 1's "one bundle, not a file tree"), hashes it and writes
+  `dist-plugins/<id>.lwplugin` in decision 1's exact shape:
+  `{ format: "lwplugin/1", manifest, bundle: <base64> }`. Verified against the
+  real validator, not a copy of it: `npm run plugins:build`, then a throwaway
+  `vitest` case calling `electron/main/plugins/pluginPackage.ts`'s own
+  `parsePluginPackage` directly on each of the three built files — full output
+  (manifest, bundle byte length, `compatibility: { state: "compatible" }`
+  against this tree's `HOST_API_VERSION`, `1.1`) pasted into this change's PR
+  body, because nothing in `npm run verify` calls `plugins:build` yet.
+  `FIXTURE_EXTENSIONS` is deleted from
+  `src/paneview/PaneViewShell.tsx`: the packaged extension surface registers no
+  plugin of its own now, and installs none of the three by default. `src/dev/
+  DevShell.tsx` still registers `MailPlugin` and `DatabasePlugin`, importing
+  their **source** directly (`plugins/mail/src/`, `plugins/database/src/`) for
+  the browser dev loop `dev.html` drives — a build per edit would be friction,
+  and `dev.html` is not a build input (`vite.config.ts`). The plugins' own tests
+  moved with them: `plugins/hello/__tests__/HelloExtension.test.tsx` is
+  unchanged but for its imports. `src/examples/__tests__/developerGuideStub.test.ts`
+  did **not** move with `HelloExtension` — it reads `DEVELOPER.md` against
+  `src/core/ShellAPI.ts` and was never about the example — and now lives at
+  `src/__tests__/developerGuideStub.test.ts`. `IntegrationSuite.test.tsx`,
+  `ShellLayoutIcons.test.tsx` and `noRawColor.test.ts` were updated to the new
+  paths; `noRawColor.test.ts`'s `KNOWN_MODULES` no longer names the two mocks,
+  since a scan rooted at `src/` cannot see code that moved out of it. *Tests:*
+  `src/__tests__/pluginImportGraph.test.ts` — "reaches no module under
+  src/mocks or src/examples, which ADR-0006 step 7 deleted", "walks a real
+  graph from paneview.html's own entry, so an empty scan cannot pass
+  vacuously", "reports a path under either deleted directory, so the check
+  above can fail" — the Implementation-sequence row 7 test, written in
+  `crossDocumentIdref.test.ts`'s manner. **What this change did NOT do:** the
+  surface loader that would read `state.json` and `import()` an installed
+  plugin into the running extension surface (ADR-0006 step 6) has not landed,
+  so nothing loads a plugin in the packaged application yet; `plugin:check`
+  (step 8) does not exist, and `plugins:build` has no `--verify` flag of its own
+  — the `parsePluginPackage` run described above is a narrower, hand-run
+  substitute, not that conformance kit; and attaching
+  the three `.lwplugin` files to a GitHub Release, or installing them in the
+  end-to-end lane (step 10/11), is unattempted and unreachable from this
+  sandbox, which cannot launch a packaged Electron app or publish a release.
+
 - **`npm run status` falls back to a local `prove-claims` run when the reference run's
   artifact cannot be downloaded** (`scripts/status.mjs`, docs/cloud/runbook.md lane C item
   0e). In this project's cloud sandbox `gh run download <id> --name claims-results` always

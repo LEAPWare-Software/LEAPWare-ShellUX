@@ -35,7 +35,8 @@ import { VirtualizedList } from '../components/shared/VirtualizedList';
  * holds state, owns a timer, fetches asynchronously, or fails on purpose. This
  * file drives the ASSEMBLED shell — real registry, real activation, real hydration
  * engine, real panel group, real fault boundaries, real hotkey dispatcher — through
- * the two verification remotes in `src/mocks/`, and asserts the things that only
+ * the two verification remotes in `plugins/mail/` and `plugins/database/`, and
+ * asserts the things that only
  * exist once several units are wired together.
  *
  * ---------------------------------------------------------------------------
@@ -154,9 +155,14 @@ interface Remotes {
  */
 async function loadRemotes(): Promise<Remotes> {
   vi.resetModules();
+  // ADR-0006 step 7: both moved to `plugins/mail/` and `plugins/database/`, each
+  // importing the host only through `@shellux/sdk`. `vitest.config.ts` resolves
+  // that bare specifier to `src/sdk/index.ts`, so `resetModules` still reloads
+  // both the remote and the host code it names fresh, exactly as it did when the
+  // import was a relative path into `src/`.
   const [mailModule, databaseModule] = await Promise.all([
-    import('../mocks/MailPlugin'),
-    import('../mocks/DatabasePlugin'),
+    import('../../plugins/mail/src/MailPlugin'),
+    import('../../plugins/database/src/DatabasePlugin'),
   ]);
   return { mail: mailModule.MailPlugin, database: databaseModule.DatabasePlugin };
 }
@@ -1695,7 +1701,25 @@ describe('the composition wiring App.tsx performs', () => {
 /* 11. Untrusted content at the verification-remote render sites               */
 /* -------------------------------------------------------------------------- */
 
-const MOCKS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'mocks');
+/**
+ * The two verification remotes' source, by the name used in this section's
+ * `it.each` tables. ADR-0006 step 7 moved them out of `src/mocks/` to
+ * `plugins/mail/src/` and `plugins/database/src/`; this map is what changed,
+ * not the scan below it.
+ */
+const PLUGIN_SOURCES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'plugins');
+const PLUGIN_SOURCE_PATHS: Readonly<Record<string, string>> = {
+  'MailPlugin.tsx': join(PLUGIN_SOURCES_DIR, 'mail', 'src', 'MailPlugin.tsx'),
+  'DatabasePlugin.tsx': join(PLUGIN_SOURCES_DIR, 'database', 'src', 'DatabasePlugin.tsx'),
+};
+
+function pluginSourcePath(file: string): string {
+  const path = PLUGIN_SOURCE_PATHS[file];
+  if (path === undefined) {
+    throw new Error(`no plugin source is registered for "${file}"`);
+  }
+  return path;
+}
 
 /** Every identifier, string literal and template chunk in a module's CODE. */
 function codeWords(path: string): string[] {
@@ -1724,7 +1748,7 @@ describe('untrusted content at the two verification-remote render sites', () => 
   it.each(['MailPlugin.tsx', 'DatabasePlugin.tsx'])(
     'the %s source contains no HTML-injection sink at all',
     (file) => {
-      const sinks = codeWords(join(MOCKS_DIR, file)).filter((word) =>
+      const sinks = codeWords(pluginSourcePath(file)).filter((word) =>
         /dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML|srcdoc|javascript:|data:text\/html/i.test(
           word,
         ),
@@ -1736,7 +1760,7 @@ describe('untrusted content at the two verification-remote render sites', () => 
   it.each(['MailPlugin.tsx', 'DatabasePlugin.tsx'])(
     'the %s source names no URL-bearing attribute a plug-in value could reach',
     (file) => {
-      const urlAttributes = codeWords(join(MOCKS_DIR, file)).filter((word) =>
+      const urlAttributes = codeWords(pluginSourcePath(file)).filter((word) =>
         /^(?:href|xlinkHref|src|srcSet|formAction|poster)$/.test(word),
       );
       expect(urlAttributes).toEqual([]);
@@ -2184,7 +2208,7 @@ describe('known limits of the assembled shell, pinned', () => {
     // extension above, and this case is why.
     const remotes = await loadRemotes();
     for (const file of ['MailPlugin.tsx', 'DatabasePlugin.tsx']) {
-      expect(codeWords(join(MOCKS_DIR, file))).not.toContain('VirtualizedList');
+      expect(codeWords(pluginSourcePath(file))).not.toContain('VirtualizedList');
     }
     injected.engine = createHydrationEngine({ storage: null });
     render(<Harness blueprints={[remotes.mail, remotes.database]} engine={injected.engine} />);

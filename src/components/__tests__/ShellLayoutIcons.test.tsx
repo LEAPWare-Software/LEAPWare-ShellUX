@@ -10,7 +10,10 @@ import { ShellHostProvider } from '../../core/ActivationContext';
 import { ExtensionRegistryProvider, useRegistry } from '../../core/RegistryContext';
 import { createHydrationEngine } from '../../core/services/HydrationEngine';
 import { makeBlueprint } from '../../core/__tests__/fixtures';
-import { DatabasePlugin } from '../../mocks/DatabasePlugin';
+// ADR-0006 step 7: moved to `plugins/database/src/`, importing the host only
+// through `@shellux/sdk` — `vitest.config.ts` resolves that bare specifier to
+// `src/sdk/index.ts` the same way the dev server and the packaged build do.
+import { DatabasePlugin } from '../../../plugins/database/src/DatabasePlugin';
 import { ShellLayout } from '../layout/ShellLayout';
 import { FALLBACK_ICON, SHELL_ICONS } from '../ui/shellIcons';
 

@@ -1,0 +1,7 @@
+{
+  "id": "mail",
+  "version": "1.0.0",
+  "title": "Mail",
+  "icon": "folder",
+  "source": "src/MailPlugin.tsx"
+}
