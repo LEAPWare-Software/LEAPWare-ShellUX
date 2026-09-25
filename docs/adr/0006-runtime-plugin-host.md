@@ -252,9 +252,79 @@ main a renderer-supplied path).
 > picker returns, and takes no path from the renderer";
 > `electron/__tests__/pluginScheme.test.ts` — "sets aside a state.json that is
 > not UTF-8 JSON, reports it, and starts empty", "flushes state.json to disk
-> before renaming it into place". **Not built:** the GitHub URL source (step
-> 11), and any sweep of a `.staging-*` or `.retired-*` directory left by a
-> crash mid-install, or of a directory a set-aside `state.json` orphaned.
+> before renaming it into place". **Not built:** any sweep of a `.staging-*`
+> or `.retired-*` directory left by a crash mid-install, or of a directory a
+> set-aside `state.json` orphaned.
+>
+> **2026-09-25, step 11 landed — the GitHub Release source as built.**
+> `electron/main/plugins/releaseSource.ts`. Host chrome calls a sixth
+> sender-checked channel, `shellux:plugins:install-release`, with one string
+> (`shelluxHost.plugins.installFromRelease(url)` in the preload); there is no
+> native dialog that asks for a URL, so the string has to come from the
+> renderer, and main checks it before anything else. `parseReleaseAssetUrl`
+> reads the string **as written**, not as parsed: it must start
+> `https://github.com/LEAPWare-Software/` spelled exactly so, have exactly the
+> segments `<repo>/releases/download/<tag>/<name>.lwplugin`, and each segment
+> may hold only `[A-Za-z0-9._+-]`, never `.` or `..` alone. The WHATWG parser
+> `fetch` uses drops tabs, reads `\` as `/` and resolves `..` and `%2e%2e`, so
+> a check on the parsed URL would admit strings that are written inside the
+> organisation and request a path outside it; the test builds three. Only a
+> string that passes reaches `fetchReleaseAsset`'s download, which is not
+> exported on its own. `index.ts` passes `net.fetch`. The body is read under
+> decision 1's 8 MiB bound, with a 60-second timeout, and the bytes go to
+> `PluginStore.installBytes`, which runs `parsePluginPackage` — the validator
+> `readPluginPackage` calls after its bounded read — and then the same staging
+> directory and rename as the picker's path. The allowlist is **entry-point
+> validation**: real at this door, silent about who controls the
+> organisation, and silent about where GitHub's redirect leads (a release
+> asset answered `302` to `release-assets.githubusercontent.com`, measured
+> 2026-09-25 with `curl -sS -D -` on a public `cli/cli` asset; redirects are
+> followed, and the host they lead to is not checked — including a redirect
+> for a repository renamed or transferred out of the organisation, filed as
+> #225 rather than merely disclosed here: no prior decision row accepts it,
+> and it is a way D-46's own trigger, "a publisher outside that organisation",
+> can be met without that row being revisited). No signature is read,
+> and `lwplugin/1` has no field for one (D-47); a package whose bundle and
+> `sha512` were replaced together installs from this door. The request and
+> the reader (or an unread body) are cancelled once, in the download
+> function's own `finally`, on every exit alike — review round 6 found an
+> earlier version only cancelled on the timeout path, leaving every other
+> exit dependent on the network layer honouring `controller.abort()` alone.
+> One case that fix still could not reach directly: a `fetch` that is still
+> pending when the timeout wins the race, and only resolves afterwards —
+> `response` is never assigned there, so `finally`'s `response?.body` is
+> nothing. Round 7 found this gap and closed it by keeping the promise
+> `fetch` returned and attaching cleanup to it directly, not awaited, so a
+> late-arriving body is still cancelled rather than left to
+> `controller.abort()` alone. *Tests:*
+> `electron/__tests__/pluginReleaseSource.test.ts` — "refuses a URL outside
+> the LEAPWare-Software organisation", "checks the URL as written, and admits
+> only spellings the URL parser leaves unchanged", "unsigned by D-47: installs
+> a release asset that carries no signature, including one whose bundle and
+> sha512 were replaced together", "refuses an error status, an oversized
+> download and an empty response, and installs nothing", "gives up on a
+> download that does not finish in time", "gives up on a download whose fetch
+> call never settles and never touches the signal", "gives up on a download
+> whose network layer never notices the abort signal", "the size bound is
+> inclusive: a download declared or measured at exactly the limit is not
+> refused for its size", "cancels a fetch that resolves only after the
+> timeout has already given up", "reports a fetch that throws synchronously
+> as a refusal, and leaves nothing unhandled once its timer would have
+> fired", "runs one download
+> at a time"; `electron/__tests__/pluginIpc.test.ts` — "refuses a management
+> call whose sender is the extension surface", which now includes the sixth
+> channel. **Rejected:** writing the download to a temporary `.lwplugin` and
+> handing its path to `install` — it puts unvalidated bytes on disk, needs its
+> own cleanup, and re-reads bytes main already holds; and a download started
+> by the renderer, which would check the allowlist in the process whose input
+> it polices, under a CSP whose `connect-src 'self'` refuses it anyway.
+> **Not measured:** `net.fetch` itself — its redirect handling and its
+> response to the abort — since every case drives a recording fake where
+> `net.fetch` stands; and no UI calls the channel before the plugin manager
+> (step 9). The organisation is compared case-sensitively, so
+> `leapware-software` is refused though GitHub serves an owner in any case
+> (measured the same way: `CLI/cli` answered the same `302`); so is
+> `releases/latest/download/`, which decision 2's shape does not name.
 
 ### 3. The versioned contract: one number, checked before the bundle is ever served — #68 decided
 

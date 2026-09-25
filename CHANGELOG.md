@@ -111,6 +111,140 @@ from so a reader can check it.
   that PR's scope and remain open. Measured: `grep -rn persist-credentials
   .github/workflows/` finds it only in `claude-code-review.yml`.
 
+- **The second plugin install source: a GitHub Release asset URL, behind the
+  LEAPWare-Software organisation allowlist** (ADR-0006 decision 2 / step 11).
+  Host chrome calls a sixth sender-checked channel,
+  `shellux:plugins:install-release` (`shelluxHost.plugins.installFromRelease(url)`
+  in the preload), with one string. Main holds it to
+  `https://github.com/LEAPWare-Software/<repo>/releases/download/<tag>/<name>.lwplugin`
+  in `electron/main/plugins/releaseSource.ts` before any request is made, and
+  checks the string **as written**, because the URL parser `fetch` uses drops
+  tabs, reads `\` as `/` and resolves `..` and `%2e%2e`: a check on the parsed
+  URL would have admitted strings written inside the organisation that request
+  a path outside it. Only an admitted URL reaches the network (`net.fetch`,
+  passed in by `electron/main/index.ts`); the body is read under decision 1's
+  8 MiB bound with a 60-second timeout, and the bytes go to a new
+  `PluginStore.installBytes`, which runs the same `parsePluginPackage`
+  `readPluginPackage` already called, and the same staging-directory-then-rename
+  install as the picker's path — one pipeline, two doors. The allowlist is
+  **entry-point validation**: real at this door, silent about who controls the
+  organisation, and silent about where GitHub's redirect leads (measured
+  2026-09-25 with `curl -sS -D -`: a public release asset answers `302` to
+  `release-assets.githubusercontent.com`, and that host is not checked).
+  Unsigned, by D-47: no signature is read, `lwplugin/1` has no field for one,
+  and a package whose bundle and `sha512` were replaced together installs from
+  this door. **The 60-second download timeout does not depend on `fetch` or
+  the body reader honouring the abort signal, corrected after review:** an
+  earlier draft awaited both directly, so a `fetch` implementation that never
+  rejects, or a body stream that never errors, on abort would have hung the
+  download and left `downloading` stuck `true` until the app restarted — a
+  real gap, not a hypothetical one, reproduced against the module directly.
+  **The first fix itself had a defect, found by the same formal review round
+  that found the gap:** it raced every wait against `signal.onabort`, which
+  turned out to share its one slot with whatever else on the same signal sets
+  it — a network layer that also writes `onabort` could silently displace
+  this module's handler, in either direction, reproduced against the fix
+  directly and never confirmed either way against the real Electron
+  `net.fetch`. Reworked to race every wait, with `Promise.race`, against a
+  plain promise only the timer itself settles — nothing here reads or writes
+  any property of `signal` at all. The first fix also shipped without a test
+  for the `fetch` half of the race (only the body-reader half was exercised);
+  added. **Round 6 found the cleanup itself only ran on the timeout
+  path:** cancelling the reader (or an unread response body) happened only
+  from the timer's own callback, so a refused status, an oversized declared
+  or streamed length, or a rejected `fetch` left an unread body relying on
+  `controller.abort()` alone — the same cooperation dependency the rewrite
+  above removed from the wait, left standing for cleanup. Reproduced live with
+  a body that records its own `cancel()` calls: zero for those three exits
+  before the fix. Moved to one unconditional step in the function's own
+  `finally`, on every exit alike, and a mutation that deletes the cancel call
+  entirely no longer survives. The size bound this door enforces (both the
+  declared `Content-Length` check and the running streamed total) was also
+  found untested at its exact boundary — a mutation changing `>` to `>=` at
+  either check survived all ten prior cases — and is now asserted inclusive,
+  matching `pluginPackage.ts`'s own "over the limit", not "at or over",
+  boundary. **Round 7 found that same `finally` still could not reach a
+  `fetch` still pending when the timeout wins the race** — `response` is
+  never assigned in that case, so nothing was cancelled when it resolved
+  later, orphaning its body unless `controller.abort()` alone freed it: the
+  one exit round 6's fix had not actually reached, reproduced live with a
+  `fetch` that resolves 60ms after a 20ms timeout. Fixed by keeping the
+  promise `fetch` returned (`fetching`) and attaching cleanup to it directly
+  in `finally`, not awaited, so a late-arriving body is cancelled too. The
+  same round also found the streamed size check's mutation coverage stopped
+  one short of the exact boundary on its over side — a mutation changing the
+  refusal threshold to `MAX_PACKAGE_BYTES + 1` also survived, since the
+  existing oversized case streams in 1 MiB chunks and never lands on exactly
+  one byte over — closed with a single-chunk case at exactly one byte over.
+  **Round 11 found the `fetch` call itself was made bare, outside the
+  function's own `try`** — `fetch` is an injected `ReleaseFetch`, and nothing
+  guarantees it only ever rejects rather than throwing synchronously; a
+  synchronous throw there would have escaped `try`/`catch`/`finally`
+  entirely, skipping `clearTimeout` and leaving the timer to reject, unheard,
+  once it fired (reproduced: a synchronously-throwing fake left an
+  `unhandledRejection` after its 30 ms timeout elapsed). This broke the
+  function's own "never rejects" contract and the "cleanup on every exit
+  alike" claim from round 6. Fixed by wrapping the call in an async IIFE, so
+  a synchronous throw becomes an ordinary rejection the existing
+  `catch`/`finally` path already handles. *Tests:*
+  `electron/__tests__/pluginReleaseSource.test.ts` —
+  "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
+  as written, and admits only spellings the URL parser leaves unchanged",
+  "unsigned by D-47: installs a release asset that carries no signature,
+  including one whose bundle and sha512 were replaced together", "asks for the
+  admitted URL with redirects enabled, and installs a package that arrives in
+  several chunks", "refuses an error status, an oversized download and an
+  empty response, and installs nothing", "gives up on a download that does not
+  finish in time", "gives up on a download whose fetch call never settles and
+  never touches the signal", "gives up on a download whose network layer never
+  notices the abort signal", "the size bound is inclusive: a download declared
+  or measured at exactly the limit is not refused for its size", "cancels a
+  fetch that resolves only after the timeout has already given up", "reports a
+  failed request as a refusal, and installs nothing", "reports a fetch that
+  throws synchronously as a refusal, and leaves nothing unhandled once its
+  timer would have fired", "runs one download at a
+  time"; `electron/__tests__/pluginIpc.test.ts`
+  — "refuses a management call whose sender is the extension surface" (now six
+  channels), "registers the six management channels, and nothing else".
+  **Not done, stated so it is not read wider:** the real Electron `net.fetch`
+  itself is not exercised by any test — whether it actually honours the abort
+  signal, writes its own `onabort` (now moot: nothing here touches that
+  property), or which redirects it follows is unmeasured, because every case
+  drives a recording fake where it stands; the fix above removes this module's
+  own dependency on cooperation, it does not measure whether the real stack
+  cooperates. GitHub's redirect can
+  also lead a once-valid URL to a repository that has since left the
+  organisation (a rename or transfer) — the same "redirect target unchecked"
+  gap as above. **Filed as #225, not merely disclosed:** review found no prior
+  decision row accepts this, and D-46 names its own trigger ("the day a
+  publisher outside that organisation is allowed") that a followed transfer
+  redirect meets without that row ever being revisited. No UI calls the channel before the plugin
+  manager (step 9); the organisation is
+  compared case-sensitively, so `leapware-software` is refused though GitHub
+  serves an owner in any case (measured the same way: `CLI/cli` answered the
+  same `302`); `releases/latest/download/` URLs are refused, asserted by
+  "checks the URL as written, and admits only spellings the URL parser leaves
+  unchanged"; a tag or repository segment containing `/` (e.g. `release/v1`)
+  is also refused as outside decision 2's six-segment shape, but only probed
+  directly against `parseReleaseAssetUrl`, not asserted by a named test.
+  "One download at a time"
+  holds only for downloads actively being awaited; if the real `net.fetch`
+  ignores the abort signal (unmeasured either way), an abandoned download's
+  connection could still be open after this door reports it timed out and
+  accepts the next one. `check:portability` gained one `ALLOWLIST` entry,
+  scoped to `electron/__tests__/pluginReleaseSource.test.ts` and the
+  `hardcoded-hostname` rule, because that file's adversarial URLs must name
+  real GitHub hosts as literals; the network module itself is not listed.
+  **Not enforcement, corrected after review:** `hardcoded-hostname` is a plain
+  regex over source text and never evaluates a template literal, so
+  `releaseSource.ts`'s own `` `https://${RELEASE_HOST}/` `` is invisible to
+  it regardless of what `RELEASE_HOST` is — the rule neither passes this file
+  today nor would catch a changed host written the same interpolated way. An
+  earlier draft of this entry and the module's own docblock both said this
+  file "stays under the rule" as if that were a guarantee; it is not, and
+  both are corrected. `DOCUMENTED_ENDPOINTS` stays empty for the
+  release-engineering step that declares the update feed.
+
 - **`npm run plugin:check <path>` — the conformance kit, and its CI job**
   (ADR-0006 decision 10 / step 8, #57). `scripts/build-plugins.mjs`'s own
   docblock had said since step 7 that checking a built `.lwplugin` against the

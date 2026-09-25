@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `372a3e9` (#217, 2026-09-24). Mission (D-31) and rules: `CLAUDE.md`. Plan:
+`main` at `e424613` (#222, 2026-09-25). Mission (D-31) and rules: `CLAUDE.md`. Plan:
 [`docs/plans/v1-production.md`](docs/plans/v1-production.md). Decisions:
 [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public (Apache-2.0);
 `main` is protected by the ruleset in `.github/rulesets/main.json`, with a merge queue.
@@ -14,15 +14,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 ## What landed on 2026-09-18 and 19
 
 `git log --oneline` is the full list; the landmarks:
-- Public, ruleset/merge queue (#141); Claude review working (#151).
-- Proof of completion: design (#152, D-50), PR A (#156), rollout 2 (#169).
-- ADR-0006 Accepted (#145); steps 1 CSP (#154), 2 SDK (#170).
-- Charts (#148), crash log (#150), ShellLayout split (#160).
-- Rollout step 2 (#171, C-30); step 3 harness (#173); step 0c item 4 (#175, C-31).
-- #23 re-fit (W3-0), the wave-3 plan (#176); `.lwplugin` validator (#177).
-- Operator install guide, 1.0 known limits, plan step 7 (#178).
-- PR B (#179): both proof-of-completion checks required, read back.
-- Plan step 0c complete (#181, C-37).
+- Public, ruleset/merge queue (#141); Claude review working (#151); ADR-0006 Accepted
+  (#145). Proof of completion adopted (D-50, #152/#156/#169), then complete (#181, C-37).
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1 state primitives (#184); plugin lifecycle/nav tree/badge clear (#185);
   proof rows C-38–C-43 (#186).
@@ -30,7 +23,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   gate-4 record (#188, D-52).
 - Proof audit corrected, `npm run status` falls back locally (0e); D-27 struck,
   superseded by D-34 (C-44).
-- ADR-0006 steps 7 (#217) and 8 (#57): plugins moved to `plugins/*`; `plugin:check` kit + CI job.
+- ADR-0006 steps 7-8 (#217/#57): plugins in `plugins/*`; `plugin:check` + CI.
+- ADR-0006 step 11 (#222): Release-URL install source, org allowlist.
 
 ## In flight
 
@@ -39,12 +33,14 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md). Shared state: #187.
 - Gate 4: #189's answer names six screens against a record of nine, so no decision row
   is written and step 9 and wave 4 wait. Record: `docs/design/gate4/`.
-- D-55 (#211): PR A and PR B (the `claude[bot]` gate) landed. `claude.yml` follow-up: gh pr view/diff/comment grant widened, fork-guarded.
+- D-55 (#211/#223/#226) landed: `claude[bot]` merge gate, `issue_comment` trigger
+  dropped (fork code-exec finding). `claude.yml` follow-up (#227): gh pr
+  view/diff/comment grant widened, fork-guarded.
 
 ## The next step
 
-1. ADR-0006 step 6, 9-11; W3-2 onward.
-2. Plan steps 6, 6c, 7-9; 1.0 tag waits for BuildCraft.
+1. ADR-0006 step 6, 9-10; W3-2 onward.
+2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 

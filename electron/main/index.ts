@@ -349,9 +349,14 @@ function warn(message: string): void {
  * it is only valid once Electron is ready and every one of these listeners can
  * in principle fire before `whenReady` resolves.
  *
- * **No network call is made anywhere in this file.** This is local-file
+ * **No network call is made by this logging path.** This is local-file
  * observability, not telemetry, exactly as issue #86 asks: "the absence of
- * third-party telemetry is not a defect".
+ * third-party telemetry is not a defect". (This diagnostics code neither
+ * makes nor logs any of this file's own network calls — `net.fetch` over
+ * `file:` in `registerRendererProtocol`, `net.fetch` handed to the GitHub
+ * Release install source in `registerPluginChannels` below, `DEV_SERVER_URL`
+ * in development, and `initializeUpdater`'s update-feed check in a packaged
+ * build.)
  * ============================================================================
  */
 function logDiagnostics(entry: DiagnosticsEntry): void {
@@ -463,13 +468,21 @@ async function pickPluginPackage(): Promise<string | null> {
   return result.canceled || path === undefined ? null : path;
 }
 
-/** Decision 6's sender check, over the live window. See `electron/main/plugins/pluginIpc.ts`. */
+/**
+ * Decision 6's sender check, over the live window. See `electron/main/plugins/pluginIpc.ts`.
+ *
+ * `fetchAsset` is Chromium's network stack (`net.fetch`), which the release
+ * source reaches only with a URL `electron/main/plugins/releaseSource.ts`
+ * admitted (ADR-0006 step 11). Not measured in this application: its handling
+ * of the abort signal and of GitHub's redirect.
+ */
 function registerPluginChannels(plugins: PluginStore): void {
   registerPluginIpc({
     ipc: ipcMain,
     hostChrome: () => paneWindow?.contentsOf('chrome') ?? null,
     store: plugins,
     pickPackage: pickPluginPackage,
+    fetchAsset: (url, init) => net.fetch(url, init),
     warn,
   });
 }
