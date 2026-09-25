@@ -500,9 +500,24 @@ export async function checkLifecycle(server, blueprint) {
   const clock = createFakeClock();
   clock.install();
 
+  /**
+   * `hasInternalRejection` tracks whether one has surfaced at all, separately
+   * from `internalRejection`'s own value: `undefined` is a legal rejection
+   * reason (`Promise.reject()`, `Promise.reject(undefined)`), so comparing
+   * `internalRejection` itself against `undefined` cannot tell "nothing has
+   * surfaced yet" apart from "the plugin rejected with `undefined`" — a
+   * `??=` assignment "writing" `undefined` over `undefined` is a no-op, so
+   * that exact rejection value was silently swallowed into a false PASS.
+   * *Tests:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle)
+   * — refuses a plugin whose onActivate rejects internally with undefined".
+   */
+  let hasInternalRejection = false;
   let internalRejection;
   const onUnhandledRejection = (reason) => {
-    internalRejection ??= reason;
+    if (!hasInternalRejection) {
+      hasInternalRejection = true;
+      internalRejection = reason;
+    }
   };
   process.on('unhandledRejection', onUnhandledRejection);
 
@@ -517,13 +532,13 @@ export async function checkLifecycle(server, blueprint) {
 
     /** `null` while nothing has surfaced; else the clean FAIL to return. */
     const internalRejectionFail = () =>
-      internalRejection === undefined
-        ? null
-        : {
+      hasInternalRejection
+        ? {
             ok: false,
             check: 'lifecycle',
             reason: `an internal, unattached promise rejection reached the process during a lifecycle hook: ${describeThrown(internalRejection)}`,
-          };
+          }
+        : null;
 
     try {
       // `await Promise.resolve(...)`, not a bare call: the hooks are typed

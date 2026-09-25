@@ -577,6 +577,38 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.deepEqual(after, [], 'the CLI must clean up its own dist-plugins/plugin-check-* scratch directory even when a hook rejects internally');
   });
 
+  // Regression for a review finding on PR #221, same tracking as the test
+  // just above: `undefined` is a legal promise-rejection reason
+  // (`Promise.reject()`/`Promise.reject(undefined)`), but the tracking used
+  // `internalRejection === undefined` as its own "nothing has surfaced yet"
+  // sentinel, and a `??=` assignment "writing" `undefined` over `undefined`
+  // is a no-op — so a plugin that fire-and-forgets exactly this rejection
+  // value was silently swallowed into a false PASS. Fixed by tracking
+  // presence with a separate boolean (`hasInternalRejection`) rather than
+  // comparing the captured value itself to the sentinel.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate rejects internally with undefined', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'internal-undefined-reject',",
+      "  name: 'InternalUndefinedReject',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: { onActivate() { Promise.reject(); } },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('internal-undefined-reject', { bundleText, id: 'internal-undefined-reject' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin that rejects internally with undefined');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /an internal, unattached promise rejection reached the process during a lifecycle hook: undefined/);
+  });
+
   // Regression for a third review finding on PR #221, same function as the
   // two above: the lifecycle hooks are typed `=> void`, which an `async`
   // function satisfies (`ActivationContext.tsx`'s `callHook` docblock says so

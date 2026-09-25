@@ -61,12 +61,13 @@ from so a reader can check it.
   well-behaved towards its siblings; and anything about the network.
 
 - **Fixed: the review findings below on `scripts/plugin-check.mjs`'s
-  Lifecycle check (#221) — eight reachable from `createFakeClock`/
-  `checkLifecycle` (numbered 1, 2, 3, 5, 6, 7, 8, 9 below), one vocabulary fix
-  the same review rounds caught alongside them (numbered 4, unrelated to the
-  Lifecycle check itself), plus two more described after the numbered list (a
-  CI `timeout-minutes` gap and a stale `build-plugins.mjs` docblock) — all
-  found and fixed before the conformance kit's first merge.**
+  Lifecycle check (#221) — nine reachable from `createFakeClock`/
+  `checkLifecycle` (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 below), one
+  vocabulary fix the same review rounds caught alongside them (numbered 4,
+  unrelated to the Lifecycle check itself), plus two more described after
+  the numbered list (a CI `timeout-minutes` gap and a stale
+  `build-plugins.mjs` docblock) — all found and fixed before the conformance
+  kit's first merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
      `dueAt = now + earliest.delay`; for a **zero-delay** interval
      (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
@@ -224,6 +225,21 @@ from so a reader can check it.
      `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
      refuses a plugin whose leaked timer throws an error unrelated to
      REVOKED after release".
+  10. The internal-rejection tracking (fixes 6, 7 above) used
+      `internalRejection === undefined` as its own "nothing has surfaced yet"
+      sentinel, but `undefined` is itself a legal promise-rejection reason
+      (`Promise.reject()`, `Promise.reject(undefined)`) — and a `??=`
+      assignment "writing" `undefined` over `undefined` is a no-op, so a
+      plugin that fire-and-forgets exactly that rejection value left
+      `internalRejection` at `undefined` forever, and every
+      `internalRejectionFail()` call kept returning `null`. Confirmed by
+      hand before the fix: `plugin-check: PASS internal-undefined-reject@1.0.0
+      ...` printed for a plugin whose `onActivate` does nothing but
+      `Promise.reject()`. Fixed by tracking presence with a separate boolean
+      (`hasInternalRejection`) rather than comparing the captured value
+      itself to the sentinel. *Test:*
+      `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+      refuses a plugin whose onActivate rejects internally with undefined".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
