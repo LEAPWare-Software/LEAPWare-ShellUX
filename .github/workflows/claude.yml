@@ -102,6 +102,36 @@ jobs:
           # carried over, deliberately — that tool posts structured inline PR
           # review comments, a shape this general-purpose mention handler has no
           # prompt asking it to produce, unlike the dedicated reviewer action.
-          # Guarded above: refused outright on a fork PR.
-          claude_args: '--allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"'
+          #
+          # The gh pr view/diff/comment tools are granted only for the three event
+          # types the fork guard above actually covers (issue_comment on a PR,
+          # pull_request_review_comment, pull_request_review); an `issues` mention
+          # (opened/assigned) never gets them, because that trigger has no
+          # associated PR for the guard to check at all — found by claude[bot]'s
+          # review: the guard step's own `if:` already excludes `issues`, but
+          # claude_args was granting the tools there anyway, unguarded. This closes
+          # that route rather than merely documenting it, since there is no
+          # legitimate need for gh pr tools on a plain issue mention.
+          #
+          # Not closed by this or any static YAML condition, and stated here rather
+          # than claimed away: a comment on a same-repo, non-fork PR (which passes
+          # the guard, since the *triggering* PR is genuinely not a fork) can still
+          # ask, in free text, "@claude also check PR #<fork-PR>" — no `prompt:`
+          # override is set, so Claude follows that instruction verbatim, and nothing
+          # here stops it from running `gh pr diff <fork-PR>` with a write-scoped
+          # token against a PR this guard never evaluated. Closing that route needs
+          # either a `prompt:` override constraining every gh pr invocation to the
+          # triggering PR's own number (unverified here whether that would also
+          # silently replace the action's default "follow the tagging comment's
+          # instructions" behavior — not attempted without confirming that first)
+          # or dropping free-form gh pr access entirely in favour of a fixed,
+          # non-configurable prompt, as claude-code-review.yml already does. Left
+          # open; CHANGELOG.md and the PR record this as a known, unresolved limit,
+          # not a closed one.
+          claude_args: >-
+            --allowedTools "${{ ((github.event_name == 'issue_comment' &&
+            github.event.issue.pull_request != null) || github.event_name ==
+            'pull_request_review_comment' || github.event_name ==
+            'pull_request_review') && 'Bash(gh pr view:*),Bash(gh pr
+            diff:*),Bash(gh pr comment:*),Read,Grep,Glob' || 'Read,Grep,Glob' }}"
 

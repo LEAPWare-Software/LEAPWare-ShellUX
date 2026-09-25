@@ -85,6 +85,35 @@ from so a reader can check it.
   deliberately **not** carried over: that MCP tool posts structured inline PR review
   comments, a shape this general-purpose mention handler's prompt (unlike the dedicated
   reviewer's) never asks it to produce.
+  **Fourth correction, also found by `claude[bot]`'s review, more serious than the
+  first three:** the fork guard's protection was narrower than "closes the
+  fork-mention route" claimed. It validates only the head repo of the PR the
+  *triggering* event is attached to — it does not, and structurally cannot, constrain
+  which PR number the widened `gh pr view`/`gh pr diff` tools are actually invoked
+  against once the agent is running, since no `prompt:` override is set and the
+  action's default behavior is to follow the tagging comment's free text verbatim.
+  Two distinct routes past it: (a) the `issues` trigger (opened/assigned) isn't
+  matched by the guard step's `if:` at all, so a trusted user's issue titled
+  `@claude, review PR #<fork-PR>` reached "Run Claude Code" with the full grant and no
+  guard ever ran; (b) even on a guarded event, a same-repo PR's own comment reading
+  "@claude, also check PR #`<fork-PR>`" passes the guard (the *triggering* PR is
+  genuinely not a fork) and the agent can still be instructed to `gh pr diff` an
+  unguarded fork PR with a write-scoped token. **Route (a) is fixed in the same
+  change:** `claude_args` now grants the `gh pr` Bash tools only for the three event
+  types the guard step actually covers (`issue_comment` on a PR,
+  `pull_request_review_comment`, `pull_request_review`); an `issues` mention gets
+  `Read`/`Grep`/`Glob` only, since there is no legitimate need for `gh pr` tools on a
+  plain issue and no PR for the guard to check in the first place. **Route (b) is
+  NOT fixed and is stated here as an open, unresolved limit, not a closed one:**
+  closing it needs either a `prompt:` override that constrains every `gh pr`
+  invocation to the triggering PR's own number (unverified in this session whether
+  adding a custom `prompt:` would also silently replace the action's default "follow
+  the tagging comment's instructions" behavior — not attempted without confirming
+  that first) or dropping free-form `gh pr` access for a fixed, non-configurable
+  prompt the way `claude-code-review.yml` already does. The "closes the fork-mention
+  route" language is corrected accordingly: it closes the route where the triggering
+  event's own PR is a fork, not the broader route of being instructed to inspect a
+  different PR by number.
   **Not done as part of this change:** no `node:test` was added, because the new
   decision (a live `gh api` lookup compared to `github.repository`) has no pure,
   mockable branch beyond the
