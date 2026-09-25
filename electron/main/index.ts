@@ -349,9 +349,12 @@ function warn(message: string): void {
  * it is only valid once Electron is ready and every one of these listeners can
  * in principle fire before `whenReady` resolves.
  *
- * **No network call is made anywhere in this file.** This is local-file
+ * **No network call is made by this logging path.** This is local-file
  * observability, not telemetry, exactly as issue #86 asks: "the absence of
- * third-party telemetry is not a defect".
+ * third-party telemetry is not a defect". (This file's only network call is
+ * elsewhere: `registerPluginChannels` below passes `net.fetch` to the GitHub
+ * Release install source, ADR-0006 step 11 — a real request this diagnostics
+ * code neither makes nor logs.)
  * ============================================================================
  */
 function logDiagnostics(entry: DiagnosticsEntry): void {
