@@ -277,7 +277,7 @@ describe('the GitHub Release install source', () => {
     expect(r.installed()).toEqual(['mail 1.0.1 enabled']);
   });
 
-  it('asks for the admitted URL, following redirects, and installs a package that arrives in several chunks', async () => {
+  it('asks for the admitted URL with redirects enabled, and installs a package that arrives in several chunks', async () => {
     const bytes = new TextEncoder().encode(packageText());
     const third = Math.ceil(bytes.byteLength / 3);
     const r = rig(() =>

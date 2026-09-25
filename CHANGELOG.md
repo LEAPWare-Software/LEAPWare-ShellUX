@@ -130,7 +130,7 @@ from so a reader can check it.
   as written, and admits only spellings the URL parser leaves unchanged",
   "unsigned by D-47: installs a release asset that carries no signature,
   including one whose bundle and sha512 were replaced together", "asks for the
-  admitted URL, following redirects, and installs a package that arrives in
+  admitted URL with redirects enabled, and installs a package that arrives in
   several chunks", "refuses an error status, an oversized download and an
   empty response, and installs nothing", "gives up on a download that does not
   finish in time", "gives up on a download whose fetch call never settles and
