@@ -254,6 +254,14 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
  * installs nothing" (asserts the early-exit cases cancel their body, not only
  * `signal.aborted`), "cancels a fetch that resolves only after the timeout
  * has already given up".
+ *
+ * **The call to `fetch` is wrapped, not bare.** `fetch` is an injected
+ * `ReleaseFetch`; nothing guarantees it only ever rejects rather than
+ * throwing synchronously. A bare call here would escape this function's own
+ * `try`/`catch`/`finally` entirely on that path — skipping `clearTimeout`
+ * and leaving `timedOut`'s timer to reject, unheard, once it fires. *Tests:*
+ * "reports a fetch that throws synchronously as a refusal, and leaves
+ * nothing unhandled once its timer would have fired".
  */
 async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs: number): Promise<ReleaseDownloadResult> {
   const controller = new AbortController();
@@ -276,7 +284,14 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
       controller.abort(reason);
     }, timeoutMs);
   });
-  const fetching = fetch(url, { signal: controller.signal, redirect: 'follow' });
+  // Wrapped in an async IIFE, not called bare: `fetch` is an injected
+  // `ReleaseFetch`, and nothing guarantees it only ever rejects rather than
+  // throwing synchronously. A bare call that threw here would escape this
+  // function entirely — skipping `try`/`catch`/`finally` below, leaving
+  // `timer` running, and later rejecting `timedOut` with nothing listening
+  // (an unhandled rejection). Wrapping converts a synchronous throw into an
+  // ordinary rejection the `catch`/`finally` below already handle.
+  const fetching = (async () => fetch(url, { signal: controller.signal, redirect: 'follow' }))();
   try {
     response = await Promise.race([fetching, timedOut]);
     if (!response.ok) return { ok: false, reason: `the download was refused: the server answered ${String(response.status)}` };
@@ -328,7 +343,12 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
 
 /**
  * Check `value` against decision 2's shape and, only if it passes, download it.
- * Resolves to the package's bytes or one reason; never rejects.
+ * Resolves to the package's bytes or one reason; never rejects — including
+ * when the injected `fetch` itself throws synchronously rather than
+ * returning a rejected promise. *Tests:*
+ * `electron/__tests__/pluginReleaseSource.test.ts` — "reports a fetch that
+ * throws synchronously as a refusal, and leaves nothing unhandled once its
+ * timer would have fired".
  */
 export async function fetchReleaseAsset(
   value: unknown,

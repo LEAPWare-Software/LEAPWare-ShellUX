@@ -151,7 +151,18 @@ from so a reader can check it.
   refusal threshold to `MAX_PACKAGE_BYTES + 1` also survived, since the
   existing oversized case streams in 1 MiB chunks and never lands on exactly
   one byte over — closed with a single-chunk case at exactly one byte over.
-  *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+  **Round 11 found the `fetch` call itself was made bare, outside the
+  function's own `try`** — `fetch` is an injected `ReleaseFetch`, and nothing
+  guarantees it only ever rejects rather than throwing synchronously; a
+  synchronous throw there would have escaped `try`/`catch`/`finally`
+  entirely, skipping `clearTimeout` and leaving the timer to reject, unheard,
+  once it fired (reproduced: a synchronously-throwing fake left an
+  `unhandledRejection` after its 30 ms timeout elapsed). This broke the
+  function's own "never rejects" contract and the "cleanup on every exit
+  alike" claim from round 6. Fixed by wrapping the call in an async IIFE, so
+  a synchronous throw becomes an ordinary rejection the existing
+  `catch`/`finally` path already handles. *Tests:*
+  `electron/__tests__/pluginReleaseSource.test.ts` —
   "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
   as written, and admits only spellings the URL parser leaves unchanged",
   "unsigned by D-47: installs a release asset that carries no signature,
@@ -164,7 +175,9 @@ from so a reader can check it.
   notices the abort signal", "the size bound is inclusive: a download declared
   or measured at exactly the limit is not refused for its size", "cancels a
   fetch that resolves only after the timeout has already given up", "reports a
-  failed request as a refusal, and installs nothing", "runs one download at a
+  failed request as a refusal, and installs nothing", "reports a fetch that
+  throws synchronously as a refusal, and leaves nothing unhandled once its
+  timer would have fired", "runs one download at a
   time"; `electron/__tests__/pluginIpc.test.ts`
   — "refuses a management call whose sender is the extension surface" (now six
   channels), "registers the six management channels, and nothing else".

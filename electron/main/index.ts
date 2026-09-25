@@ -351,10 +351,12 @@ function warn(message: string): void {
  *
  * **No network call is made by this logging path.** This is local-file
  * observability, not telemetry, exactly as issue #86 asks: "the absence of
- * third-party telemetry is not a defect". (This file's only network call is
- * elsewhere: `registerPluginChannels` below passes `net.fetch` to the GitHub
- * Release install source, ADR-0006 step 11 — a real request this diagnostics
- * code neither makes nor logs.)
+ * third-party telemetry is not a defect". (This diagnostics code neither
+ * makes nor logs any of this file's own network calls — `net.fetch` over
+ * `file:` in `registerRendererProtocol`, `net.fetch` handed to the GitHub
+ * Release install source in `registerPluginChannels` below, `DEV_SERVER_URL`
+ * in development, and `initializeUpdater`'s update-feed check in a packaged
+ * build.)
  * ============================================================================
  */
 function logDiagnostics(entry: DiagnosticsEntry): void {

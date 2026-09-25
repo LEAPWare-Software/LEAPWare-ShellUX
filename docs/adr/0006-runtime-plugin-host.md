@@ -308,7 +308,9 @@ main a renderer-supplied path).
 > whose network layer never notices the abort signal", "the size bound is
 > inclusive: a download declared or measured at exactly the limit is not
 > refused for its size", "cancels a fetch that resolves only after the
-> timeout has already given up", "runs one download
+> timeout has already given up", "reports a fetch that throws synchronously
+> as a refusal, and leaves nothing unhandled once its timer would have
+> fired", "runs one download
 > at a time"; `electron/__tests__/pluginIpc.test.ts` — "refuses a management
 > call whose sender is the extension surface", which now includes the sixth
 > channel. **Rejected:** writing the download to a temporary `.lwplugin` and

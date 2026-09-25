@@ -539,6 +539,33 @@ describe('the GitHub Release install source', () => {
     expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
   });
 
+  it('reports a fetch that throws synchronously as a refusal, and leaves nothing unhandled once its timer would have fired', async () => {
+    // `fetch` is an injected `ReleaseFetch`; nothing guarantees it only ever
+    // rejects rather than throwing. A bare (unwrapped) call to it here would
+    // escape this function's own try/catch/finally entirely — skipping
+    // `clearTimeout(timer)` and leaving it to reject, unheard, once it fires.
+    const r = rig(() => {
+      throw new Error('sync throw from fetch');
+    }, 20);
+    const rejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown): void => {
+      rejections.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      expect(await r.installRelease(ALLOWED)).toEqual({
+        ok: false,
+        reason: 'the download failed: sync throw from fetch',
+      });
+      // Long enough past the 20 ms timeout that, unfixed, its now-orphaned
+      // rejection would already have surfaced as unhandled.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      expect(rejections).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
+  });
+
   it('runs one download at a time', async () => {
     let release: (response: Response) => void = () => undefined;
     const r = rig(
