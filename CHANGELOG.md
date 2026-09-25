@@ -745,6 +745,26 @@ from so a reader can check it.
   by the register's own generic per-row test, instantiated for C-44 as the register
   stands committed. *Tests:* `scripts/__tests__/claims-prove.test.mjs`.
 
+- **The D-27 reversal was struck in `docs/DECISIONS.md` but never named in
+  `docs/maintainers/repository-settings.md`, so a reader of the settings doc alone had
+  no way to learn that the ruleset it documents reverses a prior decision, or why**
+  (plan step 3's last unticked bullet, D-27 "no branch protection, and no spend to get
+  it"). The "Bootstrap is owner-only" section named D-42 and D-43 as the owner calls
+  that made the ruleset possible, but not D-27 or D-34, the two rows that actually
+  explain what changed and why. A new paragraph in that section names D-27 by id,
+  quotes its original line, states plainly that the ruleset is D-27's reversal, and
+  points to `docs/DECISIONS.md` D-27/D-34 for the full reasoning rather than
+  duplicating it. **Failure mode:** a settings doc that documents the current
+  mechanism without naming the decision it reverses reads as if the mechanism always
+  worked this way, hiding the free-plan constraint that made D-27 true until the
+  repository went public. New proof row C-45
+  (`scripts/claims/checks/repository-settings-d27-reversal.mjs`) checks the settings
+  doc names D-27, quotes its original line, calls the ruleset D-27's reversal, cites
+  D-34, and links `docs/DECISIONS.md`; its probe rewords the reversal sentence so the
+  claim no longer holds. Run by the register's own generic per-row test, instantiated
+  for C-45 as the register stands committed. *Tests:*
+  `scripts/__tests__/claims-prove.test.mjs`.
+
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast

@@ -246,6 +246,16 @@ under that day's delegation, and the agent did so. So "owner-only" here means
 the decision is the owner's and an agent acts only on a delegation the decision
 names; it does not mean no agent has ever touched the setting.
 
+**The ruleset documented above is the reversal of D-27**, not a change that arrived
+without one. D-27 — "No branch protection, and no spend to get it" — held from
+2026-08-04 because both branch-protection endpoints returned 403 on a private
+free-plan repository with one developer, making paid enforcement buy process, not
+quality. That situation stopped being true once the repository went public (D-43)
+under Apache-2.0 (D-42), which is what D-34 records as making "D-27's branch
+protection possible, as a ruleset" — this file documents that ruleset. See
+[`docs/DECISIONS.md`](../DECISIONS.md) D-27 and D-34 for the full reasoning on both
+sides; it is not repeated here.
+
 One job does enable auto-merge: `.github/workflows/auto-queue.yml` adds a
 cloud-lane PR to the merge queue once `scripts/cloud/auto-queue.mjs` finds it
 ready (a lane label, `Verdict: MERGE` in the body, and the newest
