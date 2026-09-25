@@ -704,6 +704,116 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /an internal, unattached promise rejection reached the process during a lifecycle hook: post release leak/);
   });
 
+  // Regression for the `claude[bot]` review finding on PR #221 (comment
+  // 4100128282, `scripts/plugin-check.mjs` line 543): the pre-release
+  // `clock.advance(30_000)` calls (post-`onActivate`, post-`onDeactivate`)
+  // were bare, unlike the post-`revoke()` advance further down, which is
+  // deliberately wrapped. A plugin that leaks a timer whose callback throws a
+  // plain, synchronous error unrelated to touching a revoked `shell` — fired
+  // while the extension is still legitimately active, before either
+  // `onDeactivate` or `onRelease` ever runs — propagated straight out of
+  // `checkLifecycle`, out of `runChecks`, out of `main`'s bare `await
+  // runChecks(...)`, and crashed the whole CLI with a raw, unhandled stack
+  // instead of printing `plugin-check: FAIL [lifecycle] ...`. Confirmed by
+  // hand before this fix: the CLI subprocess exited non-zero with a raw
+  // `Error: sync leak throw` stack on `stderr`, not the `FAIL [lifecycle]`
+  // tag this test asserts on.
+  it('Check 5 (Lifecycle) — refuses a plugin whose leaked timer throws a plain error while still active, before onDeactivate runs', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'sync-throw-before-deactivate',",
+      "  name: 'SyncThrowBeforeDeactivate',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      "    onActivate(shell) { setInterval(() => { throw new Error('sync leak throw'); }, 100); },",
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('sync-throw-before-deactivate', { bundleText, id: 'sync-throw-before-deactivate' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '', 'must not print anything to stdout, let alone a raw uncaught stack');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /a leaked timer's callback threw while the extension was still active, before lifecycle\.onDeactivate ran: sync leak throw/);
+  });
+
+  // Same bug, the other pre-release window — checked rather than assumed
+  // symmetric, since each `advance()` is its own call site.
+  it('Check 5 (Lifecycle) — refuses a plugin whose leaked timer throws a plain error while still active, before onRelease runs', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'sync-throw-before-release',",
+      "  name: 'SyncThrowBeforeRelease',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      // Delay 31_000ms: due only during the SECOND `advance(30_000)` (after
+      // `onDeactivate`), not the first (after `onActivate`) — otherwise this
+      // test would pass for the wrong reason (the already-covered window).
+      "    onActivate(shell) { setInterval(() => { throw new Error('sync leak throw before release'); }, 31000); },",
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('sync-throw-before-release', { bundleText, id: 'sync-throw-before-release' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '', 'must not print anything to stdout, let alone a raw uncaught stack');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /a leaked timer's callback threw while the extension was still active, before lifecycle\.onRelease ran: sync leak throw before release/);
+  });
+
+  // Regression for the `claude[bot]` review finding on PR #221 (comment
+  // 4100128896, `scripts/plugin-check.mjs` line 594): the post-`revoke()`
+  // `catch {}` guarding the leak-scan `advance()` used to be unconditional —
+  // it swallowed ANY synchronous throw, not just the expected `REVOKED`
+  // `ShellUXError` from a leaked call reaching the wrapped, revoked `shell`.
+  // A leaked timer that throws some OTHER, unrelated error after release, and
+  // never itself calls `shell` (so the `calls.find((call) => call.phase ===
+  // 'released')` scan just below finds nothing either), was discarded there
+  // just the same, and `checkLifecycle` fell through to a false `{ ok: true
+  // }` PASS — confirmed by hand before this fix: `plugin-check: PASS
+  // unrelated-post-release-throw@1.0.0 ...` printed for a plugin that is
+  // still misbehaving after release. The fixture's timer delay (150_000ms) is
+  // deliberately sized to fire ONLY during the post-revoke scan's own
+  // `advance()` (`Math.max(120_000, clock.longestPendingDelay() + 1)`), not
+  // the earlier 30_000ms pre-release advances — otherwise this test would
+  // pass for the wrong reason.
+  it('Check 5 (Lifecycle) — refuses a plugin whose leaked timer throws an error unrelated to REVOKED after release', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'unrelated-post-release-throw',",
+      "  name: 'UnrelatedPostReleaseThrow',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      "    onActivate() { setInterval(() => { throw new Error('unrelated post-release error'); }, 150000); },",
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('unrelated-post-release-throw', { bundleText, id: 'unrelated-post-release-throw' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin that leaks a timer throwing an unrelated error after release');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /a leaked timer's callback threw an unexpected error after release \(not the expected REVOKED from touching the revoked shell\): unrelated post-release error/);
+  });
+
   it('Check 6 (Render) — refuses a plugin whose pane view throws on first render with an empty context', () => {
     const bundleText = [
       "function Pane2() { throw new Error('render boom'); }",

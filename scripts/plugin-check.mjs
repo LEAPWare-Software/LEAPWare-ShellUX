@@ -402,16 +402,23 @@ function wrapWithCallLog(shell, phaseRef, calls) {
  * `ActivationContext.tsx`'s own imports, in the order it uses them.
  */
 async function loadShellRuntime(server) {
-  const [shellApi, payloadModule, themeModule] = await Promise.all([
+  const [shellApi, payloadModule, themeModule, typesModule] = await Promise.all([
     server.ssrLoadModule(resolve(REPO_ROOT, 'src/core/ShellAPI.ts')),
     server.ssrLoadModule(resolve(REPO_ROOT, 'src/core/payload/PayloadChannel.ts')),
     server.ssrLoadModule(resolve(REPO_ROOT, 'src/core/theme/ThemeBridge.ts')),
+    // `ShellUXError` itself — `ShellAPI.ts` imports it from here but does not
+    // re-export it, and `checkLifecycle`'s post-revoke scan needs the SAME
+    // class `assertLive` throws, to tell a genuine `REVOKED` apart from any
+    // other error a leaked timer's callback might throw (see the comment on
+    // that `catch` block).
+    server.ssrLoadModule(resolve(REPO_ROOT, 'src/core/types.ts')),
   ]);
   return {
     createShellStateStore: shellApi.createShellStateStore,
     createRevocableShellAPI: shellApi.createRevocableShellAPI,
     createPayloadChannelStore: payloadModule.createPayloadChannelStore,
     createThemeBridge: themeModule.createThemeBridge,
+    ShellUXError: typesModule.ShellUXError,
   };
 }
 
@@ -540,7 +547,26 @@ export async function checkLifecycle(server, blueprint) {
       return internalRejectionFail();
     }
     phaseRef.phase = 'active';
-    clock.advance(30_000);
+    try {
+      // A leaked timer whose callback throws a plain, synchronous error —
+      // unrelated to touching the (still-live, not yet revoked) `shell` —
+      // fires from inside THIS `advance()`, on no stack this kit is
+      // otherwise on. Unlike the post-`revoke()` advance below, this is not
+      // a leak SIGNAL to swallow: the extension is still legitimately
+      // active, nothing has been revoked, and `calls` records nothing here
+      // to confirm from. It is just a bug in the plugin's own timer
+      // callback, and — same as every other hook-call `try`/`catch` in this
+      // function — it belongs in a clean `lifecycle` FAIL, not loose on the
+      // process to crash the whole CLI with a raw stack (the `claude[bot]`
+      // review finding on PR #221, comment 4100128282).
+      clock.advance(30_000);
+    } catch (error) {
+      return {
+        ok: false,
+        check: 'lifecycle',
+        reason: `a leaked timer's callback threw while the extension was still active, before lifecycle.onDeactivate ran: ${describeThrown(error)}`,
+      };
+    }
 
     try {
       await Promise.resolve(lifecycle.onDeactivate?.());
@@ -552,7 +578,17 @@ export async function checkLifecycle(server, blueprint) {
       return internalRejectionFail();
     }
     phaseRef.phase = 'active';
-    clock.advance(30_000);
+    try {
+      // Same gap, same fix, the other pre-release window — see the comment
+      // on the `advance()` above.
+      clock.advance(30_000);
+    } catch (error) {
+      return {
+        ok: false,
+        check: 'lifecycle',
+        reason: `a leaked timer's callback threw while the extension was still active, before lifecycle.onRelease ran: ${describeThrown(error)}`,
+      };
+    }
 
     try {
       await Promise.resolve(lifecycle.onRelease?.());
@@ -591,8 +627,25 @@ export async function checkLifecycle(server, blueprint) {
       // ceiling. `Math.max(120_000, …)` keeps the previous floor for the
       // ordinary case of nothing (or something short) still pending.
       clock.advance(Math.max(120_000, clock.longestPendingDelay() + 1));
-    } catch {
-      // Recorded either way — see above.
+    } catch (error) {
+      // **Only the expected `REVOKED` `ShellUXError` is swallowed here** — the
+      // `claude[bot]` review finding on PR #221, comment 4100128896. The
+      // catch above used to be unconditional, so a leaked timer that threw
+      // some OTHER, unrelated error after release — one that never touches
+      // `shell` at all, so the `calls` scan just below finds nothing either —
+      // was discarded here just the same, and `checkLifecycle` fell through
+      // to a false `{ ok: true }` PASS for a plugin still misbehaving after
+      // release, just not in the specific way this scan checks for. Anything
+      // that is not that exact `REVOKED` error is a genuine, unexpected
+      // failure and gets reported as a clean FAIL, matching every other
+      // hook-call site in this function, rather than swallowed on its say-so.
+      if (!(error instanceof runtime.ShellUXError) || error.code !== 'REVOKED') {
+        return {
+          ok: false,
+          check: 'lifecycle',
+          reason: `a leaked timer's callback threw an unexpected error after release (not the expected REVOKED from touching the revoked shell): ${describeThrown(error)}`,
+        };
+      }
     }
 
     const leaked = calls.find((call) => call.phase === 'released');

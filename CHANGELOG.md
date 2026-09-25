@@ -60,7 +60,7 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
-- **Fixed: six review findings on `scripts/plugin-check.mjs`'s Lifecycle
+- **Fixed: eight review findings on `scripts/plugin-check.mjs`'s Lifecycle
   check (#221), all reachable from `createFakeClock`/`checkLifecycle`, plus
   two more the same review rounds raised alongside them, before the
   conformance kit's first merge.**
@@ -179,6 +179,48 @@ from so a reader can check it.
      `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
      refuses a plugin whose post-release leak rejects internally without
      touching shell".
+  8. The two pre-release `clock.advance(30_000)` calls (right after
+     `onActivate`, and right after `onDeactivate`) were bare, unlike the
+     post-`revoke()` advance further down, which is deliberately wrapped. A
+     plugin that leaks a timer whose callback throws a plain, synchronous
+     error unrelated to touching a revoked `shell` — e.g.
+     `setInterval(() => { throw new Error('bug'); }, 100)`, never cleared —
+     fires that throw from inside one of these two `advance()` calls, while
+     the extension is still legitimately active and nothing has been revoked
+     yet, so it is not a leak SIGNAL the way a post-revoke `REVOKED` throw is;
+     it is just a bug in the plugin's own timer callback. Left unguarded, it
+     propagated straight out of `checkLifecycle`, out of `runChecks`, and out
+     of `main`'s bare `await runChecks(...)`, crashing the whole CLI with a
+     raw, unhandled stack instead of `plugin-check: FAIL [lifecycle] ...`.
+     Fixed by wrapping both calls in their own `try`/`catch`, each converting
+     a synchronous throw into a clean `lifecycle` FAIL that names which
+     pre-release window it happened in. *Tests:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose leaked timer throws a plain error while still
+     active, before onDeactivate runs" and "Check 5 (Lifecycle) — refuses a
+     plugin whose leaked timer throws a plain error while still active,
+     before onRelease runs".
+  9. The post-`revoke()` `catch {}` guarding the leak-scan `advance()` (fix 5
+     above) was unconditional — it swallowed ANY synchronous throw, not only
+     the expected `REVOKED` `ShellUXError` a leaked call reaching the
+     wrapped, revoked `shell` throws (`ShellAPI.ts`'s `assertLive`). A leaked
+     timer that throws some OTHER, unrelated error after release, and never
+     itself calls `shell` (so the `calls.find((call) => call.phase ===
+     'released')` scan just below finds nothing either), was discarded there
+     just the same, and `checkLifecycle` fell through to a false
+     `{ ok: true }` PASS for a plugin still misbehaving after release.
+     Confirmed by hand before the fix: `plugin-check: PASS
+     unrelated-post-release-throw@1.0.0 ...` printed for exactly such a
+     plugin. Fixed by narrowing the `catch` to only swallow an
+     `error instanceof ShellUXError` with `error.code === 'REVOKED'` — the
+     runtime now exposes `ShellUXError` itself (`src/core/types.ts`, loaded
+     alongside `ShellAPI.ts` in `loadShellRuntime`, which imports it but does
+     not re-export it) so the check can compare against the exact class
+     `assertLive` throws, not merely its shape — and reporting anything else
+     as a clean `lifecycle` FAIL. *Test:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose leaked timer throws an error unrelated to
+     REVOKED after release".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
