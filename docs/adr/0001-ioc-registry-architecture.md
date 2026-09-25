@@ -3649,7 +3649,8 @@ has, and where.
 > and the allowlist is checked on the URL as written, before any request is made.
 > Still **entry-point validation**, and still silent about who controls the
 > organisation and about where GitHub's redirect leads (ADR-0006 decision 2's
-> step-11 note). *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+> step-11 note; the repository-transfer case is filed as #225, not merely
+> disclosed). *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
 > "refuses a URL outside the LEAPWare-Software organisation", "unsigned by D-47:
 > installs a release asset that carries no signature, including one whose bundle
 > and sha512 were replaced together".

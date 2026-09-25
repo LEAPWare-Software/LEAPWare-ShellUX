@@ -122,10 +122,23 @@ from so a reader can check it.
   directly and never confirmed either way against the real Electron
   `net.fetch`. Reworked to race every wait, with `Promise.race`, against a
   plain promise only the timer itself settles — nothing here reads or writes
-  any property of `signal` at all — and the timer still cancels the reader
-  once one exists. The first fix also shipped without a test for the `fetch`
-  half of the race (only the body-reader half was exercised); added. *Tests:*
-  `electron/__tests__/pluginReleaseSource.test.ts` —
+  any property of `signal` at all. The first fix also shipped without a test
+  for the `fetch` half of the race (only the body-reader half was exercised);
+  added. **A third round found the cleanup itself only ran on the timeout
+  path:** cancelling the reader (or an unread response body) happened only
+  from the timer's own callback, so a refused status, an oversized declared
+  or streamed length, or a rejected `fetch` left an unread body relying on
+  `controller.abort()` alone — the same cooperation dependency the rewrite
+  above removed from the wait, left standing for cleanup. Reproduced live with
+  a body that records its own `cancel()` calls: zero for those three exits
+  before the fix. Moved to one unconditional step in the function's own
+  `finally`, on every exit alike, and a mutation that deletes the cancel call
+  entirely no longer survives. The size bound this door enforces (both the
+  declared `Content-Length` check and the running streamed total) was also
+  found untested at its exact boundary — a mutation changing `>` to `>=` at
+  either check survived all ten prior cases — and is now asserted inclusive,
+  matching `pluginPackage.ts`'s own "over the limit", not "at or over",
+  boundary. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
   "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
   as written, and admits only spellings the URL parser leaves unchanged",
   "unsigned by D-47: installs a release asset that carries no signature,
@@ -135,9 +148,10 @@ from so a reader can check it.
   empty response, and installs nothing", "gives up on a download that does not
   finish in time", "gives up on a download whose fetch call never settles and
   never touches the signal", "gives up on a download whose network layer never
-  notices the abort signal", "reports a failed request as a refusal, and
-  installs nothing", "runs one download at a time";
-  `electron/__tests__/pluginIpc.test.ts`
+  notices the abort signal", "the size bound is inclusive: a download declared
+  or measured at exactly the limit is not refused for its size", "reports a
+  failed request as a refusal, and installs nothing", "runs one download at a
+  time"; `electron/__tests__/pluginIpc.test.ts`
   — "refuses a management call whose sender is the extension surface" (now six
   channels), "registers the six management channels, and nothing else".
   **Not done, stated so it is not read wider:** the real Electron `net.fetch`
@@ -149,13 +163,20 @@ from so a reader can check it.
   cooperates. GitHub's redirect can
   also lead a once-valid URL to a repository that has since left the
   organisation (a rename or transfer) — the same "redirect target unchecked"
-  gap as above, named explicitly here rather than left implicit, not
-  reproduced against live GitHub. No UI calls the channel before the plugin
+  gap as above. **Filed as #225, not merely disclosed:** review found no prior
+  decision row accepts this, and D-46 names its own trigger ("the day a
+  publisher outside that organisation is allowed") that a followed transfer
+  redirect meets without that row ever being revisited. No UI calls the channel before the plugin
   manager (step 9); the organisation is
   compared case-sensitively, so `leapware-software` is refused though GitHub
   serves an owner in any case (measured the same way: `CLI/cli` answered the
-  same `302`), and `releases/latest/download/` URLs are refused as outside
-  decision 2's shape. `check:portability` gained one `ALLOWLIST` entry,
+  same `302`); `releases/latest/download/` URLs and a tag or repository
+  segment containing `/` (e.g. `release/v1`) are both refused as outside
+  decision 2's six-segment shape, checked directly. "One download at a time"
+  holds only for downloads actively being awaited; if the real `net.fetch`
+  ignores the abort signal (unmeasured either way), an abandoned download's
+  connection could still be open after this door reports it timed out and
+  accepts the next one. `check:portability` gained one `ALLOWLIST` entry,
   scoped to `electron/__tests__/pluginReleaseSource.test.ts` and the
   `hardcoded-hostname` rule, because that file's adversarial URLs must name
   real GitHub hosts as literals; the network module itself is not listed.

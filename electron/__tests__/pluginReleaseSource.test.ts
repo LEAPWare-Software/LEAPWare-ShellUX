@@ -304,15 +304,36 @@ describe('the GitHub Release install source', () => {
   it('refuses an error status, an oversized download and an empty response, and installs nothing', async () => {
     const MIB = 1024 * 1024;
     let pulls = 0;
+    // Every body that carries one is a tracked stream, not a plain string: a
+    // refused status or an oversized declared length returns before a reader
+    // is ever created, so only `finally`'s own `response?.body?.cancel()`
+    // (not `reader?.cancel()`) can ever reach it — the exact case an earlier
+    // version of the cleanup left uncovered (only the timeout path cancelled
+    // anything).
+    const cancelled: string[] = [];
+    const trackedBody = (label: string): ReadableStream<Uint8Array> =>
+      new ReadableStream<Uint8Array>({
+        cancel() {
+          cancelled.push(label);
+          return Promise.resolve();
+        },
+      });
     const answers: Array<() => Response> = [
-      () => new Response('Not Found', { status: 404 }),
-      () => new Response('{}', { headers: { 'content-length': String(MAX_PACKAGE_BYTES + 1) } }),
+      () => new Response(trackedBody('404'), { status: 404 }),
+      () =>
+        new Response(trackedBody('declared-oversize'), {
+          headers: { 'content-length': String(MAX_PACKAGE_BYTES + 1) },
+        }),
       () =>
         new Response(
           new ReadableStream<Uint8Array>({
             pull(controller) {
               pulls += 1;
               controller.enqueue(new Uint8Array(MIB));
+            },
+            cancel() {
+              cancelled.push('streamed-oversize');
+              return Promise.resolve();
             },
           }),
         ),
@@ -344,6 +365,9 @@ describe('the GitHub Release install source', () => {
 
     expect(r.fetched).toHaveLength(4);
     expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
+    // Every case with a body — refused status, refused declared length, and
+    // refused streamed length — cancelled it; only "no body" had none to.
+    expect(cancelled).toEqual(['404', 'declared-oversize', 'streamed-oversize']);
   });
 
   it('gives up on a download that does not finish in time', async () => {
@@ -382,15 +406,22 @@ describe('the GitHub Release install source', () => {
     // never enqueues, never closes, and never reacts to the signal at all.
     // Nothing here calls `init.signal.addEventListener`, unlike the
     // cooperative fake above: this is the case the timer must end on its own.
-    // `cancel` also rejects, so the timeout handler's own cleanup call to it
-    // is exercised on its failure path too, and does not itself throw.
+    // `cancel` also rejects, so `finally`'s own cleanup call to it is
+    // exercised on its failure path too, and does not itself throw; it also
+    // records that it was called at all, since a prior version of this
+    // cleanup only did so from the timeout's own callback, and no test
+    // caught that when it was removed by mutation.
+    let cancelled = 0;
     const r = rig(
       () =>
         Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               pull: () => new Promise<void>(() => undefined),
-              cancel: () => Promise.reject(new Error('the stream refused to cancel')),
+              cancel: () => {
+                cancelled += 1;
+                return Promise.reject(new Error('the stream refused to cancel'));
+              },
             }),
           ),
         ),
@@ -401,6 +432,44 @@ describe('the GitHub Release install source', () => {
       reason: 'the download failed: it did not finish within 20 ms',
     });
     expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
+    expect(cancelled).toBe(1);
+  });
+
+  it('the size bound is inclusive: a download declared or measured at exactly the limit is not refused for its size', async () => {
+    // `pluginPackage.ts`'s own size check ("refuses a package over 8 MiB
+    // before parsing it") refuses only strictly over MAX_PACKAGE_BYTES; this
+    // door's two size checks — the declared Content-Length, and the running
+    // total while streaming — must agree at the exact boundary, or a release
+    // exactly at the bound would be refused here while the same bytes from
+    // the picker would not be.
+
+    // Declared exactly at the bound, with a small real package as the body:
+    // not refused for its declared size, and the tiny actual body never
+    // reaches the streamed check either, so it installs.
+    const declaredAtBound = rig(() =>
+      Promise.resolve(new Response(packageText(), { headers: { 'content-length': String(MAX_PACKAGE_BYTES) } })),
+    );
+    expect(await declaredAtBound.installRelease(ALLOWED)).toMatchObject({ ok: true, value: { id: 'mail', status: 'enabled' } });
+
+    // Streamed exactly at the bound: not refused for its size, so it reaches
+    // the package parser, which refuses it for what it actually is — not
+    // JSON — never for "more than MAX_PACKAGE_BYTES bytes".
+    const streamedAtBound = rig(() =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(MAX_PACKAGE_BYTES));
+              controller.close();
+            },
+          }),
+        ),
+      ),
+    );
+    expect(await streamedAtBound.installRelease(ALLOWED)).toEqual({
+      ok: false,
+      reason: 'the package was refused: package is not a UTF-8 JSON document',
+    });
   });
 
   it('reports a failed request as a refusal, and installs nothing', async () => {

@@ -279,9 +279,17 @@ main a renderer-supplied path).
 > organisation, and silent about where GitHub's redirect leads (a release
 > asset answered `302` to `release-assets.githubusercontent.com`, measured
 > 2026-09-25 with `curl -sS -D -` on a public `cli/cli` asset; redirects are
-> followed, and the host they lead to is not checked). No signature is read,
+> followed, and the host they lead to is not checked — including a redirect
+> for a repository renamed or transferred out of the organisation, filed as
+> #225 rather than merely disclosed here: no prior decision row accepts it,
+> and it is a way D-46's own trigger, "a publisher outside that organisation",
+> can be met without that row being revisited). No signature is read,
 > and `lwplugin/1` has no field for one (D-47); a package whose bundle and
-> `sha512` were replaced together installs from this door. *Tests:*
+> `sha512` were replaced together installs from this door. The request and
+> the reader (or an unread body) are cancelled once, in the download
+> function's own `finally`, on every exit alike — a second review round found
+> the first fix only did this on the timeout path, leaving every other exit
+> dependent on the network layer honouring `controller.abort()` alone. *Tests:*
 > `electron/__tests__/pluginReleaseSource.test.ts` — "refuses a URL outside
 > the LEAPWare-Software organisation", "checks the URL as written, and admits
 > only spellings the URL parser leaves unchanged", "unsigned by D-47: installs
@@ -290,7 +298,9 @@ main a renderer-supplied path).
 > download and an empty response, and installs nothing", "gives up on a
 > download that does not finish in time", "gives up on a download whose fetch
 > call never settles and never touches the signal", "gives up on a download
-> whose network layer never notices the abort signal", "runs one download
+> whose network layer never notices the abort signal", "the size bound is
+> inclusive: a download declared or measured at exactly the limit is not
+> refused for its size", "runs one download
 > at a time"; `electron/__tests__/pluginIpc.test.ts` — "refuses a management
 > call whose sender is the extension surface", which now includes the sixth
 > channel. **Rejected:** writing the download to a temporary `.lwplugin` and

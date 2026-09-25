@@ -50,8 +50,12 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  *   organisation: a URL admitted here because it was once
  *   `github.com/LEAPWare-Software/<repo>/...` is followed wherever GitHub
  *   points it today, whoever that repository now belongs to. Not reproduced
- *   against live GitHub; disclosed as a named instance of the redirect gap
- *   above, not a narrower or separate one.
+ *   against live GitHub; the same gap named above, not a narrower or separate
+ *   one — filed with evidence as #225 (CLAUDE.md rule 7), not merely
+ *   disclosed here, since disclosure alone does not satisfy that rule and no
+ *   prior decision row already accepts it (D-46 names its own trigger — "the
+ *   day a publisher outside that organisation is allowed" — and this is a way
+ *   that happens without D-46's row ever being revisited).
  * - **The local-file door.** An operator can still install a `.lwplugin`
  *   anyone built through main's picker (ADR-0001 Amendment P).
  *
@@ -97,13 +101,27 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  * ends the download even if `fetch` or the reader never settles on their own,
  * which is itself a real risk: a `fetch` implementation is not obliged to
  * reject, or to error its body stream, just because its signal fired. The
- * request and the reader are both cancelled when the download ends, however
- * it ends. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+ * request is aborted, and the reader — or, if none was ever created, the
+ * unread response body — is cancelled, exactly once, in the function's own
+ * `finally`, on every exit alike: a refused status, an oversized declared or
+ * streamed length, a rejected `fetch`, a timeout, or a clean finish. An
+ * earlier version of this fix only did this on the timeout path, so every
+ * other exit relied solely on `controller.abort()`, which frees the
+ * underlying body only if the network layer honours the signal — the same
+ * cooperation dependency this rewrite exists to remove, left standing for
+ * cleanup even after it was removed from the wait itself. Reproduced as a
+ * real gap by review, at the door this fix closes. The bound this check
+ * enforces is inclusive: a download declared or measured at exactly
+ * `MAX_PACKAGE_BYTES` is not refused for its size, matching the same-or-over
+ * distinction `pluginPackage.ts`'s own size check makes for the local-file
+ * door. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
  * "refuses an error status, an oversized download and an empty response, and
  * installs nothing", "gives up on a download that does not finish in time",
  * "gives up on a download whose fetch call never settles and never touches
  * the signal", "gives up on a download whose network layer never notices the
- * abort signal". **Not measured:** whether Electron's real `net.fetch` —
+ * abort signal", "the size bound is inclusive: a download declared or
+ * measured at exactly the limit is not refused for its size".
+ * **Not measured:** whether Electron's real `net.fetch` —
  * what `index.ts` passes — itself honours the abort signal, writes its own
  * `onabort` (now moot: nothing here reads or writes that property), or which
  * redirects it follows; this module is driven here by a recording fake
@@ -204,34 +222,45 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
  * displace this module's handler, in either direction. Racing every wait on
  * `fetch` and on the body reader against `timedOut` with `Promise.race`
  * removes that hazard entirely — nothing here reads or writes any property of
- * `signal` — while `controller.abort()` is still called, for whatever
- * cooperating effect it has on the real `fetch`, and the timer also calls
- * `reader.cancel()` once a reader exists, to release the underlying
- * connection rather than only abandoning it. *Tests:*
- * `electron/__tests__/pluginReleaseSource.test.ts` — "gives up on a download
- * whose fetch call never settles and never touches the signal", "gives up on
- * a download whose network layer never notices the abort signal".
+ * `signal`. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+ * "gives up on a download whose fetch call never settles and never touches
+ * the signal", "gives up on a download whose network layer never notices the
+ * abort signal".
+ *
+ * **Cleanup is one unconditional step, not one per exit.** `finally` calls
+ * `controller.abort()` and, once, `(reader ?? response?.body)?.cancel()` —
+ * whichever of the two exists — on every exit alike, success included. An
+ * earlier version called `reader.cancel()` only from the timeout branch, so a
+ * refused status, an oversized length or a rejected `fetch` left an unread
+ * body relying on `controller.abort()` alone to be freed, which only works if
+ * the network layer honours the signal. *Tests:* the same four above, plus
+ * "refuses an error status, an oversized download and an empty response, and
+ * installs nothing" (asserts the early-exit cases cancel their body, not only
+ * `signal.aborted`).
  */
 async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs: number): Promise<ReleaseDownloadResult> {
   const controller = new AbortController();
+  let response: Response | undefined;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let timer!: ReturnType<typeof setTimeout>;
   const timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
-      // Reject first: cancel() can resolve a pending reader.read() with
-      // { done: true } as part of its own cancel algorithm, and if that
-      // happened before this rejection, an already-settled read() could win
-      // the race below with zero bytes read — a timeout that looks like an
-      // empty, successful download. Rejecting up front makes this promise's
-      // rejection the one Promise.race sees first, whatever cancel() does.
+      // This callback never calls reader.cancel() — deliberately.
+      // reader.cancel() can resolve a pending reader.read() with
+      // { done: true } as part of its own cancel algorithm; calling it here,
+      // before this rejection is observed, could let an already-settled
+      // read() win the race below with zero bytes read — a timeout that
+      // looks like an empty, successful download. The reader (or the unread
+      // response body) is cancelled exactly once, in `finally`, strictly
+      // after the race above has already decided this function's result, so
+      // that cancellation can no longer affect what it returns.
       const reason = new Error(`it did not finish within ${String(timeoutMs)} ms`);
       reject(reason);
       controller.abort(reason);
-      reader?.cancel(reason).catch(() => undefined);
     }, timeoutMs);
   });
   try {
-    const response = await Promise.race([fetch(url, { signal: controller.signal, redirect: 'follow' }), timedOut]);
+    response = await Promise.race([fetch(url, { signal: controller.signal, redirect: 'follow' }), timedOut]);
     if (!response.ok) return { ok: false, reason: `the download was refused: the server answered ${String(response.status)}` };
     const declared = Number(response.headers.get('content-length'));
     if (declared > MAX_PACKAGE_BYTES) {
@@ -261,8 +290,11 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
     return { ok: false, reason: `the download failed: ${describeError(error)}` };
   } finally {
     clearTimeout(timer);
-    // However it ended: an unread or half-read body is not left streaming.
+    // However it ended: the request is aborted, and whichever of the reader
+    // or the unread response body exists is cancelled — once, here, on every
+    // exit alike, not only the timeout's.
     controller.abort();
+    (reader ?? response?.body)?.cancel().catch(() => undefined);
   }
 }
 
