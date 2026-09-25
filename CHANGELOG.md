@@ -124,7 +124,7 @@ from so a reader can check it.
   plain promise only the timer itself settles — nothing here reads or writes
   any property of `signal` at all. The first fix also shipped without a test
   for the `fetch` half of the race (only the body-reader half was exercised);
-  added. **A third round found the cleanup itself only ran on the timeout
+  added. **Round 6 found the cleanup itself only ran on the timeout
   path:** cancelling the reader (or an unread response body) happened only
   from the timer's own callback, so a refused status, an oversized declared
   or streamed length, or a rejected `fetch` left an unread body relying on
@@ -138,7 +138,20 @@ from so a reader can check it.
   found untested at its exact boundary — a mutation changing `>` to `>=` at
   either check survived all ten prior cases — and is now asserted inclusive,
   matching `pluginPackage.ts`'s own "over the limit", not "at or over",
-  boundary. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+  boundary. **Round 7 found that same `finally` still could not reach a
+  `fetch` still pending when the timeout wins the race** — `response` is
+  never assigned in that case, so nothing was cancelled when it resolved
+  later, orphaning its body unless `controller.abort()` alone freed it: the
+  one exit round 6's fix had not actually reached, reproduced live with a
+  `fetch` that resolves 60ms after a 20ms timeout. Fixed by keeping the
+  promise `fetch` returned (`fetching`) and attaching cleanup to it directly
+  in `finally`, not awaited, so a late-arriving body is cancelled too. The
+  same round also found the streamed size check's mutation coverage stopped
+  one short of the exact boundary on its over side — a mutation changing the
+  refusal threshold to `MAX_PACKAGE_BYTES + 1` also survived, since the
+  existing oversized case streams in 1 MiB chunks and never lands on exactly
+  one byte over — closed with a single-chunk case at exactly one byte over.
+  *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
   "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
   as written, and admits only spellings the URL parser leaves unchanged",
   "unsigned by D-47: installs a release asset that carries no signature,
@@ -149,7 +162,8 @@ from so a reader can check it.
   finish in time", "gives up on a download whose fetch call never settles and
   never touches the signal", "gives up on a download whose network layer never
   notices the abort signal", "the size bound is inclusive: a download declared
-  or measured at exactly the limit is not refused for its size", "reports a
+  or measured at exactly the limit is not refused for its size", "cancels a
+  fetch that resolves only after the timeout has already given up", "reports a
   failed request as a refusal, and installs nothing", "runs one download at a
   time"; `electron/__tests__/pluginIpc.test.ts`
   — "refuses a management call whose sender is the extension surface" (now six
@@ -172,7 +186,8 @@ from so a reader can check it.
   serves an owner in any case (measured the same way: `CLI/cli` answered the
   same `302`); `releases/latest/download/` URLs and a tag or repository
   segment containing `/` (e.g. `release/v1`) are both refused as outside
-  decision 2's six-segment shape, checked directly. "One download at a time"
+  decision 2's six-segment shape — probed directly against
+  `parseReleaseAssetUrl`, not asserted by a named test. "One download at a time"
   holds only for downloads actively being awaited; if the real `net.fetch`
   ignores the abort signal (unmeasured either way), an abandoned download's
   connection could still be open after this door reports it timed out and

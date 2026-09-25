@@ -470,6 +470,62 @@ describe('the GitHub Release install source', () => {
       ok: false,
       reason: 'the package was refused: package is not a UTF-8 JSON document',
     });
+
+    // One byte over the bound, streamed in a single chunk — not many small
+    // ones, which could land past the bound without ever landing exactly on
+    // it — pins the refusal to the first byte past the limit, not somewhere
+    // near it.
+    const streamedOverBound = rig(() =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(MAX_PACKAGE_BYTES + 1));
+              controller.close();
+            },
+          }),
+        ),
+      ),
+    );
+    expect(await streamedOverBound.installRelease(ALLOWED)).toEqual({
+      ok: false,
+      reason: `the download was refused: it is more than ${String(MAX_PACKAGE_BYTES)} bytes`,
+    });
+  });
+
+  it('cancels a fetch that resolves only after the timeout has already given up', async () => {
+    // The timeout wins the very first race, on `fetch` itself — `response`
+    // is never assigned, so `finally`'s `response?.body` has nothing to
+    // cancel there. The real `fetch` call is still out there, though, and
+    // resolves later with a body nothing else will ever read or cancel,
+    // unless `finally` also reaches into that still-pending promise.
+    let resolveLate: (response: Response) => void = () => undefined;
+    let cancelled = 0;
+    const r = rig(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveLate = resolve;
+        }),
+      20,
+    );
+    expect(await r.installRelease(ALLOWED)).toEqual({
+      ok: false,
+      reason: 'the download failed: it did not finish within 20 ms',
+    });
+    resolveLate(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          cancel() {
+            cancelled += 1;
+            return Promise.resolve();
+          },
+        }),
+      ),
+    );
+    // The cleanup attached to the late fetch runs in a later microtask/tick,
+    // not before this function's own result already resolved above.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelled).toBe(1);
   });
 
   it('reports a failed request as a refusal, and installs nothing', async () => {

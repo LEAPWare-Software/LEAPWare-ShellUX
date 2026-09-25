@@ -287,9 +287,16 @@ main a renderer-supplied path).
 > and `lwplugin/1` has no field for one (D-47); a package whose bundle and
 > `sha512` were replaced together installs from this door. The request and
 > the reader (or an unread body) are cancelled once, in the download
-> function's own `finally`, on every exit alike — a second review round found
-> the first fix only did this on the timeout path, leaving every other exit
-> dependent on the network layer honouring `controller.abort()` alone. *Tests:*
+> function's own `finally`, on every exit alike — review round 6 found an
+> earlier version only cancelled on the timeout path, leaving every other
+> exit dependent on the network layer honouring `controller.abort()` alone.
+> One case that fix still could not reach directly: a `fetch` that is still
+> pending when the timeout wins the race, and only resolves afterwards —
+> `response` is never assigned there, so `finally`'s `response?.body` is
+> nothing. Round 7 found this gap and closed it by keeping the promise
+> `fetch` returned and attaching cleanup to it directly, not awaited, so a
+> late-arriving body is still cancelled rather than left to
+> `controller.abort()` alone. *Tests:*
 > `electron/__tests__/pluginReleaseSource.test.ts` — "refuses a URL outside
 > the LEAPWare-Software organisation", "checks the URL as written, and admits
 > only spellings the URL parser leaves unchanged", "unsigned by D-47: installs
@@ -300,7 +307,8 @@ main a renderer-supplied path).
 > call never settles and never touches the signal", "gives up on a download
 > whose network layer never notices the abort signal", "the size bound is
 > inclusive: a download declared or measured at exactly the limit is not
-> refused for its size", "runs one download
+> refused for its size", "cancels a fetch that resolves only after the
+> timeout has already given up", "runs one download
 > at a time"; `electron/__tests__/pluginIpc.test.ts` — "refuses a management
 > call whose sender is the extension surface", which now includes the sixth
 > channel. **Rejected:** writing the download to a temporary `.lwplugin` and

@@ -110,17 +110,27 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  * underlying body only if the network layer honours the signal — the same
  * cooperation dependency this rewrite exists to remove, left standing for
  * cleanup even after it was removed from the wait itself. Reproduced as a
- * real gap by review, at the door this fix closes. The bound this check
- * enforces is inclusive: a download declared or measured at exactly
- * `MAX_PACKAGE_BYTES` is not refused for its size, matching the same-or-over
- * distinction `pluginPackage.ts`'s own size check makes for the local-file
- * door. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
- * "refuses an error status, an oversized download and an empty response, and
+ * real gap by review, at the door this fix closes. **One case that same
+ * `finally` cannot reach directly: a `fetch` that is still pending when the
+ * timeout wins, and only resolves afterwards.** `response` is never assigned
+ * in that case, so `finally`'s own `response?.body` is nothing; the promise
+ * `fetch` returned is still out there, though, and is kept in `fetching` so
+ * cleanup can be attached to it — not awaited, since nothing here can wait
+ * for a network call the function has already given up on — cancelling
+ * whatever body eventually arrives instead of leaving it to
+ * `controller.abort()` alone. Reproduced as a real gap by a later review
+ * round, at the door this fix closes in turn. The bound this check enforces
+ * is inclusive: a download declared or measured at exactly `MAX_PACKAGE_BYTES`
+ * is not refused for its size, matching `pluginPackage.ts`'s own size check
+ * for the local-file door, which also refuses only strictly *over* the limit,
+ * never *at or over* it. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts`
+ * — "refuses an error status, an oversized download and an empty response, and
  * installs nothing", "gives up on a download that does not finish in time",
  * "gives up on a download whose fetch call never settles and never touches
  * the signal", "gives up on a download whose network layer never notices the
  * abort signal", "the size bound is inclusive: a download declared or
- * measured at exactly the limit is not refused for its size".
+ * measured at exactly the limit is not refused for its size", "cancels a
+ * fetch that resolves only after the timeout has already given up".
  * **Not measured:** whether Electron's real `net.fetch` —
  * what `index.ts` passes — itself honours the abort signal, writes its own
  * `onabort` (now moot: nothing here reads or writes that property), or which
@@ -233,10 +243,17 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
  * earlier version called `reader.cancel()` only from the timeout branch, so a
  * refused status, an oversized length or a rejected `fetch` left an unread
  * body relying on `controller.abort()` alone to be freed, which only works if
- * the network layer honours the signal. *Tests:* the same four above, plus
+ * the network layer honours the signal. That `finally` still cannot reach a
+ * `fetch` that is still pending when the timeout wins: `response` is never
+ * assigned, so `response?.body` is nothing to cancel there. `fetching` keeps
+ * the promise `fetch` returned so cleanup can attach to it anyway — its
+ * `.then`, not awaited — cancelling whatever body eventually arrives, rather
+ * than leaving that case to depend on `controller.abort()` alone the way
+ * every other exit used to. *Tests:* the same four above, plus
  * "refuses an error status, an oversized download and an empty response, and
  * installs nothing" (asserts the early-exit cases cancel their body, not only
- * `signal.aborted`).
+ * `signal.aborted`), "cancels a fetch that resolves only after the timeout
+ * has already given up".
  */
 async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs: number): Promise<ReleaseDownloadResult> {
   const controller = new AbortController();
@@ -259,8 +276,9 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
       controller.abort(reason);
     }, timeoutMs);
   });
+  const fetching = fetch(url, { signal: controller.signal, redirect: 'follow' });
   try {
-    response = await Promise.race([fetch(url, { signal: controller.signal, redirect: 'follow' }), timedOut]);
+    response = await Promise.race([fetching, timedOut]);
     if (!response.ok) return { ok: false, reason: `the download was refused: the server answered ${String(response.status)}` };
     const declared = Number(response.headers.get('content-length'));
     if (declared > MAX_PACKAGE_BYTES) {
@@ -295,6 +313,16 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
     // exit alike, not only the timeout's.
     controller.abort();
     (reader ?? response?.body)?.cancel().catch(() => undefined);
+    // If the timeout won the race above, `response` was never assigned —
+    // but `fetching` itself is still out there and can still resolve later,
+    // with a body nothing else will ever read or cancel. Attach cleanup to
+    // it now, not awaited: whenever (or whether) it eventually settles, its
+    // body is cancelled too, instead of relying on `controller.abort()`
+    // alone to free it — the same cooperation dependency this function
+    // exists to remove everywhere else.
+    if (response === undefined) {
+      fetching.then((late) => late.body?.cancel().catch(() => undefined), () => undefined);
+    }
   }
 }
 
