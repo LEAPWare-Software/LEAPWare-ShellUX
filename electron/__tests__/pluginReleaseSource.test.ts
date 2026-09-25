@@ -363,6 +363,20 @@ describe('the GitHub Release install source', () => {
     expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
   });
 
+  it('gives up on a download whose fetch call never settles and never touches the signal', async () => {
+    // Unlike the cooperative fake above (which listens for 'abort' itself)
+    // and the read-side fake below (whose fetch resolves immediately), this
+    // fake's fetch never resolves, never rejects, and never reads `init` at
+    // all — the timer must end the download on its own, before `fetch` even
+    // returns a response, not only once a body reader exists.
+    const r = rig(() => new Promise<Response>(() => undefined), 20);
+    expect(await r.installRelease(ALLOWED)).toEqual({
+      ok: false,
+      reason: 'the download failed: it did not finish within 20 ms',
+    });
+    expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
+  });
+
   it('gives up on a download whose network layer never notices the abort signal', async () => {
     // The headers arrive fine — `fetch` resolves — but the body's own pull()
     // never enqueues, never closes, and never reacts to the signal at all.

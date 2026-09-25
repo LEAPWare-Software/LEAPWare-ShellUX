@@ -287,7 +287,10 @@ main a renderer-supplied path).
 > only spellings the URL parser leaves unchanged", "unsigned by D-47: installs
 > a release asset that carries no signature, including one whose bundle and
 > sha512 were replaced together", "refuses an error status, an oversized
-> download and an empty response, and installs nothing", "runs one download
+> download and an empty response, and installs nothing", "gives up on a
+> download that does not finish in time", "gives up on a download whose fetch
+> call never settles and never touches the signal", "gives up on a download
+> whose network layer never notices the abort signal", "runs one download
 > at a time"; `electron/__tests__/pluginIpc.test.ts` — "refuses a management
 > call whose sender is the extension surface", which now includes the sixth
 > channel. **Rejected:** writing the download to a temporary `.lwplugin` and

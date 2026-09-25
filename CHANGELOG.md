@@ -114,8 +114,17 @@ from so a reader can check it.
   rejects, or a body stream that never errors, on abort would have hung the
   download and left `downloading` stuck `true` until the app restarted — a
   real gap, not a hypothetical one, reproduced against the module directly.
-  Every wait is now raced against the timer's own `AbortSignal` instead of
-  only awaited, and the timer also cancels the reader once one exists. *Tests:*
+  **The first fix itself had a defect, found by the same formal review round
+  that found the gap:** it raced every wait against `signal.onabort`, which
+  turned out to share its one slot with whatever else on the same signal sets
+  it — a network layer that also writes `onabort` could silently displace
+  this module's handler, in either direction, reproduced against the fix
+  directly and never confirmed either way against the real Electron
+  `net.fetch`. Reworked to race every wait, with `Promise.race`, against a
+  plain promise only the timer itself settles — nothing here reads or writes
+  any property of `signal` at all — and the timer still cancels the reader
+  once one exists. The first fix also shipped without a test for the `fetch`
+  half of the race (only the body-reader half was exercised); added. *Tests:*
   `electron/__tests__/pluginReleaseSource.test.ts` —
   "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
   as written, and admits only spellings the URL parser leaves unchanged",
@@ -124,16 +133,20 @@ from so a reader can check it.
   admitted URL, following redirects, and installs a package that arrives in
   several chunks", "refuses an error status, an oversized download and an
   empty response, and installs nothing", "gives up on a download that does not
-  finish in time", "gives up on a download whose network layer never notices
-  the abort signal", "reports a failed request as a refusal, and installs
-  nothing", "runs one download at a time"; `electron/__tests__/pluginIpc.test.ts`
+  finish in time", "gives up on a download whose fetch call never settles and
+  never touches the signal", "gives up on a download whose network layer never
+  notices the abort signal", "reports a failed request as a refusal, and
+  installs nothing", "runs one download at a time";
+  `electron/__tests__/pluginIpc.test.ts`
   — "refuses a management call whose sender is the extension surface" (now six
   channels), "registers the six management channels, and nothing else".
   **Not done, stated so it is not read wider:** the real Electron `net.fetch`
   itself is not exercised by any test — whether it actually honours the abort
-  signal or which redirects it follows is unmeasured, because every case
+  signal, writes its own `onabort` (now moot: nothing here touches that
+  property), or which redirects it follows is unmeasured, because every case
   drives a recording fake where it stands; the fix above removes this module's
-  own dependency on the answer, it does not measure it. GitHub's redirect can
+  own dependency on cooperation, it does not measure whether the real stack
+  cooperates. GitHub's redirect can
   also lead a once-valid URL to a repository that has since left the
   organisation (a rename or transfer) — the same "redirect target unchecked"
   gap as above, named explicitly here rather than left implicit, not

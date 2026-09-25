@@ -81,29 +81,35 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  *
  * ---------------------------------------------------------------------------
  * THE DOWNLOAD IS BOUNDED IN SIZE AND IN TIME — THE TIME BOUND DOES NOT
- * DEPEND ON THE NETWORK LAYER NOTICING IT.
+ * DEPEND ON THE NETWORK LAYER NOTICING IT, AND SHARES NO LISTENER SLOT WITH IT.
  * ---------------------------------------------------------------------------
  * A response that is not a 2xx, declares a `Content-Length` over decision 1's
  * 8 MiB, streams more than 8 MiB, carries no body or does not finish within
  * `DOWNLOAD_TIMEOUT_MS` is refused with one reason, and nothing is installed.
  * The body is read chunk by chunk and refused at the first byte past the bound,
  * so memory holds at most the bound plus one chunk. Every wait on `fetch` and
- * on the body reader is raced against the timer's own `AbortSignal`, not only
- * awaited — `AbortController.abort()` firing the `abort` event on its own
- * signal is guaranteed by the platform, so the timer ends the download even if
- * `fetch` or the reader never settles on their own, which is a real risk: a
- * `fetch` implementation is not obliged to reject, or to error its body
- * stream, just because its signal fired. The request and the reader are both
- * cancelled when the download ends, however it ends. *Tests:*
- * `electron/__tests__/pluginReleaseSource.test.ts` — "refuses an error status,
- * an oversized download and an empty response, and installs nothing", "gives
- * up on a download that does not finish in time", "gives up on a download
- * whose network layer never notices the abort signal". **Not measured:**
- * whether Electron's real `net.fetch` — what `index.ts` passes — itself
- * honours the abort signal or which redirects it follows; this module is
- * driven here by a recording fake either way, and the real network runs only
- * in the packaged application. The fix above removes the dependency on that
- * being true, it does not measure it.
+ * on the body reader is raced, with `Promise.race`, against a plain promise
+ * only this function's own timer ever settles — not `AbortSignal.onabort`,
+ * which an earlier version of this fix used and which turned out to share its
+ * one slot with whatever else on the same signal sets it (a network layer
+ * that also writes `onabort` can silently displace this module's handler, in
+ * either direction — a real hazard, corrected before it shipped). The timer
+ * ends the download even if `fetch` or the reader never settles on their own,
+ * which is itself a real risk: a `fetch` implementation is not obliged to
+ * reject, or to error its body stream, just because its signal fired. The
+ * request and the reader are both cancelled when the download ends, however
+ * it ends. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+ * "refuses an error status, an oversized download and an empty response, and
+ * installs nothing", "gives up on a download that does not finish in time",
+ * "gives up on a download whose fetch call never settles and never touches
+ * the signal", "gives up on a download whose network layer never notices the
+ * abort signal". **Not measured:** whether Electron's real `net.fetch` —
+ * what `index.ts` passes — itself honours the abort signal, writes its own
+ * `onabort` (now moot: nothing here reads or writes that property), or which
+ * redirects it follows; this module is driven here by a recording fake
+ * either way, and the real network runs only in the packaged application.
+ * The fix above removes the dependency on cooperation, it does not measure
+ * whether the real stack cooperates.
  * ============================================================================
  */
 
@@ -185,63 +191,41 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
 }
 
 /**
- * Race `promise` against `signal` firing. `controller.abort()` reaching its
- * own signal's `onabort` is guaranteed by the platform, not by whatever
- * `promise` is waiting on — so this settles even when the network layer a
- * `promise` depends on never notices the signal at all. Uses the `onabort`
- * property, not `addEventListener`: `electron/__tests__/noElectronListener.test.ts`
- * holds every file under `electron/` to zero DOM-listener calls, absolute, no
- * allowlist, and this main-process module is one of them. Only one `raceAbort`
- * is ever pending per signal at a time here — each call awaits the last before
- * starting the next on the same `controller` — so the single `onabort` slot is
- * never contended. Every caller in this file only ever races a signal that has
- * not fired yet, since the function returns as soon as one race rejects; there
- * is deliberately no already-aborted guard for a case this module never
- * reaches. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
- * "gives up on a download whose network layer never notices the abort signal".
- */
-function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    signal.onabort = () => {
-      signal.onabort = null;
-      reject(signal.reason as Error);
-    };
-    promise.then(
-      (value) => {
-        signal.onabort = null;
-        resolve(value);
-      },
-      (error: unknown) => {
-        signal.onabort = null;
-        reject(error as Error);
-      },
-    );
-  });
-}
-
-/**
  * The download itself. Not exported: the only way in is `fetchReleaseAsset`,
  * which checks the URL first, so no caller of this module can reach the network
  * with a URL the allowlist did not see.
  *
- * **The timeout does not depend on the network layer cooperating.** Every wait
- * on `fetch` and on the body reader is wrapped in `raceAbort`, so the timer
- * firing ends this function even if `fetch` never rejects and the reader's
- * `read()` never settles on its own. The timer also calls `reader.cancel()`
- * once a reader exists, to release the underlying connection rather than only
- * abandoning it. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
- * "gives up on a download whose network layer never notices the abort signal".
+ * **The timeout does not depend on the network layer cooperating, and shares
+ * no listener slot with it.** `timedOut` is a plain promise that only this
+ * function's own timer ever settles — not `AbortSignal.onabort`, and not
+ * `addEventListener`. An earlier version of this fix used `signal.onabort`,
+ * which turned out to share its one slot with whatever else on the same
+ * signal sets it: a network layer that also writes `onabort` can silently
+ * displace this module's handler, in either direction. Racing every wait on
+ * `fetch` and on the body reader against `timedOut` with `Promise.race`
+ * removes that hazard entirely — nothing here reads or writes any property of
+ * `signal` — while `controller.abort()` is still called, for whatever
+ * cooperating effect it has on the real `fetch`, and the timer also calls
+ * `reader.cancel()` once a reader exists, to release the underlying
+ * connection rather than only abandoning it. *Tests:*
+ * `electron/__tests__/pluginReleaseSource.test.ts` — "gives up on a download
+ * whose fetch call never settles and never touches the signal", "gives up on
+ * a download whose network layer never notices the abort signal".
  */
 async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs: number): Promise<ReleaseDownloadResult> {
   const controller = new AbortController();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  const timer = setTimeout(() => {
-    const reason = new Error(`it did not finish within ${String(timeoutMs)} ms`);
-    controller.abort(reason);
-    reader?.cancel(reason).catch(() => undefined);
-  }, timeoutMs);
+  let timer!: ReturnType<typeof setTimeout>;
+  const timedOut = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      const reason = new Error(`it did not finish within ${String(timeoutMs)} ms`);
+      controller.abort(reason);
+      reader?.cancel(reason).catch(() => undefined);
+      reject(reason);
+    }, timeoutMs);
+  });
   try {
-    const response = await raceAbort(fetch(url, { signal: controller.signal, redirect: 'follow' }), controller.signal);
+    const response = await Promise.race([fetch(url, { signal: controller.signal, redirect: 'follow' }), timedOut]);
     if (!response.ok) return { ok: false, reason: `the download was refused: the server answered ${String(response.status)}` };
     const declared = Number(response.headers.get('content-length'));
     if (declared > MAX_PACKAGE_BYTES) {
@@ -255,7 +239,7 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
     const chunks: Uint8Array[] = [];
     let total = 0;
     for (;;) {
-      const { done, value } = await raceAbort(reader.read(), controller.signal);
+      const { done, value } = await Promise.race([reader.read(), timedOut]);
       if (done) break;
       total += value.byteLength;
       if (total > MAX_PACKAGE_BYTES) {
