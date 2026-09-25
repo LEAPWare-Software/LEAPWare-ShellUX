@@ -218,10 +218,16 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
   let timer!: ReturnType<typeof setTimeout>;
   const timedOut = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
+      // Reject first: cancel() can resolve a pending reader.read() with
+      // { done: true } as part of its own cancel algorithm, and if that
+      // happened before this rejection, an already-settled read() could win
+      // the race below with zero bytes read — a timeout that looks like an
+      // empty, successful download. Rejecting up front makes this promise's
+      // rejection the one Promise.race sees first, whatever cancel() does.
       const reason = new Error(`it did not finish within ${String(timeoutMs)} ms`);
+      reject(reason);
       controller.abort(reason);
       reader?.cancel(reason).catch(() => undefined);
-      reject(reason);
     }, timeoutMs);
   });
   try {
