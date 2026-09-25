@@ -45,7 +45,13 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  *   against a public release asset of `cli/cli`: `302 Found`, to the host
  *   ADR-0006 decision 2's step-11 note records). Redirects are followed as
  *   the network stack follows them, and the allowlist is checked on the URL
- *   asked for, not on any URL the bytes came from.
+ *   asked for, not on any URL the bytes came from — including GitHub's own
+ *   redirect for a repository that has been renamed or transferred out of the
+ *   organisation: a URL admitted here because it was once
+ *   `github.com/LEAPWare-Software/<repo>/...` is followed wherever GitHub
+ *   points it today, whoever that repository now belongs to. Not reproduced
+ *   against live GitHub; disclosed as a named instance of the redirect gap
+ *   above, not a narrower or separate one.
  * - **The local-file door.** An operator can still install a `.lwplugin`
  *   anyone built through main's picker (ADR-0001 Amendment P).
  *
@@ -74,20 +80,30 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  * bundle and sha512 were replaced together".
  *
  * ---------------------------------------------------------------------------
- * THE DOWNLOAD IS BOUNDED IN SIZE AND IN TIME.
+ * THE DOWNLOAD IS BOUNDED IN SIZE AND IN TIME — THE TIME BOUND DOES NOT
+ * DEPEND ON THE NETWORK LAYER NOTICING IT.
  * ---------------------------------------------------------------------------
  * A response that is not a 2xx, declares a `Content-Length` over decision 1's
  * 8 MiB, streams more than 8 MiB, carries no body or does not finish within
  * `DOWNLOAD_TIMEOUT_MS` is refused with one reason, and nothing is installed.
  * The body is read chunk by chunk and refused at the first byte past the bound,
- * so memory holds at most the bound plus one chunk. The request is aborted
- * when the download ends, however it ends. *Tests:*
+ * so memory holds at most the bound plus one chunk. Every wait on `fetch` and
+ * on the body reader is raced against the timer's own `AbortSignal`, not only
+ * awaited — `AbortController.abort()` firing the `abort` event on its own
+ * signal is guaranteed by the platform, so the timer ends the download even if
+ * `fetch` or the reader never settles on their own, which is a real risk: a
+ * `fetch` implementation is not obliged to reject, or to error its body
+ * stream, just because its signal fired. The request and the reader are both
+ * cancelled when the download ends, however it ends. *Tests:*
  * `electron/__tests__/pluginReleaseSource.test.ts` — "refuses an error status,
  * an oversized download and an empty response, and installs nothing", "gives
- * up on a download that does not finish in time". **Not measured:** what
- * Electron's `net.fetch` — what `index.ts` passes — does with the abort signal,
- * or which redirects it follows; this module is driven here by a recording
- * fake, and the real network runs only in the packaged application.
+ * up on a download that does not finish in time", "gives up on a download
+ * whose network layer never notices the abort signal". **Not measured:**
+ * whether Electron's real `net.fetch` — what `index.ts` passes — itself
+ * honours the abort signal or which redirects it follows; this module is
+ * driven here by a recording fake either way, and the real network runs only
+ * in the packaged application. The fix above removes the dependency on that
+ * being true, it does not measure it.
  * ============================================================================
  */
 
@@ -169,17 +185,54 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
 }
 
 /**
+ * Race `promise` against `signal` firing. `controller.abort()` firing the
+ * `abort` event on its own signal is guaranteed by the platform, not by
+ * whatever `promise` is waiting on — so this settles even when the network
+ * layer a `promise` depends on never notices the signal at all. *Tests:*
+ * `electron/__tests__/pluginReleaseSource.test.ts` — "gives up on a download
+ * whose network layer never notices the abort signal".
+ */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason as Error);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason as Error);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error as Error);
+      },
+    );
+  });
+}
+
+/**
  * The download itself. Not exported: the only way in is `fetchReleaseAsset`,
  * which checks the URL first, so no caller of this module can reach the network
  * with a URL the allowlist did not see.
+ *
+ * **The timeout does not depend on the network layer cooperating.** Every wait
+ * on `fetch` and on the body reader is wrapped in `raceAbort`, so the timer
+ * firing ends this function even if `fetch` never rejects and the reader's
+ * `read()` never settles on its own. The timer also calls `reader.cancel()`
+ * once a reader exists, to release the underlying connection rather than only
+ * abandoning it. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+ * "gives up on a download whose network layer never notices the abort signal".
  */
 async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs: number): Promise<ReleaseDownloadResult> {
   const controller = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   const timer = setTimeout(() => {
-    controller.abort(new Error(`it did not finish within ${String(timeoutMs)} ms`));
+    const reason = new Error(`it did not finish within ${String(timeoutMs)} ms`);
+    controller.abort(reason);
+    reader?.cancel(reason).catch(() => undefined);
   }, timeoutMs);
   try {
-    const response = await fetch(url, { signal: controller.signal, redirect: 'follow' });
+    const response = await raceAbort(fetch(url, { signal: controller.signal, redirect: 'follow' }), controller.signal);
     if (!response.ok) return { ok: false, reason: `the download was refused: the server answered ${String(response.status)}` };
     const declared = Number(response.headers.get('content-length'));
     if (declared > MAX_PACKAGE_BYTES) {
@@ -189,11 +242,11 @@ async function downloadReleaseAsset(url: string, fetch: ReleaseFetch, timeoutMs:
       };
     }
     if (response.body === null) return { ok: false, reason: 'the download was refused: the response carried no body' };
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await raceAbort(reader.read(), controller.signal);
       if (done) break;
       total += value.byteLength;
       if (total > MAX_PACKAGE_BYTES) {

@@ -363,6 +363,29 @@ describe('the GitHub Release install source', () => {
     expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
   });
 
+  it('gives up on a download whose network layer never notices the abort signal', async () => {
+    // The headers arrive fine — `fetch` resolves — but the body's own pull()
+    // never enqueues, never closes, and never reacts to the signal at all.
+    // Nothing here calls `init.signal.addEventListener`, unlike the
+    // cooperative fake above: this is the case the timer must end on its own.
+    const r = rig(
+      () =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull: () => new Promise<void>(() => undefined),
+            }),
+          ),
+        ),
+      20,
+    );
+    expect(await r.installRelease(ALLOWED)).toEqual({
+      ok: false,
+      reason: 'the download failed: it did not finish within 20 ms',
+    });
+    expect(existsSync(join(r.root, STATE_FILE))).toBe(false);
+  });
+
   it('reports a failed request as a refusal, and installs nothing', async () => {
     const failures: unknown[] = [new TypeError('fetch failed'), 'offline'];
     const r = rig(() => Promise.reject(failures.shift()));

@@ -108,7 +108,15 @@ from so a reader can check it.
   `release-assets.githubusercontent.com`, and that host is not checked).
   Unsigned, by D-47: no signature is read, `lwplugin/1` has no field for one,
   and a package whose bundle and `sha512` were replaced together installs from
-  this door. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+  this door. **The 60-second download timeout does not depend on `fetch` or
+  the body reader honouring the abort signal, corrected after review:** an
+  earlier draft awaited both directly, so a `fetch` implementation that never
+  rejects, or a body stream that never errors, on abort would have hung the
+  download and left `downloading` stuck `true` until the app restarted — a
+  real gap, not a hypothetical one, reproduced against the module directly.
+  Every wait is now raced against the timer's own `AbortSignal` instead of
+  only awaited, and the timer also cancels the reader once one exists. *Tests:*
+  `electron/__tests__/pluginReleaseSource.test.ts` —
   "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
   as written, and admits only spellings the URL parser leaves unchanged",
   "unsigned by D-47: installs a release asset that carries no signature,
@@ -116,14 +124,21 @@ from so a reader can check it.
   admitted URL, following redirects, and installs a package that arrives in
   several chunks", "refuses an error status, an oversized download and an
   empty response, and installs nothing", "gives up on a download that does not
-  finish in time", "reports a failed request as a refusal, and installs
+  finish in time", "gives up on a download whose network layer never notices
+  the abort signal", "reports a failed request as a refusal, and installs
   nothing", "runs one download at a time"; `electron/__tests__/pluginIpc.test.ts`
   — "refuses a management call whose sender is the extension surface" (now six
   channels), "registers the six management channels, and nothing else".
-  **Not done, stated so it is not read wider:** `net.fetch` itself is not
-  exercised — its redirect handling and its response to the abort are
-  unmeasured, because every case drives a recording fake where it stands; no
-  UI calls the channel before the plugin manager (step 9); the organisation is
+  **Not done, stated so it is not read wider:** the real Electron `net.fetch`
+  itself is not exercised by any test — whether it actually honours the abort
+  signal or which redirects it follows is unmeasured, because every case
+  drives a recording fake where it stands; the fix above removes this module's
+  own dependency on the answer, it does not measure it. GitHub's redirect can
+  also lead a once-valid URL to a repository that has since left the
+  organisation (a rename or transfer) — the same "redirect target unchecked"
+  gap as above, named explicitly here rather than left implicit, not
+  reproduced against live GitHub. No UI calls the channel before the plugin
+  manager (step 9); the organisation is
   compared case-sensitively, so `leapware-software` is refused though GitHub
   serves an owner in any case (measured the same way: `CLI/cli` answered the
   same `302`), and `releases/latest/download/` URLs are refused as outside
