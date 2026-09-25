@@ -41,6 +41,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
+          # This job now holds pull-requests: write and a gh pr view/diff/comment
+          # grant, the same profile claude-code-review.yml carries; without this,
+          # the write-scoped job token sits readable in .git/config for the agent's
+          # own git/gh tool access to find. D-55 follow-up (#211/#227), decided in
+          # docs/decisions/debates/D-55-pr206-bootstrap-gate.md item 3 and missed in
+          # this PR's first pass — added per claude[bot]'s review.
+          persist-credentials: false
 
       # D-55 follow-up (#211): claude-code-review.yml already grants gh pr
       # view/diff/comment (line below mirrors its allowlist exactly), but that

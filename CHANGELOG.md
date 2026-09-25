@@ -64,9 +64,17 @@ from so a reader can check it.
   `pull-requests: read`, and `claude-code-review.yml` already documents (run
   `35410730035`, PR #145) that `read` gets a `gh pr comment` call denied outright.
   Fixed in the same change: `permissions.pull-requests` is now `write`, matching
-  `claude-code-review.yml`'s own fix for the identical failure. **Not done as part of
-  this change:** no `node:test` was added, because the new decision (a live `gh api`
-  lookup compared to `github.repository`) has no pure, mockable branch beyond the
+  `claude-code-review.yml`'s own fix for the identical failure. **Second correction,
+  also found by `claude[bot]`'s review and confirmed against the D-55 debate record
+  directly:** the checkout step was missing `persist-credentials: false`, even though
+  `docs/decisions/debates/D-55-pr206-bootstrap-gate.md` (item 3) explicitly specifies
+  this follow-up PR should add it, for the same reason `claude-code-review.yml`'s own
+  checkout already carries it — a `pull-requests: write` token left persisted in
+  `.git/config` is readable by the same agent step that now has `gh` tool access.
+  Fixed in the same change: `persist-credentials: false` added to the checkout step.
+  **Not done as part of this change:** no `node:test` was added, because the new
+  decision (a live `gh api` lookup compared to `github.repository`) has no pure,
+  mockable branch beyond the
   workflow's own `if:` expression and a one-line bash string comparison against live
   API data — unlike `auto-queue.mjs`'s decision logic, which runs on data already
   fetched into a plain function.
