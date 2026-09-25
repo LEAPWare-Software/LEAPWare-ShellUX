@@ -254,9 +254,19 @@ from so a reader can check it.
   "What landed" list are two separate statements about the same fact, a landing can (and
   did, twice) update one without the other, and nothing in `verify` compares them —
   `check:citations` resolves a citation to a test title, not a summary line to the state
-  it summarises, the same gap `Claude Code Review` named on #188's own findings 14–19 and
-  #190's own "Not done" list flagged for this exact file. Still nothing mechanical catches
-  it; this is a second instance of a known, named, unfixed gap, not a new one.
+  it summarises. **Correction (this commit):** the previous sentence here cited "#188's
+  own findings 14–19" and "#190's own 'Not done' list" as having flagged this exact gap —
+  neither did. #188's rule-10 note names findings 10, 14, 16, 17, 18 and 19 (not a
+  contiguous range; 15 isn't in the class, 10 is) as one class, "prose describing a state
+  that something else in the repository has since moved" — a broader class, none of whose
+  numbered instances is about `HANDOFF.md`; #188 separately flags, in an unnumbered "Still
+  open" line, that this same pointer was already stale at that PR's own head. #190's "Not
+  done" list names a related but distinct gap — "nothing checks that a summary table
+  matches the plan file it summarises" — about summary tables against
+  `docs/plans/v1-production.md`, not this file. So the general shape was named twice
+  before, but never pinned to this pointer specifically, and this entry's own citation
+  claiming otherwise was itself an instance of the class it describes. Still nothing
+  mechanical catches it; this is a second instance of a known, unfixed gap, not a new one.
 - **D-27 ("no branch protection, and no spend to get it") is struck through as
   superseded**, in `docs/DECISIONS.md` — plan step 1's last unticked bullet. Its premise
   was that both branch-protection endpoints 403 on a private free-plan repository; that
