@@ -65,7 +65,9 @@ from so a reader can check it.
   (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10, 14 and 16 below), one vocabulary fix
   (numbered 4, unrelated to the Lifecycle check itself), one `checkRender`
   fix (numbered 13, the Render check's own async-safety gap), one test-only
-  timeout-margin fix on fix 14's own regression tests (numbered 15), and two
+  timeout-margin fix on fix 14's own regression tests (numbered 15), two
+  `runChecks`/`main()` control-flow fixes with no automated test for a
+  disclosed shared-filesystem reason (numbered 17 and 18), and two
   test-fixture/message fixes on Check 1's and Check 4's own regression
   coverage (numbered 11 and 12, unrelated to `checkLifecycle`), plus two
   more described after the numbered list (a CI `timeout-minutes` gap and a
@@ -377,6 +379,57 @@ from so a reader can check it.
       forever. *Test:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
       (Lifecycle) — refuses a plugin whose onActivate leaks a recursive
       zero-delay setTimeout chain".
+  17. **`runChecks`'s Vite SSR server was created before the `try`/`finally`
+      that closes it.** `mkdirSync`/`mkdtempSync` (the scratch-directory
+      setup) ran between server creation and the `try` block; either can
+      throw (`EACCES`, `ENOSPC`, or `dist-plugins` left as a stray
+      non-directory by an earlier crashed or `SIGKILL`'d run — plausible
+      after fix 16's own hang, pre-fix). A throw there skipped straight past
+      the `finally` that calls `server.close()`, leaking the Vite dev
+      server's middleware, esbuild/optimizer state and file handles for the
+      rest of the process's life. Confirmed by hand before the fix: with
+      `dist-plugins` replaced by a plain file (forcing `mkdirSync`'s
+      `EEXIST`), the CLI crashed with a raw, unhandled stack trace instead
+      of reaching `runChecks`'s `finally`. Fixed by moving `server.close()`
+      into its own outer `finally` that now wraps the scratch-directory
+      setup as well as the checks themselves, not just the checks — a
+      throw from `mkdirSync`/`mkdtempSync` now still closes the server on
+      the way out. **Verified manually, not by an automated test**: this
+      repo's own `test:scripts` npm script runs `plugin-check.test.mjs` and
+      `build-plugins.test.mjs` as separate `node --test` files, which run
+      concurrently by default, and `build-plugins.test.mjs` writes real
+      build output into this exact same `dist-plugins` directory
+      (`scripts/__tests__/build-plugins.test.mjs`'s own `OUT_DIR`) — a test
+      that replaces `dist-plugins` with a non-directory file, even briefly,
+      risks a spurious failure in that other file if their runs overlap.
+      No automated regression test is added for this reason; the fix was
+      confirmed by hand, before and after, against the real CLI, with the
+      transcript in this PR's own body.
+  18. **`main()` had no error handling around `await runChecks(...)`,
+      contradicting the tool's own "always a clean FAIL" design promise.**
+      Fixes 1-16 exist specifically to convert every internal throw or
+      rejection inside `checkLifecycle`/`checkRender` into a clean
+      `plugin-check: FAIL [check] reason` instead of a raw crash, but that
+      guarantee only ever held for errors those two functions' own
+      `try`/`catch`es anticipate. Anything that throws elsewhere in
+      `runChecks` — fix 17's own scratch-directory setup, `createCheckServer`
+      failing to start Vite, or any other internal error `runChecks` does
+      not itself anticipate — propagated straight out of `runChecks`, out of
+      `main()`'s unguarded `await`, and, since this file runs `main()` as a
+      top-level `await` at module scope, became an unhandled rejection that
+      crashed the process with a raw stack trace: exactly the failure shape
+      the rest of this file's hardening exists to avoid. Confirmed by hand
+      before the fix: the same `dist-plugins`-as-a-file fixture from fix 17
+      crashed the CLI with `node:fs:1370 ... Error: EEXIST ...` instead of a
+      clean FAIL. Fixed by wrapping `await runChecks(packagePath)` in its
+      own `try`/`catch`, reporting anything caught as
+      `plugin-check: FAIL [internal] reason` — a new check name distinct
+      from the six ADR-0006 rows, naming this as a harness failure rather
+      than one of them. Re-ran the same fixture post-fix: clean
+      `plugin-check: FAIL [internal] EEXIST: file already exists, mkdir
+      '.../dist-plugins'`, exit 1. **Verified manually, not by an automated
+      test**, for the identical shared-`dist-plugins`-directory reason fix
+      17 states in full above.
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,

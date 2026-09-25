@@ -934,78 +934,91 @@ async function createCheckServer() {
 /**
  * Run every check against one built `.lwplugin`, stopping at the first
  * failure. Returns `{ ok: true, manifest }` or `{ ok: false, check, reason }`.
+ *
+ * `server.close()` runs in its own OUTER `finally`, wrapping the scratch-
+ * directory setup as well as the checks themselves — not just the checks.
+ * `mkdirSync`/`mkdtempSync` can throw (`EACCES`, `ENOSPC`, or a stray
+ * non-directory `dist-plugins` left behind by an earlier crashed or
+ * `SIGKILL`'d run); with the server already created at that point, a throw
+ * there used to skip straight past the (inner) `try`/`finally` that only
+ * covered `tmpDir` cleanup, leaking the Vite dev server — its middleware,
+ * esbuild/optimizer state and file handles — for the rest of the process's
+ * life (the `claude[bot]` review finding on PR #221, comment 4100931650).
  */
 export async function runChecks(packagePath) {
   const server = await createCheckServer();
-  const scratchRoot = join(REPO_ROOT, 'dist-plugins');
-  mkdirSync(scratchRoot, { recursive: true });
-  const tmpDir = mkdtempSync(join(scratchRoot, 'plugin-check-'));
   try {
-    const { readPluginPackage, nodePluginPackageFs } = await server.ssrLoadModule(
-      resolve(REPO_ROOT, 'electron/main/plugins/pluginPackage.ts'),
-    );
-
-    // Checks 1 and 2 — Package, then Contract version.
-    const result = readPluginPackage(nodePluginPackageFs, packagePath);
-    if (!result.ok) {
-      return { ok: false, check: 'package', reason: result.reason };
-    }
-    const { manifest, bundle, compatibility } = result.plugin;
-    if (compatibility.state === 'incompatible') {
-      return { ok: false, check: 'contract-version', reason: compatibility.reason };
-    }
-
-    // Check 3 — Imports, over the bundle's own text.
-    const bundleText = Buffer.from(bundle).toString('utf8');
-    const importsResult = checkImports(bundleText);
-    if (!importsResult.ok) {
-      return importsResult;
-    }
-
-    // The bundle is written to a real file so it can be `ssrLoadModule`d as a
-    // real ES module — a `data:` URL import would work for a specifier-free
-    // module, but this one has to be RESOLVED against `/shared/*`, which needs
-    // a module graph.
-    const bundlePath = join(tmpDir, 'bundle.js');
-    writeFileSync(bundlePath, bundleText);
-
-    // Check 4 — Registration.
-    let moduleNamespace;
+    const scratchRoot = join(REPO_ROOT, 'dist-plugins');
+    mkdirSync(scratchRoot, { recursive: true });
+    const tmpDir = mkdtempSync(join(scratchRoot, 'plugin-check-'));
     try {
-      moduleNamespace = await server.ssrLoadModule(bundlePath);
-    } catch (error) {
-      return { ok: false, check: 'registration', reason: `the bundle could not be loaded as an ES module: ${describeThrown(error)}` };
-    }
-    const { validateBlueprint } = await server.ssrLoadModule(resolve(REPO_ROOT, 'src/core/RegistryContext.tsx'));
-    let blueprint;
-    try {
-      blueprint = validateBlueprint(moduleNamespace.default);
-    } catch (error) {
-      return { ok: false, check: 'registration', reason: `the default export failed validateBlueprint: ${describeThrown(error)}` };
-    }
-    if (blueprint.id !== manifest.id) {
-      return {
-        ok: false,
-        check: 'registration',
-        reason: `the registered blueprint's id "${blueprint.id}" differs from the manifest's id "${manifest.id}"`,
-      };
-    }
+      const { readPluginPackage, nodePluginPackageFs } = await server.ssrLoadModule(
+        resolve(REPO_ROOT, 'electron/main/plugins/pluginPackage.ts'),
+      );
 
-    // Check 5 — Lifecycle.
-    const lifecycleResult = await checkLifecycle(server, blueprint);
-    if (!lifecycleResult.ok) {
-      return lifecycleResult;
-    }
+      // Checks 1 and 2 — Package, then Contract version.
+      const result = readPluginPackage(nodePluginPackageFs, packagePath);
+      if (!result.ok) {
+        return { ok: false, check: 'package', reason: result.reason };
+      }
+      const { manifest, bundle, compatibility } = result.plugin;
+      if (compatibility.state === 'incompatible') {
+        return { ok: false, check: 'contract-version', reason: compatibility.reason };
+      }
 
-    // Check 6 — Render.
-    const renderResult = await checkRender(server, blueprint);
-    if (!renderResult.ok) {
-      return renderResult;
-    }
+      // Check 3 — Imports, over the bundle's own text.
+      const bundleText = Buffer.from(bundle).toString('utf8');
+      const importsResult = checkImports(bundleText);
+      if (!importsResult.ok) {
+        return importsResult;
+      }
 
-    return { ok: true, manifest };
+      // The bundle is written to a real file so it can be `ssrLoadModule`d as a
+      // real ES module — a `data:` URL import would work for a specifier-free
+      // module, but this one has to be RESOLVED against `/shared/*`, which needs
+      // a module graph.
+      const bundlePath = join(tmpDir, 'bundle.js');
+      writeFileSync(bundlePath, bundleText);
+
+      // Check 4 — Registration.
+      let moduleNamespace;
+      try {
+        moduleNamespace = await server.ssrLoadModule(bundlePath);
+      } catch (error) {
+        return { ok: false, check: 'registration', reason: `the bundle could not be loaded as an ES module: ${describeThrown(error)}` };
+      }
+      const { validateBlueprint } = await server.ssrLoadModule(resolve(REPO_ROOT, 'src/core/RegistryContext.tsx'));
+      let blueprint;
+      try {
+        blueprint = validateBlueprint(moduleNamespace.default);
+      } catch (error) {
+        return { ok: false, check: 'registration', reason: `the default export failed validateBlueprint: ${describeThrown(error)}` };
+      }
+      if (blueprint.id !== manifest.id) {
+        return {
+          ok: false,
+          check: 'registration',
+          reason: `the registered blueprint's id "${blueprint.id}" differs from the manifest's id "${manifest.id}"`,
+        };
+      }
+
+      // Check 5 — Lifecycle.
+      const lifecycleResult = await checkLifecycle(server, blueprint);
+      if (!lifecycleResult.ok) {
+        return lifecycleResult;
+      }
+
+      // Check 6 — Render.
+      const renderResult = await checkRender(server, blueprint);
+      if (!renderResult.ok) {
+        return renderResult;
+      }
+
+      return { ok: true, manifest };
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
     await server.close();
   }
 }
@@ -1021,7 +1034,25 @@ async function main() {
     return;
   }
 
-  const result = await runChecks(packagePath);
+  // Every anticipated failure inside `checkLifecycle`/`checkRender` already
+  // returns a clean `{ ok: false, check, reason }` — this `try` is for
+  // everything else: `createCheckServer()` failing to start Vite,
+  // `readPluginPackage`'s own `ssrLoadModule` call throwing, or any other
+  // internal error `runChecks` does not itself anticipate. Left unguarded,
+  // any of those would propagate out of this `await` at module scope
+  // (`invokedDirectly` below runs `main()` as a top-level await) and crash
+  // the process with a raw, unhandled stack trace — the exact failure shape
+  // the rest of this file's review-driven hardening exists to avoid (the
+  // `claude[bot]` review finding on PR #221, comment 4100932254). `check:
+  // 'internal'` names this as harness failure, not one of the six checks.
+  let result;
+  try {
+    result = await runChecks(packagePath);
+  } catch (error) {
+    console.error(`plugin-check: FAIL [internal] ${describeThrown(error)}`);
+    process.exitCode = 1;
+    return;
+  }
   if (result.ok) {
     console.log(
       `plugin-check: PASS ${result.manifest.id}@${result.manifest.version} — package, contract-version, imports, registration, lifecycle, render`,

@@ -838,7 +838,7 @@ everyone. CI runs it against all three migrated plugins.
 > to the live React registry and cannot be called standalone outside it, the
 > same class of narrowing this callout uses for `createFakeClock`.
 >
-> Thirteen real defects surfaced while building and hardening this kit, each
+> Fifteen real defects surfaced while building and hardening this kit, each
 > fixed rather than filed (rule 7), each naming its own failure mode (rule
 > 10):
 > - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
@@ -965,6 +965,29 @@ everyone. CI runs it against all three migrated plugins.
 >   and locally there is no `timeout-minutes` backstop at all. Fixed by
 >   moving the floor into `schedule()` itself, so every newly scheduled
 >   timer's due time is floored regardless of kind or how it was created.
+> - `runChecks`'s Vite SSR server was created before the `try`/`finally`
+>   that closes it, so a throw from the scratch-directory setup
+>   (`mkdirSync`/`mkdtempSync`, which can fail on `EACCES`, `ENOSPC`, or a
+>   stray non-directory `dist-plugins` left by an earlier crashed run) skipped
+>   the `finally` entirely, leaking the Vite dev server for the rest of the
+>   process's life. Fixed by moving `server.close()` into its own outer
+>   `finally` wrapping the scratch-directory setup too, not just the checks.
+> - `main()` had no error handling around `await runChecks(...)`, so anything
+>   that throws outside what `checkLifecycle`/`checkRender`'s own hardening
+>   anticipates — including the leak above's own throw — crashed the process
+>   with a raw stack via an unhandled top-level-await rejection, instead of
+>   the clean single-FAIL output the rest of this file's fixes otherwise
+>   guarantee. Fixed by wrapping the call in its own `try`/`catch`, reporting
+>   anything caught as `FAIL [internal]` — a check name naming this as a
+>   harness failure, not one of the six ADR-0006 rows. Neither of these last
+>   two fixes has an automated regression test: reproducing them needs
+>   `dist-plugins` to exist as a non-directory file, and this repo's
+>   `test:scripts` script runs `plugin-check.test.mjs` and
+>   `build-plugins.test.mjs` concurrently as separate `node --test` files,
+>   with `build-plugins.test.mjs` writing real build output into that same
+>   directory — a test that corrupts it, even briefly, risks a spurious
+>   failure there. Both were confirmed by hand, before and after, against
+>   the real CLI.
 >
 > *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
 > against one hand-assembled, hash-matching `.lwplugin` fixture per row —
