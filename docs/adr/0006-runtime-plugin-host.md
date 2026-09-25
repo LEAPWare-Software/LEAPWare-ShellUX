@@ -811,7 +811,7 @@ rule drift — and takes its directory from `argv`, never an environment variabl
 | Package | The manifest breaks any rule in decision 1, or `sha512` does not match |
 | Contract version | Decision 3's rule refuses it against this checkout's SDK |
 | Imports | The bundle's static imports name anything but the three `/shared/` modules, or it contains a dynamic `import()` |
-| Registration | The default export fails the real `register`, or its `id` differs from the manifest |
+| Registration | The default export fails `validateBlueprint`, `register`'s own pure validation core (see the "as built" note below for why the check calls this and not `register` itself), or its `id` differs from the manifest |
 | Lifecycle | Driven through activate → deactivate → release against a real revocable handle with fake timers: a hook throws, or **any call reaches the handle after release**, which is how a leaked interval shows up |
 | Render | Either pane view throws on first render with an empty context, or an `isVisible` throws on an empty context |
 
