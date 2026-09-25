@@ -64,7 +64,8 @@ from so a reader can check it.
   test suite (#221) — ten reachable from `createFakeClock`/`checkLifecycle`
   (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 and 14 below), one vocabulary fix
   (numbered 4, unrelated to the Lifecycle check itself), one `checkRender`
-  fix (numbered 13, the Render check's own async-safety gap), and two
+  fix (numbered 13, the Render check's own async-safety gap), one test-only
+  timeout-margin fix on fix 14's own regression tests (numbered 15), and two
   test-fixture/message fixes on Check 1's and Check 4's own regression
   coverage (numbered 11 and 12, unrelated to `checkLifecycle`), plus two
   more described after the numbered list (a CI `timeout-minutes` gap and a
@@ -327,6 +328,23 @@ from so a reader can check it.
       (Lifecycle) — refuses a plugin whose onActivate returns a promise that
       never settles" and "Check 5 (Lifecycle) — refuses a plugin whose
       onRelease returns a promise that never settles".
+  15. **The two regression tests fix 14 just added gave `runCli` only
+      `timeout: 8000`** — a 3000ms budget on top of `HOOK_SETTLE_TIMEOUT_MS`'s
+      real 5000ms wait to cover Node startup, ESM-importing
+      `typescript`/`vite`/`react-dom`/`jsdom`, standing up the Vite SSR
+      server, and checks 1-4, all before the hook-settle wait even starts.
+      The comment beside it claimed this was "comfortably above" the 5s
+      floor without measuring it, and `.github/workflows/ci.yml` runs this
+      exact suite on `windows-latest` and `macos-latest` too, where that
+      startup overhead is routinely 2-3x slower than the ~1.6s measured
+      locally — a real run could exceed 8000ms and get `SIGKILL`ed by
+      `runCli`'s own timeout before the CLI could print its clean FAIL, a
+      harness race indistinguishable from a code regression in CI output.
+      Fixed by widening both tests' `runCli` timeout to 15000ms and their
+      own `it()` timeout to 20000ms — a 10-second cushion above the
+      production wait, comfortably wider than the measured overhead and the
+      2-3x CI multiplier. *Tests:* the same two tests as fix 14, now with
+      the corrected margin.
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,

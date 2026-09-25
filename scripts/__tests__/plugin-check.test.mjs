@@ -731,11 +731,22 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
   // `awaitHookOrTimeout` races the hook against `HOOK_SETTLE_TIMEOUT_MS`
   // real milliseconds (a REAL timer, not the fake clock this check installs
   // for everything else) and resolves to a clean FAIL rather than hanging
-  // the CLI forever with no output and a leaked scratch directory. Both
-  // `runCli` and this test's own timeout are set comfortably above
-  // `HOOK_SETTLE_TIMEOUT_MS` so the CLI has time to hit its own bound and
-  // self-report before either would kill it first.
-  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate returns a promise that never settles', { timeout: 10000 }, () => {
+  // the CLI forever with no output and a leaked scratch directory.
+  //
+  // **The margin above `HOOK_SETTLE_TIMEOUT_MS` is wide on purpose, not a
+  // guess.** A first attempt gave `runCli` only `timeout: 8000` — a 3000ms
+  // budget on top of the 5000ms wait to cover Node startup, ESM-importing
+  // `typescript`/`vite`/`react-dom`/`jsdom`, standing up the Vite SSR
+  // server, and checks 1-4, all before the hook-settle wait even starts
+  // (`claude[bot]` review comment 4100843843: this suite runs on
+  // `windows-latest` and `macos-latest` too, where that overhead is
+  // routinely 2-3x slower, so a real run could exceed 8000ms and get
+  // `SIGKILL`ed by `runCli`'s own timeout — a harness race, not a code
+  // regression, but indistinguishable from one in CI output).
+  // `HOOK_SETTLE_TIMEOUT_MS + 10_000` gives the same 5000ms production wait
+  // a 10-second cushion for that overhead, comfortably wider than the
+  // ~1.6s measured locally and the 2-3x CI multiplier the reviewer named.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate returns a promise that never settles', { timeout: 20000 }, () => {
     const bundleText = [
       "import { jsx } from '/shared/react-jsx-runtime.js';",
       "function Pane2() { return jsx('div', { children: 'pane2' }); }",
@@ -751,14 +762,14 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
       '});',
     ].join('\n');
     const path = writeFixture('never-settling-activate', { bundleText, id: 'never-settling-activate' });
-    const result = runCli(path, { timeout: 8000 });
+    const result = runCli(path, { timeout: 15000 });
     assert.equal(result.status, 1);
     assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin whose onActivate never settles');
     assert.match(result.stderr, /FAIL \[lifecycle\]/);
     assert.match(result.stderr, /lifecycle\.onActivate never settled within \d+ms/);
   });
 
-  it('Check 5 (Lifecycle) — refuses a plugin whose onRelease returns a promise that never settles', { timeout: 10000 }, () => {
+  it('Check 5 (Lifecycle) — refuses a plugin whose onRelease returns a promise that never settles', { timeout: 20000 }, () => {
     const bundleText = [
       "import { jsx } from '/shared/react-jsx-runtime.js';",
       "function Pane2() { return jsx('div', { children: 'pane2' }); }",
@@ -774,7 +785,7 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
       '});',
     ].join('\n');
     const path = writeFixture('never-settling-release', { bundleText, id: 'never-settling-release' });
-    const result = runCli(path, { timeout: 8000 });
+    const result = runCli(path, { timeout: 15000 });
     assert.equal(result.status, 1);
     assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin whose onRelease never settles');
     assert.match(result.stderr, /FAIL \[lifecycle\]/);
