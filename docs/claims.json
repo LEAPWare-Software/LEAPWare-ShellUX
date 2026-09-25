@@ -3173,6 +3173,58 @@
       },
       "provenOn": "2026-09-24",
       "addedBy": "plan step 1 tick (lane C, D-27 strike)"
+    },
+    {
+      "id": "C-45",
+      "box": "Write the D-27 reversal honestly in `docs/maintainers/repository-settings.md` or `docs/DECISIONS.md`: bootstrap is documented as owner-only there, but the D-27 \"no branch protection, and no spend to get it\" decision that this ruleset reverses is not named anywhere in the settings doc.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/repository-settings-d27-reversal.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "names_d27",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "quotes_original_line",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "calls_it_reversal",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "cites_d34",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "links_decisions",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "reword the reversal sentence so it no longer calls the ruleset D-27's reversal",
+        "edits": [
+          {
+            "file": "docs/maintainers/repository-settings.md",
+            "replace": [
+              "**The ruleset documented above is the reversal of D-27**",
+              "**The ruleset documented above relates to D-27**"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-25",
+      "addedBy": "plan step 3 tick (docs/plans/v1-production.md line 125)"
     }
   ],
   "retired": []
