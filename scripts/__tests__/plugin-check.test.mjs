@@ -655,6 +655,55 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /onRelease threw: boom async release/);
   });
 
+  // Regression for the `claude[bot]` review finding on PR #221 (comment
+  // 4100011392, `scripts/plugin-check.mjs` line 609): every other phase in
+  // `checkLifecycle` follows its hook call with `await flushMicrotasks();`
+  // before checking `internalRejectionFail()`, but the post-`revoke()` leak
+  // scan — the one phase that exists specifically to catch a leak surviving
+  // release — did not. A plugin that leaks a `setInterval` whose callback
+  // rejects internally, and never touches `shell`, defeats BOTH of this
+  // check's leak defences at once: the `calls.find((call) => call.phase ===
+  // 'released')` scan finds nothing (nothing ever called `shell`), and the
+  // internal rejection — created synchronously inside the `clock.advance(...)`
+  // call right above — settles as a genuinely unhandled rejection only once
+  // Node's own microtask checkpoint runs, which the missing `await
+  // flushMicrotasks()` gave no chance to happen before `process.off(
+  // 'unhandledRejection', ...)` ran in this function's `finally`. Net effect,
+  // confirmed by hand before this fix: `checkLifecycle` returned `{ ok: true
+  // }` — `plugin-check: PASS` printed to stdout — and the rejection then
+  // reached the process for real, with no listener attached, crashing the CLI
+  // after it had already reported success. The fixture's timer delay
+  // (100_000ms) is deliberately sized to fire ONLY during the post-revoke
+  // scan's own `advance()`, not the earlier `onDeactivate`/`onRelease`
+  // advances (30_000ms each, which already `await flushMicrotasks()`
+  // correctly) — otherwise this test would pass for the wrong reason.
+  it('Check 5 (Lifecycle) — refuses a plugin whose post-release leak rejects internally without touching shell', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'post-release-internal-reject',",
+      "  name: 'PostReleaseInternalReject',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate() {',
+      "      setInterval(() => { Promise.reject(new Error('post release leak')); }, 100000);",
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('post-release-internal-reject', { bundleText, id: 'post-release-internal-reject' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin that leaks an internally-rejecting timer');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /an internal, unattached promise rejection reached the process during a lifecycle hook: post release leak/);
+  });
+
   it('Check 6 (Render) — refuses a plugin whose pane view throws on first render with an empty context', () => {
     const bundleText = [
       "function Pane2() { throw new Error('render boom'); }",

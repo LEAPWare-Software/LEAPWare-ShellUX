@@ -603,6 +603,7 @@ export async function checkLifecycle(server, blueprint) {
         reason: `a call to shell.${leaked.member} reached the handle after release — a leaked interval or timeout that lifecycle.onRelease did not clear`,
       };
     }
+    await flushMicrotasks();
     if (internalRejectionFail() !== null) {
       return internalRejectionFail();
     }

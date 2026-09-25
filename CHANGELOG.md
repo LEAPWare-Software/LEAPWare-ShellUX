@@ -157,6 +157,28 @@ from so a reader can check it.
      internally without returning the rejection, and leaves no scratch
      directory behind", which asserts both the clean FAIL and that the
      scratch directory does not outlive the run.
+  7. **The post-`revoke()` leak scan — the one phase that exists specifically
+     to catch a leak surviving release — was the only one of the four
+     lifecycle phases that did NOT `await flushMicrotasks()` before its own
+     `internalRejectionFail()` check**, unlike the check after
+     `onActivate`/`onDeactivate`/`onRelease` (fix 6 above). A plugin that
+     leaks a `setInterval` whose callback rejects internally, and never
+     touches `shell` from inside it, defeated both of this check's leak
+     defences at once: the `calls.find((call) => call.phase === 'released')`
+     scan found nothing (nothing ever called `shell`), and the internal
+     rejection — created synchronously inside the `clock.advance(...)` call
+     right above — settled as a genuinely unhandled rejection only once
+     Node's own microtask checkpoint ran, which the missing `await` gave no
+     chance to happen before `process.off('unhandledRejection', ...)` ran in
+     this function's `finally`. Confirmed by hand before the fix:
+     `checkLifecycle` returned `{ ok: true }` — `plugin-check: PASS` printed
+     to stdout — and the rejection then reached the process for real, with no
+     listener attached, crashing the CLI after it had already reported
+     success. Fixed by adding the same `await flushMicrotasks();` the other
+     three phases already use, in the matching position. *Test:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose post-release leak rejects internally without
+     touching shell".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
