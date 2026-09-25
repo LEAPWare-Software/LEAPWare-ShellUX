@@ -41,8 +41,9 @@ from so a reader can check it.
   tracked on #211, remain open.
 
 - **`claude.yml`'s `@claude`-mention grant widened to match `claude-code-review.yml`,
-  with a fork guard added so the wider grant cannot be used on a fork PR** (D-55
-  follow-up, #211). `claude_args` now sets `--allowedTools
+  with a fork guard that refuses the mention when the *triggering* PR itself is a
+  fork** (D-55 follow-up, #211; see the Fourth correction below for the narrower,
+  unresolved case this guard does not cover). `claude_args` now sets `--allowedTools
   "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"`, so an
   `@claude` mention can read and comment on a PR the way the automated reviewer does —
   this workflow had no `gh pr` grant at all before. Unlike `claude-code-review.yml`, this workflow does not
