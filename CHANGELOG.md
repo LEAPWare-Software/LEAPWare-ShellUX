@@ -40,6 +40,90 @@ from so a reader can check it.
   (`docs/decisions/debates/D-55-pr206-bootstrap-gate.md`); PR B and a follow-up,
   tracked on #211, remain open.
 
+- **`claude.yml`'s `@claude`-mention grant widened to match `claude-code-review.yml`,
+  with a fork guard that refuses the mention when the *triggering* PR itself is a
+  fork** (D-55 follow-up, #211; see the Fourth correction below for the narrower,
+  unresolved case this guard does not cover). `claude_args` now sets `--allowedTools
+  "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"`, so an
+  `@claude` mention can read and comment on a PR the way the automated reviewer does —
+  this workflow had no `gh pr` grant at all before. Unlike `claude-code-review.yml`, this workflow does not
+  skip fork PRs (D-49 only covers the `pull_request`-triggered reviewer), and an
+  `@claude` mention reaches it via `issue_comment` on a PR, `pull_request_review_comment`
+  or `pull_request_review` — any of which a fork PR carries. A new step, "Refuse
+  @claude on fork pull requests", runs only for those three cases, calls `gh api
+  repos/<repo>/pulls/<n> --jq .head.repo.full_name` and exits 1 if the PR's head repo
+  is not this repository; GitHub Actions runs the next step only on `success()` by
+  default, so a refusal here stops "Run Claude Code" from running at all.
+  **This is a guardrail (in-repo YAML any
+  writer can edit), not an integrity control, and entry-point validation only at this
+  trigger** (CLAUDE.md's vocabulary rules): it says nothing about any other route.
+  Existing author-association restriction (OWNER/MEMBER/COLLABORATOR on the
+  commenter) is unchanged. **Correction, found by `claude[bot]`'s review of this
+  change and confirmed against both workflows directly:** the widened `gh pr comment`
+  tool grant alone does not work — the job's `permissions:` block still held
+  `pull-requests: read`, and `claude-code-review.yml` already documents (run
+  `35410730035`, PR #145) that `read` gets a `gh pr comment` call denied outright.
+  Fixed in the same change: `permissions.pull-requests` is now `write`, matching
+  `claude-code-review.yml`'s own fix for the identical failure. **Second correction,
+  also found by `claude[bot]`'s review and confirmed against the D-55 debate record
+  directly:** the checkout step was missing `persist-credentials: false`, even though
+  `docs/decisions/debates/D-55-pr206-bootstrap-gate.md` (item 3) explicitly specifies
+  this follow-up PR should add it, for the same reason `claude-code-review.yml`'s own
+  checkout already carries it — a `pull-requests: write` token left persisted in
+  `.git/config` is readable by the same agent step that now has `gh` tool access.
+  Fixed in the same change: `persist-credentials: false` added to the checkout step.
+  **Third correction, also found by `claude[bot]`'s review:** the PR's own claim that
+  the widened grant was "exactly mirroring"/"symmetric with" `claude-code-review.yml`'s
+  allowlist was true only for the three `gh pr` entries — `claude-code-review.yml`'s
+  actual allowlist also carries `Read`, `Grep`, `Glob` and
+  `mcp__github_inline_comment__create_inline_comment`. Since this job had no
+  `claude_args` at all before this change, whether an explicit `--allowedTools` flag
+  **replaces** the action's own default tool policy or only adds to it is unverified —
+  `docs/decisions/debates/D-55-pr206-bootstrap-gate.md` lists "the pytest-equivalent
+  live run of `--allowedTools`" under Not measured. Under either mechanism, omitting
+  `Read`/`Grep`/`Glob` risked a plain `@claude explain this file` issue mention (not
+  about a PR) losing the ability to read anything. Fixed in the same change:
+  `Read`, `Grep`, `Glob` added to the allowlist, matching `claude-code-review.yml`
+  exactly for those three. `mcp__github_inline_comment__create_inline_comment` is
+  deliberately **not** carried over: that MCP tool posts structured inline PR review
+  comments, a shape this general-purpose mention handler's prompt (unlike the dedicated
+  reviewer's) never asks it to produce.
+  **Fourth correction, also found by `claude[bot]`'s review, more serious than the
+  first three:** the fork guard's protection was narrower than "closes the
+  fork-mention route" claimed. It validates only the head repo of the PR the
+  *triggering* event is attached to — it does not constrain, and nothing in this guard
+  can constrain, which PR number the widened `gh pr view`/`gh pr diff` tools are actually invoked
+  against once the agent is running, since no `prompt:` override is set and the
+  action's default behavior is to follow the tagging comment's free text verbatim.
+  Two distinct routes past it: (a) the `issues` trigger (opened/assigned) isn't
+  matched by the guard step's `if:` at all, so a trusted user's issue titled
+  `@claude, review PR #<fork-PR>` reached "Run Claude Code" with the full grant and no
+  guard ever ran; (b) even on a guarded event, a same-repo PR's own comment reading
+  "@claude, also check PR #`<fork-PR>`" passes the guard (the *triggering* PR is
+  genuinely not a fork) and the agent can still be instructed to `gh pr diff` an
+  unguarded fork PR with a write-scoped token. **Route (a) is fixed in the same
+  change:** `claude_args` now grants the `gh pr` Bash tools only for the three event
+  types the guard step actually covers (`issue_comment` on a PR,
+  `pull_request_review_comment`, `pull_request_review`); an `issues` mention gets
+  `Read`/`Grep`/`Glob` only, since there is no legitimate need for `gh pr` tools on a
+  plain issue and no PR for the guard to check in the first place. **Route (b) is
+  NOT fixed and is filed as #228 per rule 7, not left as prose-only:** closing it
+  needs either a `prompt:` override that constrains every `gh pr`
+  invocation to the triggering PR's own number (unverified in this session whether
+  adding a custom `prompt:` would also silently replace the action's default "follow
+  the tagging comment's instructions" behavior — not attempted without confirming
+  that first) or dropping free-form `gh pr` access for a fixed, non-configurable
+  prompt the way `claude-code-review.yml` already does. The "closes the fork-mention
+  route" language is corrected accordingly: it closes the route where the triggering
+  event's own PR is a fork, not the broader route of being instructed to inspect a
+  different PR by number.
+  **Not done as part of this change:** no `node:test` was added, because the new
+  decision (a live `gh api` lookup compared to `github.repository`) has no pure,
+  mockable branch beyond the
+  workflow's own `if:` expression and a one-line bash string comparison against live
+  API data — unlike `auto-queue.mjs`'s decision logic, which runs on data already
+  fetched into a plain function.
+
 ### Added
 
 - **`PR evidence` now also requires a genuine `claude[bot]` `MERGE` comment, not just
