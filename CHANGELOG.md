@@ -237,6 +237,36 @@ from so a reader can check it.
 
 ### Fixed
 
+- **`HANDOFF.md`'s "Where main is" pointed at `f0bf492` (#192, 2026-09-19), six landings
+  stale** (#194, #188, #190, #196, #212 and #217 had all landed on `main` since). It is
+  a file every session is expected to check for current state (`CLAUDE.md`'s "Where to
+  read next" table), so a stale pointer there is the same defect class the repository
+  has already paid for once this run cycle (the identical line went stale after #196
+  too, fixed in an earlier commit on this branch (`7d0c2f1`), then went stale again the
+  same way after #217). Updated to `372a3e9` (#217, 2026-09-24). **Correction (this
+  commit):** the "What landed" list is not fully current either — `grep -n '#194\|#196'
+  HANDOFF.md` finds neither; both landed while this branch was open and neither's
+  content (the `issue_comment` restriction, `AUTO_QUEUE_TOKEN` auto-merge) is named in
+  any bullet. Not fixed here: `HANDOFF.md` is already at its 3000-byte cap, so adding
+  either requires a re-trim, which is out of scope for this correction (a `Claude Code
+  Review` finding against the earlier, false "already named there" claim — flagging the
+  real gap instead of restating an inaccurate "no gap"). **Failure mode (rule 10):** the pointer and the
+  "What landed" list are two separate statements about the same fact, a landing can (and
+  did, twice) update one without the other, and nothing in `verify` compares them —
+  `check:citations` resolves a citation to a test title, not a summary line to the state
+  it summarises. **Correction (this commit):** the previous sentence here cited "#188's
+  own findings 14–19" and "#190's own 'Not done' list" as having flagged this exact gap —
+  neither did. #188's rule-10 note names findings 10, 14, 16, 17, 18 and 19 (not a
+  contiguous range; 15 isn't in the class, 10 is) as one class, "prose describing a state
+  that something else in the repository has since moved" — a broader class, none of whose
+  numbered instances is about `HANDOFF.md`; #188 separately flags, in an unnumbered "Still
+  open" line, that this same pointer was already stale at that PR's own head. #190's "Not
+  done" list names a related but distinct gap — "nothing checks that a summary table
+  matches the plan file it summarises" — about summary tables against
+  `docs/plans/v1-production.md`, not this file. So the general shape was named twice
+  before, but never pinned to this pointer specifically, and this entry's own citation
+  claiming otherwise was itself an instance of the class it describes. Still nothing
+  mechanical catches it; this is a second instance of a known, unfixed gap, not a new one.
 - **D-27 ("no branch protection, and no spend to get it") is struck through as
   superseded**, in `docs/DECISIONS.md` — plan step 1's last unticked bullet. Its premise
   was that both branch-protection endpoints 403 on a private free-plan repository; that

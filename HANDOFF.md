@@ -6,7 +6,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## Where main is
 
-`main` at `f0bf492` (#192, 2026-09-19). Mission (D-31) and rules: `CLAUDE.md`. Plan:
+`main` at `372a3e9` (#217, 2026-09-24). Mission (D-31) and rules: `CLAUDE.md`. Plan:
 [`docs/plans/v1-production.md`](docs/plans/v1-production.md). Decisions:
 [`docs/DECISIONS.md`](docs/DECISIONS.md). The repository is public (Apache-2.0);
 `main` is protected by the ruleset in `.github/rulesets/main.json`, with a merge queue.
