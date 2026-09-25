@@ -23,12 +23,11 @@
  *      `{ format: "lwplugin/1", manifest, bundle: <base64> }` — the exact shape
  *      `electron/main/plugins/pluginPackage.ts`'s `parsePluginPackage` reads,
  *      unchanged; this script does not reimplement that validator, and does not
- *      call it either. This script has no `--verify` flag. Checking a built
- *      `.lwplugin` against the real validator is, today, a separate, manual
- *      step run outside this file (see the PR that added this script for the
- *      command and its output) — not something `npm run plugins:build` does
- *      for you. That gap is `plugin:check` (ADR-0006 decision 10 / step 8),
- *      which has not landed yet.
+ *      call it either. This script has no `--verify` flag, and does not check
+ *      its own output against the real validator. That is `npm run
+ *      plugin:check <path>`'s job (`scripts/plugin-check.mjs`, ADR-0006
+ *      decision 10 / step 8) — a separate CLI run after this one, not
+ *      something `npm run plugins:build` does for you.
  *
  * ---------------------------------------------------------------------------
  * `hostApiVersion` COMES FROM THE SDK BARREL'S OWN SOURCE, READ AS TEXT
@@ -69,10 +68,12 @@
  * It does not install anything, does not touch `<userData>/plugins/`, and does
  * not attach anything to a GitHub Release — ADR-0006 decision 2's install
  * sources and the release-asset step are main-process and CI concerns
- * respectively, both out of scope here. It does not run `plugin:check`
- * (ADR-0006 decision 10 / step 8), which has not landed yet, and it does not
- * check its own output against `pluginPackage.ts`'s validator either — see
- * the note under "3." above.
+ * respectively, both out of scope here. It does not run `npm run plugin:check
+ * <path>` (`scripts/plugin-check.mjs`, ADR-0006 decision 10 / step 8) itself,
+ * and does not check its own output against `pluginPackage.ts`'s validator
+ * either — see the note under "3." above; `.github/workflows/ci.yml` runs
+ * `plugin:check` as its own step, after this script, against each plugin's
+ * real built output.
  * ============================================================================
  */
 

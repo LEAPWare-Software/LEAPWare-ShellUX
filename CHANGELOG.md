@@ -60,9 +60,10 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
-- **Fixed: four review findings on `scripts/plugin-check.mjs`'s Lifecycle
-  check (#221), all reachable from `createFakeClock`/`checkLifecycle`, before
-  the conformance kit's first merge.**
+- **Fixed: five review findings on `scripts/plugin-check.mjs`'s Lifecycle
+  check (#221), all reachable from `createFakeClock`/`checkLifecycle`, plus
+  two more the same review rounds raised alongside them, before the
+  conformance kit's first merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
      `dueAt = now + earliest.delay`; for a **zero-delay** interval
      (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
@@ -118,13 +119,37 @@ from so a reader can check it.
      `CLAUDE.md`'s vocabulary section bans unconditionally from repo prose;
      reworded to "the same shape a plug-in reads through" without changing the
      claim.
+  5. The post-`revoke()` leak scan advanced a FIXED `120_000`ms of virtual
+     time. A leaked interval or timeout with a longer delay
+     (`setInterval(fn, 200_000)`, never cleared) never had its `dueAt` fall
+     inside that fixed window, so its callback never fired and the scan saw
+     nothing — a false PASS for a genuinely leaking plugin. Fixed, not merely
+     documented as a limit: `createFakeClock` gained `longestPendingDelay()`,
+     and `checkLifecycle` now advances
+     `Math.max(120_000, clock.longestPendingDelay() + 1)` — sized to the
+     plugin's own longest still-pending delay, not a guessed ceiling. This is
+     virtual time, not real waiting, so the change costs nothing regardless of
+     how long a plugin's own delay is. *Test:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose leaked interval outlives the old fixed 120s scan
+     window".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
-  4 and 7's own callouts in that file) naming all four defects above as the
-  doc of record, alongside what step 8 actually built beyond decision 10's
+  4 and 7's own callouts in that file) naming every defect above as the doc
+  of record, alongside what step 8 actually built beyond decision 10's
   original text (the Vite SSR loader for Registration, `createFakeClock` for
   Lifecycle, and the `validateBlueprint`-vs-`register` narrowing).
+  `.github/workflows/ci.yml`'s `verify` job gained `timeout-minutes: 20`,
+  matching the convention every other workflow in this repo already follows
+  (`auto-queue.yml`, `claims.yml`, `pr-evidence.yml`) and closing the gap
+  this same PR's own fixes above had, until now, only named as a hazard
+  rather than closed at the job level: nothing bounded this job if a future
+  regression caused the same class of hang. `scripts/build-plugins.mjs`'s own
+  docblock stopped saying checking a built `.lwplugin` against the real
+  validator "has not landed yet" — it names `scripts/plugin-check.mjs` and
+  the CI step that now runs it, since this PR is exactly the change that
+  landed it.
 
 - **Fixed: `npm run plugins:build` emitted a `bundle.js` with NO export
   statement at all**, for any plugin whose source declares a named export and

@@ -499,6 +499,41 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /reached the handle after release/);
   });
 
+  // Regression for a fifth review finding on PR #221, same function again:
+  // the post-`revoke()` leak scan used to advance a FIXED 120_000ms of
+  // virtual time. A leaked interval or timeout with a longer delay
+  // (200_000ms here) never had its `dueAt` fall inside that fixed window, so
+  // its callback never fired and the scan saw nothing — a false PASS for a
+  // genuinely leaking plugin. `checkLifecycle` now sizes that advance to
+  // `Math.max(120_000, clock.longestPendingDelay() + 1)`, which is virtual
+  // time (no real waiting) and so costs nothing regardless of how long the
+  // plugin's own delay is.
+  it('Check 5 (Lifecycle) — refuses a plugin whose leaked interval outlives the old fixed 120s scan window', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'slow-leak-lifecycle',",
+      "  name: 'SlowLeak',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate(shell) {',
+      '      setInterval(() => { shell.setBadgeCount("leak", 1); }, 200000);',
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('slow-leak-lifecycle', { bundleText, id: 'slow-leak-lifecycle' });
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /reached the handle after release/);
+  });
+
   // Regression for a third review finding on PR #221, same function as the
   // two above: the lifecycle hooks are typed `=> void`, which an `async`
   // function satisfies (`ActivationContext.tsx`'s `callHook` docblock says so

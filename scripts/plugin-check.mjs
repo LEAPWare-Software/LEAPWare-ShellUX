@@ -316,7 +316,24 @@ export function createFakeClock() {
     now = deadline;
   }
 
-  return { install, restore, advance };
+  /**
+   * The longest `delay` among timers still pending right now, or `0` if none
+   * are. Lets a caller size an `advance()` to reach even a timer whose delay
+   * is longer than any fixed budget the caller would otherwise guess — see
+   * `checkLifecycle`'s use of this after `revoke()`, and its own banner for
+   * why a fixed budget there was a bug, not a design choice.
+   */
+  function longestPendingDelay() {
+    let max = 0;
+    for (const timer of timers.values()) {
+      if (timer.delay > max) {
+        max = timer.delay;
+      }
+    }
+    return max;
+  }
+
+  return { install, restore, advance, longestPendingDelay };
 }
 
 /** A minimal `document` for `createThemeBridge`'s one `getComputedStyle(root)` call. See its banner: jsdom's empty custom properties fall back to the seed theme rather than throwing. */
@@ -504,7 +521,20 @@ export async function checkLifecycle(server, blueprint) {
       // that throw is itself confirmation of the leak, not a crash to
       // propagate; swallowing it here is what lets the `calls` scan below run
       // at all.
-      clock.advance(120_000);
+      //
+      // **The budget is sized to the plugin's OWN longest pending delay, not
+      // a fixed number.** A fixed `advance(120_000)` here used to give a
+      // false PASS for a genuinely leaking plugin whose interval or timeout
+      // used a longer delay (`setInterval(fn, 200_000)`, never cleared): its
+      // `dueAt` would never fall inside that fixed window, so its callback
+      // never fired, and the leak scan below saw nothing to find. This is a
+      // FAKE clock advancing VIRTUAL time — there is no real waiting, so
+      // sizing the budget to whatever is actually still pending
+      // (`clock.longestPendingDelay()`) costs nothing and closes the gap for
+      // any delay a plugin chooses, not merely delays under some guessed
+      // ceiling. `Math.max(120_000, …)` keeps the previous floor for the
+      // ordinary case of nothing (or something short) still pending.
+      clock.advance(Math.max(120_000, clock.longestPendingDelay() + 1));
     } catch {
       // Recorded either way — see above.
     }

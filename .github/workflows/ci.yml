@@ -21,6 +21,18 @@ jobs:
   verify:
     name: Verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # 20 minutes: `npm run verify` runs comfortably inside 5 on a Linux dev
+    # machine (`test:coverage` ~95s, `test:integration` ~55s, `test:scripts`
+    # ~25s, plus lint/typecheck/build/audit), and this job's own three new
+    # `plugin:check` steps run in seconds each — but nothing here bounded the
+    # job at all before this, matching every OTHER workflow in this repo
+    # (`auto-queue.yml`, `claims.yml`, `pr-evidence.yml` all set one). That
+    # gap mattered concretely: this same PR fixed a `plugin-check.mjs` defect
+    # that hung indefinitely on a badly-behaved plugin, with this job as the
+    # one thing that would have caught it running unbounded. 20 minutes gives
+    # real headroom for a slow `windows-latest`/`macos-latest` runner without
+    # being so tight a normal run risks flaking on one.
+    timeout-minutes: 20
 
     # Three operating systems, because this project is developed on more than one
     # laptop and cross-platform support was previously *inferred* from the
