@@ -838,7 +838,7 @@ everyone. CI runs it against all three migrated plugins.
 > to the live React registry and cannot be called standalone outside it, the
 > same class of narrowing this callout uses for `createFakeClock`.
 >
-> Ten real defects surfaced while building and hardening this kit, each
+> Twelve real defects surfaced while building and hardening this kit, each
 > fixed rather than filed (rule 7), each naming its own failure mode (rule
 > 10):
 > - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
@@ -939,6 +939,22 @@ everyone. CI runs it against all three migrated plugins.
 >   tried. Fixed by tracking presence with a separate boolean,
 >   `hasInternalRejection`, rather than comparing the captured value itself
 >   to the sentinel.
+> - `checkRender` installed no `unhandledRejection` guard at all, unlike
+>   `checkLifecycle`. A pane view's own effect firing an unattached rejection
+>   after mount settles asynchronously on React's own scheduler, after
+>   `flushSync` and this check have already returned `{ ok: true }` — a
+>   definitive `PASS` prints, then the process crashes. The same shape as the
+>   two `checkLifecycle` defects just above, unclosed in `checkRender`. Fixed
+>   by giving it the same guard and `flushMicrotasks()` cadence.
+> - No lifecycle hook call had a timeout, so a hook whose promise never
+>   settles at all — no throw, no resolve, no reject — hung the CLI
+>   indefinitely with no output, and no chance for `runChecks`' own cleanup
+>   `finally` to run. This check's choice to `await` each hook (a stricter
+>   divergence from the live host's own contract, "async hooks are reported,
+>   not awaited") is what creates the hang risk; the live host itself would
+>   never have blocked on it. Fixed by racing each hook against a 5-second
+>   REAL timer, captured before `createFakeClock().install()` can shadow
+>   `globalThis.setTimeout` with the virtual one.
 >
 > *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
 > against one hand-assembled, hash-matching `.lwplugin` fixture per row —

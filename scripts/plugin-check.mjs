@@ -471,6 +471,55 @@ function flushMicrotasks() {
 }
 
 /**
+ * The REAL `setTimeout`/`clearTimeout`, captured at module load — before any
+ * `createFakeClock().install()` call can shadow `globalThis.setTimeout` with
+ * the virtual one. `awaitHookOrTimeout` below needs a timer `checkLifecycle`'s
+ * own fake clock cannot swallow: the fake clock only advances when
+ * `clock.advance(ms)` is called explicitly, so a REAL-time bound raced
+ * against a hook's promise would otherwise never fire on its own while the
+ * clock is installed.
+ */
+const REAL_SET_TIMEOUT = globalThis.setTimeout;
+const REAL_CLEAR_TIMEOUT = globalThis.clearTimeout;
+
+/**
+ * ADR-0006's own host contract: "Async hooks are reported, not awaited" — the
+ * live host never waits on a hook's returned promise at all
+ * (`ActivationContext.tsx`'s `runHook`). This check chooses to await each
+ * hook anyway (see `checkLifecycle`'s own "stricter than the live host"
+ * note), which means a hook that returns a promise that never settles — no
+ * throw, no resolve, no reject, e.g. `onActivate() { return new Promise(() =>
+ * {}); }` — hangs THIS check forever even though it would never have blocked
+ * the live host at all: with no timeout, `runChecks`' own `finally` never
+ * runs either, so the `dist-plugins/plugin-check-*` scratch directory is
+ * never cleaned up, and the only backstop is CI's own job-level
+ * `timeout-minutes: 20` — an opaque hang, not the clean `lifecycle` FAIL this
+ * tool exists to print for exactly this shape of bad plugin.
+ * `HOOK_SETTLE_TIMEOUT_MS` bounds the wait; `awaitHookOrTimeout` races the
+ * hook's own promise against it and resolves to the `HOOK_TIMEOUT` sentinel
+ * if the timer wins, so the caller can turn that into a normal FAIL return
+ * rather than an unresolved `await`.
+ */
+const HOOK_SETTLE_TIMEOUT_MS = 5000;
+const HOOK_TIMEOUT = Symbol('hook-settle-timeout');
+
+function awaitHookOrTimeout(hookCall) {
+  return new Promise((resolve, reject) => {
+    const timer = REAL_SET_TIMEOUT(() => resolve(HOOK_TIMEOUT), HOOK_SETTLE_TIMEOUT_MS);
+    Promise.resolve(hookCall).then(
+      (value) => {
+        REAL_CLEAR_TIMEOUT(timer);
+        resolve(value);
+      },
+      (error) => {
+        REAL_CLEAR_TIMEOUT(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
  * Check 5 — Lifecycle. `activate` -> `deactivate` -> `release`, against a real
  * `createRevocableShellAPI` handle, with the fake clock advanced between each
  * step so a scheduled timer gets a chance to fire.
@@ -552,8 +601,16 @@ export async function checkLifecycle(server, blueprint) {
       // this check's own clean FAIL. Wrapping the call in `Promise.resolve`
       // (harmless for a hook that returns nothing) and awaiting it inside
       // this same `try` catches a synchronous throw and an async rejection
-      // through the one path.
-      await Promise.resolve(lifecycle.onActivate?.(shell));
+      // through the one path. Racing it against `HOOK_SETTLE_TIMEOUT_MS`
+      // (see `awaitHookOrTimeout`'s own banner) catches the fourth shape: a
+      // promise that never settles at all.
+      if ((await awaitHookOrTimeout(lifecycle.onActivate?.(shell))) === HOOK_TIMEOUT) {
+        return {
+          ok: false,
+          check: 'lifecycle',
+          reason: `lifecycle.onActivate never settled within ${HOOK_SETTLE_TIMEOUT_MS}ms`,
+        };
+      }
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onActivate threw: ${describeThrown(error)}` };
     }
@@ -584,7 +641,13 @@ export async function checkLifecycle(server, blueprint) {
     }
 
     try {
-      await Promise.resolve(lifecycle.onDeactivate?.());
+      if ((await awaitHookOrTimeout(lifecycle.onDeactivate?.())) === HOOK_TIMEOUT) {
+        return {
+          ok: false,
+          check: 'lifecycle',
+          reason: `lifecycle.onDeactivate never settled within ${HOOK_SETTLE_TIMEOUT_MS}ms`,
+        };
+      }
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onDeactivate threw: ${describeThrown(error)}` };
     }
@@ -606,7 +669,13 @@ export async function checkLifecycle(server, blueprint) {
     }
 
     try {
-      await Promise.resolve(lifecycle.onRelease?.());
+      if ((await awaitHookOrTimeout(lifecycle.onRelease?.())) === HOOK_TIMEOUT) {
+        return {
+          ok: false,
+          check: 'lifecycle',
+          reason: `lifecycle.onRelease never settled within ${HOOK_SETTLE_TIMEOUT_MS}ms`,
+        };
+      }
     } catch (error) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onRelease threw: ${describeThrown(error)}` };
     }
@@ -712,10 +781,43 @@ export async function checkLifecycle(server, blueprint) {
  * `react-dom/client`'s `createRoot`, flushed synchronously with `flushSync` so
  * a render that throws does so on this call stack rather than inside React's
  * own scheduler, where nothing here could catch it.
+ *
+ * **A mounted view's own effect can still reject asynchronously, after
+ * `flushSync` returns.** `flushSync` forces the synchronous commit, but
+ * `useEffect`'s callback runs as a PASSIVE effect on React's own scheduler,
+ * a separate turn of the event loop `flushSync` does not wait for. A pane
+ * whose effect does `Promise.reject(...)` and never attaches a handler
+ * settles as a genuinely unhandled rejection after this check — and
+ * `runChecks` — have already returned, printing a definitive
+ * `plugin-check: PASS` before the process then crashes with a raw,
+ * unexplained stack. This is the same "PASS printed, then crash" shape the
+ * Lifecycle check's own `process.on('unhandledRejection', ...)` guard
+ * exists to close (see `checkLifecycle`'s docblock); this check needed the
+ * identical guard and had none.
  */
 export async function checkRender(server, blueprint) {
   const runtime = await loadShellRuntime(server);
   const restoreDom = installMinimalDom();
+
+  let hasInternalRejection = false;
+  let internalRejection;
+  const onUnhandledRejection = (reason) => {
+    if (!hasInternalRejection) {
+      hasInternalRejection = true;
+      internalRejection = reason;
+    }
+  };
+  process.on('unhandledRejection', onUnhandledRejection);
+
+  const internalRejectionFail = () =>
+    hasInternalRejection
+      ? {
+          ok: false,
+          check: 'render',
+          reason: `an internal, unattached promise rejection reached the process during render: ${describeThrown(internalRejection)}`,
+        }
+      : null;
+
   try {
     const live = createLiveShell(runtime, blueprint.id);
     const emptyContext = live.store.getContext();
@@ -742,6 +844,11 @@ export async function checkRender(server, blueprint) {
       } finally {
         root.unmount();
       }
+      await flushMicrotasks();
+      const renderRejectionFail = internalRejectionFail();
+      if (renderRejectionFail !== null) {
+        return renderRejectionFail;
+      }
     }
 
     for (const command of blueprint.commands ?? []) {
@@ -755,9 +862,15 @@ export async function checkRender(server, blueprint) {
         };
       }
     }
+    await flushMicrotasks();
+    const commandRejectionFail = internalRejectionFail();
+    if (commandRejectionFail !== null) {
+      return commandRejectionFail;
+    }
 
     return { ok: true };
   } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
     restoreDom();
   }
 }

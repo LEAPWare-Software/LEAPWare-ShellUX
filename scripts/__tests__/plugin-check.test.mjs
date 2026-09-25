@@ -724,6 +724,63 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /onRelease threw: boom async release/);
   });
 
+  // Regression for the independent `shellux-cloud-reviewer` verdict on PR
+  // #221 (comment 5826173985, finding 2): every other lifecycle-fail path
+  // covers a hook that throws or rejects, but nothing bounded a hook whose
+  // promise never settles at all — no throw, no resolve, no reject.
+  // `awaitHookOrTimeout` races the hook against `HOOK_SETTLE_TIMEOUT_MS`
+  // real milliseconds (a REAL timer, not the fake clock this check installs
+  // for everything else) and resolves to a clean FAIL rather than hanging
+  // the CLI forever with no output and a leaked scratch directory. Both
+  // `runCli` and this test's own timeout are set comfortably above
+  // `HOOK_SETTLE_TIMEOUT_MS` so the CLI has time to hit its own bound and
+  // self-report before either would kill it first.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate returns a promise that never settles', { timeout: 10000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'never-settling-activate',",
+      "  name: 'NeverSettlingActivate',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: { onActivate() { return new Promise(() => {}); } },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('never-settling-activate', { bundleText, id: 'never-settling-activate' });
+    const result = runCli(path, { timeout: 8000 });
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin whose onActivate never settles');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /lifecycle\.onActivate never settled within \d+ms/);
+  });
+
+  it('Check 5 (Lifecycle) — refuses a plugin whose onRelease returns a promise that never settles', { timeout: 10000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'never-settling-release',",
+      "  name: 'NeverSettlingRelease',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: { onRelease() { return new Promise(() => {}); } },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('never-settling-release', { bundleText, id: 'never-settling-release' });
+    const result = runCli(path, { timeout: 8000 });
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin whose onRelease never settles');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /lifecycle\.onRelease never settled within \d+ms/);
+  });
+
   // Regression for the `claude[bot]` review finding on PR #221 (comment
   // 4100011392, `scripts/plugin-check.mjs` line 609): every other phase in
   // `checkLifecycle` follows its hook call with `await flushMicrotasks();`
@@ -923,5 +980,43 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.equal(result.status, 1);
     assert.match(result.stderr, /FAIL \[render\]/);
     assert.match(result.stderr, /isVisible threw on an empty context/);
+  });
+
+  // Regression for the independent `shellux-cloud-reviewer` verdict on PR
+  // #221 (comment 5826173985, finding 1): unlike `checkLifecycle`,
+  // `checkRender` installed no `unhandledRejection` guard at all. A pane
+  // view's own effect firing an unattached rejection after mount settles
+  // asynchronously, on React's own scheduler — after `flushSync` and this
+  // whole check have already returned `{ ok: true }`. Reproduced by hand
+  // before the fix: `plugin-check: PASS render-async-reject@1.0.0 ...`
+  // printed, then the process crashed with a raw, unhandled-rejection stack
+  // trace. Fixed by giving `checkRender` the same guard/flush pattern
+  // `checkLifecycle` already uses.
+  it('Check 6 (Render) — refuses a plugin whose pane view rejects internally after mount', () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "import { useEffect } from '/shared/react.js';",
+      'function Pane2() {',
+      '  useEffect(() => {',
+      "    Promise.reject(new Error('async pane rejection after mount'));",
+      '  }, []);',
+      "  return jsx('div', { children: 'pane2' });",
+      '}',
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'render-async-reject',",
+      "  name: 'RenderAsyncReject',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('render-async-reject', { bundleText, id: 'render-async-reject' });
+    const result = runCli(path);
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin whose pane view rejects internally after mount');
+    assert.match(result.stderr, /FAIL \[render\]/);
+    assert.match(result.stderr, /an internal, unattached promise rejection reached the process during render: async pane rejection after mount/);
   });
 });

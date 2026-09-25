@@ -61,14 +61,15 @@ from so a reader can check it.
   well-behaved towards its siblings; and anything about the network.
 
 - **Fixed: the review findings below on `scripts/plugin-check.mjs` and its
-  test suite (#221) — nine reachable from `createFakeClock`/`checkLifecycle`
-  (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 below), one vocabulary fix (numbered
-  4, unrelated to the Lifecycle check itself), and two test-fixture/message
-  fixes on Check 1's and Check 4's own regression coverage (numbered 11 and
-  12, unrelated to `checkLifecycle`), plus two more described after the
-  numbered list (a CI `timeout-minutes` gap and a stale `build-plugins.mjs`
-  docblock) — all found and fixed before the conformance kit's first
-  merge.**
+  test suite (#221) — ten reachable from `createFakeClock`/`checkLifecycle`
+  (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 and 14 below), one vocabulary fix
+  (numbered 4, unrelated to the Lifecycle check itself), one `checkRender`
+  fix (numbered 13, the Render check's own async-safety gap), and two
+  test-fixture/message fixes on Check 1's and Check 4's own regression
+  coverage (numbered 11 and 12, unrelated to `checkLifecycle`), plus two
+  more described after the numbered list (a CI `timeout-minutes` gap and a
+  stale `build-plugins.mjs` docblock) — all found and fixed before the
+  conformance kit's first merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
      `dueAt = now + earliest.delay`; for a **zero-delay** interval
      (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
@@ -284,6 +285,48 @@ from so a reader can check it.
       `scripts/__tests__/plugin-check.test.mjs` — "Check 4 (Registration) —
       names validateBlueprint, not register, when the default export fails
       validation".
+  13. **`checkRender` installed no `unhandledRejection` guard at all**,
+      unlike `checkLifecycle`. A pane view's own effect firing an unattached
+      rejection after mount (an ordinary component bug, not a leak) settles
+      asynchronously on React's own scheduler, after `flushSync` and
+      `checkRender` have already returned `{ ok: true }` — a definitive
+      `plugin-check: PASS` prints, then the process crashes with a raw,
+      unexplained stack trace. The exact "PASS printed, then crash" shape
+      fixes 6 and 10 already closed inside `checkLifecycle`, untouched here.
+      Confirmed by hand before the fix: a fixture whose `pane2` fires
+      `Promise.reject(new Error(...))` from a `useEffect` with no cleanup
+      printed `plugin-check: PASS render-async-reject@1.0.0 ...`, then
+      crashed. Fixed by giving `checkRender` the same
+      `process.on('unhandledRejection', ...)` guard and
+      `await flushMicrotasks()` cadence `checkLifecycle` already uses,
+      checked once after each pane's render and once after the command
+      loop. *Test:* `scripts/__tests__/plugin-check.test.mjs` — "Check 6
+      (Render) — refuses a plugin whose pane view rejects internally after
+      mount".
+  14. **No lifecycle hook call had a timeout, so a hook whose promise never
+      settles — no throw, no resolve, no reject — hangs the CLI forever with
+      zero output.** All defects fixed before this one address a hook that
+      throws or rejects; none addressed a hook that just never resolves.
+      ADR-0006 itself states "async hooks are reported, not awaited" — the
+      live host never waits on a hook's promise at all — so this check's own
+      choice to await each hook (already disclosed as stricter than the live
+      host, fix 4 above) is what creates the hang risk; the live host itself
+      would never have blocked on it. Confirmed by hand before the fix:
+      `timeout 15 node scripts/plugin-check.mjs <fixture>` for a fixture
+      whose `onActivate` returns `new Promise(() => {})` exited 124 with no
+      stdout or stderr at all, and left its `dist-plugins/plugin-check-*`
+      scratch directory on disk — `runChecks`' own cleanup `finally` never
+      runs because the process never proceeds past the hung `await`.
+      Reproduced for both `onActivate` and `onRelease`. Fixed by racing each
+      hook's promise (`awaitHookOrTimeout`) against a 5-second REAL timer —
+      captured at module load, before any `createFakeClock().install()` call
+      can shadow `globalThis.setTimeout` with the virtual one this check
+      uses everywhere else — and returning a clean `lifecycle` FAIL naming
+      the timeout when the timer wins, so `runChecks`' cleanup still runs.
+      *Tests:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
+      (Lifecycle) — refuses a plugin whose onActivate returns a promise that
+      never settles" and "Check 5 (Lifecycle) — refuses a plugin whose
+      onRelease returns a promise that never settles".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
