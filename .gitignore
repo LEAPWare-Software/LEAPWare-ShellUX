@@ -31,6 +31,9 @@ release/
 # per-run artifacts: traces and screenshots of a failing run, and the HTML report
 # over them. CI uploads them from the workflow instead of committing them.
 test-results/
+# `npm run test:packaged`'s output (ADR-0006 step 10): a trace, and the throwaway
+# user-data directory the packaged app ran in, kept for inspection until the next run.
+test-results-packaged/
 playwright-report/
 blob-report/
 .playwright/

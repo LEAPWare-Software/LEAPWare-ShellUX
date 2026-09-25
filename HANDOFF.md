@@ -25,6 +25,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   superseded by D-34 (C-44).
 - ADR-0006 steps 7-8 (#217/#57): plugins in `plugins/*`; `plugin:check` + CI.
 - ADR-0006 step 11 (#222): Release-URL install source, org allowlist.
+- ADR-0006 step 10 prep: packaged e2e lane, never run; owner/VM:
+  [`docs/runbooks/packaged-plugin-e2e.md`](docs/runbooks/packaged-plugin-e2e.md).
 
 ## In flight
 
@@ -39,7 +41,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## The next step
 
-1. ADR-0006 step 6, 9-10; W3-2 onward.
+1. ADR-0006 steps 6 and 9, then step 10's packaged run; W3-2 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
