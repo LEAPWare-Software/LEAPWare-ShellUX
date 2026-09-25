@@ -27,8 +27,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - ADR-0006 step 11 (#222): Release-URL install source, org allowlist.
 - ADR-0006 step 10 prep: packaged e2e lane, never run; owner/VM:
   [`docs/runbooks/packaged-plugin-e2e.md`](docs/runbooks/packaged-plugin-e2e.md).
-- Plan lines 129/133 ticked: `SECURITY.md` reorder, README body moved to
-  [`docs/readme-body.md`](docs/readme-body.md).
+- Plan lines 129/133/131 ticked: `SECURITY.md`/README reorder (body moved to
+  `docs/readme-body.md`); #74/#103 raw API evidence (C-49).
 
 ## In flight
 
@@ -43,7 +43,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## The next step
 
-1. ADR-0006 steps 6 and 9, then step 10's packaged run; W3-2 onward.
+1. ADR-0006 steps 6, 9, then step 10's packaged run; W3-2 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
@@ -52,6 +52,6 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   [`docs/sdlc.md`](docs/sdlc.md). There is no 1.0 date.
 - Steps run one at a time (cloud lanes excepted, D-52): every landing edits this file
   and `CHANGELOG.md`.
-- Merge with `gh pr merge <n> --squash --auto`; it enters the queue.
-- One git writer in the main tree. Throwaway worktrees go in `.workspaces/`.
+- Merge via CCR auto-merge route (not `gh pr merge`, GraphQL, blocked).
+- One git writer in main tree; throwaway worktrees in `.workspaces/`.
 - Use npm 11.16.0 (`packageManager`). See `docs/traps.md` for the npm 10 history.

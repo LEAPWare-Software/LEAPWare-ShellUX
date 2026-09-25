@@ -149,6 +149,19 @@ from so a reader can check it.
   prove the reorder and the no-overclaim wording — the box-linter (§3.2)
   requires a proof row before either plan box can tick.
 
+- **#74 and #103's closing evidence replaced with raw API output** (plan
+  `docs/plans/v1-production.md` line 131). Both issues' closing comments stated
+  the read-back values in prose (visibility `PUBLIC`, ruleset `23685990` and its
+  rules) rather than pasting a raw response, which CLAUDE.md rule 2 treats as
+  assertion, not evidence. `docs/claims-evidence/C-49-repo-visibility-and-ruleset-2026-09-25.txt`
+  now holds the literal `gh api repos/LEAPWare-Software/LEAPWare-ShellUX --jq
+  '{visibility,private}'` output and the literal `gh api
+  repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990` (and `/rulesets`)
+  output, confirming the id named in the plan line is still current (no 404,
+  still the repository's only ruleset). New `docs/claims.json` row **C-49**
+  (`class: manual`, since this reads live GitHub API state rather than repo
+  files) cites the evidence file; the plan line is now ticked.
+
 ### Added
 
 - **The packaged plugin end-to-end lane, prepared and never run** (ADR-0006 step

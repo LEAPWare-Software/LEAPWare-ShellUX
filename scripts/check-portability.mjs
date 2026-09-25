@@ -306,6 +306,20 @@ const ALLOWLIST = [
       'hardcoded-hostname only; every other rule still applies.',
   },
   {
+    files: ['docs/claims-evidence/C-49-repo-visibility-and-ruleset-2026-09-25.txt'],
+    rules: ['hardcoded-hostname'],
+    reason:
+      'C-49 (docs/claims.json), the plan v1-production.md:131 raw-API-evidence row for ' +
+      '#74/#103. This file pastes the literal `gh api` output for the repository\'s ' +
+      'visibility and its branch ruleset (id 23685990), including the ruleset\'s own ' +
+      '`_links` object, which GitHub\'s response names by api.github.com and github.com ' +
+      'URLs. Nothing in this codebase reads or contacts those hosts from this file; it is ' +
+      'a captured response pasted as evidence, on the same footing as ' +
+      'scripts/__tests__/fixtures/claims/ruleset-23685990-unauthenticated.json above. ' +
+      'Editing the hosts out would make the paste no longer the response it claims to be. ' +
+      'Scoped to this one file and to hardcoded-hostname only; every other rule still applies.',
+  },
+  {
     files: ['electron/__tests__/pluginReleaseSource.test.ts'],
     rules: ['hardcoded-hostname'],
     reason:

@@ -3371,6 +3371,26 @@
       },
       "provenOn": "2026-09-25",
       "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:133"
+    },
+    {
+      "id": "C-49",
+      "box": "#74 and #103 are marked done with evidence (API responses pasted). Split from the README item on 2026-09-19: both closing comments state the read-back values in prose (visibility `PUBLIC`, ruleset 23685990 and its rules), and neither pastes a raw API response. Done 2026-09-25: pasted the literal `gh api repos/LEAPWare-Software/LEAPWare-ShellUX --jq '{visibility,private}'` output and the literal `gh api repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990` (and `/rulesets`) output into `docs/claims-evidence/C-49-repo-visibility-and-ruleset-2026-09-25.txt`; the ruleset id named in this line still resolves directly, no discrepancy.",
+      "class": "manual",
+      "expect": [
+        {
+          "key": "VISIBILITY",
+          "op": "==",
+          "value": "public"
+        },
+        {
+          "key": "RULESET_ID",
+          "op": "==",
+          "value": "23685990"
+        }
+      ],
+      "evidence": "docs/claims-evidence/C-49-repo-visibility-and-ruleset-2026-09-25.txt",
+      "provenOn": "2026-09-25",
+      "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:131"
     }
   ],
   "retired": []
