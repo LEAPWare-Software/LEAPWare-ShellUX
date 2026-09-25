@@ -60,10 +60,13 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
-- **Fixed: eight review findings on `scripts/plugin-check.mjs`'s Lifecycle
-  check (#221), all reachable from `createFakeClock`/`checkLifecycle`, plus
-  two more the same review rounds raised alongside them, before the
-  conformance kit's first merge.**
+- **Fixed: the review findings below on `scripts/plugin-check.mjs`'s
+  Lifecycle check (#221) — eight reachable from `createFakeClock`/
+  `checkLifecycle` (numbered 1, 2, 3, 5, 6, 7, 8, 9 below), one vocabulary fix
+  the same review rounds caught alongside them (numbered 4, unrelated to the
+  Lifecycle check itself), plus two more described after the numbered list (a
+  CI `timeout-minutes` gap and a stale `build-plugins.mjs` docblock) — all
+  found and fixed before the conformance kit's first merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
      `dueAt = now + earliest.delay`; for a **zero-delay** interval
      (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
