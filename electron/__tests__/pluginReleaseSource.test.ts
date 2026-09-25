@@ -512,12 +512,15 @@ describe('the GitHub Release install source', () => {
       ok: false,
       reason: 'the download failed: it did not finish within 20 ms',
     });
+    // `cancel` also rejects, so the late-fetch cleanup's own catch is
+    // exercised on its failure path too, and does not itself throw —
+    // the same pattern the timeout-path cleanup above is held to.
     resolveLate(
       new Response(
         new ReadableStream<Uint8Array>({
           cancel() {
             cancelled += 1;
-            return Promise.resolve();
+            return Promise.reject(new Error('the stream refused to cancel'));
           },
         }),
       ),
