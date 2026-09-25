@@ -58,12 +58,18 @@ from so a reader can check it.
   writer can edit), not an integrity control, and entry-point validation only at this
   trigger** (CLAUDE.md's vocabulary rules): it says nothing about any other route.
   Existing author-association restriction (OWNER/MEMBER/COLLABORATOR on the
-  commenter) is unchanged. **Not done as part of this change:** no `node:test` was
-  added, because the new decision (a live `gh api` lookup compared to
-  `github.repository`) has no pure, mockable branch beyond the workflow's own `if:`
-  expression and a one-line bash string comparison against live API data — unlike
-  `auto-queue.mjs`'s decision logic, which runs on data already fetched into a plain
-  function.
+  commenter) is unchanged. **Correction, found by `claude[bot]`'s review of this
+  change and confirmed against both workflows directly:** the widened `gh pr comment`
+  tool grant alone does not work — the job's `permissions:` block still held
+  `pull-requests: read`, and `claude-code-review.yml` already documents (run
+  `35410730035`, PR #145) that `read` gets a `gh pr comment` call denied outright.
+  Fixed in the same change: `permissions.pull-requests` is now `write`, matching
+  `claude-code-review.yml`'s own fix for the identical failure. **Not done as part of
+  this change:** no `node:test` was added, because the new decision (a live `gh api`
+  lookup compared to `github.repository`) has no pure, mockable branch beyond the
+  workflow's own `if:` expression and a one-line bash string comparison against live
+  API data — unlike `auto-queue.mjs`'s decision logic, which runs on data already
+  fetched into a plain function.
 
 ### Added
 

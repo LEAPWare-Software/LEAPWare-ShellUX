@@ -28,7 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      # write: the D-55 follow-up (#211/#227) widened claude_args to allow `gh pr
+      # comment`. `read` is not enough for that call to succeed: claude-code-review.yml
+      # documents the identical failure (run 35410730035, PR #145, held `read`, denied
+      # 14 tool calls, posted nothing) and was fixed the same way.
+      pull-requests: write
       issues: read
       id-token: write
       actions: read # Required for Claude to read CI results on PRs
