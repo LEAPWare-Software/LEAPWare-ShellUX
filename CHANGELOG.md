@@ -184,10 +184,12 @@ from so a reader can check it.
   manager (step 9); the organisation is
   compared case-sensitively, so `leapware-software` is refused though GitHub
   serves an owner in any case (measured the same way: `CLI/cli` answered the
-  same `302`); `releases/latest/download/` URLs and a tag or repository
-  segment containing `/` (e.g. `release/v1`) are both refused as outside
-  decision 2's six-segment shape — probed directly against
-  `parseReleaseAssetUrl`, not asserted by a named test. "One download at a time"
+  same `302`); `releases/latest/download/` URLs are refused, asserted by
+  "checks the URL as written, and admits only spellings the URL parser leaves
+  unchanged"; a tag or repository segment containing `/` (e.g. `release/v1`)
+  is also refused as outside decision 2's six-segment shape, but only probed
+  directly against `parseReleaseAssetUrl`, not asserted by a named test.
+  "One download at a time"
   holds only for downloads actively being awaited; if the real `net.fetch`
   ignores the abort signal (unmeasured either way), an abandoned download's
   connection could still be open after this door reports it timed out and
