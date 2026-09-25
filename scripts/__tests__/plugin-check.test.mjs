@@ -269,11 +269,18 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
   });
 
   it('Check 1 (Package) — refuses a bundle whose sha512 does not match its manifest', () => {
-    const path = writeFixture('bad-package', { sha512Override: 'AA'.repeat(43) });
+    // A validly-SHAPED but wrong digest, not a malformed one: `pluginPackage.ts`'s
+    // SHA512_BASE64_PATTERN (86 base64 characters + literal `==`) refuses a
+    // wrong-length string before `validate()` ever reaches the actual digest
+    // comparison this test means to exercise, so the override must be a real,
+    // 88-character base64 SHA-512 digest of different bytes to land past format
+    // validation and into the mismatch branch.
+    const wrongDigest = createHash('sha512').update('not the bundle').digest('base64');
+    const path = writeFixture('bad-package', { sha512Override: wrongDigest });
     const result = runCli(path);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /FAIL \[package\]/);
-    assert.match(result.stderr, /sha512/);
+    assert.match(result.stderr, /the bundle does not match the manifest sha512/);
   });
 
   it('Check 2 (Contract version) — refuses a plugin built for a newer major than this checkout offers', () => {

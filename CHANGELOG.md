@@ -60,14 +60,14 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
-- **Fixed: the review findings below on `scripts/plugin-check.mjs`'s
-  Lifecycle check (#221) — nine reachable from `createFakeClock`/
-  `checkLifecycle` (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 below), one
-  vocabulary fix the same review rounds caught alongside them (numbered 4,
-  unrelated to the Lifecycle check itself), plus two more described after
-  the numbered list (a CI `timeout-minutes` gap and a stale
-  `build-plugins.mjs` docblock) — all found and fixed before the conformance
-  kit's first merge.**
+- **Fixed: the review findings below on `scripts/plugin-check.mjs` and its
+  test suite (#221) — nine reachable from `createFakeClock`/`checkLifecycle`
+  (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 below), one vocabulary fix (numbered
+  4, unrelated to the Lifecycle check itself), one test-fixture fix on Check
+  1's own regression test (numbered 11, unrelated to `checkLifecycle`), plus
+  two more described after the numbered list (a CI `timeout-minutes` gap and
+  a stale `build-plugins.mjs` docblock) — all found and fixed before the
+  conformance kit's first merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
      `dueAt = now + earliest.delay`; for a **zero-delay** interval
      (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
@@ -240,6 +240,32 @@ from so a reader can check it.
       itself to the sentinel. *Test:*
       `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
       refuses a plugin whose onActivate rejects internally with undefined".
+  11. **Check 1's own regression test named a behaviour it never exercised**
+      (a test named for a behaviour it never performed, ADR-0003). "Check 1
+      (Package) — refuses a bundle whose sha512 does not match its manifest"
+      planted `sha512Override: 'AA'.repeat(43)` — 86 characters, two short of
+      `pluginPackage.ts`'s `SHA512_BASE64_PATTERN` (`{86}==`, 88 characters).
+      `validateManifest` refused it at the format-validation step
+      (`manifest.sha512 must be a base64 SHA-512 digest`) before `validate()`
+      ever reached the actual digest comparison
+      (`sha512Base64(bundle) !== manifest.sha512`) this test's name claims to
+      exercise. It still passed, because both refusal paths return
+      `check: 'package'` and both reason strings happen to contain the
+      substring "sha512", the only thing the assertions checked — so the
+      digest-mismatch branch had no coverage from this conformance-kit suite,
+      contrary to the "one planted-bad fixture per check row" claim in the
+      "Added" entry above (the branch itself is separately covered at the
+      unit level by `electron/__tests__/pluginPackage.test.ts`'s own "refuses
+      a package whose bundle does not match its manifest sha512", so nothing
+      shipped unverified — only this CLI-level conformance test was asserting
+      on the wrong path). Fixed by overriding with a real, validly-shaped
+      88-character digest of different bytes
+      (`createHash('sha512').update('not the bundle').digest('base64')`)
+      instead of a malformed one, and narrowing the assertion from a bare
+      `/sha512/` substring match to the exact mismatch reason string. *Test:*
+      `scripts/__tests__/plugin-check.test.mjs` — "Check 1 (Package) —
+      refuses a bundle whose sha512 does not match its manifest" (same title,
+      corrected fixture and assertion).
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
