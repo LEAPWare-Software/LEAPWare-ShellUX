@@ -63,11 +63,12 @@ from so a reader can check it.
 - **Fixed: the review findings below on `scripts/plugin-check.mjs` and its
   test suite (#221) — nine reachable from `createFakeClock`/`checkLifecycle`
   (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 below), one vocabulary fix (numbered
-  4, unrelated to the Lifecycle check itself), one test-fixture fix on Check
-  1's own regression test (numbered 11, unrelated to `checkLifecycle`), plus
-  two more described after the numbered list (a CI `timeout-minutes` gap and
-  a stale `build-plugins.mjs` docblock) — all found and fixed before the
-  conformance kit's first merge.**
+  4, unrelated to the Lifecycle check itself), and two test-fixture/message
+  fixes on Check 1's and Check 4's own regression coverage (numbered 11 and
+  12, unrelated to `checkLifecycle`), plus two more described after the
+  numbered list (a CI `timeout-minutes` gap and a stale `build-plugins.mjs`
+  docblock) — all found and fixed before the conformance kit's first
+  merge.**
   1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
      `dueAt = now + earliest.delay`; for a **zero-delay** interval
      (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
@@ -266,6 +267,23 @@ from so a reader can check it.
       `scripts/__tests__/plugin-check.test.mjs` — "Check 1 (Package) —
       refuses a bundle whose sha512 does not match its manifest" (same title,
       corrected fixture and assertion).
+  12. **Check 4's own failure message named the wrong function.** The
+      Registration check's failure reason read "the default export failed
+      the real register", but the code three lines above calls
+      `validateBlueprint`, not `register` — `register` is bound to the live
+      React registry and cannot be called standalone from this CLI, exactly
+      the narrowing this same PR's decision-10 table and as-built callout
+      (fix 14 in the PR body) were already corrected to state. The doc fixes
+      landed; the identical stale wording survived verbatim in the runtime
+      string a developer or CI log actually sees, and no test exercised this
+      branch. Fixed by renaming the claim to `validateBlueprint`, and added
+      a fixture (a default export missing `navigationTree`, so
+      `normalizeBlueprint`'s `requireField` throws before any pane or
+      command is inspected) that asserts the corrected wording and that the
+      stale wording does not reappear. *Test:*
+      `scripts/__tests__/plugin-check.test.mjs` — "Check 4 (Registration) —
+      names validateBlueprint, not register, when the default export fails
+      validation".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,

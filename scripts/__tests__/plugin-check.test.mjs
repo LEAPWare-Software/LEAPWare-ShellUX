@@ -314,6 +314,36 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /differs from the manifest/);
   });
 
+  it('Check 4 (Registration) — names validateBlueprint, not register, when the default export fails validation', () => {
+    // `register` is bound to the live React registry and cannot be called
+    // standalone from this CLI; the check calls `validateBlueprint`, its pure
+    // validation core, instead. A prior round of this bundle's default export
+    // had that check's failure message read "failed the real register" —
+    // stale wording the PR's own docs (the ADR-0006 §10 as-built callout and
+    // the decision-10 table) were already corrected to stop claiming
+    // elsewhere, but which survived verbatim in this runtime string. Missing
+    // `navigationTree` is the fixture: `normalizeBlueprint`'s `requireField`
+    // throws before any pane or command is ever inspected.
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'no-navigation-tree',",
+      "  name: 'Fixture Plugin',",
+      "  version: '1.0.0',",
+      "  commands: [{ id: 'cmd', label: 'Cmd', icon: 'box', isVisible: () => true, onExecute: () => {} }],",
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('no-navigation-tree', { bundleText, id: 'no-navigation-tree' });
+    const result = runCli(path);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[registration\]/);
+    assert.match(result.stderr, /failed validateBlueprint/);
+    assert.doesNotMatch(result.stderr, /the real register/, 'must not claim register was called, when the check calls validateBlueprint');
+  });
+
   it('Check 5 (Lifecycle) — refuses a plugin whose onRelease does not clear a running interval', () => {
     const bundleText = [
       "import { jsx } from '/shared/react-jsx-runtime.js';",

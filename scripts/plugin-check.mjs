@@ -851,7 +851,7 @@ export async function runChecks(packagePath) {
     try {
       blueprint = validateBlueprint(moduleNamespace.default);
     } catch (error) {
-      return { ok: false, check: 'registration', reason: `the default export failed the real register: ${describeThrown(error)}` };
+      return { ok: false, check: 'registration', reason: `the default export failed validateBlueprint: ${describeThrown(error)}` };
     }
     if (blueprint.id !== manifest.id) {
       return {
