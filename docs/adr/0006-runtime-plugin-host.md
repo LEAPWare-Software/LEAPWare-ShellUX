@@ -874,14 +874,31 @@ everyone. CI runs it against all three migrated plugins.
 >   instead of a clean `lifecycle` FAIL. Fixed by awaiting
 >   `Promise.resolve(hookCall)` inside the same `try`/`catch` at all three
 >   call sites, converging a synchronous throw and an asynchronous rejection
->   onto the one FAIL path — deliberately stricter than the live host, which
->   is fire-and-forget on a rejecting hook; named as a decision on the
->   script's own banner, not left as an unexplained discrepancy.
+>   onto the one FAIL path. This check is deliberately stricter than the live
+>   host on two points, not one: any hook's async rejection (just described),
+>   and a SYNCHRONOUS throw from `onDeactivate` or `onRelease` specifically —
+>   the live host's `runHook` (`ActivationContext.tsx`) catches a synchronous
+>   throw from either of those two hooks and reports it through `reportFault`
+>   without failing deactivation or release, but this check fails on it
+>   regardless of which of the three hooks threw. Both are named as decisions
+>   on the script's own banner, not left as unexplained discrepancies.
+> - A hook can also reject INTERNALLY, never returning the rejection at all —
+>   `onActivate(shell) { Promise.reject(new Error('boom')); }`, fired and
+>   forgotten. Awaiting the hook's return value (the fix just above) only ever
+>   sees what that return value carries; this settles on its own,
+>   asynchronously, as an unhandled rejection Node detects on no stack this
+>   check is on — which crashed the whole process the same way, except
+>   OUTSIDE `checkLifecycle`'s own `finally`, which skipped `runChecks`'
+>   temp-directory cleanup too (a real, measured leak: a
+>   `dist-plugins/plugin-check-*` scratch directory left on disk after a
+>   crashed run). Fixed by a `process.on('unhandledRejection', ...)` installed
+>   for `checkLifecycle`'s own duration, checked after every
+>   `flushMicrotasks()` call.
 >
 > *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
 > against one hand-assembled, hash-matching `.lwplugin` fixture per row —
 > one passing every check, and one planted-bad fixture per failure named in
-> the table above and in the four defects just listed, plus the fake clock's
+> the table above and in the defects just listed, plus the fake clock's
 > own pure-function cases (`createFakeClock`'s exported `advance`, refire and
 > cancellation behaviour) exercised directly, without a subprocess.
 > `.github/workflows/ci.yml` runs `npm run plugins:build` then

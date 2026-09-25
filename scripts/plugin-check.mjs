@@ -108,16 +108,28 @@
  * still outside what this tick can catch; that gap is unclosed, not silently
  * assumed away.
  *
- * Check 5 is also, by design, STRICTER than the real host on one point: an
- * `async` hook that rejects (the hooks are typed `=> void`, which an `async`
- * function satisfies) is `await`ed here and its rejection turned into an
- * ordinary `lifecycle` FAIL. The live host (`ActivationContext.tsx`'s
- * `callHook`) does not do this — it is fire-and-forget on a rejecting hook,
- * reporting the rejection through its own fault path without ever failing or
- * un-failing the activation already returned. This kit's job is "does this
- * hook misbehave", not "match the live host's leniency", so treating a
- * rejecting hook as a conformance FAIL is a deliberate, and arguably better,
- * departure — named here so it reads as a decision, not a discrepancy.
+ * Check 5 is also, by design, STRICTER than the real host on two points:
+ *
+ *   1. An `async` hook that rejects (the hooks are typed `=> void`, which an
+ *      `async` function satisfies) is `await`ed here and its rejection turned
+ *      into an ordinary `lifecycle` FAIL. The live host (`ActivationContext
+ *      .tsx`'s `callHook`) does not do this — it is fire-and-forget on a
+ *      rejecting hook, reporting the rejection through its own fault path
+ *      without ever failing or un-failing the activation already returned.
+ *   2. A SYNCHRONOUS throw from `onDeactivate` or `onRelease` fails this
+ *      check too, not only one from `onActivate`. The live host's own
+ *      wrapping differs by hook: `activate` lets an `onActivate` throw
+ *      propagate (fatal to that activation), but `onDeactivate` and
+ *      `onRelease` run through `runHook` instead, which catches a
+ *      synchronous throw and reports it through `reportFault` — deactivation
+ *      and release proceed on the live host even when the plug-in's own hook
+ *      throws. This check does not carry that hook-by-hook distinction: any
+ *      of the three throwing is a `lifecycle` FAIL.
+ *
+ * This kit's job is "does this hook misbehave", not "match the live host's
+ * leniency", so both departures are deliberate, and arguably better, than
+ * matching the host's own behaviour exactly — named here so they read as
+ * decisions, not discrepancies.
  * ============================================================================
  */
 
@@ -455,6 +467,24 @@ function flushMicrotasks() {
  * Check 5 — Lifecycle. `activate` -> `deactivate` -> `release`, against a real
  * `createRevocableShellAPI` handle, with the fake clock advanced between each
  * step so a scheduled timer gets a chance to fire.
+ *
+ * **A hook can also reject INTERNALLY, never returning the rejection at
+ * all** — `onActivate(shell) { Promise.reject(new Error('boom')); }`, fired
+ * and forgotten, no `return`, no `await`. Awaiting `Promise.resolve(hookCall)`
+ * above only ever sees what the hook's own RETURN VALUE carries; a rejection
+ * that never reaches that return value settles on its own, asynchronously,
+ * as an unhandled rejection Node detects on no stack this function is on —
+ * so nothing in the `try`/`catch` around the hook call ever runs. Left
+ * unhandled, that crashes the whole CLI process the same way the
+ * already-fixed RETURNED-rejection case did, except OUTSIDE this function's
+ * own `finally`, which skips `runChecks`' temp-directory cleanup too (a real,
+ * measured leak: a `dist-plugins/plugin-check-*` scratch directory from a
+ * crashed run was still on disk after the process exited). A single
+ * `process.on('unhandledRejection', ...)` for this function's own duration
+ * catches it into `internalRejection` below, checked after every
+ * `flushMicrotasks()` — the same cadence a RETURNED rejection is already
+ * caught at — and turned into the same clean `lifecycle` FAIL shape, so
+ * `runChecks`' `finally` still runs either way.
  */
 export async function checkLifecycle(server, blueprint) {
   const runtime = await loadShellRuntime(server);
@@ -462,6 +492,13 @@ export async function checkLifecycle(server, blueprint) {
   const restoreDom = installMinimalDom();
   const clock = createFakeClock();
   clock.install();
+
+  let internalRejection;
+  const onUnhandledRejection = (reason) => {
+    internalRejection ??= reason;
+  };
+  process.on('unhandledRejection', onUnhandledRejection);
+
   try {
     const live = createLiveShell(runtime, blueprint.id);
 
@@ -470,6 +507,16 @@ export async function checkLifecycle(server, blueprint) {
     const shell = wrapWithCallLog(live.shell, phaseRef, calls);
 
     const lifecycle = blueprint.lifecycle ?? {};
+
+    /** `null` while nothing has surfaced; else the clean FAIL to return. */
+    const internalRejectionFail = () =>
+      internalRejection === undefined
+        ? null
+        : {
+            ok: false,
+            check: 'lifecycle',
+            reason: `an internal, unattached promise rejection reached the process during a lifecycle hook: ${describeThrown(internalRejection)}`,
+          };
 
     try {
       // `await Promise.resolve(...)`, not a bare call: the hooks are typed
@@ -489,6 +536,9 @@ export async function checkLifecycle(server, blueprint) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onActivate threw: ${describeThrown(error)}` };
     }
     await flushMicrotasks();
+    if (internalRejectionFail() !== null) {
+      return internalRejectionFail();
+    }
     phaseRef.phase = 'active';
     clock.advance(30_000);
 
@@ -498,6 +548,9 @@ export async function checkLifecycle(server, blueprint) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onDeactivate threw: ${describeThrown(error)}` };
     }
     await flushMicrotasks();
+    if (internalRejectionFail() !== null) {
+      return internalRejectionFail();
+    }
     phaseRef.phase = 'active';
     clock.advance(30_000);
 
@@ -507,6 +560,9 @@ export async function checkLifecycle(server, blueprint) {
       return { ok: false, check: 'lifecycle', reason: `lifecycle.onRelease threw: ${describeThrown(error)}` };
     }
     await flushMicrotasks();
+    if (internalRejectionFail() !== null) {
+      return internalRejectionFail();
+    }
 
     // Revocation: exactly what ending an extension's liveness does in
     // `ActivationContext.tsx`'s `endLiveness` — the predicate flips, then the
@@ -547,8 +603,12 @@ export async function checkLifecycle(server, blueprint) {
         reason: `a call to shell.${leaked.member} reached the handle after release — a leaked interval or timeout that lifecycle.onRelease did not clear`,
       };
     }
+    if (internalRejectionFail() !== null) {
+      return internalRejectionFail();
+    }
     return { ok: true };
   } finally {
+    process.off('unhandledRejection', onUnhandledRejection);
     clock.restore();
     restoreDom();
   }

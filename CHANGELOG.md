@@ -60,7 +60,7 @@ from so a reader can check it.
   behaviour and contrast (owed to the browser lane); whether a plugin is
   well-behaved towards its siblings; and anything about the network.
 
-- **Fixed: five review findings on `scripts/plugin-check.mjs`'s Lifecycle
+- **Fixed: six review findings on `scripts/plugin-check.mjs`'s Lifecycle
   check (#221), all reachable from `createFakeClock`/`checkLifecycle`, plus
   two more the same review rounds raised alongside them, before the
   conformance kit's first merge.**
@@ -107,9 +107,15 @@ from so a reader can check it.
      `lifecycle` FAIL. Fixed by awaiting `Promise.resolve(hookCall)` inside
      the same `try`/`catch` at all three call sites, converging a
      synchronous throw and an asynchronous rejection onto the one FAIL path.
-     This makes the check deliberately stricter than the live host, which is
-     fire-and-forget on a rejecting hook; the script's own banner now names
-     that as a decision, not a discrepancy. *Tests:*
+     This makes the check deliberately stricter than the live host on two
+     points, not one: any hook's async rejection (this fix), and — named
+     alongside it once a later review pass pointed out the banner undercounted
+     its own divergence — a SYNCHRONOUS throw from `onDeactivate` or
+     `onRelease`, which the live host's `runHook` catches and reports through
+     `reportFault` without failing deactivation or release, but which this
+     check still fails on (only a synchronous `onActivate` throw is fatal on
+     the live host, matching this check). The script's own banner names both
+     as decisions, not discrepancies. *Tests:*
      `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
      refuses a plugin whose onActivate rejects asynchronously", "Check 5
      (Lifecycle) — refuses a plugin whose onDeactivate rejects
@@ -133,6 +139,24 @@ from so a reader can check it.
      `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
      refuses a plugin whose leaked interval outlives the old fixed 120s scan
      window".
+  6. A hook can reject INTERNALLY, never returning the rejection at all —
+     `onActivate(shell) { Promise.reject(new Error('boom')); }`, fired and
+     forgotten, no `return`, no `await`. Awaiting `Promise.resolve(hookCall)`
+     (fix 3 above) only ever sees what the hook's own RETURN VALUE carries;
+     this settles on its own, asynchronously, as an unhandled rejection Node
+     detects on no stack this check is on. Left unhandled, this crashed the
+     whole CLI process the same way fix 3's RETURNED-rejection case did,
+     except OUTSIDE `checkLifecycle`'s own `finally`, which skipped
+     `runChecks`' temp-directory cleanup too — a real, measured leak: a
+     `dist-plugins/plugin-check-*` scratch directory was still on disk after a
+     crashed run. Fixed by a `process.on('unhandledRejection', ...)` installed
+     for `checkLifecycle`'s own duration, checked after every
+     `flushMicrotasks()` call — the same cadence a RETURNED rejection is
+     already caught at. *Test:* `scripts/__tests__/plugin-check.test.mjs` —
+     "Check 5 (Lifecycle) — refuses a plugin whose onActivate rejects
+     internally without returning the rejection, and leaves no scratch
+     directory behind", which asserts both the clean FAIL and that the
+     scratch directory does not outlive the run.
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,
@@ -166,6 +190,14 @@ from so a reader can check it.
   `plugins/mail/src/MailPlugin.tsx` and `plugins/database/src/DatabasePlugin.tsx`
   each gained an additive `export default` of the same manifest object their
   existing named export already carries, so no existing importer changed.
+  **Verified manually, not by an automated test:** `npm run plugins:build`
+  against all three real plugins, then `plugin:check` against each real
+  `.lwplugin` it wrote — transcript in the PR body. `build-plugins.mjs`'s own
+  docblock says "no test anywhere imports build-plugins.mjs", and that is
+  still true after this fix; `scripts/__tests__/plugin-check.test.mjs`'s CLI
+  suite exercises `checkLifecycle`/`checkRender` etc. against hand-assembled
+  fixtures, not against `build-plugins.mjs`'s own Rollup output, so it does
+  not stand in for a regression test of this specific fix either.
 
 - **The three first-party plugins move to `plugins/*`, and `npm run plugins:build`
   emits a `.lwplugin` per plugin** (ADR-0006 step 7). `src/mocks/MailPlugin.tsx`,

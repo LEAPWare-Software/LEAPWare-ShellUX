@@ -26,7 +26,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -532,6 +532,49 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.equal(result.status, 1);
     assert.match(result.stderr, /FAIL \[lifecycle\]/);
     assert.match(result.stderr, /reached the handle after release/);
+  });
+
+  // Regression for the independent `shellux-cloud-reviewer` routine's Medium
+  // finding on PR #221 (reviewed at head 345283f): a hook can reject
+  // INTERNALLY, never returning the rejection at all —
+  // `onActivate(shell) { Promise.reject(new Error('boom')); }`, fired and
+  // forgotten, no `return`, no `await`. Awaiting `Promise.resolve(hookCall)`
+  // (the fix for the async-rejection cases below) only ever sees what the
+  // hook's own RETURN VALUE carries; this rejection settles on its own,
+  // asynchronously, as an unhandled rejection Node detects on no stack this
+  // check is on. Left unhandled, this crashed the whole CLI process the same
+  // way the RETURNED-rejection case did, except OUTSIDE `checkLifecycle`'s
+  // own `finally`, which skipped `runChecks`' temp-directory cleanup too — a
+  // real, measured leak: a `dist-plugins/plugin-check-*` scratch directory
+  // was still on disk after a crashed run. Fixed by a
+  // `process.on('unhandledRejection', ...)` installed for `checkLifecycle`'s
+  // own duration, checked after every `flushMicrotasks()`. This test asserts
+  // both halves of the finding: a clean FAIL (not a crash), and that the
+  // scratch directory it ran in does not outlive the run.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate rejects internally without returning the rejection, and leaves no scratch directory behind', { timeout: 5000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'internal-unattached-reject',",
+      "  name: 'InternalUnattachedReject',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      "  lifecycle: { onActivate() { Promise.reject(new Error('boom internal')); } },",
+      '});',
+    ].join('\n');
+    const path = writeFixture('internal-unattached-reject', { bundleText, id: 'internal-unattached-reject' });
+    const scratchRoot = join(REPO_ROOT, 'dist-plugins');
+    const before = new Set(readdirSync(scratchRoot).filter((name) => name.startsWith('plugin-check-')));
+    const result = runCli(path, { timeout: 4000 });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /an internal, unattached promise rejection reached the process during a lifecycle hook: boom internal/);
+    const after = readdirSync(scratchRoot).filter((name) => name.startsWith('plugin-check-') && !before.has(name));
+    assert.deepEqual(after, [], 'the CLI must clean up its own dist-plugins/plugin-check-* scratch directory even when a hook rejects internally');
   });
 
   // Regression for a third review finding on PR #221, same function as the
