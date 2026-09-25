@@ -91,8 +91,17 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # D-55 follow-up (#211): widened, symmetric with claude-code-review.yml's
-          # allowlist, so an @claude mention can review a PR the same way the
-          # automated reviewer does. Guarded above: refused outright on a fork PR.
-          claude_args: '--allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"'
+          # D-55 follow-up (#211/#227): before this line existed, claude_args was
+          # unset, so this job ran on the action's own default tool policy. Adding
+          # an explicit --allowedTools flag REPLACES that default rather than
+          # extending it, so Read/Grep/Glob are named here too (not just the three
+          # gh pr commands #211 asked for) to avoid silently breaking a plain
+          # "@claude explain this file" issue mention that isn't about a PR at all.
+          # Read/Grep/Glob mirror claude-code-review.yml's own allowlist exactly;
+          # its mcp__github_inline_comment__create_inline_comment entry is not
+          # carried over, deliberately — that tool posts structured inline PR
+          # review comments, a shape this general-purpose mention handler has no
+          # prompt asking it to produce, unlike the dedicated reviewer action.
+          # Guarded above: refused outright on a fork PR.
+          claude_args: '--allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"'
 

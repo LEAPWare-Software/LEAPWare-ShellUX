@@ -43,10 +43,9 @@ from so a reader can check it.
 - **`claude.yml`'s `@claude`-mention grant widened to match `claude-code-review.yml`,
   with a fork guard added so the wider grant cannot be used on a fork PR** (D-55
   follow-up, #211). `claude_args` now sets `--allowedTools
-  "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"`, mirroring
-  `claude-code-review.yml`'s existing allowlist exactly, so an `@claude` mention can
-  read and comment on a PR the way the automated reviewer does — this workflow had no
-  `gh pr` grant at all before. Unlike `claude-code-review.yml`, this workflow does not
+  "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"`, so an
+  `@claude` mention can read and comment on a PR the way the automated reviewer does —
+  this workflow had no `gh pr` grant at all before. Unlike `claude-code-review.yml`, this workflow does not
   skip fork PRs (D-49 only covers the `pull_request`-triggered reviewer), and an
   `@claude` mention reaches it via `issue_comment` on a PR, `pull_request_review_comment`
   or `pull_request_review` — any of which a fork PR carries. A new step, "Refuse
@@ -72,6 +71,20 @@ from so a reader can check it.
   checkout already carries it — a `pull-requests: write` token left persisted in
   `.git/config` is readable by the same agent step that now has `gh` tool access.
   Fixed in the same change: `persist-credentials: false` added to the checkout step.
+  **Third correction, also found by `claude[bot]`'s review:** the PR's own claim that
+  the widened grant was "exactly mirroring"/"symmetric with" `claude-code-review.yml`'s
+  allowlist was true only for the three `gh pr` entries — `claude-code-review.yml`'s
+  actual allowlist also carries `Read`, `Grep`, `Glob` and
+  `mcp__github_inline_comment__create_inline_comment`. Since this job had no
+  `claude_args` at all before this change, adding an explicit `--allowedTools` flag
+  **replaces** the action's own default tool policy rather than extending it — so
+  without `Read`/`Grep`/`Glob`, a plain `@claude explain this file` issue mention (not
+  about a PR) would have lost the ability to read anything. Fixed in the same change:
+  `Read`, `Grep`, `Glob` added to the allowlist, matching `claude-code-review.yml`
+  exactly for those three. `mcp__github_inline_comment__create_inline_comment` is
+  deliberately **not** carried over: that MCP tool posts structured inline PR review
+  comments, a shape this general-purpose mention handler's prompt (unlike the dedicated
+  reviewer's) never asks it to produce.
   **Not done as part of this change:** no `node:test` was added, because the new
   decision (a live `gh api` lookup compared to `github.repository`) has no pure,
   mockable branch beyond the
