@@ -9,12 +9,13 @@ import {
   PLUGIN_VERSION_PATTERN,
   nodePluginPackageFs,
   parseInstalledManifest,
+  parsePluginPackage,
   readBoundedFile,
   readPluginPackage,
   serializeManifest,
   sha512Base64,
 } from './pluginPackage.js';
-import type { PluginManifest, PluginPackageFs } from './pluginPackage.js';
+import type { PluginManifest, PluginPackageFs, PluginPackageResult } from './pluginPackage.js';
 
 /**
  * ============================================================================
@@ -33,13 +34,15 @@ import type { PluginManifest, PluginPackageFs } from './pluginPackage.js';
  * id can name either. Every path this module builds is joined from an id and a
  * version that passed the manifest rules (at install) or the `state.json` rules
  * (at read) — never from a renderer string. The renderer supplies no path at
- * all: the package path comes from the picker main opens (`pluginIpc.ts`).
+ * all: the package path comes from the picker main opens (`pluginIpc.ts`), and
+ * a package main downloaded reaches `installBytes` as bytes, never as a path.
  *
  * ---------------------------------------------------------------------------
  * INSTALL: TEMPORARY DIRECTORY, VALIDATE, RENAME. A HALF-WRITTEN PLUGIN IS NEVER LISTED.
  * ---------------------------------------------------------------------------
- * The package is read and validated by `readPluginPackage` (step 3) before a
- * byte is written. Its bundle and manifest are written into a `.staging-*`
+ * The package is read and validated by `readPluginPackage` (step 3) — or, for
+ * bytes main downloaded (step 11), validated by `parsePluginPackage`, the
+ * validator `readPluginPackage` calls — before a byte is written. Its bundle and manifest are written into a `.staging-*`
  * directory beside the target, which is renamed into `<id>/<version>/`; only
  * then does `state.json` name it. What is listed and served is decided by
  * `state.json` alone, so a directory with no record is never either. A package
@@ -237,6 +240,11 @@ export interface PluginStore {
   list(): StoreResult<readonly PluginListing[]>;
   /** Install, update or reinstall from a `.lwplugin` main chose. Never a renderer's path. */
   install(packagePath: string): StoreResult<PluginListing>;
+  /**
+   * The same install, from a package's bytes main downloaded itself
+   * (`releaseSource.ts`). Never a renderer's bytes: no channel carries any.
+   */
+  installBytes(bytes: Uint8Array): StoreResult<PluginListing>;
   /** Enable or disable an installed, compatible, unfaulted plugin. */
   setEnabled(id: unknown, enabled: boolean): StoreResult<PluginListing>;
   /** Drop the record, then delete the directory. */
@@ -468,8 +476,14 @@ export function createPluginStore(options: PluginStoreOptions): PluginStore {
     }
   }
 
-  function install(packagePath: string): PluginListing {
-    const read = readPluginPackage(fs, packagePath, hostVersion);
+  /**
+   * Both install sources end here: a package file main's picker chose
+   * (`readPluginPackage`) and a package main downloaded (`parsePluginPackage`,
+   * the validator `readPluginPackage` itself calls after its bounded read). One
+   * validation, one staging directory, one rename, whichever door the bytes
+   * came through.
+   */
+  function install(read: PluginPackageResult): PluginListing {
     if (!read.ok) refuse(`the package was refused: ${read.reason}`);
     const { manifest, bundle } = read.plugin;
     const records = readState();
@@ -567,7 +581,8 @@ export function createPluginStore(options: PluginStoreOptions): PluginStore {
         const records = readState();
         return [...records.keys()].sort().map((id) => listingOf(records, id));
       }),
-    install: (packagePath) => run(() => install(packagePath)),
+    install: (packagePath) => run(() => install(readPluginPackage(fs, packagePath, hostVersion))),
+    installBytes: (bytes) => run(() => install(parsePluginPackage(bytes, hostVersion))),
     setEnabled: (id, enabled) => run(() => setEnabled(id, enabled)),
     remove: (id) => run(() => remove(id)),
     entryFor: (id, version) => run(() => entryFor(id, version)),
