@@ -13,9 +13,17 @@ import { MAX_PACKAGE_BYTES } from './pluginPackage.js';
  *   /LEAPWare-Software/<repo>/releases/download/<tag>/<name>.lwplugin
  *
  * — and only a string that passes is ever handed to the network. (Written as
- * parts, not as one URL, so this file stays under `check:portability`'s
- * hostname rule with no exemption: `RELEASE_URL_PREFIX` below is the one place
- * the whole prefix is spelled.) What comes back
+ * parts, not as one URL: `RELEASE_URL_PREFIX` below is the one place the
+ * whole prefix is spelled. **This is not enforcement.** `check:portability`'s
+ * `hardcoded-hostname` rule is a plain regex over source text
+ * (`\bhttps?://([A-Za-z0-9._-]+)`); it never evaluates a template literal, so
+ * `` `https://${RELEASE_HOST}/` `` is invisible to it either way — the rule
+ * neither passes this file nor would catch a different host written the same
+ * interpolated way. Writing it as parts only keeps this file out of the
+ * `ALLOWLIST` exemption `pluginReleaseSource.test.ts` needs for its literal
+ * adversarial-input hostnames; it buys no guarantee against a changed host
+ * here, and no test claims otherwise.)
+ * What comes back
  * is bytes, and the bytes go to `PluginStore.installBytes` — the same
  * validation, staging directory and rename as a package main's picker chose.
  * Nothing here writes to disk, and no renderer string becomes a path.

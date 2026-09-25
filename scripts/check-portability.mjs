@@ -315,11 +315,14 @@ const ALLOWLIST = [
       'as literal strings to show each is refused or admitted as written. Nothing here ' +
       'is contacted: every case answers from a recording fake standing where net.fetch ' +
       'stands, and the file asserts that no request is made for a refused URL. The ' +
-      'module under test, electron/main/plugins/releaseSource.ts, is NOT listed and ' +
-      'stays under this rule, so a host literal added to the network code still fails ' +
-      'the build; DOCUMENTED_ENDPOINTS is left to the release-engineering step that ' +
-      'declares the update feed (docs/RELEASE.md section 1). Scoped to this one file ' +
-      'and to hardcoded-hostname only; every other rule still applies.',
+      'module under test, electron/main/plugins/releaseSource.ts, is NOT listed here. ' +
+      'That is not the same as this rule enforcing anything about it: the module writes ' +
+      'its host through template-literal interpolation (`https://${RELEASE_HOST}/`), ' +
+      'which this rule’s regex never evaluates, so it is invisible to hardcoded-hostname ' +
+      'either way — leaving it off this list buys no guarantee against a host literal ' +
+      'changed the same interpolated way. DOCUMENTED_ENDPOINTS is left to the ' +
+      'release-engineering step that declares the update feed (docs/RELEASE.md section 1). ' +
+      'Scoped to this one file and to hardcoded-hostname only; every other rule still applies.',
   },
   {
     files: ['docs/INSTALL.md'],

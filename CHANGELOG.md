@@ -130,8 +130,15 @@ from so a reader can check it.
   decision 2's shape. `check:portability` gained one `ALLOWLIST` entry,
   scoped to `electron/__tests__/pluginReleaseSource.test.ts` and the
   `hardcoded-hostname` rule, because that file's adversarial URLs must name
-  real GitHub hosts as literals; the network module itself is not listed and
-  stays under the rule, and `DOCUMENTED_ENDPOINTS` stays empty for the
+  real GitHub hosts as literals; the network module itself is not listed.
+  **Not enforcement, corrected after review:** `hardcoded-hostname` is a plain
+  regex over source text and never evaluates a template literal, so
+  `releaseSource.ts`'s own `` `https://${RELEASE_HOST}/` `` is invisible to
+  it regardless of what `RELEASE_HOST` is — the rule neither passes this file
+  today nor would catch a changed host written the same interpolated way. An
+  earlier draft of this entry and the module's own docblock both said this
+  file "stays under the rule" as if that were a guarantee; it is not, and
+  both are corrected. `DOCUMENTED_ENDPOINTS` stays empty for the
   release-engineering step that declares the update feed.
 
 - **`npm run plugin:check <path>` — the conformance kit, and its CI job**

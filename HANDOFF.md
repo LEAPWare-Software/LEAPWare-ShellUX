@@ -21,7 +21,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - Rollout step 2 (#171, C-30); step 3 harness (#173); step 0c item 4 (#175, C-31).
 - #23 re-fit (W3-0), the wave-3 plan (#176); `.lwplugin` validator (#177).
 - Operator install guide, 1.0 known limits, plan step 7 (#178).
-- PR B (#179): both proof-of-completion checks required, read back.
+- PR B (#179): both proof-of-completion checks required, read back
 - Plan step 0c complete (#181, C-37).
 - The plugin store, ADR-0006 step 4 (#182).
 - Wave-3 W3-1 state primitives (#184); plugin lifecycle/nav tree/badge clear (#185);
@@ -45,7 +45,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 ## The next step
 
 1. ADR-0006 step 6, 9-10; W3-2 onward.
-2. Plan steps 6, 6c, 7, 8 and 9; the 1.0 tag waits for BuildCraft.
+2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 
