@@ -42,7 +42,7 @@ LEAPWare-ShellUX host.
 landed**: `src/core/types.ts`, `src/core/RegistryContext.tsx` and
 `src/core/ShellAPI.ts` all exist and are covered by tests. The signatures in
 this guide are now printed from those files rather than withheld. See
-[`README.md`](README.md#status).
+[`docs/readme-body.md`](docs/readme-body.md#status).
 
 **ISSUE-002 — the three-pane resizable layout — is implemented, tested and
 merged**, so the passages describing the panes are written in the present tense

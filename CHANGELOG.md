@@ -124,6 +124,31 @@ from so a reader can check it.
   API data — unlike `auto-queue.mjs`'s decision logic, which runs on data already
   fetched into a plain function.
 
+### Documentation
+
+- **`SECURITY.md` reordered to the `leapware-sessionkeeper` pattern, and
+  `README.md` top matter shortened to match it** (`docs/plans/v1-production.md`
+  lines 129 and 133). `SECURITY.md` now leads with "Reporting a vulnerability"
+  (the advisories link, then the D-03 email, then the unchanged reporting
+  content), followed by the unchanged trust-model and defends-against /
+  does-NOT-defend-against sections, with "Supported versions" moved last and
+  reworded so it no longer overclaims a release that has not happened: it still
+  says plainly that there is no release and no tag (`package.json` is `0.1.0`,
+  `git tag -l` is empty), and adds the future policy the plan asked for — once a
+  release exists, only the latest `1.x` line gets fixes. `README.md` now runs
+  opening paragraph → license → an Installing link (`docs/INSTALL.md`) → an
+  inline `npm ci && npm run verify` Developing block → the Documentation,
+  Contributing and Security sections; the former "Status" table, "What it is"
+  diagram, "Getting started" and "Developing" table moved verbatim to the new
+  `docs/readme-body.md` (with its relative links adjusted for the new path, on
+  the pattern already used by `docs/history/readme-status-2026-08.md`), and the
+  Documentation table gained a row pointing at it. No behaviour changed; no new
+  *behavioral* test, since this only reorders prose. Two new `docs/claims.json`
+  register rows, **C-47** and **C-48**, each with a check script
+  (`scripts/claims/checks/security-readme-reorder.mjs`) and a mutation probe,
+  prove the reorder and the no-overclaim wording — the box-linter (§3.2)
+  requires a proof row before either plan box can tick.
+
 ### Added
 
 - **The packaged plugin end-to-end lane, prepared and never run** (ADR-0006 step

@@ -27,6 +27,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - ADR-0006 step 11 (#222): Release-URL install source, org allowlist.
 - ADR-0006 step 10 prep: packaged e2e lane, never run; owner/VM:
   [`docs/runbooks/packaged-plugin-e2e.md`](docs/runbooks/packaged-plugin-e2e.md).
+- Plan lines 129/133 ticked: `SECURITY.md` reorder, README body moved to
+  [`docs/readme-body.md`](docs/readme-body.md).
 
 ## In flight
 

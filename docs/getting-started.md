@@ -67,7 +67,7 @@ variable — ADR-0002 forbids one without a working default; see
 **The production shell is still reachable by name.** Open **`/index.html`** on the
 same dev server for the real composition root: `src/App.tsx` registers no
 extensions, so you get the context bar's host actions, a resizable and collapsible pane
-1 with nothing in it, and two empty panes. See the Status section of [`README.md`](../README.md#status).
+1 with nothing in it, and two empty panes. See the Status section of [`docs/readme-body.md`](readme-body.md#status).
 *Tests:* `e2e/dev-routing.spec.ts` — "serves the fixture shell at the bare root,
 with both remotes registered", "keeps the URL at / rather than redirecting the
 browser to /dev.html" and "leaves /index.html on the production shell, whose

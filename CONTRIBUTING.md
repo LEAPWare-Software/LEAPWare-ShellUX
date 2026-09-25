@@ -5,7 +5,7 @@ useful contribution right now is review of the specification in
 [`.github/ISSUES_MANIFEST.md`](.github/ISSUES_MANIFEST.md) and of the architecture
 decision in [`docs/adr/0001-ioc-registry-architecture.md`](docs/adr/0001-ioc-registry-architecture.md).
 
-Setup instructions are in [README.md](README.md#getting-started). This document is
+Setup instructions are in [`docs/readme-body.md`](docs/readme-body.md#getting-started). This document is
 the rules.
 
 ---
