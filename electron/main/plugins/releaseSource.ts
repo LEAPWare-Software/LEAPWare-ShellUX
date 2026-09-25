@@ -194,11 +194,13 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
  * allowlist, and this main-process module is one of them. Only one `raceAbort`
  * is ever pending per signal at a time here — each call awaits the last before
  * starting the next on the same `controller` — so the single `onabort` slot is
- * never contended. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+ * never contended. Every caller in this file only ever races a signal that has
+ * not fired yet, since the function returns as soon as one race rejects; there
+ * is deliberately no already-aborted guard for a case this module never
+ * reaches. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
  * "gives up on a download whose network layer never notices the abort signal".
  */
 function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason as Error);
   return new Promise<T>((resolve, reject) => {
     signal.onabort = () => {
       signal.onabort = null;
