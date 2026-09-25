@@ -1,19 +1,84 @@
 # Security Policy
 
-## Supported versions
+## Reporting a vulnerability
 
-There has been no release. `package.json` declares version `0.1.0` and marks the
-package `private`; nothing has been published and nothing has been tagged.
+**Report privately, through GitHub's
+[Report a vulnerability](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/security/advisories/new)
+form, or by email to `leapware@outlook.com`.** The email address is the security
+contact named by decision D-03 (`docs/DECISIONS.md`): chosen 2026-08-03 to close a
+**Blocker** without going public and without spend, after the previous text sent
+reporters to a public-repository feature that returned 404 on this then-private
+repository. It is monitored (see "What you can expect back" below). Private
+vulnerability reporting is enabled on this repository: `gh api
+repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting` returned
+`{"enabled":true}` on 2026-09-19.
 
-| What | Supported |
-|---|---|
-| The default branch | Yes. Fixes land there, and only there. |
-| Any earlier commit | No. There are no backports and no patch branches. |
-| Any tag or published artefact | None exist. |
+Encrypted mail is welcome and no key is published, so if you need one, say so in a
+first message containing no detail and one will be arranged. **A report is never
+refused for arriving in plain text** — a finding that reaches us unencrypted is
+better than a finding that does not reach us.
 
-There is no LTS line, and there will not be one before 1.0. If you are running
-this shell you are running a **commit**, so name the commit when you report
-anything.
+> **This section used to be circular, and it is worth saying so rather than quietly
+> replacing it.** It sent reporters to the Security tab's "Report a vulnerability"
+> button. **That button did not exist then.** Private vulnerability reporting is a
+> **public-repository** feature; the repository was private at the time,
+> `security_and_analysis` was `null` and the advisories endpoint returned `404`. The fallback sentence then
+> said to use "the private channel you *do* have" — and never named one, anywhere in
+> this file or any other.
+>
+> So the honest description of the previous state is that **there was no way to
+> report a vulnerability at all**, and the instructions read as though there were.
+> Tracked as issue #75 and closed by naming the address above. Fixed 2026-08-03,
+> before any release rather than after one.
+
+**Do not open a public issue for a suspected vulnerability.** Not a bug report,
+not a discussion, not a pull request that fixes it with an explanatory title. A
+public issue publishes the finding before there is anything to update to, and on
+a project with no release there is nothing to update to.
+
+**What you can expect back.** An acknowledgement that a human has read it. This
+project makes **no** response-time commitment, and stating one it has never measured
+would be exactly the kind of unevidenced claim `CLAUDE.md` rule 2 and ADR-0001
+Amendment G exist to prevent. It is a pre-release project maintained by a small
+team; the address is real and monitored, and that is the whole of the promise.
+
+Please include, in as much of this form as you can manage:
+
+- the **commit SHA** you observed it on;
+- **`file:line`** for every claim — this repository argues from specific lines,
+  and a report that does the same is triaged far faster;
+- **how you reproduced it**, ideally as a failing test written against the public
+  contract;
+- **what the repository promises** that this contradicts — the sentence, and where
+  it is;
+- what you are **not** claiming, so the finding is not read wider than the
+  evidence.
+
+Expectations, stated honestly: this is a pre-1.0 project with a single
+maintainer. There is no bounty, no service-level agreement, and no guaranteed
+response window. What is promised is that a report will be read, that a finding
+which reproduces will be recorded in the repository even if it is not fixed
+immediately, and that the fix or the accepted limit will be written down where
+readers will find it.
+
+### What is not a vulnerability here
+
+Anything in the "does NOT defend against" section above. Those are decided
+positions with the reasoning recorded, and a report restating one is not a
+finding. The trigger in ADR-0001 Amendment E is what changes that answer, and
+until it fires the answer does not change.
+
+### What IS a vulnerability here, and is easy to miss
+
+**A sentence in this repository that claims more than the code delivers.** That is
+the failure mode this project has actually had — seven consecutive review rounds
+found sound code and a conclusion written one step wider than the premise
+licensing it, which is why ADR-0001 Amendment G exists. A reader who trusts an
+overclaimed sentence and ships against it is exposed by the sentence, so a
+documentation overclaim is treated as a security defect and not as a typo. If the
+overclaim is about a limit already public in this file, an ordinary public issue
+is fine; if narrowing the sentence would itself disclose an unpublished weakness,
+report it privately like any other.
 
 ---
 
@@ -314,82 +379,25 @@ repository *claims* otherwise is genuinely valuable — see below.
 
 ---
 
-## Reporting a vulnerability
+## Supported versions
 
-**Report privately, through GitHub's
-[Report a vulnerability](https://github.com/LEAPWare-Software/LEAPWare-ShellUX/security/advisories/new)
-form, or by email to `leapware@outlook.com`.** The email address is monitored (see
-"What you can expect back" below). Private vulnerability reporting is enabled on this
-repository: `gh api
-repos/LEAPWare-Software/LEAPWare-ShellUX/private-vulnerability-reporting` returned
-`{"enabled":true}` on 2026-09-19.
+**There has been no release yet.** `package.json` declares version `0.1.0` and
+marks the package `private`; nothing has been published and nothing has been
+tagged (`git tag -l` returns nothing as of this writing). Until a first release
+exists, "supported" means the default branch and nothing else:
 
-Encrypted mail is welcome and no key is published, so if you need one, say so in a
-first message containing no detail and one will be arranged. **A report is never
-refused for arriving in plain text** — a finding that reaches us unencrypted is
-better than a finding that does not reach us.
+| What | Supported |
+|---|---|
+| The default branch | Yes. Fixes land there, and only there. |
+| Any earlier commit | No. There are no backports and no patch branches. |
+| Any tag or published artefact | None exist. |
 
-> **This section used to be circular, and it is worth saying so rather than quietly
-> replacing it.** It sent reporters to the Security tab's "Report a vulnerability"
-> button. **That button did not exist then.** Private vulnerability reporting is a
-> **public-repository** feature; the repository was private at the time,
-> `security_and_analysis` was `null` and the advisories endpoint returned `404`. The fallback sentence then
-> said to use "the private channel you *do* have" — and never named one, anywhere in
-> this file or any other.
->
-> So the honest description of the previous state is that **there was no way to
-> report a vulnerability at all**, and the instructions read as though there were.
-> Tracked as issue #75 and closed by naming the address above. Fixed 2026-08-03,
-> before any release rather than after one.
-
-**Do not open a public issue for a suspected vulnerability.** Not a bug report,
-not a discussion, not a pull request that fixes it with an explanatory title. A
-public issue publishes the finding before there is anything to update to, and on
-a project with no release there is nothing to update to.
-
-**What you can expect back.** An acknowledgement that a human has read it. This
-project makes **no** response-time commitment, and stating one it has never measured
-would be exactly the kind of unevidenced claim `CLAUDE.md` rule 2 and ADR-0001
-Amendment G exist to prevent. It is a pre-release project maintained by a small
-team; the address is real and monitored, and that is the whole of the promise.
-
-Please include, in as much of this form as you can manage:
-
-- the **commit SHA** you observed it on;
-- **`file:line`** for every claim — this repository argues from specific lines,
-  and a report that does the same is triaged far faster;
-- **how you reproduced it**, ideally as a failing test written against the public
-  contract;
-- **what the repository promises** that this contradicts — the sentence, and where
-  it is;
-- what you are **not** claiming, so the finding is not read wider than the
-  evidence.
-
-Expectations, stated honestly: this is a pre-1.0 project with a single
-maintainer. There is no bounty, no service-level agreement, and no guaranteed
-response window. What is promised is that a report will be read, that a finding
-which reproduces will be recorded in the repository even if it is not fixed
-immediately, and that the fix or the accepted limit will be written down where
-readers will find it.
-
-### What is not a vulnerability here
-
-Anything in the "does NOT defend against" section above. Those are decided
-positions with the reasoning recorded, and a report restating one is not a
-finding. The trigger in ADR-0001 Amendment E is what changes that answer, and
-until it fires the answer does not change.
-
-### What IS a vulnerability here, and is easy to miss
-
-**A sentence in this repository that claims more than the code delivers.** That is
-the failure mode this project has actually had — seven consecutive review rounds
-found sound code and a conclusion written one step wider than the premise
-licensing it, which is why ADR-0001 Amendment G exists. A reader who trusts an
-overclaimed sentence and ships against it is exposed by the sentence, so a
-documentation overclaim is treated as a security defect and not as a typo. If the
-overclaim is about a limit already public in this file, an ordinary public issue
-is fine; if narrowing the sentence would itself disclose an unpublished weakness,
-report it privately like any other.
+**The policy for once a release exists, so this can be checked off without
+claiming a release that has not happened:** only the latest `1.x` release line
+will get fixes — the equivalent of "1.x: latest release only". There will be no
+LTS line, and there will not be one before 1.0. Until then, if you are running
+this shell you are running a **commit**, so name the commit when you report
+anything.
 
 ---
 

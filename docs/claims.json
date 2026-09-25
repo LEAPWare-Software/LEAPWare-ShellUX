@@ -3297,6 +3297,80 @@
       },
       "provenOn": "2026-09-25",
       "addedBy": "D-55 PR B (lane C conductor, cloud, 2026-09-25): the claude[bot] merge gate itself, rebased off #206 with the issue_comment trigger dropped (fork code-execution finding, D-55 debate) and the F7 comment-selection bug fixed per the debate's round-3 review-shaped-comment algorithm."
+    },
+    {
+      "id": "C-47",
+      "box": "Rewrite `SECURITY.md` the way sessionkeeper does: a \"Report a vulnerability\" link first, then `leapware@outlook.com` (D-03), then scope notes (what the host does and does not claim, citing tests per Amendment G), then supported versions (\"1.x: latest release only\").",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/security-readme-reorder.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "security_order",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "security_no_release_overclaim",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "move Supported versions back to the top of SECURITY.md",
+        "edits": [
+          {
+            "file": "SECURITY.md",
+            "replace": [
+              "## Supported versions",
+              "## Supported Versions (moved)"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-25",
+      "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:129"
+    },
+    {
+      "id": "C-48",
+      "box": "README top matter in sessionkeeper's order: a one-paragraph what-it-is, a license line, an Installing link (`docs/INSTALL.md`, Step 7), a Developing block (`npm ci && npm run verify`), and Contributing/Security links. The long body moves to `docs/`.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/security-readme-reorder.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "readme_order",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "readme_body_sections",
+          "op": "==",
+          "value": 4
+        }
+      ],
+      "probe": {
+        "name": "rename README's Installing heading so the moved body can't be found in order",
+        "edits": [
+          {
+            "file": "README.md",
+            "replace": [
+              "## Installing",
+              "## Setup"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-25",
+      "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:133"
     }
   ],
   "retired": []
