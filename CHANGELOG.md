@@ -61,8 +61,8 @@ from so a reader can check it.
   well-behaved towards its siblings; and anything about the network.
 
 - **Fixed: the review findings below on `scripts/plugin-check.mjs` and its
-  test suite (#221) — ten reachable from `createFakeClock`/`checkLifecycle`
-  (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10 and 14 below), one vocabulary fix
+  test suite (#221) — eleven reachable from `createFakeClock`/`checkLifecycle`
+  (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10, 14 and 16 below), one vocabulary fix
   (numbered 4, unrelated to the Lifecycle check itself), one `checkRender`
   fix (numbered 13, the Render check's own async-safety gap), one test-only
   timeout-margin fix on fix 14's own regression tests (numbered 15), and two
@@ -345,6 +345,38 @@ from so a reader can check it.
       production wait, comfortably wider than the measured overhead and the
       2-3x CI multiplier. *Tests:* the same two tests as fix 14, now with
       the corrected margin.
+  16. **`advance()`'s zero-delay refire clamp (fix 1) only covered
+      `setInterval`; a recursive zero-delay `setTimeout` hit the identical
+      infinite loop through a different path.** The idiom
+      `const tick = () => { setTimeout(tick, 0); }; setTimeout(tick, 0);` is
+      ordinary, working code in a real browser or Node event loop, but here
+      each recursive call creates a FRESH `timeout`-kind timer via
+      `schedule()`, not a refire of an existing one — so fix 1's clamp
+      (applied only where `advance()` re-arms an existing `interval` timer)
+      never ran for it. `schedule()` computed `dueAt: now + safeDelay`, so a
+      zero-delay timer scheduled at the current `now` (true on every
+      recursive call, since `now` does not move within one synchronous
+      callback) got `dueAt === now`, still `<= deadline`, and `advance()`'s
+      `for (;;)` picked it straight back up — forever, inside one
+      synchronous JS call stack with no `await` to interrupt it. Worse than
+      fix 1's original interval hang: this loop never yields to the event
+      loop at all, so it was unkillable by `timeout`'s own `SIGTERM` in
+      testing (confirmed: `user 0m32s+` CPU time, still running; only
+      `SIGKILL` — which the kernel enforces unconditionally — could stop
+      it), and locally there is no `timeout-minutes` backstop at all; in CI
+      only the job-level 20-minute budget would eventually kill it, burning
+      the full 20 minutes without ever printing the clean `lifecycle` FAIL
+      this tool exists to produce. Confirmed by hand before the fix: the
+      idiom above, run through the real CLI, pinned one CPU core
+      indefinitely. Fixed by moving the floor into `schedule()` itself —
+      `dueAt: now + Math.max(safeDelay, 1)` — so every newly scheduled
+      timer's due time is floored regardless of kind or how it was created;
+      the stored `delay` field (which `longestPendingDelay()` reads) stays
+      the real, unclamped value, so a genuinely leaking recursive chain
+      still runs its course over one `advance()` budget rather than looping
+      forever. *Test:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
+      (Lifecycle) — refuses a plugin whose onActivate leaks a recursive
+      zero-delay setTimeout chain".
 
   `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
   "step 8 landed — the conformance kit, as built" callout (matching steps 2,

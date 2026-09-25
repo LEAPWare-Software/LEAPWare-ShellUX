@@ -838,7 +838,7 @@ everyone. CI runs it against all three migrated plugins.
 > to the live React registry and cannot be called standalone outside it, the
 > same class of narrowing this callout uses for `createFakeClock`.
 >
-> Twelve real defects surfaced while building and hardening this kit, each
+> Thirteen real defects surfaced while building and hardening this kit, each
 > fixed rather than filed (rule 7), each naming its own failure mode (rule
 > 10):
 > - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
@@ -955,6 +955,16 @@ everyone. CI runs it against all three migrated plugins.
 >   never have blocked on it. Fixed by racing each hook against a 5-second
 >   REAL timer, captured before `createFakeClock().install()` can shadow
 >   `globalThis.setTimeout` with the virtual one.
+> - The zero-delay refire clamp above only covered `setInterval`; a
+>   recursive zero-delay `setTimeout` (`const tick = () => { setTimeout(tick,
+>   0); }; setTimeout(tick, 0);`, an ordinary idiom) hit the identical
+>   infinite loop through a different path — each recursive call creates a
+>   FRESH timer via `schedule()`, not a refire of an existing one, so the
+>   clamp never ran for it. Worse than the original: this loop never yields
+>   to the event loop at all, so it was unkillable by `SIGTERM` in testing,
+>   and locally there is no `timeout-minutes` backstop at all. Fixed by
+>   moving the floor into `schedule()` itself, so every newly scheduled
+>   timer's due time is floored regardless of kind or how it was created.
 >
 > *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
 > against one hand-assembled, hash-matching `.lwplugin` fixture per row —

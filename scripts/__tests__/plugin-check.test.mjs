@@ -495,6 +495,51 @@ describe('plugin-check — the CLI, end to end, one planted-bad fixture per chec
     assert.match(result.stderr, /reached the handle after release/);
   });
 
+  // Regression for the `claude[bot]` review finding on PR #221 (comment
+  // 4100931007): the three zero/omitted/negative-delay tests above all use
+  // `setInterval`, which `advance()`'s own refire clamp
+  // (`earliest.dueAt = now + Math.max(earliest.delay, 1)`) covers. A
+  // recursive zero-delay `setTimeout` — `const tick = () => { setTimeout(
+  // tick, 0); }; setTimeout(tick, 0);`, an ordinary idiom — hit the
+  // identical hang through a different path: each recursive call schedules
+  // a FRESH `timeout`-kind timer via `schedule()`, not a refire of an
+  // existing one, so the refire clamp never ran for it. `schedule()` itself
+  // now floors every new timer's `dueAt` to `now + Math.max(delay, 1)`,
+  // covering both shapes with one fix. Confirmed by hand before the fix:
+  // `timeout 20 node scripts/plugin-check.mjs <fixture>` for a fixture
+  // whose `onActivate` starts exactly this recursive chain (touching
+  // `shell` on each tick, so it is also a genuine leak) hung indefinitely —
+  // `user 0m32s+` CPU time and still running, unkillable by `timeout`'s own
+  // `SIGTERM` because `advance()`'s `for (;;)` loop never yields to the
+  // event loop for Node to process the signal.
+  it('Check 5 (Lifecycle) — refuses a plugin whose onActivate leaks a recursive zero-delay setTimeout chain', { timeout: 8000 }, () => {
+    const bundleText = [
+      "import { jsx } from '/shared/react-jsx-runtime.js';",
+      "function Pane2() { return jsx('div', { children: 'pane2' }); }",
+      "function Pane3() { return jsx('div', { children: 'pane3' }); }",
+      'export default Object.freeze({',
+      "  id: 'recursive-zero-timeout-leak',",
+      "  name: 'RecursiveZeroTimeoutLeak',",
+      "  version: '1.0.0',",
+      '  navigationTree: [],',
+      '  commands: [],',
+      '  views: { pane2: Pane2, pane3: Pane3 },',
+      '  lifecycle: {',
+      '    onActivate(shell) {',
+      '      const tick = () => { shell.setBadgeCount("leak", 1); setTimeout(tick, 0); };',
+      '      setTimeout(tick, 0);',
+      '    },',
+      '  },',
+      '});',
+    ].join('\n');
+    const path = writeFixture('recursive-zero-timeout-leak', { bundleText, id: 'recursive-zero-timeout-leak' });
+    const result = runCli(path, { timeout: 6000 });
+    assert.equal(result.status, 1);
+    assert.doesNotMatch(result.stdout, /plugin-check: PASS/, 'must not print PASS for a plugin leaking a recursive zero-delay setTimeout chain');
+    assert.match(result.stderr, /FAIL \[lifecycle\]/);
+    assert.match(result.stderr, /reached the handle after release/);
+  });
+
   // Regression for the independent review finding on PR #221 (a High-severity
   // "MERGE WITH FIXES" verdict, not the line-288 finding above): an
   // `onActivate` that defers STARTING its leak by one microtask

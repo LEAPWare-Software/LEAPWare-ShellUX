@@ -271,7 +271,24 @@ export function createFakeClock() {
     const id = nextId;
     nextId += 1;
     const safeDelay = typeof delay === 'number' && delay >= 0 ? delay : 0;
-    timers.set(id, { kind, callback, delay: safeDelay, dueAt: now + safeDelay, args });
+    // `Math.max(safeDelay, 1)` for `dueAt`, not `safeDelay` alone: a
+    // zero-delay timer scheduled AT the current `now` — either the plugin's
+    // first call, or a callback recursively re-scheduling itself with the
+    // common "recursive setTimeout" idiom (`const tick = () => {
+    // setTimeout(tick, 0); }; setTimeout(tick, 0);`) — would otherwise get
+    // `dueAt === now`, still `<= deadline` inside `advance()`'s `for (;;)`
+    // loop below, which would pick it straight back up with `now` unmoved —
+    // forever, synchronously, with no `await` to interrupt it (the
+    // `claude[bot]` review finding on PR #221, comment 4100931007: the
+    // `for (;;)` loop's existing interval-refire clamp, a few lines below,
+    // only covered `kind === 'interval'`; a `kind === 'timeout'` callback
+    // that reschedules itself hit the identical hang through a fresh
+    // `schedule()` call instead of a refire). `delay` itself (used by
+    // `longestPendingDelay()`) stays the real, unclamped value — only the
+    // internal scheduling timestamp is floored, so a genuinely leaking
+    // recursive zero-delay chain still runs its course over one `advance()`
+    // budget rather than looping inside a single synchronous call forever.
+    timers.set(id, { kind, callback, delay: safeDelay, dueAt: now + Math.max(safeDelay, 1), args });
     return id;
   }
 
