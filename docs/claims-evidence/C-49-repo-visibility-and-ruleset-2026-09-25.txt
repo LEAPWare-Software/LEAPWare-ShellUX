@@ -1,0 +1,19 @@
+# C-49 evidence: raw API output for #74 and #103, read 2026-09-25T22:27:22Z
+# Both issues were closed on prose read-back (visibility PUBLIC, ruleset 23685990
+# and its rules) with no raw API response pasted into either closing comment.
+# This file pastes the actual `gh api` output the prose summarised.
+
+$ gh api repos/LEAPWare-Software/LEAPWare-ShellUX --jq '{visibility,private}'
+{"private":false,"visibility":"public"}
+
+$ gh api repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990
+{"id":23685990,"name":"main","target":"branch","source_type":"Repository","source":"LEAPWare-Software/LEAPWare-ShellUX","enforcement":"active","conditions":{"ref_name":{"exclude":[],"include":["~DEFAULT_BRANCH"]}},"rules":[{"type":"deletion"},{"type":"non_fast_forward"},{"type":"pull_request","parameters":{"required_approving_review_count":0,"dismiss_stale_reviews_on_push":true,"required_reviewers":[],"require_code_owner_review":false,"dismissal_restriction":{"enabled":false,"allowed_actors":[]},"require_last_push_approval":false,"required_review_thread_resolution":false,"require_extra_approval_for_unattributed_changes":true,"allowed_merge_methods":["squash"]}},{"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":false,"do_not_enforce_on_create":false,"required_status_checks":[{"context":"Verify (ubuntu-latest)","integration_id":15368},{"context":"Verify (macos-latest)","integration_id":15368},{"context":"Verify (windows-latest)","integration_id":15368},{"context":"Browser tests (chromium)","integration_id":15368},{"context":"Declared Node floor (22.13.0)","integration_id":15368},{"context":"Prove claims","integration_id":15368},{"context":"PR evidence","integration_id":15368}]}},{"type":"merge_queue","parameters":{"merge_method":"SQUASH","max_entries_to_build":5,"min_entries_to_merge":1,"max_entries_to_merge":5,"min_entries_to_merge_wait_minutes":5,"grouping_strategy":"ALLGREEN","check_response_timeout_minutes":10}}],"node_id":"RRS_lACqUmVwb3NpdG9yec5OdOj3zgFpa2Y","created_at":"2026-09-18T23:46:59.704Z","updated_at":"2026-09-19T20:38:32.426Z","bypass_actors":[],"current_user_can_bypass":"never","_links":{"self":{"href":"https://api.github.com/repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990"},"html":{"href":"https://github.com/LEAPWare-Software/LEAPWare-ShellUX/rules/23685990"}}}
+
+$ gh api repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets
+[{"id":23685990,"name":"main","target":"branch","source_type":"Repository","source":"LEAPWare-Software/LEAPWare-ShellUX","enforcement":"active","node_id":"RRS_lACqUmVwb3NpdG9yec5OdOj3zgFpa2Y","_links":{"self":{"href":"https://api.github.com/repos/LEAPWare-Software/LEAPWare-ShellUX/rulesets/23685990"},"html":{"href":"https://github.com/LEAPWare-Software/LEAPWare-ShellUX/rules/23685990"}},"created_at":"2026-09-18T23:46:59.704Z","updated_at":"2026-09-19T20:38:32.426Z"}]
+
+# No discrepancy found: ruleset id 23685990 still resolves directly (no 404), and the
+# rulesets list shows it as the repository's only ruleset, so the id named in the plan
+# line is still current. VISIBILITY=public, RULESET_ID=23685990.
+VISIBILITY=public
+RULESET_ID=23685990

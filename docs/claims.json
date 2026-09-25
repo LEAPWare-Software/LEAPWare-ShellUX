@@ -3371,6 +3371,26 @@
       },
       "provenOn": "2026-09-25",
       "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:133"
+    },
+    {
+      "id": "C-49",
+      "box": "#74 and #103's closing decision (make the repo public, add a branch ruleset) is real, but both closing comments stated the read-back values in prose (visibility `PUBLIC`, ruleset 23685990 and its rules) instead of pasting a raw API response. This row pastes the raw `gh api` output for both: repository visibility and the ruleset by id, plus a rulesets list confirming the id is still current.",
+      "class": "manual",
+      "expect": [
+        {
+          "key": "VISIBILITY",
+          "op": "==",
+          "value": "public"
+        },
+        {
+          "key": "RULESET_ID",
+          "op": "==",
+          "value": "23685990"
+        }
+      ],
+      "evidence": "docs/claims-evidence/C-49-repo-visibility-and-ruleset-2026-09-25.txt",
+      "provenOn": "2026-09-25",
+      "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:131"
     }
   ],
   "retired": []
