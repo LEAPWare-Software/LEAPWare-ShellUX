@@ -152,6 +152,7 @@ const CHANNEL = {
    */
   pluginsList: 'shellux:plugins:list',
   pluginsInstall: 'shellux:plugins:install',
+  pluginsInstallRelease: 'shellux:plugins:install-release',
   pluginsEnable: 'shellux:plugins:enable',
   pluginsDisable: 'shellux:plugins:disable',
   pluginsRemove: 'shellux:plugins:remove',
@@ -318,11 +319,15 @@ contextBridge.exposeInMainWorld('shelluxHost', {
    * `webContents` with a refusal (`electron/main/plugins/pluginIpc.ts`). *Tests:*
    * `electron/__tests__/pluginIpc.test.ts` — "refuses a management call whose
    * sender is the extension surface". `install` takes no argument: main opens
-   * the picker, so no renderer string names a path. `id` is checked in main.
+   * the picker, so no renderer string names a path. `installFromRelease` takes
+   * one URL string, which main holds to the LEAPWare-Software release-asset
+   * shape before it makes any request (`electron/main/plugins/releaseSource.ts`);
+   * it never becomes a path. `id` is checked in main.
    */
   plugins: {
     list: (): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsList),
     install: (): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsInstall),
+    installFromRelease: (url: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsInstallRelease, url),
     enable: (id: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsEnable, id),
     disable: (id: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsDisable, id),
     remove: (id: string): Promise<unknown> => ipcRenderer.invoke(CHANNEL.pluginsRemove, id),

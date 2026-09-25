@@ -5,13 +5,15 @@ import { describe, expect, it } from 'vitest';
 import { PLUGIN_CHANNEL, REFUSED_SENDER_REASON, registerPluginIpc } from '../main/plugins/pluginIpc';
 import type { PluginIpcEvent } from '../main/plugins/pluginIpc';
 import type { PluginListing, PluginStore, StoreResult } from '../main/plugins/pluginStore';
+import { RELEASE_URL_PREFIX } from '../main/plugins/releaseSource';
 
 /**
  * ============================================================================
- * THE PLUGIN-MANAGEMENT CHANNELS (ADR-0006 STEP 4), DRIVEN WITHOUT ELECTRON.
+ * THE PLUGIN-MANAGEMENT CHANNELS (ADR-0006 STEPS 4 AND 11), DRIVEN WITHOUT ELECTRON.
  * ============================================================================
- * `registerPluginIpc` takes `ipcMain`, host chrome's `webContents`, the store
- * and the picker as arguments; here each is a recording fake, and the two
+ * `registerPluginIpc` takes `ipcMain`, host chrome's `webContents`, the store,
+ * the picker and the network request as arguments; here each is a recording
+ * fake, and the two
  * "webContents" are two distinct objects, as the two views' are. The comparison
  * under test is the module's own `event.sender !== hostChrome()`.
  *
@@ -50,6 +52,10 @@ function rig(options: { chrome?: unknown; pick?: () => Promise<string | null> } 
       calls.push(`install ${path}`);
       return ok(LISTING);
     },
+    installBytes: (bytes) => {
+      calls.push(`installBytes ${String(bytes.byteLength)}`);
+      return ok(LISTING);
+    },
     setEnabled: (id, enabled) => {
       calls.push(`setEnabled ${String(id)} ${String(enabled)}`);
       return ok(LISTING);
@@ -74,6 +80,10 @@ function rig(options: { chrome?: unknown; pick?: () => Promise<string | null> } 
         calls.push('picker');
         return Promise.resolve('picked/mail.lwplugin');
       }),
+    fetchAsset: (url) => {
+      calls.push(`fetch ${url}`);
+      return Promise.resolve(new Response('{}'));
+    },
     warn: (message) => warnings.push(message),
   });
   const invoke = (sender: unknown, channel: string, ...args: unknown[]): Promise<unknown> => {
@@ -86,8 +96,11 @@ function rig(options: { chrome?: unknown; pick?: () => Promise<string | null> } 
 
 const REFUSED = { ok: false, reason: REFUSED_SENDER_REASON };
 
+/** A URL the release source admits, so a refusal below is the sender's and not the URL's. */
+const RELEASE_URL = `${RELEASE_URL_PREFIX}shellux-plugins/releases/download/v1.0.0/mail.lwplugin`;
+
 describe('the plugin-management channels', () => {
-  it('registers the five management channels, and nothing else', () => {
+  it('registers the six management channels, and nothing else', () => {
     expect([...rig().handlers.keys()].sort()).toEqual(Object.values(PLUGIN_CHANNEL).sort());
   });
 
@@ -96,15 +109,16 @@ describe('the plugin-management channels', () => {
     for (const [channel, args] of [
       [PLUGIN_CHANNEL.list, []],
       [PLUGIN_CHANNEL.install, []],
+      [PLUGIN_CHANNEL.installRelease, [RELEASE_URL]],
       [PLUGIN_CHANNEL.enable, ['mail']],
       [PLUGIN_CHANNEL.disable, ['mail']],
       [PLUGIN_CHANNEL.remove, ['mail']],
     ] as const) {
       expect(await r.invoke(r.extension, channel, ...args), channel).toEqual(REFUSED);
     }
-    // Refused before the store ran and before a picker opened.
+    // Refused before the store ran, before a picker opened and before a request was made.
     expect(r.calls).toEqual([]);
-    expect(r.warnings).toHaveLength(5);
+    expect(r.warnings).toHaveLength(6);
     expect(r.warnings[0]).toBe(`refused ${PLUGIN_CHANNEL.list}: the sender is not host chrome.`);
 
     // The same calls from host chrome reach the store: the refusal was the sender.
@@ -112,7 +126,15 @@ describe('the plugin-management channels', () => {
     await r.invoke(r.chrome, PLUGIN_CHANNEL.enable, 'mail');
     await r.invoke(r.chrome, PLUGIN_CHANNEL.disable, 'mail');
     await r.invoke(r.chrome, PLUGIN_CHANNEL.remove, 'mail');
-    expect(r.calls).toEqual(['list', 'setEnabled mail true', 'setEnabled mail false', 'remove mail']);
+    await r.invoke(r.chrome, PLUGIN_CHANNEL.installRelease, RELEASE_URL);
+    expect(r.calls).toEqual([
+      'list',
+      'setEnabled mail true',
+      'setEnabled mail false',
+      'remove mail',
+      `fetch ${RELEASE_URL}`,
+      'installBytes 2',
+    ]);
   });
 
   it('refuses every sender when host chrome has no live webContents', async () => {
@@ -175,7 +197,7 @@ describe('the plugin-management channels', () => {
 
   it('the preload names every management channel main handles', () => {
     // The preload is a CommonJS realm and cannot import PLUGIN_CHANNEL, so it
-    // spells the five names out. This holds the two lists together: a
+    // spells the six names out. This holds the two lists together: a
     // guardrail against an honest rename on one side only.
     const preload = readFileSync(
       join(dirname(dirname(fileURLToPath(import.meta.url))), 'preload', 'index.cts'),

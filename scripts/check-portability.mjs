@@ -306,6 +306,22 @@ const ALLOWLIST = [
       'hardcoded-hostname only; every other rule still applies.',
   },
   {
+    files: ['electron/__tests__/pluginReleaseSource.test.ts'],
+    rules: ['hardcoded-hostname'],
+    reason:
+      'ADR-0006 step 11. The GitHub Release install source refuses every URL but one ' +
+      'shape on github.com, and this file is its adversarial input table: it must write ' +
+      'github.com, api.github.com, release-assets.githubusercontent.com and lookalikes ' +
+      'as literal strings to show each is refused or admitted as written. Nothing here ' +
+      'is contacted: every case answers from a recording fake standing where net.fetch ' +
+      'stands, and the file asserts that no request is made for a refused URL. The ' +
+      'module under test, electron/main/plugins/releaseSource.ts, is NOT listed and ' +
+      'stays under this rule, so a host literal added to the network code still fails ' +
+      'the build; DOCUMENTED_ENDPOINTS is left to the release-engineering step that ' +
+      'declares the update feed (docs/RELEASE.md section 1). Scoped to this one file ' +
+      'and to hardcoded-hostname only; every other rule still applies.',
+  },
+  {
     files: ['docs/INSTALL.md'],
     rules: ['environment-home-reference'],
     reason:

@@ -3644,6 +3644,15 @@ real at that door and silent about who controls the organisation. The test that 
 pin it is named in ADR-0006's implementation sequence (step 11) and does not exist
 yet; until it does, no document may cite the allowlist as a property of the shell.
 
+> **2026-09-25, step 11 landed.** The door is `electron/main/plugins/releaseSource.ts`,
+> and the allowlist is checked on the URL as written, before any request is made.
+> Still **entry-point validation**, and still silent about who controls the
+> organisation and about where GitHub's redirect leads (ADR-0006 decision 2's
+> step-11 note). *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+> "refuses a URL outside the LEAPWare-Software organisation", "unsigned by D-47:
+> installs a release asset that carries no signature, including one whose bundle
+> and sha512 were replaced together".
+
 ---
 
 ## Related

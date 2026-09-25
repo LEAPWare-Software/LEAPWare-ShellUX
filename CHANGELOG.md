@@ -86,6 +86,54 @@ from so a reader can check it.
   that PR's scope and remain open. Measured: `grep -rn persist-credentials
   .github/workflows/` finds it only in `claude-code-review.yml`.
 
+- **The second plugin install source: a GitHub Release asset URL, behind the
+  LEAPWare-Software organisation allowlist** (ADR-0006 decision 2 / step 11).
+  Host chrome calls a sixth sender-checked channel,
+  `shellux:plugins:install-release` (`shelluxHost.plugins.installFromRelease(url)`
+  in the preload), with one string. Main holds it to
+  `https://github.com/LEAPWare-Software/<repo>/releases/download/<tag>/<name>.lwplugin`
+  in `electron/main/plugins/releaseSource.ts` before any request is made, and
+  checks the string **as written**, because the URL parser `fetch` uses drops
+  tabs, reads `\` as `/` and resolves `..` and `%2e%2e`: a check on the parsed
+  URL would have admitted strings written inside the organisation that request
+  a path outside it. Only an admitted URL reaches the network (`net.fetch`,
+  passed in by `electron/main/index.ts`); the body is read under decision 1's
+  8 MiB bound with a 60-second timeout, and the bytes go to a new
+  `PluginStore.installBytes`, which runs the same `parsePluginPackage`
+  `readPluginPackage` already called, and the same staging-directory-then-rename
+  install as the picker's path — one pipeline, two doors. The allowlist is
+  **entry-point validation**: real at this door, silent about who controls the
+  organisation, and silent about where GitHub's redirect leads (measured
+  2026-09-25 with `curl -sS -D -`: a public release asset answers `302` to
+  `release-assets.githubusercontent.com`, and that host is not checked).
+  Unsigned, by D-47: no signature is read, `lwplugin/1` has no field for one,
+  and a package whose bundle and `sha512` were replaced together installs from
+  this door. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+  "refuses a URL outside the LEAPWare-Software organisation", "checks the URL
+  as written, and admits only spellings the URL parser leaves unchanged",
+  "unsigned by D-47: installs a release asset that carries no signature,
+  including one whose bundle and sha512 were replaced together", "asks for the
+  admitted URL, following redirects, and installs a package that arrives in
+  several chunks", "refuses an error status, an oversized download and an
+  empty response, and installs nothing", "gives up on a download that does not
+  finish in time", "reports a failed request as a refusal, and installs
+  nothing", "runs one download at a time"; `electron/__tests__/pluginIpc.test.ts`
+  — "refuses a management call whose sender is the extension surface" (now six
+  channels), "registers the six management channels, and nothing else".
+  **Not done, stated so it is not read wider:** `net.fetch` itself is not
+  exercised — its redirect handling and its response to the abort are
+  unmeasured, because every case drives a recording fake where it stands; no
+  UI calls the channel before the plugin manager (step 9); the organisation is
+  compared case-sensitively, so `leapware-software` is refused though GitHub
+  serves an owner in any case (measured the same way: `CLI/cli` answered the
+  same `302`), and `releases/latest/download/` URLs are refused as outside
+  decision 2's shape. `check:portability` gained one `ALLOWLIST` entry,
+  scoped to `electron/__tests__/pluginReleaseSource.test.ts` and the
+  `hardcoded-hostname` rule, because that file's adversarial URLs must name
+  real GitHub hosts as literals; the network module itself is not listed and
+  stays under the rule, and `DOCUMENTED_ENDPOINTS` stays empty for the
+  release-engineering step that declares the update feed.
+
 - **`npm run plugin:check <path>` — the conformance kit, and its CI job**
   (ADR-0006 decision 10 / step 8, #57). `scripts/build-plugins.mjs`'s own
   docblock had said since step 7 that checking a built `.lwplugin` against the

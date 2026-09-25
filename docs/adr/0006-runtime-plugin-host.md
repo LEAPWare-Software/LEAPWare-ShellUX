@@ -252,9 +252,56 @@ main a renderer-supplied path).
 > picker returns, and takes no path from the renderer";
 > `electron/__tests__/pluginScheme.test.ts` — "sets aside a state.json that is
 > not UTF-8 JSON, reports it, and starts empty", "flushes state.json to disk
-> before renaming it into place". **Not built:** the GitHub URL source (step
-> 11), and any sweep of a `.staging-*` or `.retired-*` directory left by a
-> crash mid-install, or of a directory a set-aside `state.json` orphaned.
+> before renaming it into place". **Not built:** any sweep of a `.staging-*`
+> or `.retired-*` directory left by a crash mid-install, or of a directory a
+> set-aside `state.json` orphaned.
+>
+> **2026-09-25, step 11 landed — the GitHub Release source as built.**
+> `electron/main/plugins/releaseSource.ts`. Host chrome calls a sixth
+> sender-checked channel, `shellux:plugins:install-release`, with one string
+> (`shelluxHost.plugins.installFromRelease(url)` in the preload); there is no
+> native dialog that asks for a URL, so the string has to come from the
+> renderer, and main checks it before anything else. `parseReleaseAssetUrl`
+> reads the string **as written**, not as parsed: it must start
+> `https://github.com/LEAPWare-Software/` spelled exactly so, have exactly the
+> segments `<repo>/releases/download/<tag>/<name>.lwplugin`, and each segment
+> may hold only `[A-Za-z0-9._+-]`, never `.` or `..` alone. The WHATWG parser
+> `fetch` uses drops tabs, reads `\` as `/` and resolves `..` and `%2e%2e`, so
+> a check on the parsed URL would admit strings that are written inside the
+> organisation and request a path outside it; the test builds three. Only a
+> string that passes reaches `fetchReleaseAsset`'s download, which is not
+> exported on its own. `index.ts` passes `net.fetch`. The body is read under
+> decision 1's 8 MiB bound, with a 60-second timeout, and the bytes go to
+> `PluginStore.installBytes`, which runs `parsePluginPackage` — the validator
+> `readPluginPackage` calls after its bounded read — and then the same staging
+> directory and rename as the picker's path. The allowlist is **entry-point
+> validation**: real at this door, silent about who controls the
+> organisation, and silent about where GitHub's redirect leads (a release
+> asset answered `302` to `release-assets.githubusercontent.com`, measured
+> 2026-09-25 with `curl -sS -D -` on a public `cli/cli` asset; redirects are
+> followed, and the host they lead to is not checked). No signature is read,
+> and `lwplugin/1` has no field for one (D-47); a package whose bundle and
+> `sha512` were replaced together installs from this door. *Tests:*
+> `electron/__tests__/pluginReleaseSource.test.ts` — "refuses a URL outside
+> the LEAPWare-Software organisation", "checks the URL as written, and admits
+> only spellings the URL parser leaves unchanged", "unsigned by D-47: installs
+> a release asset that carries no signature, including one whose bundle and
+> sha512 were replaced together", "refuses an error status, an oversized
+> download and an empty response, and installs nothing", "runs one download
+> at a time"; `electron/__tests__/pluginIpc.test.ts` — "refuses a management
+> call whose sender is the extension surface", which now includes the sixth
+> channel. **Rejected:** writing the download to a temporary `.lwplugin` and
+> handing its path to `install` — it puts unvalidated bytes on disk, needs its
+> own cleanup, and re-reads bytes main already holds; and a download started
+> by the renderer, which would check the allowlist in the process whose input
+> it polices, under a CSP whose `connect-src 'self'` refuses it anyway.
+> **Not measured:** `net.fetch` itself — its redirect handling and its
+> response to the abort — since every case drives a recording fake where
+> `net.fetch` stands; and no UI calls the channel before the plugin manager
+> (step 9). The organisation is compared case-sensitively, so
+> `leapware-software` is refused though GitHub serves an owner in any case
+> (measured the same way: `CLI/cli` answered the same `302`); so is
+> `releases/latest/download/`, which decision 2's shape does not name.
 
 ### 3. The versioned contract: one number, checked before the bundle is ever served — #68 decided
 

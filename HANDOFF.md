@@ -31,6 +31,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - Proof audit corrected, `npm run status` falls back locally (0e); D-27 struck,
   superseded by D-34 (C-44).
 - ADR-0006 steps 7 (#217) and 8 (#57): plugins moved to `plugins/*`; `plugin:check` kit + CI job.
+- ADR-0006 step 11: Release-URL source, org allowlist.
 
 ## In flight
 
@@ -43,8 +44,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## The next step
 
-1. ADR-0006 step 6, 9-11; W3-2 onward.
-2. Plan steps 6, 6c, 7-9; 1.0 tag waits for BuildCraft.
+1. ADR-0006 step 6, 9-10; W3-2 onward.
+2. Plan steps 6, 6c, 7, 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 

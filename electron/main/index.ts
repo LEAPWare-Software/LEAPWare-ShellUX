@@ -463,13 +463,21 @@ async function pickPluginPackage(): Promise<string | null> {
   return result.canceled || path === undefined ? null : path;
 }
 
-/** Decision 6's sender check, over the live window. See `electron/main/plugins/pluginIpc.ts`. */
+/**
+ * Decision 6's sender check, over the live window. See `electron/main/plugins/pluginIpc.ts`.
+ *
+ * `fetchAsset` is Chromium's network stack (`net.fetch`), which the release
+ * source reaches only with a URL `electron/main/plugins/releaseSource.ts`
+ * admitted (ADR-0006 step 11). Not measured in this application: its handling
+ * of the abort signal and of GitHub's redirect.
+ */
 function registerPluginChannels(plugins: PluginStore): void {
   registerPluginIpc({
     ipc: ipcMain,
     hostChrome: () => paneWindow?.contentsOf('chrome') ?? null,
     store: plugins,
     pickPackage: pickPluginPackage,
+    fetchAsset: (url, init) => net.fetch(url, init),
     warn,
   });
 }
