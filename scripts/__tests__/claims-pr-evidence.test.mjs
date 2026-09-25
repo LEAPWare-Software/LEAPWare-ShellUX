@@ -9,7 +9,7 @@ import path from 'node:path';
 import { after, describe, it } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { defaultRunner } from '../claims/lib.mjs';
-import { checkBody, gate, isGateFile, isVerifiedDependabot, parseArgs, registerSchemaChanged, sections } from '../claims/pr-evidence.mjs';
+import { checkBody, gate, hasBotMergeComment, isGateFile, isVerifiedDependabot, parseArgs, registerSchemaChanged, sections } from '../claims/pr-evidence.mjs';
 
 const SHA = '0123456789abcdef0123456789abcdef01234567';
 const body = (overrides = {}) => {
@@ -128,6 +128,87 @@ describe('the Dependabot exemption', () => {
   });
 });
 
+describe('the claude[bot] merge comment (entry-point validation, not an integrity control)', () => {
+  const STALE = 'f'.repeat(40);
+  const t = (n) => `2026-09-${String(20 + n).padStart(2, '0')}T00:00:00Z`;
+  const comment = (body, { login = 'claude[bot]', created_at = t(1) } = {}) => ({ user: { login }, body, created_at });
+  const genuine = (verdict, { sha = SHA } = {}) => `Claude review:\n\nReviewed SHA: ${sha}\nVerdict: ${verdict}\n`;
+
+  it('has no comment at all, or only an unrelated non-bot comment: false', () => {
+    assert.equal(hasBotMergeComment([], SHA), false);
+    assert.equal(hasBotMergeComment([comment('just chatting', { login: 'someone' })], SHA), false);
+  });
+
+  it('a claude[bot] comment at a stale (non-head) SHA: false', () => {
+    assert.equal(hasBotMergeComment([comment(genuine('MERGE', { sha: STALE }))], SHA), false);
+  });
+
+  it('only a clean MERGE opens the gate, not MERGE WITH FIXES', () => {
+    assert.equal(hasBotMergeComment([comment(genuine('MERGE WITH FIXES'))], SHA), false);
+  });
+
+  it('the right SHA and Verdict: MERGE, but authored by LEAPWare-HQ impersonating the format: false', () => {
+    assert.equal(hasBotMergeComment([comment(genuine('MERGE'), { login: 'LEAPWare-HQ' })], SHA), false);
+  });
+
+  it('a genuine claude[bot] comment at the head SHA with Verdict: MERGE: true', () => {
+    assert.equal(hasBotMergeComment([comment(genuine('MERGE'))], SHA), true);
+  });
+
+  it('SHA comparison is case-insensitive', () => {
+    assert.equal(hasBotMergeComment([comment(genuine('MERGE', { sha: SHA.toUpperCase() }))], SHA), true);
+  });
+
+  it('is found among other unrelated comments', () => {
+    const comments = [comment('unrelated', { login: 'someone' }), comment(genuine('MERGE')), comment('another one', { login: 'other-bot' })];
+    assert.equal(hasBotMergeComment(comments, SHA), true);
+  });
+
+  it('F7: an unrelated later claude[bot] reply must not hide a genuine earlier MERGE', () => {
+    const comments = [
+      comment(genuine('MERGE'), { created_at: t(1) }),
+      comment('Sure, happy to help with that question!', { created_at: t(2) }),
+    ];
+    assert.equal(hasBotMergeComment(comments, SHA), true);
+  });
+
+  it('a genuine MERGE retracted by a later, review-shaped DO NOT MERGE at the same SHA: false', () => {
+    const comments = [comment(genuine('MERGE'), { created_at: t(1) }), comment(genuine('DO NOT MERGE'), { created_at: t(2) })];
+    assert.equal(hasBotMergeComment(comments, SHA), false);
+  });
+
+  it('the mirror case: an earlier rejection followed by a later genuine MERGE is honoured', () => {
+    const comments = [comment(genuine('DO NOT MERGE'), { created_at: t(1) }), comment(genuine('MERGE'), { created_at: t(2) })];
+    assert.equal(hasBotMergeComment(comments, SHA), true);
+  });
+
+  it('resolution is by created_at, not array position', () => {
+    const comments = [comment(genuine('MERGE'), { created_at: t(2) }), comment(genuine('DO NOT MERGE'), { created_at: t(1) })];
+    assert.equal(hasBotMergeComment(comments, SHA), true, 'the later-by-time MERGE, even though it appears first in the array, must govern');
+  });
+
+  it('markup-tolerant openers: bold and heading genuine MERGE comments still govern', () => {
+    assert.equal(hasBotMergeComment([comment(`**Claude review:**\n\nReviewed SHA: ${SHA}\nVerdict: MERGE\n`)], SHA), true);
+    assert.equal(hasBotMergeComment([comment(`## Claude Review\n\nReviewed SHA: ${SHA}\nVerdict: MERGE\n`)], SHA), true);
+  });
+
+  it('markup-tolerant openers: bold, heading and bare-verdict retractions are still review-shaped and win', () => {
+    const bold = [comment(genuine('MERGE'), { created_at: t(1) }), comment(`**Claude review:**\n\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`, { created_at: t(2) })];
+    assert.equal(hasBotMergeComment(bold, SHA), false, 'bold opener retraction must not be skipped for lacking a literal "Claude review:" prefix');
+
+    const heading = [comment(genuine('MERGE'), { created_at: t(1) }), comment(`## Claude Review\n\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`, { created_at: t(2) })];
+    assert.equal(hasBotMergeComment(heading, SHA), false, 'heading opener retraction must not be skipped');
+
+    const bare = [comment(genuine('MERGE'), { created_at: t(1) }), comment(`Verdict: DO NOT MERGE\n`, { created_at: t(2) })];
+    assert.equal(hasBotMergeComment(bare, SHA), false, 'a bare line-anchored Verdict: line alone must count as review-shaped');
+  });
+
+  it('within one comment, the LAST Reviewed SHA:/Verdict: pair wins, not the first', () => {
+    const body = `Claude review:\n\nReviewed SHA: ${SHA}\nVerdict: MERGE\n\n(revised)\nReviewed SHA: ${SHA}\nVerdict: DO NOT MERGE\n`;
+    assert.equal(hasBotMergeComment([comment(body)], SHA), false);
+  });
+});
+
 describe('arguments', () => {
   it('requires an event it knows', () => {
     assert.deepEqual(parseArgs(['--event', 'pull_request', '--pr', '5']), { event: 'pull_request', pr: '5', headRef: null });
@@ -174,13 +255,19 @@ function project() {
   return clone;
 }
 
-function ghDouble({ bodyText, commits }) {
+const GENUINE_MERGE_COMMENT = [{ user: { login: 'claude[bot]' }, body: `Claude review:\n\nReviewed SHA: ${SHA}\nVerdict: MERGE\n`, created_at: '2026-09-20T00:00:00Z' }];
+
+function ghDouble({ bodyText, commits, comments = GENUINE_MERGE_COMMENT }) {
   return (cmd, args, opts) => {
     if (cmd !== 'gh') return defaultRunner(cmd, args, opts);
     if (args.at(-1).endsWith('/commits')) {
       // --paginate --slurp: one array per page. Split so the flatten is exercised.
       assert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);
       return { status: 0, stdout: JSON.stringify([commits.slice(0, 1), commits.slice(1)]), stderr: '' };
+    }
+    if (args.at(-1).endsWith('/comments')) {
+      assert.deepEqual(args.slice(0, 3), ['api', '--paginate', '--slurp']);
+      return { status: 0, stdout: JSON.stringify([comments]), stderr: '' };
     }
     return { status: 0, stdout: JSON.stringify({ head: { sha: SHA }, body: bodyText }), stderr: '' };
   };
@@ -211,6 +298,22 @@ describe('the gate end to end', () => {
     const lines = [];
     assert.equal(gate({ event: 'pull_request', pr: '7', repo: 'o/r', cwd, run: ghDouble({ bodyText: '', commits: bot }), log: (l) => lines.push(l) }), 0);
     assert.ok(lines.some((l) => /dependabot\[bot\].*skipped/.test(l)));
+  });
+
+  it('fails when the body is otherwise complete but no comment carries the claude[bot] MERGE verdict', () => {
+    const cwd = project();
+    const text = body().replace('docs/plans/v1-production.md:108', 'docs/plans/p.md:2').replace('Rows reviewed: C-01, C-02', 'Rows reviewed: none').replace('scripts/claims/lib.mjs', 'scripts/claims/gate.mjs');
+    const lines = [];
+    const code = gate({ event: 'pull_request', pr: '7', repo: 'o/r', cwd, run: ghDouble({ bodyText: text, commits: human, comments: [] }), log: (l) => lines.push(l) });
+    assert.equal(code, 1);
+    assert.ok(lines.some((l) => /no comment authored by claude\[bot\]/.test(l)));
+  });
+
+  it('passes when the body is complete AND a genuine claude[bot] MERGE comment is present', () => {
+    const cwd = project();
+    const text = body().replace('docs/plans/v1-production.md:108', 'docs/plans/p.md:2').replace('Rows reviewed: C-01, C-02', 'Rows reviewed: none').replace('scripts/claims/lib.mjs', 'scripts/claims/gate.mjs');
+    const lines = [];
+    assert.equal(gate({ event: 'pull_request', pr: '7', repo: 'o/r', cwd, run: ghDouble({ bodyText: text, commits: human, comments: GENUINE_MERGE_COMMENT }), log: (l) => lines.push(l) }), 0, lines.join('\n'));
   });
 
   it('fails when a merge-queue ref names no pull request, and when a pull request number is missing', () => {

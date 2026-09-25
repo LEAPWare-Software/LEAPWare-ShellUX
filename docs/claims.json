@@ -3225,6 +3225,78 @@
       },
       "provenOn": "2026-09-25",
       "addedBy": "plan step 3 tick (docs/plans/v1-production.md line 125)"
+    },
+    {
+      "id": "C-46",
+      "box": "`hasBotMergeComment`'s review-shaped-comment selection: `PR evidence` fails unless the LATEST *review-shaped* `claude[bot]` comment (a markup-tolerant `Claude review` opener, OR a line-anchored `Reviewed SHA:` line, OR a line-anchored `Verdict:` line) carries `Reviewed SHA:` equal to the head SHA and a clean `Verdict: MERGE`; an unrelated, non-review-shaped later `claude[bot]` reply is skipped rather than treated as \"the latest\" (D-55 round 3, fixing F7). This is **entry-point validation**, not an integrity control: real at the `PR evidence` check, silent about every other route a comment claiming that GitHub login could arrive by.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/claude-bot-gate.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "no_review_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "stale_sha_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "leapware_hq_impersonation_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "unrelated_later_reply_does_not_hide_earlier_merge_passes",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "superseded_stale_merge_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "genuine_latest_merge_accepted_passes",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "bold_opener_retraction_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "heading_opener_retraction_fails",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "bare_verdict_retraction_fails",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "revert hasBotMergeComment to the pre-fix #206 behaviour: take the single latest claude[bot] comment by created_at, with no review-shaped filtering at all",
+        "edits": [
+          {
+            "file": "scripts/claims/pr-evidence.mjs",
+            "replace": [
+              "  const reviewShaped = bot\n    .filter((c) => {\n      const text = String(c?.body ?? '');\n      return REVIEW_OPENER.test(text) || lastField(text, 'Reviewed SHA') !== null || lastField(text, 'Verdict') !== null;\n    })\n    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));",
+              "  const reviewShaped = bot.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); // PROBE: naive revert, no review-shaped filtering at all"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-25",
+      "addedBy": "D-55 PR B (lane C conductor, cloud, 2026-09-25): the claude[bot] merge gate itself, rebased off #206 with the issue_comment trigger dropped (fork code-execution finding, D-55 debate) and the F7 comment-selection bug fixed per the debate's round-3 review-shaped-comment algorithm."
     }
   ],
   "retired": []

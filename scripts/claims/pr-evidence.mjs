@@ -81,6 +81,19 @@ function field(text, name) {
 }
 
 /**
+ * Same shape as `field()`, but the LAST matching line rather than the first. `field()`'s
+ * regex has no `g` flag, so `.match()` stops at the first hit — deliberately wrong here,
+ * because a bot comment can carry more than one `Reviewed SHA:`/`Verdict:` pair (a draft
+ * followed by a revision in the same comment, or an edited comment), and the final line is
+ * the authoritative one.
+ */
+function lastField(text, name) {
+  const matches = [...text.matchAll(new RegExp(`^[ \\t]*[-*]?[ \\t]*\\**${name}:\\**[ \\t]*(.*)$`, 'gmi'))];
+  const m = matches.at(-1);
+  return m ? m[1].replace(/[`*]/g, '').trim() : null;
+}
+
+/**
  * Every rule of §3.3 against one body. Returns a list of failure messages.
  * *Tests:* scripts/__tests__/claims-pr-evidence.test.mjs — "fails a body whose Reviewed SHA is not the head SHA".
  */
@@ -181,6 +194,49 @@ export function isVerifiedDependabot(commits) {
   );
 }
 
+/** A pull request's own comments, which GitHub serves through the issues endpoint. */
+export function ghPullComments(repo, number, run = defaultRunner) {
+  return ghJsonAllPages(`repos/${repo}/issues/${number}/comments`, run);
+}
+
+// A markup-tolerant "Claude review" opener: case-insensitive, and tolerant of leading
+// markdown heading markers (`#` to `######`), bold markers (`**`) and whitespace before the
+// words, so it matches `Claude review:`, `**Claude review:**` and `## Claude Review` alike.
+const REVIEW_OPENER = /^[ \t]*#{0,6}[ \t]*\**[ \t]*claude review\b/im;
+
+/**
+ * Whether `comments` carries a genuine claude[bot] `MERGE` verdict at `headSha`.
+ *
+ * This is **entry-point validation, not an integrity control** (CLAUDE.md's vocabulary
+ * rules): it is real at the door it guards, the `PR evidence` check — it rejects a missing
+ * review, a stale SHA, an author who is not `claude[bot]`, or a verdict that is not a clean
+ * `MERGE` on the comment it selects — and it is silent about every other route a comment
+ * claiming that GitHub login could arrive by.
+ *
+ * Only the latest *review-shaped* `claude[bot]` comment ever governs (D-55, round 3,
+ * fixing F7). A comment is review-shaped when it has ANY of: the `REVIEW_OPENER` above, a
+ * line-anchored `Reviewed SHA:` line, or a line-anchored `Verdict:` line. An unrelated later
+ * `claude[bot]` reply that is none of these (e.g. a plain `@claude`-mention answer) is
+ * skipped entirely — it never counts as "the latest" — and once the latest review-shaped
+ * comment is selected, a missing or malformed field on THAT comment is `false`; nothing
+ * ever falls back to an earlier comment.
+ * *Tests:* scripts/__tests__/claims-pr-evidence.test.mjs — "an unrelated later claude[bot] reply must not hide a genuine earlier MERGE".
+ */
+export function hasBotMergeComment(comments, headSha) {
+  const bot = (Array.isArray(comments) ? comments : []).filter((c) => c?.user?.login === 'claude[bot]');
+  const reviewShaped = bot
+    .filter((c) => {
+      const text = String(c?.body ?? '');
+      return REVIEW_OPENER.test(text) || lastField(text, 'Reviewed SHA') !== null || lastField(text, 'Verdict') !== null;
+    })
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  if (reviewShaped.length === 0) return false;
+  const text = String(reviewShaped.at(-1).body ?? '');
+  const sha = lastField(text, 'Reviewed SHA');
+  const verdict = lastField(text, 'Verdict');
+  return sha !== null && sha.toLowerCase() === String(headSha).toLowerCase() && verdict === 'MERGE';
+}
+
 export function gate({ event, pr, headRef, repo = DEFAULT_REPO, cwd = REPO_ROOT, run = defaultRunner, log = console.log }) {
   const number = event === 'merge_group' ? prNumberFromQueueRef(headRef) : Number(pr);
   if (!Number.isInteger(number) || number <= 0) throw new Error(`no pull request number (event ${event})`);
@@ -212,6 +268,12 @@ export function gate({ event, pr, headRef, repo = DEFAULT_REPO, cwd = REPO_ROOT,
     deletedPlanFiles: diff.deletedPlanFiles,
     gateFiles,
   });
+
+  const comments = ghPullComments(repo, number, run);
+  if (!hasBotMergeComment(comments, headSha)) {
+    failures.push(`no comment authored by claude[bot] carries Reviewed SHA: ${headSha} and Verdict: MERGE`);
+  }
+
   log(`PR #${number} at ${headSha}: rows to name ${requiredRows.join(', ') || 'none'}; items removed or reworded ${diff.removedOrReworded.length}; gate files ${gateFiles.join(', ') || 'none'}`);
   for (const f of failures) log(annotation('error', f));
   log(failures.length ? `pr-evidence: ${failures.length} failure(s)` : 'pr-evidence: the body carries every required field');
