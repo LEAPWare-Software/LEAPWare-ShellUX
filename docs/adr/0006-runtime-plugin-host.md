@@ -838,7 +838,7 @@ everyone. CI runs it against all three migrated plugins.
 > to the live React registry and cannot be called standalone outside it, the
 > same class of narrowing this callout uses for `createFakeClock`.
 >
-> Nine real defects surfaced while building and hardening this kit, each
+> Ten real defects surfaced while building and hardening this kit, each
 > fixed rather than filed (rule 7), each naming its own failure mode (rule
 > 10):
 > - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
@@ -928,6 +928,17 @@ everyone. CI runs it against all three migrated plugins.
 >   `shell`, was silently discarded into a false PASS. Fixed by narrowing the
 >   catch to `error instanceof runtime.ShellUXError && error.code === 'REVOKED'`;
 >   anything else is now reported as a `lifecycle` FAIL.
+> - The internal-rejection tracking two defects above added used
+>   `internalRejection === undefined` as its own "nothing has surfaced yet"
+>   sentinel, but `undefined` is itself a legal rejection reason
+>   (`Promise.reject()`, `Promise.reject(undefined)`), and a `??=` assignment
+>   "writing" `undefined` over `undefined` is a no-op — so a plugin that
+>   fire-and-forgot exactly that rejection value left `internalRejection` at
+>   `undefined` forever, and `internalRejectionFail()` kept returning `null`:
+>   a false PASS for the one rejection value none of the existing fixtures
+>   tried. Fixed by tracking presence with a separate boolean,
+>   `hasInternalRejection`, rather than comparing the captured value itself
+>   to the sentinel.
 >
 > *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
 > against one hand-assembled, hash-matching `.lwplugin` fixture per row —
