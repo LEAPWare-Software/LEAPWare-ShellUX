@@ -38,6 +38,35 @@ jobs:
         with:
           fetch-depth: 1
 
+      # D-55 follow-up (#211): claude-code-review.yml already grants gh pr
+      # view/diff/comment (line below mirrors its allowlist exactly), but that
+      # workflow skips fork PRs outright (D-49). This workflow does not, and an
+      # @claude mention can arrive on a fork PR's issue_comment,
+      # pull_request_review_comment or pull_request_review. Refuse those before
+      # the widened grant is ever used. This is a guardrail (in-repo YAML any
+      # writer can edit), not an integrity control; it is entry-point validation
+      # at this trigger only, not a claim about any other route. A failed step
+      # here halts the job — GitHub Actions runs the next step only on
+      # success() by default — so "Run Claude Code" never executes for a
+      # refused fork PR.
+      - name: Refuse @claude on fork pull requests
+        id: fork-guard
+        if: >-
+          (github.event_name == 'issue_comment' && github.event.issue.pull_request != null) ||
+          github.event_name == 'pull_request_review_comment' ||
+          github.event_name == 'pull_request_review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          HEAD_REPO=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq .head.repo.full_name)
+          if [ "$HEAD_REPO" != "${{ github.repository }}" ]; then
+            echo "::error::@claude refused on PR #${PR_NUMBER}: head repo '$HEAD_REPO' is not '${{ github.repository }}' (a fork). D-55 follow-up (#211): the gh pr view/diff/comment grant is not extended to fork PRs."
+            exit 1
+          fi
+          echo "PR #${PR_NUMBER} head repo is ${{ github.repository }}; not a fork, proceeding."
+
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@4036a180cf690f49529f5d8c79c998855287f590 # v1, pinned 2026-09-18: a moving tag would run new third-party code with this repository's tokens on its next push
@@ -51,8 +80,8 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          # D-55 follow-up (#211): widened, symmetric with claude-code-review.yml's
+          # allowlist, so an @claude mention can review a PR the same way the
+          # automated reviewer does. Guarded above: refused outright on a fork PR.
+          claude_args: '--allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"'
 

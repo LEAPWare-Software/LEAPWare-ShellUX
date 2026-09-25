@@ -40,6 +40,31 @@ from so a reader can check it.
   (`docs/decisions/debates/D-55-pr206-bootstrap-gate.md`); PR B and a follow-up,
   tracked on #211, remain open.
 
+- **`claude.yml`'s `@claude`-mention grant widened to match `claude-code-review.yml`,
+  with a fork guard added so the wider grant cannot be used on a fork PR** (D-55
+  follow-up, #211). `claude_args` now sets `--allowedTools
+  "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*)"`, mirroring
+  `claude-code-review.yml`'s existing allowlist exactly, so an `@claude` mention can
+  read and comment on a PR the way the automated reviewer does — this workflow had no
+  `gh pr` grant at all before. Unlike `claude-code-review.yml`, this workflow does not
+  skip fork PRs (D-49 only covers the `pull_request`-triggered reviewer), and an
+  `@claude` mention reaches it via `issue_comment` on a PR, `pull_request_review_comment`
+  or `pull_request_review` — any of which a fork PR carries. A new step, "Refuse
+  @claude on fork pull requests", runs only for those three cases, calls `gh api
+  repos/<repo>/pulls/<n> --jq .head.repo.full_name` and exits 1 if the PR's head repo
+  is not this repository; GitHub Actions runs the next step only on `success()` by
+  default, so a refusal here stops "Run Claude Code" from running at all — a real,
+  fail-closed guard, not a cosmetic one. **This is a guardrail (in-repo YAML any
+  writer can edit), not an integrity control, and entry-point validation only at this
+  trigger** (CLAUDE.md's vocabulary rules): it says nothing about any other route.
+  Existing author-association restriction (OWNER/MEMBER/COLLABORATOR on the
+  commenter) is unchanged. **Not done as part of this change:** no `node:test` was
+  added, because the new decision (a live `gh api` lookup compared to
+  `github.repository`) has no pure, mockable branch beyond the workflow's own `if:`
+  expression and a one-line bash string comparison against live API data — unlike
+  `auto-queue.mjs`'s decision logic, which runs on data already fetched into a plain
+  function.
+
 ### Added
 
 - **`PR evidence` now also requires a genuine `claude[bot]` `MERGE` comment, not just

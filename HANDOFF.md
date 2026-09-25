@@ -39,7 +39,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md). Shared state: #187.
 - Gate 4: #189's answer names six screens against a record of nine, so no decision row
   is written and step 9 and wave 4 wait. Record: `docs/design/gate4/`.
-- D-55 PR A (#211) landed; PR B lands with this PR: the `claude[bot]` merge gate, its `issue_comment` trigger dropped (fork code-execution finding, D-55).
+- D-55 (#211): PR A and PR B (the `claude[bot]` gate) landed. `claude.yml` follow-up: gh pr view/diff/comment grant widened, fork-guarded.
 
 ## The next step
 
