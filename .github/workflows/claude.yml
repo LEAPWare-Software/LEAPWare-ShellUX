@@ -92,11 +92,14 @@ jobs:
           # prompt: 'Update the pull request description to include a summary of changes.'
 
           # D-55 follow-up (#211/#227): before this line existed, claude_args was
-          # unset, so this job ran on the action's own default tool policy. Adding
-          # an explicit --allowedTools flag REPLACES that default rather than
-          # extending it, so Read/Grep/Glob are named here too (not just the three
-          # gh pr commands #211 asked for) to avoid silently breaking a plain
-          # "@claude explain this file" issue mention that isn't about a PR at all.
+          # unset, so this job ran on the action's own default tool policy.
+          # docs/decisions/debates/D-55-pr206-bootstrap-gate.md lists "the
+          # pytest-equivalent live run of --allowedTools" under Not measured — so
+          # whether an explicit --allowedTools flag replaces that default outright
+          # or only adds to it is unverified, not asserted here. Read/Grep/Glob are
+          # named here too (not just the three gh pr commands #211 asked for) so
+          # that, under either mechanism, a plain "@claude explain this file" issue
+          # mention that isn't about a PR at all keeps working.
           # Read/Grep/Glob mirror claude-code-review.yml's own allowlist exactly;
           # its mcp__github_inline_comment__create_inline_comment entry is not
           # carried over, deliberately — that tool posts structured inline PR

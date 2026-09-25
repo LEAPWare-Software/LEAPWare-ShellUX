@@ -76,10 +76,12 @@ from so a reader can check it.
   allowlist was true only for the three `gh pr` entries — `claude-code-review.yml`'s
   actual allowlist also carries `Read`, `Grep`, `Glob` and
   `mcp__github_inline_comment__create_inline_comment`. Since this job had no
-  `claude_args` at all before this change, adding an explicit `--allowedTools` flag
-  **replaces** the action's own default tool policy rather than extending it — so
-  without `Read`/`Grep`/`Glob`, a plain `@claude explain this file` issue mention (not
-  about a PR) would have lost the ability to read anything. Fixed in the same change:
+  `claude_args` at all before this change, whether an explicit `--allowedTools` flag
+  **replaces** the action's own default tool policy or only adds to it is unverified —
+  `docs/decisions/debates/D-55-pr206-bootstrap-gate.md` lists "the pytest-equivalent
+  live run of `--allowedTools`" under Not measured. Under either mechanism, omitting
+  `Read`/`Grep`/`Glob` risked a plain `@claude explain this file` issue mention (not
+  about a PR) losing the ability to read anything. Fixed in the same change:
   `Read`, `Grep`, `Glob` added to the allowlist, matching `claude-code-review.yml`
   exactly for those three. `mcp__github_inline_comment__create_inline_comment` is
   deliberately **not** carried over: that MCP tool posts structured inline PR review
@@ -88,8 +90,8 @@ from so a reader can check it.
   **Fourth correction, also found by `claude[bot]`'s review, more serious than the
   first three:** the fork guard's protection was narrower than "closes the
   fork-mention route" claimed. It validates only the head repo of the PR the
-  *triggering* event is attached to — it does not, and structurally cannot, constrain
-  which PR number the widened `gh pr view`/`gh pr diff` tools are actually invoked
+  *triggering* event is attached to — it does not constrain, and nothing in this guard
+  can constrain, which PR number the widened `gh pr view`/`gh pr diff` tools are actually invoked
   against once the agent is running, since no `prompt:` override is set and the
   action's default behavior is to follow the tagging comment's free text verbatim.
   Two distinct routes past it: (a) the `issues` trigger (opened/assigned) isn't
