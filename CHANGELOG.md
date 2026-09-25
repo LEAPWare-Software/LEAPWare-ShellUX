@@ -143,7 +143,11 @@ from so a reader can check it.
   `docs/readme-body.md` (with its relative links adjusted for the new path, on
   the pattern already used by `docs/history/readme-status-2026-08.md`), and the
   Documentation table gained a row pointing at it. No behaviour changed; no new
-  test, because none is exercised by prose reordering.
+  *behavioral* test, since this only reorders prose. Two new `docs/claims.json`
+  register rows, **C-47** and **C-48**, each with a check script
+  (`scripts/claims/checks/security-readme-reorder.mjs`) and a mutation probe,
+  prove the reorder and the no-overclaim wording — the box-linter (§3.2)
+  requires a proof row before either plan box can tick.
 
 ### Added
 

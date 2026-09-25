@@ -3321,7 +3321,7 @@
         }
       ],
       "probe": {
-        "name": "move Supported versions back to the top of SECURITY.md",
+        "name": "rename Supported versions so it can't be found in order",
         "edits": [
           {
             "file": "SECURITY.md",

@@ -2,7 +2,7 @@
 
 For LEAPWare operators installing the packaged Windows application. If you are
 building or contributing to the project instead, see
-[`README.md`](../README.md#getting-started).
+[`docs/readme-body.md`](readme-body.md#getting-started).
 
 **Nothing has been released yet.** `package.json` is at `0.1.0`, there is no
 tag, and there is no installer to download (see [`RELEASE.md`](RELEASE.md)).
