@@ -30,7 +30,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   gate-4 record (#188, D-52).
 - Proof audit corrected, `npm run status` falls back locally (0e); D-27 struck,
   superseded by D-34 (C-44).
-- ADR-0006 steps 7 (#217) and 8 (#57): plugins moved to `plugins/*`; `plugin:check` kit + CI job.
+- ADR-0006 steps 7-8 (#217/#57): plugins in `plugins/*`; `plugin:check` + CI.
 - ADR-0006 step 11: Release-URL source, org allowlist.
 
 ## In flight
@@ -40,7 +40,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md). Shared state: #187.
 - Gate 4: #189's answer names six screens against a record of nine, so no decision row
   is written and step 9 and wave 4 wait. Record: `docs/design/gate4/`.
-- D-55 PR A (#211) landed; PR B lands with this PR: the `claude[bot]` merge gate, its `issue_comment` trigger dropped (fork code-execution finding, D-55).
+- D-55 (#211/#226) landed: `claude[bot]` merge gate, `issue_comment` trigger dropped (fork code-exec finding).
 
 ## The next step
 
