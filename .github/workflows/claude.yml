@@ -129,8 +129,7 @@ jobs:
           # instructions" behavior — not attempted without confirming that first)
           # or dropping free-form gh pr access entirely in favour of a fixed,
           # non-configurable prompt, as claude-code-review.yml already does. Left
-          # open; CHANGELOG.md and the PR record this as a known, unresolved limit,
-          # not a closed one.
+          # open, filed as #228 per CLAUDE.md rule 7 rather than left as prose only.
           claude_args: >-
             --allowedTools "${{ ((github.event_name == 'issue_comment' &&
             github.event.issue.pull_request != null) || github.event_name ==

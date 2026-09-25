@@ -107,8 +107,8 @@ from so a reader can check it.
   `pull_request_review_comment`, `pull_request_review`); an `issues` mention gets
   `Read`/`Grep`/`Glob` only, since there is no legitimate need for `gh pr` tools on a
   plain issue and no PR for the guard to check in the first place. **Route (b) is
-  NOT fixed and is stated here as an open, unresolved limit, not a closed one:**
-  closing it needs either a `prompt:` override that constrains every `gh pr`
+  NOT fixed and is filed as #228 per rule 7, not left as prose-only:** closing it
+  needs either a `prompt:` override that constrains every `gh pr`
   invocation to the triggering PR's own number (unverified in this session whether
   adding a custom `prompt:` would also silently replace the action's default "follow
   the tagging comment's instructions" behavior — not attempted without confirming
