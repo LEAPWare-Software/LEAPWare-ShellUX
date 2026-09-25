@@ -185,25 +185,32 @@ export function parseReleaseAssetUrl(value: unknown): ReleaseUrlResult {
 }
 
 /**
- * Race `promise` against `signal` firing. `controller.abort()` firing the
- * `abort` event on its own signal is guaranteed by the platform, not by
- * whatever `promise` is waiting on — so this settles even when the network
- * layer a `promise` depends on never notices the signal at all. *Tests:*
- * `electron/__tests__/pluginReleaseSource.test.ts` — "gives up on a download
- * whose network layer never notices the abort signal".
+ * Race `promise` against `signal` firing. `controller.abort()` reaching its
+ * own signal's `onabort` is guaranteed by the platform, not by whatever
+ * `promise` is waiting on — so this settles even when the network layer a
+ * `promise` depends on never notices the signal at all. Uses the `onabort`
+ * property, not `addEventListener`: `electron/__tests__/noElectronListener.test.ts`
+ * holds every file under `electron/` to zero DOM-listener calls, absolute, no
+ * allowlist, and this main-process module is one of them. Only one `raceAbort`
+ * is ever pending per signal at a time here — each call awaits the last before
+ * starting the next on the same `controller` — so the single `onabort` slot is
+ * never contended. *Tests:* `electron/__tests__/pluginReleaseSource.test.ts` —
+ * "gives up on a download whose network layer never notices the abort signal".
  */
 function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason as Error);
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(signal.reason as Error);
-    signal.addEventListener('abort', onAbort, { once: true });
+    signal.onabort = () => {
+      signal.onabort = null;
+      reject(signal.reason as Error);
+    };
     promise.then(
       (value) => {
-        signal.removeEventListener('abort', onAbort);
+        signal.onabort = null;
         resolve(value);
       },
       (error: unknown) => {
-        signal.removeEventListener('abort', onAbort);
+        signal.onabort = null;
         reject(error as Error);
       },
     );
