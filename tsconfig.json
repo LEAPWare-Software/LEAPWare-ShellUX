@@ -43,6 +43,9 @@
   "include": [
     "src",
     "e2e",
+    // ADR-0006 step 10's packaged lane: a sibling of `e2e/`, never run by
+    // `verify`, and type-checked by it all the same.
+    "e2e-packaged",
     "electron/__tests__",
     // ADR-0006 step 7: the three first-party plugins, moved out of `src/mocks/`
     // and `src/examples/`. Each imports the host only through `@shellux/sdk`
@@ -50,6 +53,7 @@
     "plugins",
     "vite.config.ts",
     "vitest.config.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "playwright.packaged.config.ts"
   ]
 }

@@ -126,6 +126,36 @@ from so a reader can check it.
 
 ### Added
 
+- **The packaged plugin end-to-end lane, prepared and never run** (ADR-0006 step
+  10; `docs/cloud/runbook.md` lane A item 3). `e2e-packaged/plugin-lifecycle.spec.ts`
+  drives a packaged build through Playwright's `_electron.launch()`, with its own
+  `playwright.packaged.config.ts` beside `playwright.config.ts` rather than inside
+  it, and is started by `npm run test:packaged -- <path to packaged executable>`
+  (`scripts/packaged-e2e.mjs`). The path is a required argument with no default,
+  as `scripts/csp-smoke.mjs`'s is and as ADR-0006 decision 10 requires of
+  `plugin:check`; Playwright Test takes no user arguments, so the wrapper hands the
+  checked path to the config in one variable it sets on its own child, and the
+  config throws, naming the command, without it. Neither is in `verify` or CI: the
+  lane needs a packaged build and a desktop, which the sandbox this was written in
+  cannot provide, so **step 10 is not done and no case has run against an app** —
+  a `needs-owner` issue asks for the run. Of the acceptance line's five
+  checkpoints, the spec asserts *install* (main's real installer; the native
+  picker stubbed inside main), *appears* and *disable → gone* at the store's
+  listing and the `/plugins/` route only, and *the shell survives* narrowed to a
+  killed extension renderer with no plugin in it. It cannot assert the plugin
+  manager (step 9) or *crashed* (step 6 builds the loader and fault reports that
+  would produce it); those three cases are `test.fixme` with the reason, not
+  stand-ins. `tsconfig.json` now type-checks `e2e-packaged/` and the new config;
+  `vitest.config.ts` needed no exclude, since neither its test `include` nor its
+  coverage `include` names the directory, which is how `e2e/` stays out today.
+  How a human runs it, and what was observed of its two early failures here:
+  `docs/runbooks/packaged-plugin-e2e.md`. *Tests:*
+  `scripts/__tests__/packaged-e2e.test.mjs` — "refuses to start without a path to
+  the packaged executable, and prints the usage", "refuses a path that names
+  nothing, and a path that names a directory", "the config refuses to load when
+  started without the wrapper, and names the command to run", "through the
+  wrapper, --list loads the spec and names every checkpoint, launching nothing".
+
 - **`PR evidence` now also requires a genuine `claude[bot]` `MERGE` comment, not just
   the PR body's own say-so** (D-55 PR B, #211; `scripts/claims/pr-evidence.mjs`, row
   C-46). `hasBotMergeComment(comments, headSha)` reads the pull request's comments

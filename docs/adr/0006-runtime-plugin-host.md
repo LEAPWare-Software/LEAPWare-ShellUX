@@ -1145,6 +1145,52 @@ bundle. The plugins' own tests move with them.
 > `.lwplugin` files to a GitHub Release, or installing them in the end-to-end lane
 > (step 10/11) — none of that is reachable from this sandbox, which cannot launch
 > a packaged Electron app or publish a release.
+>
+> **2026-09-25, step 10 prep landed — the packaged lane, written and never run;
+> step 10 itself is open.** `e2e-packaged/plugin-lifecycle.spec.ts`, its harness
+> `e2e-packaged/packaged.ts` and `playwright.packaged.config.ts` drive a
+> packaged build through Playwright's `_electron.launch()`, started by `npm run
+> test:packaged -- <executable>` (`scripts/packaged-e2e.mjs`). A sibling of
+> `e2e/`, not a project in `playwright.config.ts`, whose banner says it cannot
+> see the packaged app. Not in `verify` and not in CI: it needs a packaged build
+> and a desktop, and it was written in a sandbox that has neither, so **no case
+> in it has run against an app**. Step 10 stays open and owner/VM-only
+> (`docs/cloud/runbook.md`); how a human runs it is
+> `docs/runbooks/packaged-plugin-e2e.md`. The executable path is the wrapper's
+> one required argument, decision 10's "from argv, never an environment
+> variable": Playwright Test takes no user arguments, so the wrapper hands the
+> checked path to the config in one variable it sets on its own child, and the
+> config throws without it. *Tests:* `scripts/__tests__/packaged-e2e.test.mjs` —
+> "refuses to start without a path to the packaged executable, and prints the
+> usage", "the config refuses to load when started without the wrapper, and
+> names the command to run", "through the wrapper, --list loads the spec and
+> names every checkpoint, launching nothing" — which exercise the wrapper and
+> the spec's loading, and nothing a packaged app does. What the spec reaches,
+> per checkpoint of row 10: *install* through main's real installer, called
+> from host chrome's bridge, with `dialog.showOpenDialog` replaced inside main
+> because Playwright cannot drive a native dialog — everything after the picker
+> returns a path is shipped code, and the picker is not exercised; *appears*
+> and *disable → gone* at the store's listing and the `/plugins/` route only,
+> because decision 11's plugin manager is step 9 and does not exist; *crashed*
+> not at all — no surface loader runs plugin code, no fault report reaches
+> main, nothing records `crashed` (step 6), nothing would show it (step 9), and
+> no crashing fixture plugin exists; *the shell survives* narrowed to an
+> extension renderer killed with Electron's own
+> `webContents.forcefullyCrashRenderer()`, with no plugin in it, and brought
+> back by the `render-process-gone` branch in `electron/main/paneViews.ts`.
+> Decision 9 has no crash-simulation hook to reuse, because step 6 has not
+> built one; nothing is added to the application for this lane. The three
+> checkpoints it cannot reach are `test.fixme` cases carrying those reasons,
+> not stand-ins written under the acceptance line's words. The package is
+> `plugins/hello`'s, from `npm run plugins:build`, checked by
+> `parsePluginPackage` against the checkout's contract before anything
+> launches. **Not verified:** that `app.getPath('userData')` follows the
+> `--user-data-dir` switch the harness launches with (the harness asks the
+> running app, and refuses to install when the answer differs); that
+> Playwright's page list holds both `WebContentsView`s; that Ctrl+K sent by
+> `keyboard.press` reaches host chrome's palette. **Step 10 closes** when all
+> seven cases run green on a packaged build with no `fixme` left, which needs
+> steps 6 and 9 first.
 
 ---
 
