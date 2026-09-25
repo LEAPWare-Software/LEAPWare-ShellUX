@@ -30,8 +30,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   gate-4 record (#188, D-52).
 - Proof audit corrected, `npm run status` falls back locally (0e); D-27 struck,
   superseded by D-34 (C-44).
-- ADR-0006 step 7: plugins moved to `plugins/*` (#217).
-- ADR-0006 step 8: `plugin:check` conformance kit + CI job (#57).
+- ADR-0006 steps 7 (#217) and 8 (#57): plugins moved to `plugins/*`; `plugin:check` kit + CI job.
 
 ## In flight
 
@@ -40,12 +39,12 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md). Shared state: #187.
 - Gate 4: #189's answer names six screens against a record of nine, so no decision row
   is written and step 9 and wave 4 wait. Record: `docs/design/gate4/`.
-- D-55 PR A (#211): stale-SHA + `persist-credentials` fix, `claude-code-review.yml`.
+- D-55 PR A (#211) landed; PR B lands with this PR: the `claude[bot]` merge gate, its `issue_comment` trigger dropped (fork code-execution finding, D-55).
 
 ## The next step
 
 1. ADR-0006 step 6, 9-11; W3-2 onward.
-2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
+2. Plan steps 6, 6c, 7-9; 1.0 tag waits for BuildCraft.
 
 ## The rules that bite
 
@@ -54,6 +53,5 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - Steps run one at a time (cloud lanes excepted, D-52): every landing edits this file
   and `CHANGELOG.md`.
 - Merge with `gh pr merge <n> --squash --auto`; it enters the queue.
-- One git writer in the main tree. Throwaway worktrees go in a `.workspaces/`
-  directory beside the repository.
+- One git writer in the main tree. Throwaway worktrees go in `.workspaces/`.
 - Use npm 11.16.0 (`packageManager`). See `docs/traps.md` for the npm 10 history.

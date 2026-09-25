@@ -42,6 +42,50 @@ from so a reader can check it.
 
 ### Added
 
+- **`PR evidence` now also requires a genuine `claude[bot]` `MERGE` comment, not just
+  the PR body's own say-so** (D-55 PR B, #211; `scripts/claims/pr-evidence.mjs`, row
+  C-46). `hasBotMergeComment(comments, headSha)` reads the pull request's comments
+  (`ghPullComments`, via the issues endpoint GitHub actually serves them from) and
+  gates the check on the LATEST *review-shaped* `claude[bot]` comment: one that has a
+  markup-tolerant `Claude review` opener, OR a line-anchored `Reviewed SHA:` line, OR
+  a line-anchored `Verdict:` line (a new `lastField(text, name)` helper takes the last
+  such line, not `field()`'s first, since the final line in a comment is the
+  authoritative one). That comment must carry `Reviewed SHA:` equal to the head SHA
+  and a clean `Verdict: MERGE`; a missing or malformed field on it is `false` with no
+  fallback to an earlier comment. This fixes F7 from the D-55 debate
+  (`docs/decisions/debates/D-55-pr206-bootstrap-gate.md`): the original design (PR
+  #206) took the single latest `claude[bot]` comment with no shape filtering at all,
+  so an unrelated later reply (e.g. a plain `@claude`-mention answer) could hide a
+  genuine earlier `MERGE`; three rounds of adversarial review were needed to land on
+  a selection rule that also survives a bold (`**Claude review:**`) or heading
+  (`## Claude Review`) opener without going fail-open on a retraction. **This is
+  entry-point validation, not an integrity control** (CLAUDE.md's vocabulary rules):
+  real at the `PR evidence` check, silent about every other route a comment claiming
+  the `claude[bot]` login could arrive by. #206's proposed `issue_comment` re-run
+  trigger on `pr-evidence.yml` is dropped entirely, not fixed — the D-55 debate found
+  it let anyone commenting on a fork PR make this workflow check out and execute the
+  fork's own code under `main`'s context, with no author check at all; the existing
+  `edited` trigger already covers the re-check the conductor needs (runbook §4 lane C
+  item 3). *Tests:* `scripts/__tests__/claims-pr-evidence.test.mjs` — "F7: an
+  unrelated later claude[bot] reply must not hide a genuine earlier MERGE", "a genuine
+  MERGE retracted by a later, review-shaped DO NOT MERGE at the same SHA: false",
+  "the mirror case: an earlier rejection followed by a later genuine MERGE is
+  honoured", "resolution is by created_at, not array position", "markup-tolerant
+  openers: bold and heading genuine MERGE comments still govern", "markup-tolerant
+  openers: bold, heading and bare-verdict retractions are still review-shaped and
+  win", "within one comment, the LAST Reviewed SHA:/Verdict: pair wins, not the
+  first", "fails when the body is otherwise complete but no comment carries the
+  claude[bot] MERGE verdict", and "passes when the body is complete AND a genuine
+  claude[bot] MERGE comment is present".
+
+- **Known, unfixed limitation: `pr-evidence.yml` and `auto-queue.yml` still lack
+  `persist-credentials: false` on their checkout steps** (D-55 debate point 4; filed,
+  not fixed, per rule 7 — a labelled, unmeasured candidate fix is allowed as long as
+  it is not presented as verified). `claude-code-review.yml` got this fix in PR A
+  (#211); the other two workflows that check out code and hold a token were not in
+  that PR's scope and remain open. Measured: `grep -rn persist-credentials
+  .github/workflows/` finds it only in `claude-code-review.yml`.
+
 - **`npm run plugin:check <path>` — the conformance kit, and its CI job**
   (ADR-0006 decision 10 / step 8, #57). `scripts/build-plugins.mjs`'s own
   docblock had said since step 7 that checking a built `.lwplugin` against the
