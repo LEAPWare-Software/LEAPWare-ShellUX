@@ -14,6 +14,32 @@ from so a reader can check it.
 
 ## [Unreleased]
 
+### Security
+
+- **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
+  checkout kept a writable credential the reviewer agent could read.** Two
+  problems found and fixed as PR A of D-55 (#211): (1) the prompt had the
+  reviewer fetch the PR's head SHA live via `gh` during the run, while the code
+  it reads via Read/Grep/Glob is fixed as of the checkout at run start — a push
+  landing mid-run could get the live `gh` call returning the new head SHA while
+  the reviewed tree was still the old one, stamping a review of stale code with
+  a SHA that satisfies `scripts/claims/pr-evidence.mjs`'s gate at the new head.
+  Fixed by pinning the reviewed SHA to `${{ github.event.pull_request.head.sha
+  }}` from the event context instead of a live fetch, and having the prompt
+  re-check `gh pr view <number> --json headRefOid -q .headRefOid` immediately
+  before posting the summary: if it differs from the pinned SHA, the branch
+  moved during the review, which the summary now says explicitly, ending
+  `Verdict: DO NOT MERGE` rather than a silent stale `MERGE`. (2) neither this
+  workflow nor any other in `.github/workflows/` set `persist-credentials:
+  false` on `actions/checkout` (confirmed: `grep -rn persist-credentials
+  .github/workflows/` found nothing), and this job holds `pull-requests: write`
+  with a reviewer agent that has Read-tool access to the checkout — the job
+  token was readable in `.git/config` for that agent's own git/gh tool calls to
+  find and potentially misuse. Fixed by adding `persist-credentials: false` to
+  the checkout step. Both found and specified in the D-55 CTO/QA debate
+  (`docs/decisions/debates/D-55-pr206-bootstrap-gate.md`); PR B and a follow-up,
+  tracked on #211, remain open.
+
 ### Added
 
 - **`npm run plugin:check <path>` — the conformance kit, and its CI job**

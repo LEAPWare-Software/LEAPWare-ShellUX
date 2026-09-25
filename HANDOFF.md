@@ -21,16 +21,15 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - Rollout step 2 (#171, C-30); step 3 harness (#173); step 0c item 4 (#175, C-31).
 - #23 re-fit (W3-0), the wave-3 plan (#176); `.lwplugin` validator (#177).
 - Operator install guide, 1.0 known limits, plan step 7 (#178).
-- PR B (#179): both proof-of-completion checks required and read back.
+- PR B (#179): both proof-of-completion checks required, read back.
 - Plan step 0c complete (#181, C-37).
 - The plugin store, ADR-0006 step 4 (#182).
-- Wave-3 W3-1, the state primitives (#184).
-- Plugin lifecycle, nav tree, badge clear (#185).
-- Proof rows C-38–C-43 (#186).
+- Wave-3 W3-1 state primitives (#184); plugin lifecycle/nav tree/badge clear (#185);
+  proof rows C-38–C-43 (#186).
 - Cloud lanes can merge (#192, lane C item 0a); the runbook, `lw-*` roles and
   gate-4 record (#188, D-52).
-- Proof audit corrected; `npm run status` falls back to local `prove-claims` (0e).
-- D-27 struck, superseded by D-34: the ruleset it ruled out is already applied (C-44).
+- Proof audit corrected, `npm run status` falls back locally (0e); D-27 struck,
+  superseded by D-34 (C-44).
 - ADR-0006 step 7: plugins moved to `plugins/*` (#217).
 - ADR-0006 step 8: `plugin:check` conformance kit + CI job (#57).
 
@@ -41,6 +40,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
   [`docs/cloud/runbook.md`](docs/cloud/runbook.md). Shared state: #187.
 - Gate 4: #189's answer names six screens against a record of nine, so no decision row
   is written and step 9 and wave 4 wait. Record: `docs/design/gate4/`.
+- D-55 PR A (#211): stale-SHA + `persist-credentials` fix, `claude-code-review.yml`.
 
 ## The next step
 
