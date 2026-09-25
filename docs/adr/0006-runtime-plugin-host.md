@@ -838,7 +838,7 @@ everyone. CI runs it against all three migrated plugins.
 > to the live React registry and cannot be called standalone outside it, the
 > same class of narrowing this callout uses for `createFakeClock`.
 >
-> Four real defects surfaced while building and hardening this kit, each
+> Nine real defects surfaced while building and hardening this kit, each
 > fixed rather than filed (rule 7), each naming its own failure mode (rule
 > 10):
 > - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
@@ -864,6 +864,15 @@ everyone. CI runs it against all three migrated plugins.
 >   on the fake clock instead. Stated as an open limit, not closed by this
 >   fix: a leak whose start instead awaits real I/O still outlives that one
 >   tick.
+> - The post-`revoke()` leak scan advanced a FIXED `120_000`ms of virtual
+>   time, so a leaked interval or timeout with a longer delay
+>   (`setInterval(fn, 200_000)`, never cleared) never had its `dueAt` fall
+>   inside that fixed window — a false PASS for a genuinely leaking plugin.
+>   Fixed by giving `createFakeClock` a `longestPendingDelay()` accessor and
+>   sizing the post-revoke advance to
+>   `Math.max(120_000, clock.longestPendingDelay() + 1)`, the plugin's own
+>   longest still-pending delay rather than a guessed ceiling; free to do
+>   since this is virtual time, not real waiting.
 > - The lifecycle hooks are typed `=> void`, which an `async` function
 >   satisfies (`ActivationContext.tsx`'s `callHook` docblock says so
 >   explicitly, and attaches its own rejection handler for exactly this
@@ -894,6 +903,31 @@ everyone. CI runs it against all three migrated plugins.
 >   crashed run). Fixed by a `process.on('unhandledRejection', ...)` installed
 >   for `checkLifecycle`'s own duration, checked after every
 >   `flushMicrotasks()` call.
+> - The post-`revoke()` leak scan itself was missing the same
+>   `await flushMicrotasks(); if (internalRejectionFail() !== null) { ... }`
+>   guard the other three phases had just gained from the fix above — a leaked
+>   timer that rejects internally without ever touching `shell` (so the
+>   `calls`-based leak check can't see it) created its rejection synchronously
+>   inside `advance()`, with no `await` before the `unhandledRejection`
+>   listener was torn down in `finally`, so Node's notification arrived too
+>   late to be caught — a false PASS, then a genuinely unhandled crash later.
+>   Fixed by adding the missing `await flushMicrotasks()` in that same
+>   position.
+> - The two pre-release `clock.advance(30_000)` calls (after `onActivate`,
+>   after `onDeactivate`) were bare, unlike the post-revoke advance, which was
+>   deliberately wrapped. A leaked timer whose callback threw a plain
+>   synchronous error unrelated to a revoked `shell` propagated straight out
+>   of `checkLifecycle`, `runChecks` and `main()`, crashing the CLI instead of
+>   reporting a clean `FAIL [lifecycle]`. Fixed by wrapping both calls in
+>   their own `try`/`catch`, each naming which pre-release window the throw
+>   happened in.
+> - The post-revoke `catch {}` guarding that same advance was unconditional,
+>   swallowing any synchronous throw rather than only the expected `REVOKED`
+>   error a leaked call reaching the wrapped `shell` produces — so a leaked
+>   timer throwing some OTHER error after release, without ever calling
+>   `shell`, was silently discarded into a false PASS. Fixed by narrowing the
+>   catch to `error instanceof runtime.ShellUXError && error.code === 'REVOKED'`;
+>   anything else is now reported as a `lifecycle` FAIL.
 >
 > *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
 > against one hand-assembled, hash-matching `.lwplugin` fixture per row —
