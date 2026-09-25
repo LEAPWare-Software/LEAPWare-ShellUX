@@ -274,15 +274,77 @@ form (separate job, `needs`, artifact download) is new and is proven in rollout 
    dispatch with `inject=none` included; so a flaky crash hidden by a later green run is
    seen only through the issue it filed, which stays open until someone closes it.
    *Tests:* scripts/__tests__/status.test.mjs — "takes a workflow_dispatch run on main as the reference run, so a forced crash renders FAILING RUN, and never one from another branch".
+   *Note, 2026-09-24 (lane C item 0e):* when the reference run concluded `success` but its
+   `claims-results` artifact cannot be downloaded and read back — either the
+   `gh run download <id> --name claims-results` call itself fails (in this project's cloud
+   sandbox, always, because the outbound proxy blocks it), or the downloaded file cannot be
+   parsed — `loadRunContext` falls back to reproducing the same rows locally:
+   `node scripts/claims/prove-claims.mjs --mode push --out <tmpfile>` in the working tree,
+   read back in the same `{ results: [...] }` shape as the artifact. This is where
+   `npm run status` stops being a passive read of runs-API state: it runs every configured
+   repo/github row's real check command, mutation-probes each repo row in a scratch
+   worktree, and fetches the live ruleset from the GitHub API for the S-ruleset comparison
+   — the same commands `prove-claims --mode push` always runs, now triggered as a side
+   effect of checking status rather than of an explicit invocation, and usually
+   unrestricted in this sandbox (below). The reference run
+   itself may have run as `push`, `schedule` or `workflow_dispatch` — `claims.yml` sets
+   `MODE: ${{ github.event_name }}`, and step 3 above accepts all three as reference runs
+   — so `--mode push` here is not necessarily the mode the reference run actually used;
+   `isChangeMode()` treats those three identically for row selection and budget (any mode
+   other than `pull_request`/`merge_group` takes the whole-register branch and the same
+   `MAIN_BUDGET_MS`), so the choice makes no difference to which rows run, and `push`
+   avoids `assertInjection`'s extra `GITHUB_REF` requirement that `workflow_dispatch`
+   alone carries. It runs with `timeout: MAIN_BUDGET_MS` (30 minutes, §3.4), the same
+   budget any of the three gets in CI, rather than the 5-minute default meant for an
+   ordinary subprocess call. **One documented way it can still diverge:** repo rows run
+   under the `unshare --net` guardrail only when
+   `CLAIMS_NET_RESTRICT=unshare` is set, prove-claims logs which mode it ran in, and this
+   sandbox is exactly the case unlikely to have that set — that disclosure is not
+   surfaced on a successful local run, so `MEASURED LOCALLY` does not say whether the row
+   ran under the same network restriction its CI counterpart would have. Because that
+   subprocess call can itself run for up to those same 30 minutes with `spawnSync`
+   capturing rather than streaming its output, `loadRunContext` writes one `log` line
+   naming the reference run and the up-to-30-minute wait before starting it — without it,
+   this fallback would block silently, indistinguishable from a hang, in exactly the
+   sandbox this item targets. This is a fallback for the download-or-read-back step
+   specifically: a missing reference run, a missing token, or any other structural failure
+   is unchanged. If the local run also fails (a nonzero exit, or a result file that does
+   not parse), `loadRunContext` throws naming both failures, and every row degrades to
+   `UNPROVEN` the same way any other unreadable run does (§3.6 step 4's no-reference-run
+   rule, since `main()`'s catch leaves `reference` at its unset default) — it never
+   crashes `npm run status`.
+   *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims --mode push when the reference run artifact cannot be downloaded, and renders the row MEASURED LOCALLY".
+   *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed".
+   *Tests:* scripts/__tests__/status.test.mjs — "logs that it is starting the local reproduction, and that it can take up to 30 minutes, before running it".
+   *Tests:* scripts/__tests__/status.test.mjs — "gives the local prove-claims run the same 30-minute budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary subprocess calls".
+   *Tests:* scripts/__tests__/status.test.mjs — "throws an error naming both failures when the artifact download and the local reproduction both fail".
+   *Tests:* scripts/__tests__/status.test.mjs — "names the parse failure rather than the download when gh run download succeeds but its artifact cannot be parsed and the local reproduction also fails".
+   *Tests:* scripts/__tests__/status.test.mjs — "prints one warning naming both failures and exits 0 when the artifact download and the local reproduction both fail".
+   *Tests:* scripts/__tests__/status.test.mjs — "renders UNPROVEN when there is no reference run, or the row is absent from it".
 4. Rendering, first match wins: no token, `UNPROVEN`; `manual` row, `MANUAL <date>` with
    its `expect` values marked `STATED` (X1: manual rows never enter a run); newest
    completed main run cancelled by `timeout-minutes`, `FAILING RUN <id>` (X4); reference
    run conclusion not `success`, `FAILING RUN <id>` for every row, deliberately, because a
    crashed run's partial results are not trusted (X9); reference run `updated_at` more than 48 hours ago,
    `STALE`; its `head_sha` unknown locally or not an ancestor of `origin/main`,
-   `UNPROVEN`; the row's `rowHash` in the artifact not equal to the local row's,
-   `UNPROVEN`; recorded `fail`, `FAILING C-nn`; recorded `pass`, `PASSING C-nn run <id>`,
-   followed by each checked expectation as measured (`handoff_bytes=1928 <= 3000`, X8).
+   `UNPROVEN` — **both skipped when the results came from the local fallback above**,
+   because a number computed just now against this process's own working tree is neither
+   aged nor tied to `reference.head_sha`'s ancestry, so neither question has an answer for
+   it; the row's `rowHash` in the results not equal to the local row's, `UNPROVEN`;
+   recorded `fail`, `FAILING C-nn` (from either source, since a failure needs no elevated
+   trust to state); recorded `pass` from the downloaded artifact, `PASSING C-nn run <id>`,
+   followed by each checked expectation as measured (`handoff_bytes=1928 <= 3000`, X8);
+   recorded `pass` from the local fallback, `MEASURED LOCALLY C-nn` with the same
+   expectation detail — never `PASSING ... run <id>`, because no CI run vouched for it
+   (CLAUDE.md's vocabulary section: a claim must render as what actually attests it). The
+   header's `summary:` line buckets a row by `state.split(' ')[0]` (unchanged by this
+   note), so `MEASURED LOCALLY C-nn` counts under a bare `MEASURED` bucket, the same way
+   `FAILING RUN <id>` already counts under `FAILING` — the summary line has never carried
+   more than a state's first word for any multi-word state; the full state still prints on
+   the row's own line.
+   *Tests:* scripts/__tests__/status.test.mjs — "applies the rendering rules in the order the design fixes".
+   *Tests:* scripts/__tests__/status.test.mjs — "renders a locally-measured row in the full report, bucketed under MEASURED in the summary the same way FAILING RUN buckets under FAILING".
+   *Tests:* scripts/__tests__/status.test.mjs — "skips staleness and the ancestor check for a locally-measured row, even against a stale reference run whose head is not known to be an ancestor".
 
 ### 3.7 Chat
 

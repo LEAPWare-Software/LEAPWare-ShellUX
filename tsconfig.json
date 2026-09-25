@@ -22,7 +22,17 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": false,
-    "noEmit": true
+    "noEmit": true,
+    // ADR-0006 step 7. The three plugins under `plugins/*` import the host only
+    // through the bare specifier `@shellux/sdk`, mirroring what the dev server
+    // (`vite.config.ts`) and the test runner (`vitest.config.ts`) resolve it to,
+    // so `tsc --noEmit` can type-check them too — reached both directly, via
+    // `include` below, and transitively, since `src/dev/DevShell.tsx` imports
+    // the plugins' source for the browser dev loop.
+    "baseUrl": ".",
+    "paths": {
+      "@shellux/sdk": ["src/sdk/index.ts"]
+    }
   },
   // `electron/__tests__` and NOT `electron/`. The main and preload programs are
   // compiled by `electron/tsconfig.json`, which describes a Node process with no
@@ -34,6 +44,10 @@
     "src",
     "e2e",
     "electron/__tests__",
+    // ADR-0006 step 7: the three first-party plugins, moved out of `src/mocks/`
+    // and `src/examples/`. Each imports the host only through `@shellux/sdk`
+    // (the `paths` entry above), never a relative path into `src/core/`.
+    "plugins",
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts"

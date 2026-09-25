@@ -170,8 +170,10 @@ reason is the declaration, not a known crash on today's lockfile.
 
 - ~~**`npm run dev` renders an empty shell.**~~ **Fixed 2026-08-02.**
   `vite.config.ts` install `configureServer` middleware rewriting `/` to `dev.html`,
-  so `npm run dev` open shell with both verification remotes in `src/mocks/`
-  registered. `/index.html` still serve empty-registry production shell **by name**,
+  so `npm run dev` open shell with both verification remotes (moved to
+  `plugins/mail/` and `plugins/database/` by ADR-0006 step 7; `src/mocks/` at the
+  time this was written) registered. `/index.html` still serve empty-registry
+  production shell **by name**,
   and `src/App.tsx` still register nothing — that part never was defect. `dist/` is
   SHA-256 identical before and after change, measured on all three artifacts.
 - ~~**No human has signed off on the running application.**~~ **#39 is CLOSED.**
@@ -182,9 +184,10 @@ reason is the declaration, not a known crash on today's lockfile.
   technology ever pointed at it (#60, still open).
 
 **Where to start instead, if you here to write extension:**
-`src/examples/HelloExtension.tsx` — whole contract in ~100 lines, registered and
-driven by own test. Two modules under `src/mocks/` are verification remotes, ~1,000
-lines each, wrong thing to read first.
+`plugins/hello/src/HelloExtension.tsx` — whole contract in ~100 lines, registered
+and driven by own test. Two modules, `plugins/mail/` and `plugins/database/`,
+are verification remotes, ~1,000 lines each, wrong thing to read first (moved
+from `src/examples/` and `src/mocks/` respectively by ADR-0006 step 7).
 
 Neither correction delivered by ADR-0003. Stated so no one read rule 5 as describing
 more than it does — and so this file not do thing #90 was filed about: describe

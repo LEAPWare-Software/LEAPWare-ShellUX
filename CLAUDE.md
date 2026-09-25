@@ -193,7 +193,7 @@ Citation markers checker recognise: `*Tests:*`, `*Test:*`, `pinned by`.
 | How "done" is proven before BuildCraft enforces it (design, D-50) | `docs/proof-of-completion.md` |
 | The visual system every UI change follows | `DESIGN.md` |
 | Every trap in full, and two corrected surprises | `docs/traps.md` |
-| Writing an extension | `src/examples/HelloExtension.tsx` first (the whole contract in ~100 lines), then `DEVELOPER.md`; not `src/mocks/` |
+| Writing an extension | `plugins/hello/src/HelloExtension.tsx` first (the whole contract in ~100 lines), then `DEVELOPER.md`; not `plugins/mail/` or `plugins/database/` |
 | The five-item work breakdown | `.github/ISSUES_MANIFEST.md` |
 | What has actually been fixed, and what made each defect possible | `CHANGELOG.md` |
 | Who this shell is for, what it must not look like, and what accessibility is committed to | `PRODUCT.md` |

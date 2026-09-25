@@ -3,8 +3,20 @@ import type { ReactElement } from 'react';
 import App from '../App';
 import { useRegistry } from '../core/RegistryContext';
 import type { LEAPExtensionBlueprintInput } from '../core/types';
-import { DatabasePlugin } from '../mocks/DatabasePlugin';
-import { MailPlugin } from '../mocks/MailPlugin';
+// ADR-0006 step 7: the two verification remotes now live at `plugins/mail/` and
+// `plugins/database/`, each importing the host only through `@shellux/sdk`
+// (never a relative path into `src/core/`). This is the one PRODUCTION module
+// in `src/` that imports them (two test files also do, for their own
+// assertions: `src/__tests__/IntegrationSuite.test.tsx`,
+// `src/components/__tests__/ShellLayoutIcons.test.tsx`), and it imports their
+// SOURCE, not a built `.lwplugin` — `dev.html` is not a build input
+// (`vite.config.ts`), so a build per edit would be friction the browser dev
+// loop does not need. The bare `@shellux/sdk` specifier each plugin carries
+// resolves on the dev server
+// through `vite.config.ts`'s `resolve.alias`, to the same `src/sdk/index.ts`
+// the packaged app serves as `/shared/sdk.js`.
+import { DatabasePlugin } from '../../plugins/database/src/DatabasePlugin';
+import { MailPlugin } from '../../plugins/mail/src/MailPlugin';
 
 /**
  * ============================================================================
@@ -16,8 +28,8 @@ import { MailPlugin } from '../mocks/MailPlugin';
  * overflow, no rows to select and no hotkey to dispatch, so every assertion that
  * matters would be vacuous against it.
  *
- * This component is `App` with the two verification remotes in `src/mocks/`
- * registered, and it is what `e2e/` drives.
+ * This component is `App` with the two verification remotes in `plugins/mail/`
+ * and `plugins/database/` registered, and it is what `e2e/` drives.
  *
  * **How "dev-only" is enforced, and why it is not an environment variable.**
  * ADR-0002 forbids a local-environment dependency without a working default, so

@@ -1,22 +1,23 @@
-import type { ExtensionViewProps, LEAPExtensionBlueprintInput } from '../core/types';
+import type { ExtensionViewProps, LEAPExtensionBlueprintInput } from '@shellux/sdk';
 
 /**
  * ============================================================================
  * THE SMALLEST EXTENSION THAT IS A REAL EXTENSION. COPY THIS FILE.
  * ============================================================================
  * This is the on-ramp #52 says the repository did not have. Until it existed the
- * only two examples were `src/mocks/MailPlugin.tsx` and
- * `src/mocks/DatabasePlugin.tsx` — around a thousand lines each, and *verification
- * remotes* rather than samples: their job is to exercise the host's edges, so they
- * carry seeded catalogues, running timers, a deliberately throwing renderer and a
- * payload channel. Everything an author has to read past to find the contract.
+ * only two examples were `plugins/mail/src/MailPlugin.tsx` and
+ * `plugins/database/src/DatabasePlugin.tsx` — around a thousand lines each, and
+ * *verification remotes* rather than samples: their job is to exercise the
+ * host's edges, so they carry seeded catalogues, running timers, a deliberately
+ * throwing renderer and a payload channel. Everything an author has to read
+ * past to find the contract.
  *
  * **The contract is five keys and two components, and that is what is below.**
  * Nothing here is elided, nothing is pseudo-code, and it is registered and
- * rendered by `src/examples/__tests__/HelloExtension.test.tsx` — so if this file
- * stops being a working extension, that test fails rather than a reader finding
- * out. An example nobody runs is a promise, and this repository has a rule about
- * those.
+ * rendered by `plugins/hello/__tests__/HelloExtension.test.tsx` — so if this
+ * file stops being a working extension, that test fails rather than a reader
+ * finding out. An example nobody runs is a promise, and this repository has a
+ * rule about those.
  *
  * WHAT THE HOST REQUIRES OF YOU, IN FULL:
  *
@@ -29,9 +30,12 @@ import type { ExtensionViewProps, LEAPExtensionBlueprintInput } from '../core/ty
  *
  * WHAT YOU DO NOT DO, AND CANNOT:
  *
- *  - You do not import anything from `src/core/` except **types**. This file's
- *    single import is `import type`, which compiles to nothing. An extension that
- *    reaches for `useShellStore` or the registry has left the contract.
+ *  - You do not import anything from the host except **types**, and even those
+ *    come through `@shellux/sdk` — ADR-0006 decision 3's one runtime module a
+ *    plugin may import — never through a relative path into `src/core/`. This
+ *    file's single import is `import type`, which compiles to nothing. An
+ *    extension that reaches for `useShellStore` or the registry has left the
+ *    contract.
  *  - You do not receive host internals. Your views are handed `shell` — a
  *    deep-frozen `IShellAPI` scoped to you — and `context`, an immutable snapshot.
  *    That is the whole surface.

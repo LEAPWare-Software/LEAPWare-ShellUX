@@ -92,6 +92,17 @@ export default {
     './src/**/*.{ts,tsx}',
     '!./src/**/__tests__/**',
     '!./src/**/*.{test,spec}.{ts,tsx}',
+    // ADR-0006 step 7: the three first-party plugins moved out of `src/mocks/`
+    // and `src/examples/` to `plugins/*/src/`, which falls outside the glob
+    // above. Without this, Tailwind's JIT scanner drops any utility class
+    // used only in a plugin file — found by review: `w-20`
+    // (`plugins/database/src/DatabasePlugin.tsx`) and `items-start`
+    // (`plugins/mail/src/MailPlugin.tsx`) each appear nowhere else in the
+    // tree, and both plugins are rendered by `src/dev/DevShell.tsx`, which
+    // `npm run dev` and the browser lane's fixture both drive.
+    'plugins/**/*.{ts,tsx}',
+    '!plugins/**/__tests__/**',
+    '!plugins/**/*.{test,spec}.{ts,tsx}',
   ],
   darkMode: ['selector', '[data-theme="dark"]'],
   theme: {

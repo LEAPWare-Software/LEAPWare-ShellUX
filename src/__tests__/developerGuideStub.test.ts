@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createShellAPI, createShellStateStore } from '../../core/ShellAPI';
+import { createShellAPI, createShellStateStore } from '../core/ShellAPI';
 
 /**
  * `DEVELOPER.md`'s "Testing your extension with a mocked `IShellAPI`" hands
@@ -13,8 +13,14 @@ import { createShellAPI, createShellStateStore } from '../../core/ShellAPI';
  * a directory this repository does not have — so a member with the wrong type
  * would pass. What is pinned is that the stub lists exactly the members a real
  * handle has, which is the drift that happened.
+ *
+ * **Moved here from `src/examples/__tests__/` in ADR-0006 step 7.** It was never
+ * about `HelloExtension` — it reads `DEVELOPER.md` against `src/core/ShellAPI.ts`
+ * — and `src/examples/` no longer exists once the three plugins move to
+ * `plugins/*`, so this repo-level check moved to the repo-level `__tests__/`
+ * directory beside it rather than following `HelloExtension` out of `src/`.
  */
-const GUIDE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'DEVELOPER.md');
+const GUIDE = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'DEVELOPER.md');
 
 describe('the mocked IShellAPI in DEVELOPER.md', () => {
   it('lists exactly the members a real IShellAPI has', () => {

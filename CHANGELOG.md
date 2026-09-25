@@ -16,6 +16,115 @@ from so a reader can check it.
 
 ### Added
 
+- **The three first-party plugins move to `plugins/*`, and `npm run plugins:build`
+  emits a `.lwplugin` per plugin** (ADR-0006 step 7). `src/mocks/MailPlugin.tsx`,
+  `src/mocks/DatabasePlugin.tsx` and `src/examples/HelloExtension.tsx` are now
+  `plugins/mail/src/MailPlugin.tsx`, `plugins/database/src/DatabasePlugin.tsx` and
+  `plugins/hello/src/HelloExtension.tsx`; `src/mocks/` and `src/examples/` no
+  longer exist. Each imports the host only through the bare specifier
+  `@shellux/sdk` — never a relative path into `src/core/` — which `vite.config.ts`
+  and `vitest.config.ts` now resolve (a `resolve.alias`) to `src/sdk/index.ts` for
+  the dev server and for tests; a real build does the opposite, in
+  `scripts/build-plugins.mjs`, which marks `react`, `react/jsx-runtime` and
+  `@shellux/sdk` EXTERNAL and rewrites them to `/shared/react.js`,
+  `/shared/react-jsx-runtime.js` and `/shared/sdk.js` — ADR-0006 decision 5's
+  build-time rewrite, applied to a plugin build for the first time. `npm run
+  plugins:build` reads each `plugins/<name>/plugin.json` (`id`, `version`,
+  `title`, an optional `icon`, and the source entry), bundles it with
+  Vite/Rollup into one `bundle.js` (`output.codeSplitting: false`, one file, no
+  chunks — decision 1's "one bundle, not a file tree"), hashes it and writes
+  `dist-plugins/<id>.lwplugin` in decision 1's exact shape:
+  `{ format: "lwplugin/1", manifest, bundle: <base64> }`. Verified against the
+  real validator, not a copy of it: `npm run plugins:build`, then a throwaway
+  `vitest` case calling `electron/main/plugins/pluginPackage.ts`'s own
+  `parsePluginPackage` directly on each of the three built files — full output
+  (manifest, bundle byte length, `compatibility: { state: "compatible" }`
+  against this tree's `HOST_API_VERSION`, `1.1`) pasted into this change's PR
+  body, because nothing in `npm run verify` calls `plugins:build` yet.
+  `FIXTURE_EXTENSIONS` is deleted from
+  `src/paneview/PaneViewShell.tsx`: the packaged extension surface registers no
+  plugin of its own now, and installs none of the three by default. `src/dev/
+  DevShell.tsx` still registers `MailPlugin` and `DatabasePlugin`, importing
+  their **source** directly (`plugins/mail/src/`, `plugins/database/src/`) for
+  the browser dev loop `dev.html` drives — a build per edit would be friction,
+  and `dev.html` is not a build input (`vite.config.ts`). The plugins' own tests
+  moved with them: `plugins/hello/__tests__/HelloExtension.test.tsx` is
+  unchanged but for its imports. `src/examples/__tests__/developerGuideStub.test.ts`
+  did **not** move with `HelloExtension` — it reads `DEVELOPER.md` against
+  `src/core/ShellAPI.ts` and was never about the example — and now lives at
+  `src/__tests__/developerGuideStub.test.ts`. `IntegrationSuite.test.tsx`,
+  `ShellLayoutIcons.test.tsx` and `noRawColor.test.ts` were updated to the new
+  paths; `noRawColor.test.ts`'s `KNOWN_MODULES` no longer names the two mocks,
+  since a scan rooted at `src/` cannot see code that moved out of it. *Tests:*
+  `src/__tests__/pluginImportGraph.test.ts` — "reaches no module under
+  src/mocks or src/examples, which ADR-0006 step 7 deleted", "walks a real
+  graph from paneview.html's own entry, so an empty scan cannot pass
+  vacuously", "reports a path under either deleted directory, so the check
+  above can fail" — the Implementation-sequence row 7 test, written in
+  `crossDocumentIdref.test.ts`'s manner. **What this change did NOT do:** the
+  surface loader that would read `state.json` and `import()` an installed
+  plugin into the running extension surface (ADR-0006 step 6) has not landed,
+  so nothing loads a plugin in the packaged application yet; `plugin:check`
+  (step 8) does not exist, and `plugins:build` has no `--verify` flag of its own
+  — the `parsePluginPackage` run described above is a narrower, hand-run
+  substitute, not that conformance kit; and attaching
+  the three `.lwplugin` files to a GitHub Release, or installing them in the
+  end-to-end lane (step 10/11), is unattempted and unreachable from this
+  sandbox, which cannot launch a packaged Electron app or publish a release.
+
+- **`npm run status` falls back to a local `prove-claims` run when the reference run's
+  artifact cannot be downloaded** (`scripts/status.mjs`, docs/cloud/runbook.md lane C item
+  0e). In this project's cloud sandbox `gh run download <id> --name claims-results` always
+  fails — an outbound proxy blocks it — and until now that made `loadRunContext` throw,
+  which `main()` caught and degraded **every** row to `UNPROVEN`, even though the
+  reference run's identity, conclusion, sha and ancestry had all been read successfully;
+  only the artifact download had failed. Now, when the reference run concluded `success`
+  but the download or the read-back of its artifact fails, `loadRunContext` reproduces
+  the reference run's rows locally with `node scripts/claims/prove-claims.mjs --mode push
+  --out <tmpfile>` — this is where `npm run status` stops being a passive read of
+  runs-API state: it runs every configured repo/github row's real check command,
+  mutation-probes each repo row in a scratch worktree, and fetches the live ruleset from
+  the GitHub API for the S-ruleset comparison, the same commands `prove-claims --mode
+  push` always runs, now triggered as a side effect of checking status. The reference
+  run itself may have run as `push`, `schedule` or
+  `workflow_dispatch` (`claims.yml` sets `MODE: ${{ github.event_name }}`), but
+  `isChangeMode()` treats all three identically for row selection and budget, and `push`
+  sidesteps an extra `GITHUB_REF` requirement `workflow_dispatch` alone carries — given the
+  same 30-minute `MAIN_BUDGET_MS` any of the three gets in CI rather than the 5-minute
+  default meant for an ordinary subprocess call, read back in the artifact's own
+  `{ results: [...] }` shape) and `renderRow` labels a row
+  resolved that way `MEASURED LOCALLY <id>`, never `PASSING <id> run <id>`, because no CI
+  run vouches for it — though it does not say whether the row ran under the same
+  `unshare --net` restriction its CI counterpart would have (docs/proof-of-completion.md
+  §3.6 documents this open caveat). Because that subprocess call can itself run for up to
+  those same 30 minutes with its output captured rather than streamed, `loadRunContext`
+  logs one line naming the reference run and the wait before starting it, so the fallback
+  never looks like a hang. *Tests:* scripts/__tests__/status.test.mjs — "logs that it is
+  starting the local reproduction, and that it can take up to 30 minutes, before running
+  it". Staleness and the ancestor-of-`origin/main` check are skipped for those rows, since
+  both judge whether an *old CI run* is still trustworthy and neither question has an
+  answer for a number computed just now against the working tree; `rowHash` matching and
+  the `FAILING` branch are unchanged either way. *Tests:* scripts/__tests__/status.test.mjs
+  — "skips staleness and the ancestor check for a locally-measured row, even against a
+  stale reference run whose head is not known to be an ancestor". If the local reproduction
+  also fails (nonzero exit, or a result file that will not parse), `loadRunContext` throws
+  naming both failures and every row degrades to the existing `UNPROVEN`-with-reason
+  behaviour (§3.6 step 4's no-reference-run rule), rather than crashing `npm run status`.
+  *Tests:* scripts/__tests__/status.test.mjs — "falls back to a local run of prove-claims
+  --mode push when the reference run artifact cannot be downloaded, and renders the row
+  MEASURED LOCALLY"; scripts/__tests__/status.test.mjs — "falls back to a local run of
+  prove-claims when gh run download succeeds but the artifact it wrote cannot be parsed";
+  scripts/__tests__/status.test.mjs — "gives the local prove-claims run the same 30-minute
+  budget a push-mode main run gets in CI, not the 5-minute default meant for ordinary
+  subprocess calls"; scripts/__tests__/status.test.mjs — "throws an error naming both
+  failures when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "names the parse failure rather than the download when
+  gh run download succeeds but its artifact cannot be parsed and the local reproduction also
+  fails"; scripts/__tests__/status.test.mjs — "prints one warning naming both failures and
+  exits 0 when the artifact download and the local reproduction both fail";
+  scripts/__tests__/status.test.mjs — "renders UNPROVEN when there is no reference run, or
+  the row is absent from it".
+
 - **The cloud runbook and the `lw-*` agent roles** (`docs/cloud/runbook.md`,
   `.claude/agents/lw-architect.md` and its four siblings; D-52, commits `a092b91`,
   `1991344`, `5e0d59a`, `e2a1646`). The protocol unattended cloud routines follow while
@@ -128,23 +237,38 @@ from so a reader can check it.
 
 ### Fixed
 
-- **`HANDOFF.md`'s "Where main is" pointed at `f0bf492` (#192), four merges stale** (#194,
-  #188, #190, #196 had all landed since). It is the first thing every session — human or
-  cloud lane — reads, so a stale pointer there misleads at the door. Updated to `713c97b`
-  (#196), and the "What landed" list re-trimmed to the 3000-byte cap (row C-08: a trim
-  there is by design, not a defect) rather than appended, adding #190, #194 and #196.
-  **Five bullets were dropped, not two as an earlier draft of this entry undercounted**
-  (caught by `Claude Code Review` on the PR, citing rule 2, twice — the second catch
-  was this sentence misattributing its own correction): `#141` (public, Apache-2.0,
-  ruleset and merge queue) and `#151` (Claude review working), `#148`/`#150`/`#160`
-  (charts, crash log, ShellLayout split), `#178` (operator install guide, known
-  limits) and `#179` (PR B, proof-of-completion checks) — plus, initially missed and
-  the more load-bearing one, `#152`/`#156`/`#169` (proof of completion: design, PR A,
-  rollout 2). That thread is
-  not lost: #190's new entry two lines below is the current chapter of the same
-  proof-of-completion effort (the audit that corrected 3 false, 11 weak and 17
-  underproven rows), so the active record survives even though the founding landmark's
-  own line did not fit the cap.
+- **`HANDOFF.md`'s "Where main is" pointed at `f0bf492` (#192, 2026-09-19), six landings
+  stale** (#194, #188, #190, #196, #212 and #217 had all landed on `main` since). It is
+  the first thing every session — human or cloud lane — reads (`docs/cloud/runbook.md`
+  line 3), so a stale pointer there is the same defect class the repository has already
+  paid for once this run cycle (the identical line went stale after #196 too, fixed and
+  merged in #205, then went stale again the same way after #217). Updated to `372a3e9`
+  (#217, 2026-09-24). The "What landed" list itself was **not** stale — every landing
+  through #217 is already named there — only the pointer line above it was left behind,
+  so no re-trim was needed this time. **Failure mode (rule 10):** the pointer and the
+  "What landed" list are two separate statements about the same fact, a landing can (and
+  did, twice) update one without the other, and nothing in `verify` compares them —
+  `check:citations` resolves a citation to a test title, not a summary line to the state
+  it summarises, the same gap `Claude Code Review` named on #188's own findings 14–19 and
+  #190's own "Not done" list flagged for this exact file. Still nothing mechanical catches
+  it; this is a second instance of a known, named, unfixed gap, not a new one.
+- **D-27 ("no branch protection, and no spend to get it") is struck through as
+  superseded**, in `docs/DECISIONS.md` — plan step 1's last unticked bullet. Its premise
+  was that both branch-protection endpoints 403 on a private free-plan repository; that
+  is no longer true, because D-34 took the repository public and, per D-50 and plan step
+  0c row C-37, a ruleset (23685990, seven required contexts) is already applied — so the
+  row was left standing after the fact it stated stopped holding. Struck to the same
+  `~~claim~~ **Superseded by D-34, 2026-09-18.**` pattern already used on D-09, D-11 and
+  D-12; only the Decision-column cell changed, the row's original rationale stays as
+  historical record. **What made it possible:** nothing re-checked a superseded-by
+  relationship once its precondition (D-34) landed; a decision row is written once and
+  never revisited unless a later change happens to touch it. New proof row C-44
+  (`scripts/claims/checks/decisions-d27-strike.mjs`) checks D-27's cell is struck and
+  names D-34, guards that D-09/D-11/D-12 stay struck, and that D-31 through D-35 exist;
+  its probe un-strikes D-27 and is exercised, along with every other repo row's probe,
+  by the register's own generic per-row test, instantiated for C-44 as the register
+  stands committed. *Tests:* `scripts/__tests__/claims-prove.test.mjs`.
+
 - **`verify` could not run the register's C-08 row in CI, and the failure looked like a
   real mismatch.** `.github/workflows/ci.yml` took `actions/checkout`'s default depth-1
   clone. C-08's check compares the archived §2–§12 HANDOFF body against the pre-recast

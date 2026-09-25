@@ -318,7 +318,8 @@ project actually cares about, not before.
 
 **The fixture.** `src/App.tsx` registers no extension, so the production shell
 has nothing for a browser test to drive. `dev.html` and `src/dev/` mount the same
-shell with the two verification remotes in `src/mocks/` registered, and the dev
+shell with the two verification remotes in `plugins/mail/` and `plugins/database/`
+registered (ADR-0006 step 7 moved them out of `src/mocks/`), and the dev
 server serves that fixture at **`/`** as well as at `/dev.html` — a middleware in
 `vite.config.ts` rewrites the one path. It is dev-server-only by construction
 twice over: the middleware is installed under `configureServer`, which `vite

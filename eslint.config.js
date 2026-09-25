@@ -10,7 +10,16 @@ export default tseslint.config(
   // `.js.map` into it, and `npm run lint` runs with `--max-warnings 0` — so
   // whether a generated artifact happens to trip a rule today is not a question
   // this repository should be leaving to chance on a lane it does not own.
-  { ignores: ['dist', 'dist-electron', 'coverage', 'node_modules'] },
+  {
+    ignores: [
+      'dist',
+      'dist-electron',
+      'coverage',
+      'node_modules',
+      // `npm run plugins:build`'s output (ADR-0006 step 7): emitted JS, not source.
+      'dist-plugins',
+    ],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     // `cts` is in this glob for one file and one reason. A sandboxed Electron

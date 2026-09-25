@@ -18,8 +18,9 @@ import { SHARED_MODULES, sharedModuleSource } from './src/sdk/sharedModules.js';
  * `dev.html` before Vite's own HTML middleware sees it. It is installed under
  * `configureServer`, which Vite calls for `vite` and `vite preview` and never
  * during `vite build`, so no build output is affected. `dev.html`,
- * `src/dev/main.dev.tsx` and `src/mocks/` remain unreachable from anything a
- * user installs, because neither build input references them.
+ * `src/dev/main.dev.tsx` and the three plugins' source under `plugins/`
+ * remain unreachable from anything a user installs, because neither build
+ * input references them.
  *
  * **This banner used to say "`index.html` remains the only build input", and
  * that sentence is now false and has been rewritten rather than left standing.**
@@ -98,6 +99,22 @@ function serveSharedModules(): Plugin {
 
 export default defineConfig({
   plugins: [react(), serveFixtureAtRoot(), serveSharedModules()],
+  resolve: {
+    alias: {
+      // ADR-0006 step 7. `dev.html` imports the three plugins' SOURCE directly
+      // (`src/dev/DevShell.tsx`), and their source names the host only through
+      // `@shellux/sdk` — the bare specifier decision 3 and decision 5 give a
+      // plugin, never a relative path into `src/core/`. On the DEV SERVER this
+      // alias is what resolves it, to the same `src/sdk/index.ts` the built
+      // `/shared/sdk.js` module is one of the shared build inputs for below.
+      // `npm run plugins:build` (`scripts/build-plugins.mjs`) does NOT reuse this
+      // config: it marks `@shellux/sdk` EXTERNAL and rewrites it to
+      // `/shared/sdk.js` in the emitted `.lwplugin` bundle, which is the whole
+      // point of decision 5's build-time rewrite — an alias here would inline a
+      // second copy instead.
+      '@shellux/sdk': fileURLToPath(new URL('src/sdk/index.ts', import.meta.url)),
+    },
+  },
   server: {
     port: 5173,
   },

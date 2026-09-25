@@ -1,0 +1,7 @@
+{
+  "id": "inventory-db",
+  "version": "1.0.0",
+  "title": "Inventory Database",
+  "icon": "box",
+  "source": "src/DatabasePlugin.tsx"
+}

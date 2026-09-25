@@ -44,12 +44,25 @@
  * measured necessary — see `electron/main/rendererCsp.ts`.)
  *
  * WHAT IS DRIVEN. Host chrome: the palette is opened (Ctrl+K). The extension
- * surface: `src/paneview/PaneViewShell.tsx` registers the Mail and Database
- * fixtures in the production `paneview.html` bundle, but host chrome's registry
- * is empty, so pane 1 offers nothing to click and nothing activates them. The
- * smoke activates each through the surface's own controller (see
- * `driveFixtures`), hovers the Database chart until its tooltip shows, and drags
- * a divider with the pointer. Each step's outcome is recorded in `driven`.
+ * surface: as of `docs/measurements/csp-2026-09-18.json`, `src/paneview/
+ * PaneViewShell.tsx` registered the Mail and Database fixtures in the
+ * production `paneview.html` bundle (`FIXTURE_EXTENSIONS`), and `driveFixtures`
+ * below activated them by id through the surface's own controller, hovered the
+ * Database chart until its tooltip showed, and dragged a divider with the
+ * pointer.
+ *
+ * **BROKEN BY ADR-0006 STEP 7 (2026-09-24), NOT YET FIXED.** `FIXTURE_EXTENSIONS`
+ * is deleted from `PaneViewShell.tsx`; nothing registers `'mail'` or
+ * `'inventory-db'` in a packaged production `paneview.html` build any more, so
+ * `driveFixtures`'s `ACTIVATE` calls below now have nothing to find (`found:
+ * false`). This script cannot currently retake the measurement it backs
+ * (`docs/measurements/csp-2026-09-18.json`, cited by plan item `#85`/C-26 in
+ * `docs/claims.json`) — that past measurement still stands as a record of what
+ * was true on 2026-09-18, but is not reproducible against this tree until
+ * ADR-0006 step 6 (the surface loader) or an equivalent gives a packaged build
+ * something to activate. Not fixed here: this script needs a packaged Electron
+ * launch to validate any fix, which the sandbox that found this defect cannot
+ * do. Filed as a known limitation rather than guessed at.
  *
  * THE SHARED MODULES (ADR-0006 step 2), extension surface only. Before the
  * reload, a minimal `__REACT_DEVTOOLS_GLOBAL_HOOK__` is installed beside the

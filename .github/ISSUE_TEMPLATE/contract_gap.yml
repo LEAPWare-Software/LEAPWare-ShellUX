@@ -13,9 +13,10 @@ body:
 
         The contract is the product. Its gaps are not found by reading it — they are
         found by writing an extension against it and hitting the place where it
-        stops. The mocks under `src/mocks/` exist for exactly that, and the last
-        pass over them produced eight findings that no amount of reviewing the types
-        had surfaced.
+        stops. The two verification remotes under `plugins/mail/` and
+        `plugins/database/` exist for exactly that (ADR-0006 step 7 moved them out
+        of `src/mocks/`), and the last pass over them produced eight findings that
+        no amount of reviewing the types had surfaced.
 
         A contract gap is not always a bug. Some of what you cannot do here you are
         not supposed to be able to do, and the reason is written down. Telling those

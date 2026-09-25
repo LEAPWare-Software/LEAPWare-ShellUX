@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -21,9 +22,23 @@ export default defineConfig({
   // `ssr.resolve.conditions` is the half that matters, because Vitest processes
   // node_modules through Vite's SSR pipeline; the client list is set to match so
   // that an inlined dependency resolves identically.
+  //
+  // `alias` lives in this SAME `resolve` block rather than a second one. (A
+  // second top-level `resolve:` key would in fact be a `tsc` error —
+  // `TS1117: An object literal cannot have multiple properties with the same
+  // name` — not a silent overwrite; this file has never had one.) ADR-0006
+  // step 7: the three plugins under `plugins/*` import the host only through
+  // the bare specifier `@shellux/sdk`, never a relative path into
+  // `src/core/`, so their own tests and the host tests that import a
+  // plugin's real export (`ShellLayoutIcons.test.tsx`,
+  // `IntegrationSuite.test.tsx`) need it resolved here the way
+  // `vite.config.ts` resolves it for the dev server.
   // ---------------------------------------------------------------------------
   resolve: {
     conditions: ['browser', 'development', 'module', 'import', 'default'],
+    alias: {
+      '@shellux/sdk': fileURLToPath(new URL('src/sdk/index.ts', import.meta.url)),
+    },
   },
   ssr: {
     resolve: {
@@ -58,7 +73,13 @@ export default defineConfig({
     // `src/components/**` and `src/hooks/**` only, so `electron/**` is tested
     // rather than gated — and those are not the same word.
     // -----------------------------------------------------------------------
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'electron/**/*.{test,spec}.ts'],
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}',
+      'electron/**/*.{test,spec}.ts',
+      // ADR-0006 step 7: the three plugins' own tests moved out of `src/` with
+      // them, to `plugins/*/__tests__/`.
+      'plugins/**/*.{test,spec}.{ts,tsx}',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
