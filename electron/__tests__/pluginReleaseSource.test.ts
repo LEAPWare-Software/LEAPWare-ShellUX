@@ -368,12 +368,15 @@ describe('the GitHub Release install source', () => {
     // never enqueues, never closes, and never reacts to the signal at all.
     // Nothing here calls `init.signal.addEventListener`, unlike the
     // cooperative fake above: this is the case the timer must end on its own.
+    // `cancel` also rejects, so the timeout handler's own cleanup call to it
+    // is exercised on its failure path too, and does not itself throw.
     const r = rig(
       () =>
         Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               pull: () => new Promise<void>(() => undefined),
+              cancel: () => Promise.reject(new Error('the stream refused to cancel')),
             }),
           ),
         ),
