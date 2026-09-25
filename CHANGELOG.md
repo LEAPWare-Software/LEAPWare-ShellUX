@@ -16,6 +16,467 @@ from so a reader can check it.
 
 ### Added
 
+- **`npm run plugin:check <path>` — the conformance kit, and its CI job**
+  (ADR-0006 decision 10 / step 8, #57). `scripts/build-plugins.mjs`'s own
+  docblock had said since step 7 that checking a built `.lwplugin` against the
+  real validator was "a separate, manual step" with no automation; this closes
+  that gap. It is a plain Node CLI (`scripts/plugin-check.mjs`) that takes its
+  target from `process.argv[2]` only — never an environment variable
+  (ADR-0002) — accepting either a `.lwplugin` file directly or a directory
+  holding exactly one, and runs six checks in ADR-0006's own order, stopping at
+  the first failure: **Package** and **Contract version**, both by calling
+  `electron/main/plugins/pluginPackage.ts`'s real `readPluginPackage` (the
+  exact module the main-process installer uses, not a second copy of its
+  rules); **Imports**, by parsing the bundle with the TypeScript compiler —
+  the same technique `src/__tests__/pluginImportGraph.test.ts` uses — for any
+  static import outside the three `/shared/` modules or any dynamic
+  `import()`; **Registration**, by loading the bundle as a real ES module
+  (`/shared/*` resolved to the real `react`, `react/jsx-runtime` and
+  `src/sdk/index.ts` through a Vite SSR server) and handing its default export
+  to `RegistryContext.tsx`'s own exported `validateBlueprint`; **Lifecycle**,
+  by driving activate → deactivate → release against a real
+  `createRevocableShellAPI` handle under a small purpose-built fake clock
+  (`createFakeClock`, documented in the script as deliberately narrower than
+  `vi.useFakeTimers()`, which needs a Vitest worker this CLI does not run
+  under); and **Render**, by mounting each pane view with `react-dom/client`'s
+  `createRoot` into a `jsdom` container against a real live shell and an empty
+  context, plus every command's `isVisible` against the same context. *Tests:*
+  `scripts/__tests__/plugin-check.test.mjs` — "passes every check for a
+  well-formed plugin (package, contract-version, imports, registration,
+  lifecycle, render)", "Check 1 (Package) — refuses a bundle whose sha512 does
+  not match its manifest", "Check 2 (Contract version) — refuses a plugin
+  built for a newer major than this checkout offers", "Check 3 (Imports) —
+  refuses a bundle that statically imports something other than a /shared/
+  module", "Check 4 (Registration) — refuses a default export whose id
+  differs from the manifest", "Check 5 (Lifecycle) — refuses a plugin whose
+  onRelease does not clear a running interval", "Check 5 (Lifecycle) —
+  refuses a plugin whose onActivate throws", "Check 6 (Render) — refuses a
+  plugin whose pane view throws on first render with an empty context", and
+  "Check 6 (Render) — refuses a plugin whose command isVisible throws on an
+  empty context". `.github/workflows/ci.yml` now runs `npm run plugins:build`
+  then `npm run plugin:check` against each of the three migrated plugins'
+  built output, on all three operating systems. **Not in scope, stated so a
+  green kit is not read wider:** layout, painted pixels, focus order, pointer
+  behaviour and contrast (owed to the browser lane); whether a plugin is
+  well-behaved towards its siblings; and anything about the network.
+
+- **Fixed: the review findings below on `scripts/plugin-check.mjs` and its
+  test suite (#221) — eleven reachable from `createFakeClock`/`checkLifecycle`
+  (numbered 1, 2, 3, 5, 6, 7, 8, 9, 10, 14 and 16 below), one vocabulary fix
+  (numbered 4, unrelated to the Lifecycle check itself), one `checkRender`
+  fix (numbered 13, the Render check's own async-safety gap), one test-only
+  timeout-margin fix on fix 14's own regression tests (numbered 15), two
+  `runChecks`/`main()` control-flow fixes with no automated test for a
+  disclosed shared-filesystem reason (numbered 17 and 18), and two
+  test-fixture/message fixes on Check 1's and Check 4's own regression
+  coverage (numbered 11 and 12, unrelated to `checkLifecycle`), plus two
+  more described after the numbered list (a CI `timeout-minutes` gap and a
+  stale `build-plugins.mjs` docblock) — all found and fixed before the
+  conformance kit's first merge.**
+  1. `createFakeClock`'s `advance(ms)` re-armed a due interval at
+     `dueAt = now + earliest.delay`; for a **zero-delay** interval
+     (`setInterval(fn, 0)`, an omitted delay, or a negative delay — `schedule()`'s
+     `safeDelay` clamps all three the same way) that left `dueAt === now`, still
+     `<= deadline`, so `advance()`'s `for (;;)` picked the same timer again with
+     `now` unmoved and never returned — a plain bad plugin turning into a hung
+     CI job, since the step that runs `plugin:check` carries no
+     `timeout-minutes`. Fixed by clamping the refire to
+     `now + Math.max(earliest.delay, 1)`, so `dueAt` strictly increases every
+     time. *Tests:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
+     (Lifecycle) — refuses a plugin whose onActivate never clears a
+     zero-delay interval", "Check 5 (Lifecycle) — refuses a plugin whose
+     onActivate never clears an omitted-delay interval", and "Check 5
+     (Lifecycle) — refuses a plugin whose onActivate never clears a
+     negative-delay interval".
+  2. A plugin whose `onActivate` deferred STARTING its leak by one microtask
+     (`somePromise.then(() => setInterval(...))`, an ordinary pattern) was
+     still mid-flight when `checkLifecycle`'s `finally` ran `clock.restore()`
+     — calling `lifecycle.onActivate?.(shell)` does not itself drain the
+     microtask queue — so that `setInterval` landed on the REAL timers,
+     invisible to every check, and the CLI printed a false PASS followed by an
+     uncaught `REVOKED` crash once the real interval fired against the
+     already-revoked handle. Fixed by awaiting one real event-loop tick
+     (`flushMicrotasks`, via the real, unpatched `setImmediate`) after each of
+     `onActivate`/`onDeactivate`/`onRelease`, so a leak started from a
+     microtask chain of any depth lands on the fake clock as a synchronous one
+     does. The script's own banner now also states plainly what this does NOT
+     close: a leak whose start instead awaits real I/O outlives one tick and
+     is still outside it. *Test:* `scripts/__tests__/plugin-check.test.mjs` —
+     "Check 5 (Lifecycle) — refuses a plugin whose onActivate starts an
+     uncleared interval from a microtask".
+  3. The lifecycle hooks are typed `=> void`, which an `async` function
+     satisfies (`ActivationContext.tsx`'s `callHook` docblock says so
+     explicitly, and attaches its own rejection handler for exactly this
+     reason). `checkLifecycle` called each hook bare
+     (`lifecycle.onActivate?.(shell)`, and likewise for `onDeactivate` and
+     `onRelease`); an `async` hook that rejects does not throw synchronously
+     from a bare call, so its rejection went unattached — an unhandled
+     rejection under this CLI's default `--unhandled-rejections=throw`,
+     crashing the whole process with a raw stack instead of a clean
+     `lifecycle` FAIL. Fixed by awaiting `Promise.resolve(hookCall)` inside
+     the same `try`/`catch` at all three call sites, converging a
+     synchronous throw and an asynchronous rejection onto the one FAIL path.
+     This makes the check deliberately stricter than the live host on two
+     points, not one: any hook's async rejection (this fix), and — named
+     alongside it once a later review pass pointed out the banner undercounted
+     its own divergence — a SYNCHRONOUS throw from `onDeactivate` or
+     `onRelease`, which the live host's `runHook` catches and reports through
+     `reportFault` without failing deactivation or release, but which this
+     check still fails on (only a synchronous `onActivate` throw is fatal on
+     the live host, matching this check). The script's own banner names both
+     as decisions, not discrepancies. *Tests:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose onActivate rejects asynchronously", "Check 5
+     (Lifecycle) — refuses a plugin whose onDeactivate rejects
+     asynchronously", and "Check 5 (Lifecycle) — refuses a plugin whose
+     onRelease rejects asynchronously".
+  4. `wrapWithCallLog`'s docblock used the word "structural", which
+     `CLAUDE.md`'s vocabulary section bans unconditionally from repo prose;
+     reworded to "the same shape a plug-in reads through" without changing the
+     claim.
+  5. The post-`revoke()` leak scan advanced a FIXED `120_000`ms of virtual
+     time. A leaked interval or timeout with a longer delay
+     (`setInterval(fn, 200_000)`, never cleared) never had its `dueAt` fall
+     inside that fixed window, so its callback never fired and the scan saw
+     nothing — a false PASS for a genuinely leaking plugin. Fixed, not merely
+     documented as a limit: `createFakeClock` gained `longestPendingDelay()`,
+     and `checkLifecycle` now advances
+     `Math.max(120_000, clock.longestPendingDelay() + 1)` — sized to the
+     plugin's own longest still-pending delay, not a guessed ceiling. This is
+     virtual time, not real waiting, so the change costs nothing regardless of
+     how long a plugin's own delay is. *Test:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose leaked interval outlives the old fixed 120s scan
+     window".
+  6. A hook can reject INTERNALLY, never returning the rejection at all —
+     `onActivate(shell) { Promise.reject(new Error('boom')); }`, fired and
+     forgotten, no `return`, no `await`. Awaiting `Promise.resolve(hookCall)`
+     (fix 3 above) only ever sees what the hook's own RETURN VALUE carries;
+     this settles on its own, asynchronously, as an unhandled rejection Node
+     detects on no stack this check is on. Left unhandled, this crashed the
+     whole CLI process the same way fix 3's RETURNED-rejection case did,
+     except OUTSIDE `checkLifecycle`'s own `finally`, which skipped
+     `runChecks`' temp-directory cleanup too — a real, measured leak: a
+     `dist-plugins/plugin-check-*` scratch directory was still on disk after a
+     crashed run. Fixed by a `process.on('unhandledRejection', ...)` installed
+     for `checkLifecycle`'s own duration, checked after every
+     `flushMicrotasks()` call — the same cadence a RETURNED rejection is
+     already caught at. *Test:* `scripts/__tests__/plugin-check.test.mjs` —
+     "Check 5 (Lifecycle) — refuses a plugin whose onActivate rejects
+     internally without returning the rejection, and leaves no scratch
+     directory behind", which asserts both the clean FAIL and that the
+     scratch directory does not outlive the run.
+  7. **The post-`revoke()` leak scan — the one phase that exists specifically
+     to catch a leak surviving release — was the only one of the four
+     lifecycle phases that did NOT `await flushMicrotasks()` before its own
+     `internalRejectionFail()` check**, unlike the check after
+     `onActivate`/`onDeactivate`/`onRelease` (fix 6 above). A plugin that
+     leaks a `setInterval` whose callback rejects internally, and never
+     touches `shell` from inside it, defeated both of this check's leak
+     defences at once: the `calls.find((call) => call.phase === 'released')`
+     scan found nothing (nothing ever called `shell`), and the internal
+     rejection — created synchronously inside the `clock.advance(...)` call
+     right above — settled as a genuinely unhandled rejection only once
+     Node's own microtask checkpoint ran, which the missing `await` gave no
+     chance to happen before `process.off('unhandledRejection', ...)` ran in
+     this function's `finally`. Confirmed by hand before the fix:
+     `checkLifecycle` returned `{ ok: true }` — `plugin-check: PASS` printed
+     to stdout — and the rejection then reached the process for real, with no
+     listener attached, crashing the CLI after it had already reported
+     success. Fixed by adding the same `await flushMicrotasks();` the other
+     three phases already use, in the matching position. *Test:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose post-release leak rejects internally without
+     touching shell".
+  8. The two pre-release `clock.advance(30_000)` calls (right after
+     `onActivate`, and right after `onDeactivate`) were bare, unlike the
+     post-`revoke()` advance further down, which is deliberately wrapped. A
+     plugin that leaks a timer whose callback throws a plain, synchronous
+     error unrelated to touching a revoked `shell` — e.g.
+     `setInterval(() => { throw new Error('bug'); }, 100)`, never cleared —
+     fires that throw from inside one of these two `advance()` calls, while
+     the extension is still legitimately active and nothing has been revoked
+     yet, so it is not a leak SIGNAL the way a post-revoke `REVOKED` throw is;
+     it is just a bug in the plugin's own timer callback. Left unguarded, it
+     propagated straight out of `checkLifecycle`, out of `runChecks`, and out
+     of `main`'s bare `await runChecks(...)`, crashing the whole CLI with a
+     raw, unhandled stack instead of `plugin-check: FAIL [lifecycle] ...`.
+     Fixed by wrapping both calls in their own `try`/`catch`, each converting
+     a synchronous throw into a clean `lifecycle` FAIL that names which
+     pre-release window it happened in. *Tests:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose leaked timer throws a plain error while still
+     active, before onDeactivate runs" and "Check 5 (Lifecycle) — refuses a
+     plugin whose leaked timer throws a plain error while still active,
+     before onRelease runs".
+  9. The post-`revoke()` `catch {}` guarding the leak-scan `advance()` (fix 5
+     above) was unconditional — it swallowed ANY synchronous throw, not only
+     the expected `REVOKED` `ShellUXError` a leaked call reaching the
+     wrapped, revoked `shell` throws (`ShellAPI.ts`'s `assertLive`). A leaked
+     timer that throws some OTHER, unrelated error after release, and never
+     itself calls `shell` (so the `calls.find((call) => call.phase ===
+     'released')` scan just below finds nothing either), was discarded there
+     just the same, and `checkLifecycle` fell through to a false
+     `{ ok: true }` PASS for a plugin still misbehaving after release.
+     Confirmed by hand before the fix: `plugin-check: PASS
+     unrelated-post-release-throw@1.0.0 ...` printed for exactly such a
+     plugin. Fixed by narrowing the `catch` to only swallow an
+     `error instanceof ShellUXError` with `error.code === 'REVOKED'` — the
+     runtime now exposes `ShellUXError` itself (`src/core/types.ts`, loaded
+     alongside `ShellAPI.ts` in `loadShellRuntime`, which imports it but does
+     not re-export it) so the check can compare against the exact class
+     `assertLive` throws, not merely its shape — and reporting anything else
+     as a clean `lifecycle` FAIL. *Test:*
+     `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+     refuses a plugin whose leaked timer throws an error unrelated to
+     REVOKED after release".
+  10. The internal-rejection tracking (fixes 6, 7 above) used
+      `internalRejection === undefined` as its own "nothing has surfaced yet"
+      sentinel, but `undefined` is itself a legal promise-rejection reason
+      (`Promise.reject()`, `Promise.reject(undefined)`) — and a `??=`
+      assignment "writing" `undefined` over `undefined` is a no-op, so a
+      plugin that fire-and-forgets exactly that rejection value left
+      `internalRejection` at `undefined` forever, and every
+      `internalRejectionFail()` call kept returning `null`. Confirmed by
+      hand before the fix: `plugin-check: PASS internal-undefined-reject@1.0.0
+      ...` printed for a plugin whose `onActivate` does nothing but
+      `Promise.reject()`. Fixed by tracking presence with a separate boolean
+      (`hasInternalRejection`) rather than comparing the captured value
+      itself to the sentinel. *Test:*
+      `scripts/__tests__/plugin-check.test.mjs` — "Check 5 (Lifecycle) —
+      refuses a plugin whose onActivate rejects internally with undefined".
+  11. **Check 1's own regression test named a behaviour it never exercised**
+      (a test named for a behaviour it never performed, ADR-0003). "Check 1
+      (Package) — refuses a bundle whose sha512 does not match its manifest"
+      planted `sha512Override: 'AA'.repeat(43)` — 86 characters, two short of
+      `pluginPackage.ts`'s `SHA512_BASE64_PATTERN` (`{86}==`, 88 characters).
+      `validateManifest` refused it at the format-validation step
+      (`manifest.sha512 must be a base64 SHA-512 digest`) before `validate()`
+      ever reached the actual digest comparison
+      (`sha512Base64(bundle) !== manifest.sha512`) this test's name claims to
+      exercise. It still passed, because both refusal paths return
+      `check: 'package'` and both reason strings happen to contain the
+      substring "sha512", the only thing the assertions checked — so the
+      digest-mismatch branch had no coverage from this conformance-kit suite,
+      contrary to the "one planted-bad fixture per check row" claim in the
+      "Added" entry above (the branch itself is separately covered at the
+      unit level by `electron/__tests__/pluginPackage.test.ts`'s own "refuses
+      a package whose bundle does not match its manifest sha512", so nothing
+      shipped unverified — only this CLI-level conformance test was asserting
+      on the wrong path). Fixed by overriding with a real, validly-shaped
+      88-character digest of different bytes
+      (`createHash('sha512').update('not the bundle').digest('base64')`)
+      instead of a malformed one, and narrowing the assertion from a bare
+      `/sha512/` substring match to the exact mismatch reason string. *Test:*
+      `scripts/__tests__/plugin-check.test.mjs` — "Check 1 (Package) —
+      refuses a bundle whose sha512 does not match its manifest" (same title,
+      corrected fixture and assertion).
+  12. **Check 4's own failure message named the wrong function.** The
+      Registration check's failure reason read "the default export failed
+      the real register", but the code three lines above calls
+      `validateBlueprint`, not `register` — `register` is bound to the live
+      React registry and cannot be called standalone from this CLI, exactly
+      the narrowing this same PR's decision-10 table and as-built callout
+      (fix 14 in the PR body) were already corrected to state. The doc fixes
+      landed; the identical stale wording survived verbatim in the runtime
+      string a developer or CI log actually sees, and no test exercised this
+      branch. Fixed by renaming the claim to `validateBlueprint`, and added
+      a fixture (a default export missing `navigationTree`, so
+      `normalizeBlueprint`'s `requireField` throws before any pane or
+      command is inspected) that asserts the corrected wording and that the
+      stale wording does not reappear. *Test:*
+      `scripts/__tests__/plugin-check.test.mjs` — "Check 4 (Registration) —
+      names validateBlueprint, not register, when the default export fails
+      validation".
+  13. **`checkRender` installed no `unhandledRejection` guard at all**,
+      unlike `checkLifecycle`. A pane view's own effect firing an unattached
+      rejection after mount (an ordinary component bug, not a leak) settles
+      asynchronously on React's own scheduler, after `flushSync` and
+      `checkRender` have already returned `{ ok: true }` — a definitive
+      `plugin-check: PASS` prints, then the process crashes with a raw,
+      unexplained stack trace. The exact "PASS printed, then crash" shape
+      fixes 6 and 10 already closed inside `checkLifecycle`, untouched here.
+      Confirmed by hand before the fix: a fixture whose `pane2` fires
+      `Promise.reject(new Error(...))` from a `useEffect` with no cleanup
+      printed `plugin-check: PASS render-async-reject@1.0.0 ...`, then
+      crashed. Fixed by giving `checkRender` the same
+      `process.on('unhandledRejection', ...)` guard and
+      `await flushMicrotasks()` cadence `checkLifecycle` already uses,
+      checked once after each pane's render and once after the command
+      loop. *Test:* `scripts/__tests__/plugin-check.test.mjs` — "Check 6
+      (Render) — refuses a plugin whose pane view rejects internally after
+      mount".
+  14. **No lifecycle hook call had a timeout, so a hook whose promise never
+      settles — no throw, no resolve, no reject — hangs the CLI forever with
+      zero output.** All defects fixed before this one address a hook that
+      throws or rejects; none addressed a hook that just never resolves.
+      ADR-0006 itself states "async hooks are reported, not awaited" — the
+      live host never waits on a hook's promise at all — so this check's own
+      choice to await each hook (already disclosed as stricter than the live
+      host, fix 4 above) is what creates the hang risk; the live host itself
+      would never have blocked on it. Confirmed by hand before the fix:
+      `timeout 15 node scripts/plugin-check.mjs <fixture>` for a fixture
+      whose `onActivate` returns `new Promise(() => {})` exited 124 with no
+      stdout or stderr at all, and left its `dist-plugins/plugin-check-*`
+      scratch directory on disk — `runChecks`' own cleanup `finally` never
+      runs because the process never proceeds past the hung `await`.
+      Reproduced for both `onActivate` and `onRelease`. Fixed by racing each
+      hook's promise (`awaitHookOrTimeout`) against a 5-second REAL timer —
+      captured at module load, before any `createFakeClock().install()` call
+      can shadow `globalThis.setTimeout` with the virtual one this check
+      uses everywhere else — and returning a clean `lifecycle` FAIL naming
+      the timeout when the timer wins, so `runChecks`' cleanup still runs.
+      *Tests:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
+      (Lifecycle) — refuses a plugin whose onActivate returns a promise that
+      never settles" and "Check 5 (Lifecycle) — refuses a plugin whose
+      onRelease returns a promise that never settles".
+  15. **The two regression tests fix 14 just added gave `runCli` only
+      `timeout: 8000`** — a 3000ms budget on top of `HOOK_SETTLE_TIMEOUT_MS`'s
+      real 5000ms wait to cover Node startup, ESM-importing
+      `typescript`/`vite`/`react-dom`/`jsdom`, standing up the Vite SSR
+      server, and checks 1-4, all before the hook-settle wait even starts.
+      The comment beside it claimed this was "comfortably above" the 5s
+      floor without measuring it, and `.github/workflows/ci.yml` runs this
+      exact suite on `windows-latest` and `macos-latest` too, where that
+      startup overhead is routinely 2-3x slower than the ~1.6s measured
+      locally — a real run could exceed 8000ms and get `SIGKILL`ed by
+      `runCli`'s own timeout before the CLI could print its clean FAIL, a
+      harness race indistinguishable from a code regression in CI output.
+      Fixed by widening both tests' `runCli` timeout to 15000ms and their
+      own `it()` timeout to 20000ms — a 10-second cushion above the
+      production wait, comfortably wider than the measured overhead and the
+      2-3x CI multiplier. *Tests:* the same two tests as fix 14, now with
+      the corrected margin.
+  16. **`advance()`'s zero-delay refire clamp (fix 1) only covered
+      `setInterval`; a recursive zero-delay `setTimeout` hit the identical
+      infinite loop through a different path.** The idiom
+      `const tick = () => { setTimeout(tick, 0); }; setTimeout(tick, 0);` is
+      ordinary, working code in a real browser or Node event loop, but here
+      each recursive call creates a FRESH `timeout`-kind timer via
+      `schedule()`, not a refire of an existing one — so fix 1's clamp
+      (applied only where `advance()` re-arms an existing `interval` timer)
+      never ran for it. `schedule()` computed `dueAt: now + safeDelay`, so a
+      zero-delay timer scheduled at the current `now` (true on every
+      recursive call, since `now` does not move within one synchronous
+      callback) got `dueAt === now`, still `<= deadline`, and `advance()`'s
+      `for (;;)` picked it straight back up — forever, inside one
+      synchronous JS call stack with no `await` to interrupt it. Worse than
+      fix 1's original interval hang: this loop never yields to the event
+      loop at all, so it was unkillable by `timeout`'s own `SIGTERM` in
+      testing (confirmed: `user 0m32s+` CPU time, still running; only
+      `SIGKILL` — which the kernel enforces unconditionally — could stop
+      it), and locally there is no `timeout-minutes` backstop at all; in CI
+      only the job-level 20-minute budget would eventually kill it, burning
+      the full 20 minutes without ever printing the clean `lifecycle` FAIL
+      this tool exists to produce. Confirmed by hand before the fix: the
+      idiom above, run through the real CLI, pinned one CPU core
+      indefinitely. Fixed by moving the floor into `schedule()` itself —
+      `dueAt: now + Math.max(safeDelay, 1)` — so every newly scheduled
+      timer's due time is floored regardless of kind or how it was created;
+      the stored `delay` field (which `longestPendingDelay()` reads) stays
+      the real, unclamped value, so a genuinely leaking recursive chain
+      still runs its course over one `advance()` budget rather than looping
+      forever. *Test:* `scripts/__tests__/plugin-check.test.mjs` — "Check 5
+      (Lifecycle) — refuses a plugin whose onActivate leaks a recursive
+      zero-delay setTimeout chain".
+  17. **`runChecks`'s Vite SSR server was created before the `try`/`finally`
+      that closes it.** `mkdirSync`/`mkdtempSync` (the scratch-directory
+      setup) ran between server creation and the `try` block; either can
+      throw (`EACCES`, `ENOSPC`, or `dist-plugins` left as a stray
+      non-directory by an earlier crashed or `SIGKILL`'d run — plausible
+      after fix 16's own hang, pre-fix). A throw there skipped straight past
+      the `finally` that calls `server.close()`, leaking the Vite dev
+      server's middleware, esbuild/optimizer state and file handles for the
+      rest of the process's life. Confirmed by hand before the fix: with
+      `dist-plugins` replaced by a plain file (forcing `mkdirSync`'s
+      `EEXIST`), the CLI crashed with a raw, unhandled stack trace instead
+      of reaching `runChecks`'s `finally`. Fixed by moving `server.close()`
+      into its own outer `finally` that now wraps the scratch-directory
+      setup as well as the checks themselves, not just the checks — a
+      throw from `mkdirSync`/`mkdtempSync` now still closes the server on
+      the way out. **Verified manually, not by an automated test**: this
+      repo's own `test:scripts` npm script runs `plugin-check.test.mjs` and
+      `build-plugins.test.mjs` as separate `node --test` files, which run
+      concurrently by default, and `build-plugins.test.mjs` writes real
+      build output into this exact same `dist-plugins` directory
+      (`scripts/__tests__/build-plugins.test.mjs`'s own `OUT_DIR`) — a test
+      that replaces `dist-plugins` with a non-directory file, even briefly,
+      risks a spurious failure in that other file if their runs overlap.
+      No automated regression test is added for this reason; the fix was
+      confirmed by hand, before and after, against the real CLI, with the
+      transcript in this PR's own body.
+  18. **`main()` had no error handling around `await runChecks(...)`,
+      contradicting the tool's own "always a clean FAIL" design promise.**
+      Fixes 1-16 exist specifically to convert every internal throw or
+      rejection inside `checkLifecycle`/`checkRender` into a clean
+      `plugin-check: FAIL [check] reason` instead of a raw crash, but that
+      guarantee only ever held for errors those two functions' own
+      `try`/`catch`es anticipate. Anything that throws elsewhere in
+      `runChecks` — fix 17's own scratch-directory setup, `createCheckServer`
+      failing to start Vite, or any other internal error `runChecks` does
+      not itself anticipate — propagated straight out of `runChecks`, out of
+      `main()`'s unguarded `await`, and, since this file runs `main()` as a
+      top-level `await` at module scope, became an unhandled rejection that
+      crashed the process with a raw stack trace: exactly the failure shape
+      the rest of this file's hardening exists to avoid. Confirmed by hand
+      before the fix: the same `dist-plugins`-as-a-file fixture from fix 17
+      crashed the CLI with `node:fs:1370 ... Error: EEXIST ...` instead of a
+      clean FAIL. Fixed by wrapping `await runChecks(packagePath)` in its
+      own `try`/`catch`, reporting anything caught as
+      `plugin-check: FAIL [internal] reason` — a new check name distinct
+      from the six ADR-0006 rows, naming this as a harness failure rather
+      than one of them. Re-ran the same fixture post-fix: clean
+      `plugin-check: FAIL [internal] EEXIST: file already exists, mkdir
+      '.../dist-plugins'`, exit 1. **Verified manually, not by an automated
+      test**, for the identical shared-`dist-plugins`-directory reason fix
+      17 states in full above.
+
+  `docs/adr/0006-runtime-plugin-host.md` section 10 gained a
+  "step 8 landed — the conformance kit, as built" callout (matching steps 2,
+  4 and 7's own callouts in that file) naming every defect above as the doc
+  of record, alongside what step 8 actually built beyond decision 10's
+  original text (the Vite SSR loader for Registration, `createFakeClock` for
+  Lifecycle, and the `validateBlueprint`-vs-`register` narrowing).
+  `.github/workflows/ci.yml`'s `verify` job gained `timeout-minutes: 20`,
+  matching the convention every other workflow in this repo already follows
+  (`auto-queue.yml`, `claims.yml`, `pr-evidence.yml`) and closing the gap
+  this same PR's own fixes above had, until now, only named as a hazard
+  rather than closed at the job level: nothing bounded this job if a future
+  regression caused the same class of hang. `scripts/build-plugins.mjs`'s own
+  docblock stopped saying checking a built `.lwplugin` against the real
+  validator "has not landed yet" — it names `scripts/plugin-check.mjs` and
+  the CI step that now runs it, since this PR is exactly the change that
+  landed it.
+
+- **Fixed: `npm run plugins:build` emitted a `bundle.js` with NO export
+  statement at all**, for any plugin whose source declares a named export and
+  nothing in the bundle re-imports it — which is every one of the three
+  first-party plugins, since the entry module IS the plugin's manifest.
+  Rollup's default tree-shaking for a non-library client build does not
+  preserve an unused entry export, discovered while building `plugin:check`'s
+  Registration check: `import()`ing a built `hello-example.lwplugin` bundle
+  gave a module with no `default` (and no named export at all), so ADR-0006
+  §7's "the surface `import()`s each, validates the default export through
+  the real `register`" could never have worked once step 6 lands. The failure
+  mode was a missing `preserveEntrySignatures: 'strict'` in
+  `scripts/build-plugins.mjs`'s `rollupOptions`; `plugins/hello/src/HelloExtension.tsx`,
+  `plugins/mail/src/MailPlugin.tsx` and `plugins/database/src/DatabasePlugin.tsx`
+  each gained an additive `export default` of the same manifest object their
+  existing named export already carries, so no existing importer changed.
+  *Test:* `scripts/__tests__/build-plugins.test.mjs` — "preserves the entry
+  module default export in the built bundle via preserveEntrySignatures
+  strict" — which runs the real `npm run plugins:build` CLI and asserts the
+  built `hello-example.lwplugin` bundle's own text ends with an export
+  clause naming `default`; verified by hand to fail with
+  `preserveEntrySignatures: 'strict'` temporarily removed. Narrower than it
+  might read: this runs `build-plugins.mjs` as a subprocess and checks its
+  output, not by importing it — `build-plugins.mjs`'s own docblock still
+  correctly says no test anywhere IMPORTS it, a different, narrower claim
+  this test does not change. (Originally landed disclosed as verified
+  manually, not by an automated test — the PR body's `plugins:build` +
+  `plugin:check` transcript; this test replaces that disclosure with a
+  citable one.)
+
 - **The three first-party plugins move to `plugins/*`, and `npm run plugins:build`
   emits a `.lwplugin` per plugin** (ADR-0006 step 7). `src/mocks/MailPlugin.tsx`,
   `src/mocks/DatabasePlugin.tsx` and `src/examples/HelloExtension.tsx` are now

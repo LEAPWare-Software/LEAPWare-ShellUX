@@ -1250,3 +1250,12 @@ export const DatabasePlugin: LEAPExtensionBlueprintInput = Object.freeze({
   ribbonActions: RIBBON_ACTIONS,
   views: { pane2: InventoryRecordList, pane3: InventoryRecordDetail },
 });
+
+/**
+ * The SAME object, as the module's default export — see the identical note on
+ * `plugins/hello/src/HelloExtension.tsx`. ADR-0006 §7's running surface and
+ * the conformance kit's Registration check (decision 10 / step 8) both read a
+ * built bundle's DEFAULT export; the named export above is kept for
+ * `src/dev/DevShell.tsx` and this plugin's own tests.
+ */
+export default DatabasePlugin;

@@ -135,3 +135,16 @@ export const HelloExtension: LEAPExtensionBlueprintInput = Object.freeze({
   ],
   views: { pane2: HelloList, pane3: HelloDetail },
 });
+
+/**
+ * The SAME object, as the module's default export.
+ *
+ * ADR-0006 §7: the running extension surface `import()`s a plugin's built
+ * bundle and validates its DEFAULT export through the real `register`; the
+ * conformance kit's Registration check (decision 10 / step 8) does the same.
+ * The named export above is kept for the two call sites that already use
+ * it — `plugins/hello/__tests__/HelloExtension.test.tsx` and
+ * `src/dev/DevShell.tsx`'s copyable-example wiring — so this is additive, not
+ * a rename.
+ */
+export default HelloExtension;

@@ -29,11 +29,10 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - Proof rows C-38–C-43 (#186).
 - Cloud lanes can merge (#192, lane C item 0a); the runbook, `lw-*` roles and
   gate-4 record (#188, D-52).
-- Proof audit: false claims corrected, checks tightened; `npm run status` falls
-  back to a local `prove-claims` run (lane C item 0e).
-- D-27 struck as superseded by D-34: the branch-protection ruleset it once ruled
-  out is already applied (C-44).
-- ADR-0006 step 7: plugins moved to `plugins/*` (#217)
+- Proof audit corrected; `npm run status` falls back to local `prove-claims` (0e).
+- D-27 struck, superseded by D-34: the ruleset it ruled out is already applied (C-44).
+- ADR-0006 step 7: plugins moved to `plugins/*` (#217).
+- ADR-0006 step 8: `plugin:check` conformance kit + CI job (#57).
 
 ## In flight
 
@@ -45,7 +44,7 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 
 ## The next step
 
-1. ADR-0006 step 6, 8-11; W3-2 onward.
+1. ADR-0006 step 6, 9-11; W3-2 onward.
 2. Plan steps 6, 6c, 7 (sourcemaps), 8 and 9; the 1.0 tag waits for BuildCraft.
 
 ## The rules that bite

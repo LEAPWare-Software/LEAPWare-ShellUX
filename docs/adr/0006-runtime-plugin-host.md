@@ -811,7 +811,7 @@ rule drift — and takes its directory from `argv`, never an environment variabl
 | Package | The manifest breaks any rule in decision 1, or `sha512` does not match |
 | Contract version | Decision 3's rule refuses it against this checkout's SDK |
 | Imports | The bundle's static imports name anything but the three `/shared/` modules, or it contains a dynamic `import()` |
-| Registration | The default export fails the real `register`, or its `id` differs from the manifest |
+| Registration | The default export fails `validateBlueprint`, `register`'s own pure validation core (see the "as built" note below for why the check calls this and not `register` itself), or its `id` differs from the manifest |
 | Lifecycle | Driven through activate → deactivate → release against a real revocable handle with fake timers: a hook throws, or **any call reaches the handle after release**, which is how a leaked interval shows up |
 | Render | Either pane view throws on first render with an empty context, or an `isVisible` throws on an empty context |
 
@@ -820,6 +820,184 @@ pixels, focus order, pointer behaviour, contrast — all invisible to jsdom, and
 the browser lane; whether a plugin is well-behaved towards its siblings, which nothing
 in one realm can decide; and anything about the network, which the CSP settles for
 everyone. CI runs it against all three migrated plugins.
+
+> **2026-09-24, step 8 landed — the conformance kit, as built.**
+> `scripts/plugin-check.mjs` is one plain Node CLI, `runChecks` running the six
+> rows above in order and stopping at the first failure. Two mechanics this
+> section's table does not name: Registration loads the built bundle as a
+> real ES module through a Vite SSR server built for this one run
+> (`createCheckServer`), with `/shared/react.js`, `/shared/react-jsx-runtime.js`
+> and `/shared/sdk.js` resolved to the real modules `src/sdk/sharedModules.ts`
+> names — the same three specifiers decision 5's rewrite produces — so the
+> module graph is real, not stubbed; and Lifecycle runs against a home-grown
+> `createFakeClock`, not `vi.useFakeTimers()`, because this CLI is not a
+> Vitest worker and has no such runtime to borrow one from — its own banner
+> states it is a deliberately narrower tool, not a claim of parity. Check 4
+> hands the loaded bundle's default export to `RegistryContext.tsx`'s
+> exported `validateBlueprint`, not the full `register` — `register` is bound
+> to the live React registry and cannot be called standalone outside it, the
+> same class of narrowing this callout uses for `createFakeClock`.
+>
+> Fifteen real defects surfaced while building and hardening this kit, each
+> fixed rather than filed (rule 7), each naming its own failure mode (rule
+> 10):
+> - `scripts/build-plugins.mjs` emitted a `bundle.js` with no export
+>   statement at all for a plugin whose only export is unused by anything
+>   re-imported into it — Rollup's default tree-shaking for a non-library
+>   build does not preserve an unused entry export. Fixed by
+>   `preserveEntrySignatures: 'strict'`; see step 7's own callout above.
+> - `createFakeClock`'s `advance()` re-armed a due interval at
+>   `now + delay`; for a zero, omitted, or negative delay (`schedule()`'s
+>   `safeDelay` clamps all three to `0`), that left `dueAt === now`, so the
+>   `for (;;)` loop inside `advance()` picked the same timer forever — a bad
+>   plugin turning into a hung CI job, since the step that runs
+>   `plugin:check` carries no `timeout-minutes`. Fixed by clamping the
+>   refire to `now + Math.max(delay, 1)`, so `dueAt` strictly increases.
+> - A plugin whose `onActivate` deferred STARTING a leak by one microtask
+>   (`somePromise.then(() => setInterval(...))`) was still mid-flight when
+>   `checkLifecycle`'s `finally` restored the real timers, so that
+>   `setInterval` landed on them instead of the fake clock — a false PASS
+>   followed by an uncaught `REVOKED` crash once the real interval later hit
+>   the revoked handle. Fixed by awaiting one real event-loop tick
+>   (`flushMicrotasks`, via the real, unpatched `setImmediate`) after each of
+>   `onActivate`/`onDeactivate`/`onRelease`, so a deferred registration lands
+>   on the fake clock instead. Stated as an open limit, not closed by this
+>   fix: a leak whose start instead awaits real I/O still outlives that one
+>   tick.
+> - The post-`revoke()` leak scan advanced a FIXED `120_000`ms of virtual
+>   time, so a leaked interval or timeout with a longer delay
+>   (`setInterval(fn, 200_000)`, never cleared) never had its `dueAt` fall
+>   inside that fixed window — a false PASS for a genuinely leaking plugin.
+>   Fixed by giving `createFakeClock` a `longestPendingDelay()` accessor and
+>   sizing the post-revoke advance to
+>   `Math.max(120_000, clock.longestPendingDelay() + 1)`, the plugin's own
+>   longest still-pending delay rather than a guessed ceiling; free to do
+>   since this is virtual time, not real waiting.
+> - The lifecycle hooks are typed `=> void`, which an `async` function
+>   satisfies (`ActivationContext.tsx`'s `callHook` docblock says so
+>   explicitly, and attaches its own rejection handler for exactly this
+>   reason). `checkLifecycle` called each hook bare; an `async` hook that
+>   rejects does not throw synchronously from a bare call, so its rejection
+>   went unattached — an unhandled rejection under this CLI's default
+>   `--unhandled-rejections=throw`, crashing the process with a raw stack
+>   instead of a clean `lifecycle` FAIL. Fixed by awaiting
+>   `Promise.resolve(hookCall)` inside the same `try`/`catch` at all three
+>   call sites, converging a synchronous throw and an asynchronous rejection
+>   onto the one FAIL path. This check is deliberately stricter than the live
+>   host on two points, not one: any hook's async rejection (just described),
+>   and a SYNCHRONOUS throw from `onDeactivate` or `onRelease` specifically —
+>   the live host's `runHook` (`ActivationContext.tsx`) catches a synchronous
+>   throw from either of those two hooks and reports it through `reportFault`
+>   without failing deactivation or release, but this check fails on it
+>   regardless of which of the three hooks threw. Both are named as decisions
+>   on the script's own banner, not left as unexplained discrepancies.
+> - A hook can also reject INTERNALLY, never returning the rejection at all —
+>   `onActivate(shell) { Promise.reject(new Error('boom')); }`, fired and
+>   forgotten. Awaiting the hook's return value (the fix just above) only ever
+>   sees what that return value carries; this settles on its own,
+>   asynchronously, as an unhandled rejection Node detects on no stack this
+>   check is on — which crashed the whole process the same way, except
+>   OUTSIDE `checkLifecycle`'s own `finally`, which skipped `runChecks`'
+>   temp-directory cleanup too (a real, measured leak: a
+>   `dist-plugins/plugin-check-*` scratch directory left on disk after a
+>   crashed run). Fixed by a `process.on('unhandledRejection', ...)` installed
+>   for `checkLifecycle`'s own duration, checked after every
+>   `flushMicrotasks()` call.
+> - The post-`revoke()` leak scan itself was missing the same
+>   `await flushMicrotasks(); if (internalRejectionFail() !== null) { ... }`
+>   guard the other three phases had just gained from the fix above — a leaked
+>   timer that rejects internally without ever touching `shell` (so the
+>   `calls`-based leak check can't see it) created its rejection synchronously
+>   inside `advance()`, with no `await` before the `unhandledRejection`
+>   listener was torn down in `finally`, so Node's notification arrived too
+>   late to be caught — a false PASS, then a genuinely unhandled crash later.
+>   Fixed by adding the missing `await flushMicrotasks()` in that same
+>   position.
+> - The two pre-release `clock.advance(30_000)` calls (after `onActivate`,
+>   after `onDeactivate`) were bare, unlike the post-revoke advance, which was
+>   deliberately wrapped. A leaked timer whose callback threw a plain
+>   synchronous error unrelated to a revoked `shell` propagated straight out
+>   of `checkLifecycle`, `runChecks` and `main()`, crashing the CLI instead of
+>   reporting a clean `FAIL [lifecycle]`. Fixed by wrapping both calls in
+>   their own `try`/`catch`, each naming which pre-release window the throw
+>   happened in.
+> - The post-revoke `catch {}` guarding that same advance was unconditional,
+>   swallowing any synchronous throw rather than only the expected `REVOKED`
+>   error a leaked call reaching the wrapped `shell` produces — so a leaked
+>   timer throwing some OTHER error after release, without ever calling
+>   `shell`, was silently discarded into a false PASS. Fixed by narrowing the
+>   catch to `error instanceof runtime.ShellUXError && error.code === 'REVOKED'`;
+>   anything else is now reported as a `lifecycle` FAIL.
+> - The internal-rejection tracking two defects above added used
+>   `internalRejection === undefined` as its own "nothing has surfaced yet"
+>   sentinel, but `undefined` is itself a legal rejection reason
+>   (`Promise.reject()`, `Promise.reject(undefined)`), and a `??=` assignment
+>   "writing" `undefined` over `undefined` is a no-op — so a plugin that
+>   fire-and-forgot exactly that rejection value left `internalRejection` at
+>   `undefined` forever, and `internalRejectionFail()` kept returning `null`:
+>   a false PASS for the one rejection value none of the existing fixtures
+>   tried. Fixed by tracking presence with a separate boolean,
+>   `hasInternalRejection`, rather than comparing the captured value itself
+>   to the sentinel.
+> - `checkRender` installed no `unhandledRejection` guard at all, unlike
+>   `checkLifecycle`. A pane view's own effect firing an unattached rejection
+>   after mount settles asynchronously on React's own scheduler, after
+>   `flushSync` and this check have already returned `{ ok: true }` — a
+>   definitive `PASS` prints, then the process crashes. The same shape as the
+>   two `checkLifecycle` defects just above, unclosed in `checkRender`. Fixed
+>   by giving it the same guard and `flushMicrotasks()` cadence.
+> - No lifecycle hook call had a timeout, so a hook whose promise never
+>   settles at all — no throw, no resolve, no reject — hung the CLI
+>   indefinitely with no output, and no chance for `runChecks`' own cleanup
+>   `finally` to run. This check's choice to `await` each hook (a stricter
+>   divergence from the live host's own contract, "async hooks are reported,
+>   not awaited") is what creates the hang risk; the live host itself would
+>   never have blocked on it. Fixed by racing each hook against a 5-second
+>   REAL timer, captured before `createFakeClock().install()` can shadow
+>   `globalThis.setTimeout` with the virtual one.
+> - The zero-delay refire clamp above only covered `setInterval`; a
+>   recursive zero-delay `setTimeout` (`const tick = () => { setTimeout(tick,
+>   0); }; setTimeout(tick, 0);`, an ordinary idiom) hit the identical
+>   infinite loop through a different path — each recursive call creates a
+>   FRESH timer via `schedule()`, not a refire of an existing one, so the
+>   clamp never ran for it. Worse than the original: this loop never yields
+>   to the event loop at all, so it was unkillable by `SIGTERM` in testing,
+>   and locally there is no `timeout-minutes` backstop at all. Fixed by
+>   moving the floor into `schedule()` itself, so every newly scheduled
+>   timer's due time is floored regardless of kind or how it was created.
+> - `runChecks`'s Vite SSR server was created before the `try`/`finally`
+>   that closes it, so a throw from the scratch-directory setup
+>   (`mkdirSync`/`mkdtempSync`, which can fail on `EACCES`, `ENOSPC`, or a
+>   stray non-directory `dist-plugins` left by an earlier crashed run) skipped
+>   the `finally` entirely, leaking the Vite dev server for the rest of the
+>   process's life. Fixed by moving `server.close()` into its own outer
+>   `finally` wrapping the scratch-directory setup too, not just the checks.
+> - `main()` had no error handling around `await runChecks(...)`, so anything
+>   that throws outside what `checkLifecycle`/`checkRender`'s own hardening
+>   anticipates — including the leak above's own throw — crashed the process
+>   with a raw stack via an unhandled top-level-await rejection, instead of
+>   the clean single-FAIL output the rest of this file's fixes otherwise
+>   guarantee. Fixed by wrapping the call in its own `try`/`catch`, reporting
+>   anything caught as `FAIL [internal]` — a check name naming this as a
+>   harness failure, not one of the six ADR-0006 rows. Neither of these last
+>   two fixes has an automated regression test: reproducing them needs
+>   `dist-plugins` to exist as a non-directory file, and this repo's
+>   `test:scripts` script runs `plugin-check.test.mjs` and
+>   `build-plugins.test.mjs` concurrently as separate `node --test` files,
+>   with `build-plugins.test.mjs` writing real build output into that same
+>   directory — a test that corrupts it, even briefly, risks a spurious
+>   failure there. Both were confirmed by hand, before and after, against
+>   the real CLI.
+>
+> *Tests:* `scripts/__tests__/plugin-check.test.mjs` runs the CLI end to end
+> against one hand-assembled, hash-matching `.lwplugin` fixture per row —
+> one passing every check, and one planted-bad fixture per failure named in
+> the table above and in the defects just listed, plus the fake clock's
+> own pure-function cases (`createFakeClock`'s exported `advance`, refire and
+> cancellation behaviour) exercised directly, without a subprocess.
+> `.github/workflows/ci.yml` runs `npm run plugins:build` then
+> `npm run plugin:check` against each of the three migrated plugins' real
+> output, on all three operating systems.
 
 ### 11. The plugin manager — the gate-4 screen, and one delta
 
