@@ -52,8 +52,8 @@ from so a reader can check it.
   @claude on fork pull requests", runs only for those three cases, calls `gh api
   repos/<repo>/pulls/<n> --jq .head.repo.full_name` and exits 1 if the PR's head repo
   is not this repository; GitHub Actions runs the next step only on `success()` by
-  default, so a refusal here stops "Run Claude Code" from running at all — a real,
-  fail-closed guard, not a cosmetic one. **This is a guardrail (in-repo YAML any
+  default, so a refusal here stops "Run Claude Code" from running at all.
+  **This is a guardrail (in-repo YAML any
   writer can edit), not an integrity control, and entry-point validation only at this
   trigger** (CLAUDE.md's vocabulary rules): it says nothing about any other route.
   Existing author-association restriction (OWNER/MEMBER/COLLABORATOR on the
