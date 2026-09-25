@@ -190,14 +190,19 @@ from so a reader can check it.
   `plugins/mail/src/MailPlugin.tsx` and `plugins/database/src/DatabasePlugin.tsx`
   each gained an additive `export default` of the same manifest object their
   existing named export already carries, so no existing importer changed.
-  **Verified manually, not by an automated test:** `npm run plugins:build`
-  against all three real plugins, then `plugin:check` against each real
-  `.lwplugin` it wrote — transcript in the PR body. `build-plugins.mjs`'s own
-  docblock says "no test anywhere imports build-plugins.mjs", and that is
-  still true after this fix; `scripts/__tests__/plugin-check.test.mjs`'s CLI
-  suite exercises `checkLifecycle`/`checkRender` etc. against hand-assembled
-  fixtures, not against `build-plugins.mjs`'s own Rollup output, so it does
-  not stand in for a regression test of this specific fix either.
+  *Test:* `scripts/__tests__/build-plugins.test.mjs` — "preserves the entry
+  module default export in the built bundle via preserveEntrySignatures
+  strict" — which runs the real `npm run plugins:build` CLI and asserts the
+  built `hello-example.lwplugin` bundle's own text ends with an export
+  clause naming `default`; verified by hand to fail with
+  `preserveEntrySignatures: 'strict'` temporarily removed. Narrower than it
+  might read: this runs `build-plugins.mjs` as a subprocess and checks its
+  output, not by importing it — `build-plugins.mjs`'s own docblock still
+  correctly says no test anywhere IMPORTS it, a different, narrower claim
+  this test does not change. (Originally landed disclosed as verified
+  manually, not by an automated test — the PR body's `plugins:build` +
+  `plugin:check` transcript; this test replaces that disclosure with a
+  citable one.)
 
 - **The three first-party plugins move to `plugins/*`, and `npm run plugins:build`
   emits a `.lwplugin` per plugin** (ADR-0006 step 7). `src/mocks/MailPlugin.tsx`,

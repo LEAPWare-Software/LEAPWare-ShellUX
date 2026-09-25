@@ -44,12 +44,16 @@
  * decision 3, step 3 describes — narrowing this claim rather than restating
  * it, per ADR-0001 Amendment G. That note's guardrail is `hostContract.ts`'s
  * mirror, held to `src/sdk/api-surface.json` by a real test
- * (`electron/__tests__/pluginPackage.test.ts`). No test anywhere imports
+ * (`electron/__tests__/pluginPackage.test.ts`). No test anywhere IMPORTS
  * `build-plugins.mjs` — for `HOST_API_VERSION` here same as for
  * `EXTENSION_ID_PATTERN`/`RESERVED_IDS` below (`grep -rl "build-plugins" --
  * '*.test.ts' '*.test.tsx'` finds nothing) — so the throw-on-mismatch
  * behavior is real, readable code, not a claim this file's own test suite
- * backs.
+ * backs. (`scripts/__tests__/build-plugins.test.mjs` runs this file as the
+ * real CLI, a subprocess, and checks its OUTPUT — the `preserveEntrySignatures:
+ * 'strict'` fix below, specifically; that is a narrower, different claim
+ * from a test importing this module's own functions, which still does not
+ * exist.)
  *
  * `EXTENSION_ID_PATTERN` and `RESERVED_IDS`, below, are weaker still: they
  * are copy-pasted literals from `src/core/RegistryContext.tsx`'s published
