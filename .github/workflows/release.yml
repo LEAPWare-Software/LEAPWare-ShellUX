@@ -25,9 +25,9 @@ on:
     tags:
       - 'v*'
 
-# `contents: write` is scoped to the `release` job alone, which is the only one
-# that creates or uploads to a release. `verify` reads the repository and needs
-# nothing else.
+# `contents: write` is scoped to the `package-and-draft-release` job alone,
+# which is the only one that creates or uploads to a release. `verify` reads
+# the repository and needs nothing else.
 permissions:
   contents: read
 
