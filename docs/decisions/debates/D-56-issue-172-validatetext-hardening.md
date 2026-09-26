@@ -510,3 +510,49 @@ door, silent about a string that reaches display any other way. The
 `hostContract.ts` mirror is a **guardrail**. Neither is described as
 "fixed," "frozen" (in the sense of behaviour) or "immutable" anywhere in the
 change.
+
+---
+
+## Post-implementation review findings (PR #236), not part of the debate above
+
+Two `claude[bot]` review rounds on the implementation PR found three real
+issues after the debate closed and the code was written. None reopens the
+debate's decision; all three are corrected in the same PR, not deferred.
+
+1. **A conceded round-2 deliverable was dropped between decision and
+   implementation.** Round 2's resolution of Objection 4 committed to a
+   dedicated runtime-door test ("setNavigationTree refuses a label carrying
+   a bidi control or a line separator") plus doc updates in `types.ts`/
+   `DEVELOPER.md`; round 3 and the final CONCEDE both still listed it as
+   "still open, for whoever implements this," and the implementation commit
+   did not carry it forward, nor did the PR's "Not done"/"Limits" sections
+   name the gap — they instead asserted, uncited, that entry-point
+   validation is real at the runtime door too. `claude[bot]` caught this
+   exact chain (conceded → still-open → silently absent → asserted anyway).
+   Fixed: the test now exists in `src/core/__tests__/navigationTree.test.tsx`,
+   confirmed to pass against the already-shipped code (the runtime door
+   already refused this input, it was only untested), and `types.ts`/
+   `DEVELOPER.md` cite it with the user-data-cleaning guidance round 2 asked
+   for.
+2. **The exhaustive-scan numbers pasted into the PR body didn't reconcile
+   with each other**, because they mixed raw pattern-match totals (any
+   codepoint, matched or not by `Default_Ignorable_Code_Point`) with a claim
+   framed as default-ignorable-restricted coverage. Tracing the exact
+   240-codepoint gap `claude[bot]` found led to the actual defect: `TEXT_INVISIBLE_PATTERN`
+   carried a `U+E0100-U+E01EF` sub-range that had become a strict subset of
+   the wider `U+E0080-U+E0FFF` range added later in the same pattern —
+   redundant, never changing which characters were matched, but the source
+   of the confusing arithmetic. Removed the redundant sub-range from all
+   three places it was recorded; the PR body's pasted numbers now report
+   DI-restricted coverage that actually sums to the total scanned.
+3. **The `unc-path` false-positive exclusion this same change added was
+   file-agnostic and asserted a false "never."** `claude[bot]` correctly
+   identified that a lowercase `u` plus four hex digits is a syntactically
+   valid NetBIOS-style hostname, and that `accept` had no file check at all,
+   so it silently weakened `unc-path` detection in every tracked file, not
+   only the one JSON file it was written for. Its own suggested mechanism
+   (`onlyFiles` on the whole rule) would have been a worse regression — that
+   gates the entire rule, disabling `unc-path` detection everywhere but
+   `api-surface.json` — so the actual fix checks `context.file` inside
+   `accept` itself, and a new test proves the same escape-shaped text in a
+   different file is still caught.

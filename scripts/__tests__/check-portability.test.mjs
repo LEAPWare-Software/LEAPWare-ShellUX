@@ -191,6 +191,16 @@ const FIRING = [
   { rule: 'temp-or-scratch-path', file: 'src/scratch.ts', text: assemble('scratch', 'pad') },
   { rule: 'absolute-posix-path', file: 'src/posix.ts', text: assemble('/', 'usr', '/', 'local', '/', 'lib') },
   { rule: 'unc-path', file: 'src/unc.ts', text: assemble(' ', BS, BS, 'fileserver', '.', 'corp', BS, 'share') },
+  {
+    // D-56 (#172): the `unc-path` `accept` exclusion for a run of JSON-escaped
+    // `\uXXXX` escapes is scoped to exactly `src/sdk/api-surface.json` via
+    // `context.file` — the identical escape-run text in any other file is not
+    // excluded, and a `u` plus four hex digits is a syntactically valid
+    // NetBIOS-style hostname, so this must still fire here.
+    rule: 'unc-path',
+    file: 'src/api-surface-like.ts',
+    text: assemble(BS, BS, 'u', '2', '0', '6', 'A', BS, BS, 'u', '2', '0', '6', 'F'),
+  },
   { rule: 'hardcoded-ip-address', file: 'src/ip.ts', text: assemble('203', '.', '0', '.', '113', '.', '7') },
   {
     rule: 'hardcoded-hostname',
@@ -253,16 +263,20 @@ const ACCEPTED = [
     why: 'platform-only-invocation and platform-only-path-separator are scoped to files that run commands',
   },
   {
-    // D-56 (#172): a JSON file recording `String(someRegExp)` writes runs of
-    // JSON-escaped `\uXXXX` Unicode escapes back to back, and two adjacent
-    // ones are exactly the shape unc-path looks for (`\\` + alnum run + `\\`).
-    // A UNC host is never a literal lowercase `u` plus four hex digits and
-    // nothing else, so this is the `unc-path` rule's own `accept` exclusion,
-    // not the ALLOWLIST — a real UNC path typed into the same file afterwards
-    // still gets caught.
-    file: 'src/api-surface-like.ts',
+    // D-56 (#172): `src/sdk/api-surface.json` records `String(someRegExp)`,
+    // which writes runs of JSON-escaped `\uXXXX` Unicode escapes back to
+    // back, and two adjacent ones are exactly the shape unc-path looks for
+    // (`\\` + alnum run + `\\`). The `unc-path` rule's own `accept` exclusion
+    // (not the ALLOWLIST) is scoped to exactly this one path via
+    // `context.file` — see the FIRING case below, which proves the identical
+    // text in a different file is still caught, closing the gap a
+    // `claude[bot]` review found in this exclusion's first version (it had
+    // no file check at all, and its "never" claim about UNC hostnames was
+    // false: a lowercase `u` plus four hex digits is a syntactically valid
+    // NetBIOS-style name).
+    file: 'src/sdk/api-surface.json',
     text: assemble(BS, BS, 'u', '2', '0', '6', 'A', BS, BS, 'u', '2', '0', '6', 'F'),
-    why: 'a run of JSON-escaped \\uXXXX Unicode escapes is not a UNC path naming a host',
+    why: 'a run of JSON-escaped \\uXXXX Unicode escapes in api-surface.json is not a UNC path naming a host',
   },
 ];
 

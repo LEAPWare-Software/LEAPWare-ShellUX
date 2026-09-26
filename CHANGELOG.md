@@ -222,11 +222,27 @@ from so a reader can check it.
   "mirrors the SDK baseline's version, id pattern, text patterns, reserved
   ids and text bound"; `src/sdk/__tests__/apiSurface.test.ts` — "names the
   pattern and both sides of the change in the reason string for each text
-  pattern (D-56, #172)". Full debate record:
+  pattern (D-56, #172)"; `src/core/__tests__/navigationTree.test.tsx` —
+  "setNavigationTree refuses a label carrying a bidi control or a line
+  separator", pinning that the runtime `setNavigationTree` door is refused
+  through the same gate as registration, not merely assumed from the shared
+  function (a debate commitment that had been conceded but not shipped,
+  caught by a `claude[bot]` review round; `DEVELOPER.md` and `types.ts` gain
+  the matching citation and user-data-cleaning guidance in the same commit).
+  Full debate record:
   `docs/decisions/debates/D-56-issue-172-validatetext-hardening.md`. **Filed
   as a sibling, not fixed here: #235.** Chrome text beside a plugin-authored
   RTL label is not bidi-isolated — proposed `<bdi>`/`unicode-bidi: isolate`,
   needs a Playwright measurement since jsdom cannot observe layout.
+  A second `claude[bot]` review round also found `scripts/check-portability.mjs`'s
+  `unc-path` false-positive exclusion (added for this same change) was
+  file-agnostic and asserted a false "never" about UNC hostname shapes —
+  fixed by scoping the exclusion to `context.file === 'src/sdk/api-surface.json'`
+  rather than gating the whole rule via `onlyFiles` (which would have
+  disabled `unc-path` detection everywhere else). *Test:*
+  `scripts/__tests__/check-portability.test.mjs` — the new `unc-path` FIRING
+  case proving the identical escape-run text in a different file is still
+  caught.
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two

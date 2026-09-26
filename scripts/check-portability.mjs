@@ -470,17 +470,32 @@ const CONTENT_RULES = [
     // path in a source string, which is the drive-letter rule's finding to report
     // and not this one's.
     patterns: [/(?<![\\/:\w.$-])\\\\[A-Za-z0-9][A-Za-z0-9._-]+\\/g],
-    // D-56 (#172) sharpened this after a real false positive: a JSON file
-    // recording a `RegExp`'s `String(...)` form (`src/sdk/api-surface.json`'s
-    // `textForbiddenPattern`/`textInvisiblePattern`) writes runs of JSON-escaped
-    // `\uXXXX` Unicode escapes back to back — e.g. `\\u200E\\u200F` — and two
-    // adjacent escapes are exactly `\\` + four alnum hex digits + `\\`, the same
-    // shape this pattern looks for. A UNC host component is never a literal
-    // lowercase `u` followed by four hex digits and nothing else, so that shape
-    // is excluded rather than allowlisting the whole file, which would also
-    // have switched this rule off for a real UNC path typed into the same file
-    // by mistake later.
-    accept: (match) => /^u[0-9A-Fa-f]{4}$/.test(match[0].slice(2, -1)),
+    // D-56 (#172) sharpened this after a real false positive: `src/sdk/api-surface.json`
+    // records a `RegExp`'s `String(...)` form (`textForbiddenPattern`/
+    // `textInvisiblePattern`) as a run of adjacent JSON-escaped Unicode
+    // escapes, each one backslash + lowercase `u` + four hex digits — and two
+    // of them back to back are exactly backslash-backslash + an alnum run +
+    // backslash-backslash, the same shape this pattern looks for. (Not typed
+    // literally in this comment, on purpose — see the test below for a
+    // spelled-out example, kept out of this file for exactly this reason.)
+    //
+    // A `claude[bot]` review on that PR caught a first version of this
+    // exclusion that was wrong twice over: it claimed a UNC host component is
+    // "never" a literal lowercase `u` plus four hex digits, which is false —
+    // that shape is a syntactically valid NetBIOS-style hostname (alphanumeric,
+    // up to 15 characters) — and it excluded the shape file-agnostically
+    // (`accept` never looked at which file it was in), so it silently weakened
+    // real `unc-path` detection in every tracked file, not just the one JSON
+    // file it was written for. `onlyFiles` was not the fix either: it would
+    // gate the *entire rule*, not just this exclusion, turning off `unc-path`
+    // detection everywhere but `api-surface.json`. The correction is to check
+    // `context.file` inside `accept` itself, so the exclusion applies only to
+    // the one file it is true for, and a real UNC path anywhere else — this
+    // file included, elsewhere on the same line shape, or typed into
+    // `api-surface.json` afterwards in a context this exact shape doesn't
+    // cover — still gets caught.
+    accept: (match, context) =>
+      context.file === 'src/sdk/api-surface.json' && /^u[0-9A-Fa-f]{4}$/.test(match[0].slice(2, -1)),
   },
   {
     id: 'developer-username',
