@@ -268,17 +268,29 @@ describe('validateBlueprint — text fields', () => {
     }
   });
 
-  it('rejects the same bidi override at each of the other 6 validateText call sites (D-56, #172)', () => {
+  it('rejects the same bidi override, and an invisible-only blank, at each of the other 6 validateText call sites (D-56, #172)', () => {
     // F4, cloud-reviewer verdict on PR #236: the CHANGELOG/ADR/DECISIONS claim
     // hardening for "all 7" display-string fields, but every prior test above
     // drives blueprint `name` only -- true by construction (one shared
     // validateText), unobserved for the other six. This exercises each one
     // directly, through the same public validateBlueprint entry point.
+    //
+    // F3, a later cloud-reviewer pass: a parallel-work merge dropped a
+    // RibbonAction.icon case that covered an invisible-only blank string, not
+    // just the forbidden/bidi-override path this test originally checked --
+    // that was a real, non-redundant gap, not the duplicate it was taken for.
+    // Both shapes are checked at every site now, not just the forbidden one.
     const bidi = '\u202E' + 'gnik'; // RIGHT-TO-LEFT OVERRIDE
+    const blank = '\u200B\u034F'; // ZERO WIDTH SPACE + COMBINING GRAPHEME JOINER
     const cases: [Record<string, unknown>, string][] = [
       [{ version: bidi }, 'version'],
+      [{ version: blank }, 'version'],
       [
         { ribbonActions: [{ ...makeAction(), label: bidi }] },
+        'ribbonActions[0].label',
+      ],
+      [
+        { ribbonActions: [{ ...makeAction(), label: blank }] },
         'ribbonActions[0].label',
       ],
       [
@@ -286,7 +298,15 @@ describe('validateBlueprint — text fields', () => {
         'ribbonActions[0].icon',
       ],
       [
+        { ribbonActions: [{ ...makeAction(), icon: blank }] },
+        'ribbonActions[0].icon',
+      ],
+      [
         { navigationTree: [{ id: 'root-a', label: bidi }] },
+        'navigationTree[0].label',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: blank }] },
         'navigationTree[0].label',
       ],
       [
@@ -294,9 +314,21 @@ describe('validateBlueprint — text fields', () => {
         'navigationTree[0].icon',
       ],
       [
+        { navigationTree: [{ id: 'root-a', label: 'Root A', icon: blank }] },
+        'navigationTree[0].icon',
+      ],
+      [
         {
           navigationTree: [
             { id: 'root-a', label: 'Root A', metric: { kind: 'bar', value: 0.5, description: bidi } },
+          ],
+        },
+        'navigationTree[0].metric.description',
+      ],
+      [
+        {
+          navigationTree: [
+            { id: 'root-a', label: 'Root A', metric: { kind: 'bar', value: 0.5, description: blank } },
           ],
         },
         'navigationTree[0].metric.description',

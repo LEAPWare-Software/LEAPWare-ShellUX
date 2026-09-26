@@ -325,9 +325,10 @@ describe('the host constants', () => {
     expect(disposableClone.lastIndex).toBe(0); // the one write that DID fail
 
     // None of this reaches the real exports: nothing in this codebase calls
-    // .compile() on TEXT_FORBIDDEN_PATTERN/TEXT_INVISIBLE_PATTERN, and freeze
-    // costs nothing for the read path either, because neither carries g/y,
-    // so .test()/.exec() never read or write lastIndex in the first place.
+    // .compile() on TEXT_FORBIDDEN_PATTERN/TEXT_INVISIBLE_PATTERN. Freeze
+    // costs nothing either way: lastIndex is always read (then reset to 0
+    // locally for a non-g/y pattern), but only written back for g/y, and
+    // neither export carries one, so .test()/.exec() never write it here.
     expect(TEXT_FORBIDDEN_PATTERN.global).toBe(false);
     expect(TEXT_INVISIBLE_PATTERN.global).toBe(false);
   });

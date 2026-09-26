@@ -47,12 +47,9 @@ nav node `label`/`icon` :863/:885 via `normalizeNavigationNode`, reached from
 nav metric `description` :781).
 
 Cited the shipped precedent: `pluginPackage.ts:185`
-`TITLE_FORBIDDEN_PATTERN = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/u`; `pluginPackage.ts:195`
-`INVISIBLE_PATTERN = /[­ᅟᅠ᠎​-‍⁠ㅤ﻿ﾠ\u{E0000}-\u{E007F}]/gu`; applied in order
-at :248-251 (forbidden-test, then strip-invisible-and-check-blank, then
+`TITLE_FORBIDDEN_PATTERN = /[\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u`; `pluginPackage.ts:195`\u000A`INVISIBLE_PATTERN = /[\u00AD\u115F\u1160\u180E\u200B-\u200D\u2060\u3164\uFEFF\uFFA0\u{E0000}-\u{E007F}]/gu`; applied in order\u000Aat :248-251 (forbidden-test, then strip-invisible-and-check-blank, then
 length); pinned by a test at `electron/__tests__/pluginPackage.test.ts:172` covering
-this exact rejection shape (also asserting `'Ma‍il'` is still accepted) —
-the round-1-era title has since been widened by the implementation commit;
+this exact rejection shape (also asserting `'Ma\u200Dil'` is still accepted) \u2014\u000Athe round-1-era title has since been widened by the implementation commit;
 current title, *Tests:* "refuses a title carrying a bidi control, a C0 or C1
 control, a line/paragraph separator, an interlinear-annotation control, or
 nothing but invisible characters".
@@ -125,8 +122,7 @@ major is spent, making a second major likely.
 
 Verified all citations directly against `bc4026d` — `validateText`'s line
 range and seven call sites, `TITLE_FORBIDDEN_PATTERN`/`INVISIBLE_PATTERN`'s
-lines and application order, the pinning test title and its `'Ma‍il'`
-acceptance case, the ADR-0006 versioning text and the MAX_SCOPES precedent,
+lines and application order, the pinning test title and its `'Ma\u200Dil'`\u000Aacceptance case, the ADR-0006 versioning text and the MAX_SCOPES precedent,
 and `hostContract.ts:5-20` — all held.
 
 **Objections, what must change to concede:**
@@ -562,17 +558,27 @@ debate's decision; all three are corrected in the same PR, not deferred.
    informally imprecise — flagged as PLAUSIBLE rather than CONFIRMED because
    the reviewer could not execute code to measure it.** Measured directly:
    `lastIndex` is an own, writable data property, so `Object.freeze` makes it
-   non-writable, and both a direct assignment and a call to `.compile()`
-   (which re-writes `lastIndex` internally) throw a `TypeError` in this
-   always-strict ES-module code. The debate rounds above are left as they
+   non-writable, and a direct assignment throws a `TypeError` in this
+   always-strict ES-module code. `.compile()` is worse than a clean throw: a
+   later, independent measurement (the `shellux-cloud-reviewer`'s F2, on the
+   implementation PR) found it silently rewrites `source`/`flags`/`global`
+   from internal slots freeze does not protect, and only throws when it
+   reaches the one step that touches an own property (resetting `lastIndex`
+   to 0) — this paragraph's first-pass account of "both throw a TypeError"
+   undersold that, and was itself corrected once, in the same PR review
+   cycle, before this sentence was. The debate rounds above are left as they
    are — that is what was actually said in the actual debate, wrong claim
    included, per this record's own opening note about reproducing the real
    transcript rather than a corrected one — but the shipped docblock in
-   `RegistryContext.tsx` is corrected to state the measured fact (freeze
-   *does* protect `lastIndex`; it costs nothing here only because neither
-   pattern carries `g`/`y`, so nothing ever reads or writes it), and a new
-   test pins the measurement rather than asserting it from memory a second
-   time.
+   `RegistryContext.tsx` states the fully measured fact (freeze protects a
+   direct `lastIndex` write; `.compile()` corrupts other slots before it hits
+   that one protected write), and per a still-later correction (a
+   `shellux-cloud-reviewer` F5), `lastIndex` is not "never read" for a
+   non-`g`/`y` pattern either — the spec's `exec`/`test` algorithm always
+   reads it first and only skips the write-back — it costs nothing here only
+   because that read is a no-op against a value that's always 0 and no write
+   ever follows. Two new tests pin these measurements rather than asserting
+   them from memory a second and third time.
 5. **An independent `shellux-cloud-reviewer` (opus, host-security path) pass
    found a fifth issue, F4: "all 7 fields" was claimed but only blueprint
    `name` was directly tested** — true by construction (one shared

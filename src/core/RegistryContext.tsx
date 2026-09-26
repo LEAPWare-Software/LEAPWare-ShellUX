@@ -119,10 +119,17 @@ export const EXTENSION_ID_PATTERN = Object.freeze(/^[a-z0-9][a-z0-9-]{0,63}$/);
  * to also throw. Nothing in this codebase calls `.compile()` on either
  * export, so this is a documented latent hazard, not a live one.
  *
- * Both of the above cost nothing here regardless, because `.test()`/`.exec()`
- * only ever read or write `lastIndex` for a `g`- or `y`-flagged pattern, and
- * neither export carries one (see "the shared text patterns carry no global
- * flag" below) — the same register as `EXTENSION_ID_PATTERN`'s "hardened
+ * Both of the above cost nothing here regardless: per the spec algorithm
+ * `.test()`/`.exec()` call, `lastIndex` is always READ (then locally reset to
+ * 0 for a non-`g`/`y` pattern before the search runs), but only WRITTEN back
+ * for a `g`- or `y`-flagged pattern — and neither export carries one (see
+ * "the shared text patterns carry no global flag" below), so the read is a
+ * no-op against a value that's always 0 and the write never happens at all.
+ * (Not independently re-instrumented here: `lastIndex` is non-configurable
+ * even before freezing, which blocks both a getter trap and a `Proxy`, since
+ * `RegExp.prototype.exec` refuses a receiver without the internal slot — the
+ * "always reads" half is spec text, not a repro run against V8 specifically.)
+ * The same register as `EXTENSION_ID_PATTERN`'s "hardened
  * against replacement, not against a determined caller" above. Neither
  * pattern is described as "fixed" or "immutable" for that reason: replacing
  * `.test` as an own property is

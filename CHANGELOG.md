@@ -200,8 +200,13 @@ from so a reader can check it.
   `pluginPackage.ts` deletes its own `TITLE_FORBIDDEN_PATTERN`/
   `INVISIBLE_PATTERN` and imports the mirror instead. Verified exhaustively
   against every codepoint U+0000-U+10FFFF for `Default_Ignorable_Code_Point`
-  coverage (Node v22.22.2, Unicode 17.0): 4174 default-ignorable codepoints
-  scanned, 0 uncovered. **Baseline-visible:** `ApiSurface.textForbiddenPattern`
+  coverage: `node scripts/scan-default-ignorable-coverage.mjs`
+  (`npm run scan:unicode-coverage`), committed rather than left as a chat
+  transcript a rule-9/Amendment-G reviewer can't reproduce — at Node
+  v22.22.2, Unicode 17.0: 4174 default-ignorable codepoints scanned, 0
+  uncovered. Deliberately not part of `npm run verify`, since its result
+  depends on the Node build's own Unicode-data version (the script's own
+  header says so). **Baseline-visible:** `ApiSurface.textForbiddenPattern`
   and `.textInvisiblePattern` record `String(pattern)` (flags included), and
   any change to either is an unconditional major in `diffSurface` —
   `HOST_API_VERSION` moves `1.1` → `2.0`
@@ -214,12 +219,16 @@ from so a reader can check it.
   (D-56, #172)", "a string made only of two or more different invisible
   characters is blank (D-56, #172)", "a Persian name held together by ZWNJ is
   not blank (D-56, #172)", "an emoji with a variation selector is not blank
-  (D-56, #172)", "rejects the same bidi override at each of the other 6
-  validateText call sites (D-56, #172)" (`version`, command `label`/`icon`,
-  nav node `label`/`icon`, nav metric `description` — the prior tests all
-  drove blueprint `name` only, true-by-construction but unobserved for the
-  other six until a cloud-reviewer pass named the gap); `DEVELOPER.md` gains
-  the matching field-table pointers and version note.
+  (D-56, #172)", "rejects the same bidi override, and an invisible-only
+  blank, at each of the other 6 validateText call sites (D-56, #172)"
+  (`version`, command `label`/`icon`, nav node `label`/`icon`, nav metric
+  `description` — the prior tests all drove blueprint `name` only,
+  true-by-construction but unobserved for the other six until a
+  cloud-reviewer pass named the gap; a later pass caught a parallel-work
+  merge that had dropped a non-redundant invisible-only-blank case for
+  `RibbonAction.icon` while removing a truly redundant one — both shapes are
+  now checked at every site, not just the forbidden/bidi-override one);
+  `DEVELOPER.md` gains the matching field-table pointers and version note.
   `src/core/__tests__/hostConstants.test.ts` — "the shared
   text patterns carry no global flag, so repeated test calls agree";
   `electron/__tests__/pluginPackage.test.ts` — "refuses a title carrying a
@@ -270,13 +279,18 @@ from so a reader can check it.
   same branch closed this from different directions (a genuine parallel-work
   collision, reconciled by merge rather than by discarding either side): one
   added a shared "Display text is also refused..." subsection plus the
-  cross-field coverage test named above; the other added per-field
-  a per-field New-in-2.0 note directly on each row. The merged result
-  keeps both — the detailed per-row prose and the shared subsection — and
-  cites the one comprehensive test from every row, since the two narrower,
-  single-field tests the second push added (`NavigationNode.label`,
-  `RibbonAction.icon`) became strictly redundant with it and were dropped
-  rather than left duplicating coverage.
+  cross-field coverage test named above; the other added a per-field
+  New-in-2.0 note directly on each row. The merged result keeps both — the
+  detailed per-row prose and the shared subsection — and cites the one
+  comprehensive test from every row. Of the second push's two narrower,
+  single-field tests, `NavigationNode.label`'s was genuinely redundant with
+  the comprehensive test and was dropped; `RibbonAction.icon`'s covered an
+  invisible-only blank string, a shape the comprehensive test didn't check
+  at any non-`name` site at the time — a real gap, not a duplicate, caught
+  by a later cloud-reviewer pass (F3) and closed by extending the
+  comprehensive test to check both the forbidden/bidi-override shape and an
+  invisible-only blank at every site, rather than reintroducing the
+  single-field test.
   A fourth `claude[bot]` review round found the `TEXT_FORBIDDEN_PATTERN`
   rejection message named only four of the five categories the pattern
   actually forbids — a value refused solely for a deprecated format control

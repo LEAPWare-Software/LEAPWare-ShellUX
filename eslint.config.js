@@ -190,8 +190,10 @@ export default tseslint.config(
   // `electron/main/plugins/hostContract.ts`) is not ordinary text: it is a
   // character class whose MEMBERS are, by design, combining marks and
   // variation selectors — U+034F COMBINING GRAPHEME JOINER, U+180B-180F the
-  // Mongolian variation selectors, U+FE00-FE0F and U+E0100-E01EF the BMP and
-  // supplementary variation selectors — listed as alternatives precisely
+  // Mongolian variation selectors, U+FE00-FE0F the BMP variation selectors,
+  // and U+E0080-E0FFF (which covers the supplementary variation selectors,
+  // U+E0100-E01EF, as part of a wider default-ignorable plane-14 range) —
+  // listed as alternatives precisely
   // because each one, ALONE, must be caught and stripped for the blankness
   // check. Two of them sitting next to each other in the class's source text
   // is not a mistaken "did you mean one combined glyph" — it is the class
