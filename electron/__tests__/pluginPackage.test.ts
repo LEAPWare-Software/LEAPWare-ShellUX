@@ -191,7 +191,9 @@ describe('the .lwplugin package', () => {
       'Mail\u206Achain', // deprecated format control (INHIBIT SYMMETRIC SWAPPING)
     ];
     for (const title of controls) {
-      expect(reasonOf(parse({ title }))).toBe('manifest.title must not contain control characters or bidi controls');
+      expect(reasonOf(parse({ title }))).toBe(
+        'manifest.title must not contain a bidi control, a C0/C1 control, a line or paragraph separator, an interlinear-annotation control, or a deprecated format control',
+      );
     }
     const invisible = [
       '\u200B',

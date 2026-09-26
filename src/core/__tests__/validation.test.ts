@@ -348,11 +348,17 @@ describe('validateBlueprint — text fields', () => {
     const blank = [
       '\u200B\u034F', // ZERO WIDTH SPACE + COMBINING GRAPHEME JOINER
       '\uFEFF\u2060\u180B', // BOM + WORD JOINER + Mongolian FVS1
-      '\u2800', // BRAILLE PATTERN BLANK alone — named by decision, not by Default_Ignorable
     ];
     for (const name of blank) {
       expectRejection(makeBlueprint({ name }), 'INVALID_FIELD', 'name');
     }
+  });
+
+  it('a string made only of U+2800 BRAILLE PATTERN BLANK is blank, though it is not Default_Ignorable (D-56, #172)', () => {
+    // A distinct claim from the two-or-more-invisible-characters test above:
+    // this is a single character, named into TEXT_INVISIBLE_PATTERN by
+    // decision rather than by the Default_Ignorable_Code_Point property.
+    expectRejection(makeBlueprint({ name: '\u2800' }), 'INVALID_FIELD', 'name');
   });
 
   it('a Persian name held together by ZWNJ is not blank (D-56, #172)', () => {

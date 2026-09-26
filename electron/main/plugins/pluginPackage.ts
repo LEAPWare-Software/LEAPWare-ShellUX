@@ -236,7 +236,9 @@ function validateManifest(value: unknown): PluginManifest {
 
   const title = requireString(value, 'title', 'manifest');
   if (TEXT_FORBIDDEN_PATTERN.test(title)) {
-    refuse('manifest.title must not contain control characters or bidi controls');
+    refuse(
+      'manifest.title must not contain a bidi control, a C0/C1 control, a line or paragraph separator, an interlinear-annotation control, or a deprecated format control',
+    );
   }
   // Fresh, locally-built `g` copy: `TEXT_INVISIBLE_PATTERN` carries no `g` flag
   // (see its docblock in hostContract.ts). Calling `.replace(TEXT_INVISIBLE_PATTERN, '')`
