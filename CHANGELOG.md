@@ -14,6 +14,41 @@ from so a reader can check it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Second review round on PR #233 found three more real issues, all fixed in the
+  same PR.**
+  - **`release.yml`'s draft-creation step was not safely re-runnable.** `gh release
+    create` has no upsert: a run that created the draft and then failed on one of
+    the two upload steps (a transient network error, say) would leave a stray
+    draft that made every retry fail with "release already exists", with no
+    documented recovery. Found by `claude[bot]`'s review. Fixed by checking `gh
+    release view "$TAG_NAME" --repo "$REPO"` first and only creating the draft if
+    it does not already exist; the two upload steps were already `--clobber`-safe
+    to repeat. Documented in `docs/RELEASE.md` §2.4.
+  - **`docs/INSTALL.md` §5 and `docs/RELEASE.md`'s opening line were stale**,
+    falsified by this same PR's own item 2 (the `publish: { provider: github }`
+    block) without being updated in the commit that made them false — CLAUDE.md
+    rule 3. `INSTALL.md` said "the update feed is not live yet" and named a
+    nonexistent `publish` block as the reason; `RELEASE.md`'s first sentence said
+    "the update feed host is not provisioned." Both rewritten to the true state:
+    the feed is configured (D-34/D-43) but has never been exercised, because no
+    release has ever been published — Step 9's job, not this PR's.
+  - **The pre-existing `docs/claims.json` row C-36 pinned an exact sentence from
+    `INSTALL.md`** ("The update feed is not live yet") that the fix above changed,
+    which would otherwise have gone from a true claim to a false one still marked
+    proven. `scripts/claims/checks/step7-docs.mjs`'s `install_feed_not_live` key
+    and C-36's `box` text were updated to match the new, equally honest sentence
+    ("a packaged build's real update check still fails today") rather than
+    loosened or dropped.
+  - Also found in this round, filed rather than fixed here (CLAUDE.md rule 7):
+    most of C-51/C-52/C-53's `expect` keys, and a pre-existing pattern in older
+    rows (C-44 through C-48), are never independently exercised by their row's one
+    mutation probe when a check emits several keys — the same failure class as the
+    `upload_order_correct` bug below, generalized. This is a claims-register
+    schema question (how many probes a row may declare), not a one-line fix; filed
+    as issue #234 with the reviewer's own evidence.
+
 ### Security
 
 - **Shell-injection via an untrusted git tag name in `.github/workflows/release.yml`,

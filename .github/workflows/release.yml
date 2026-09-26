@@ -119,13 +119,20 @@ jobs:
       # quoted straight into the shell string instead. An environment variable's
       # *value* is never re-parsed for shell syntax, so `"$TAG_NAME"` is safe
       # regardless of what the tag name contains.
+      # Idempotent on retry: `gh release create` has no upsert, so a run that
+      # created the draft and then failed on one of the two upload steps below
+      # (a transient network error, say) would otherwise leave a stray draft
+      # that makes every retry fail here with "release already exists", with no
+      # recovery but a human deleting it by hand. `gh release view` first makes
+      # a retry skip straight to the (already `--clobber`-safe) upload steps
+      # instead.
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         shell: bash
-        run: gh release create "$TAG_NAME" --draft --title "$TAG_NAME" --notes "Draft release for $TAG_NAME, packaged by .github/workflows/release.yml. Unsigned unless D-25's signing identity is configured, verify with the platform's own tool per docs/RELEASE.md section 2.3, not by the absence of a warning in this build log. Publishing this draft is a human step (docs/RELEASE.md section 2.4)." --repo "$REPO"
+        run: gh release view "$TAG_NAME" --repo "$REPO" >/dev/null 2>&1 || gh release create "$TAG_NAME" --draft --title "$TAG_NAME" --notes "Draft release for $TAG_NAME, packaged by .github/workflows/release.yml. Unsigned unless D-25's signing identity is configured, verify with the platform's own tool per docs/RELEASE.md section 2.3, not by the absence of a warning in this build log. Publishing this draft is a human step (docs/RELEASE.md section 2.4)." --repo "$REPO"
 
       # THE INSTALLER AND ITS BLOCKMAP, FIRST. RELEASE.md section 2.4: the
       # blockmap is what makes a differential update possible, and uploading it

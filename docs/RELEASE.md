@@ -1,7 +1,8 @@
 # Releasing a desktop build
 
-**Nothing has been released.** `package.json` declares `0.1.0`, the package is
-marked private, there is no tag, and the update feed host is **not provisioned**.
+**Nothing has been released.** `package.json` declares `0.1.0`, the npm package is
+marked private, there is no tag, and the update feed is decided and configured
+(D-34/D-43) but has never been exercised end to end — see the table below.
 This document is the checklist that has to be true before the first release is,
 and it is written so that the first person to use it can tell what has been
 observed from what has only been configured.
@@ -171,6 +172,12 @@ a set of manual uploads to perform by hand, unless the workflow was bypassed.
 - [ ] Upload the manifest **last**. It is the file that tells running applications
       an update exists, so a manifest published before its installer is a window in
       which every client tries to download a file that is not there yet.
+
+**Retrying a failed run.** `release.yml`'s draft-creation step checks whether the
+tag's release already exists before creating it, so re-running the job after a
+partial failure (say, a transient network error on one of the two upload steps)
+does not fail at "release already exists" — it skips straight to the uploads,
+which are already `--clobber`-safe to repeat.
 
 ---
 

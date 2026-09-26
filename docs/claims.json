@@ -2704,7 +2704,7 @@
     },
     {
       "id": "C-36",
-      "box": "`docs/INSTALL.md` for operators: install per-user, the SmartScreen \"More info → Run anyway\" path for an unsigned build, where the logs live, and how updates arrive (partly covers #43). Written with those sections plus uninstalling, and linked from the README; the update section says the feed is not live yet.",
+      "box": "`docs/INSTALL.md` for operators: install per-user, the SmartScreen \"More info → Run anyway\" path for an unsigned build, where the logs live, and how updates arrive (partly covers #43). Written with those sections plus uninstalling, and linked from the README; the update section honestly says updates don't work yet, whatever the current reason (originally no feed configured; now a configured feed with no release ever published, per plan step 8 items 2-5, PR #233).",
       "class": "repo",
       "checks": [
         [
@@ -2742,7 +2742,7 @@
         ]
       },
       "provenOn": "2026-09-19",
-      "addedBy": "plan step 7 docs (docs/step7-limits-install) — tightened 2026-09-19 (proof audit item 29): the box's \"the feed is not live yet\" clause was unchecked; step7-docs.mjs now asserts INSTALL.md still carries that exact sentence."
+      "addedBy": "plan step 7 docs (docs/step7-limits-install) — tightened 2026-09-19 (proof audit item 29): the box's \"the feed is not live yet\" clause was unchecked; step7-docs.mjs now asserts INSTALL.md still carries that exact sentence. Re-pointed 2026-09-26 (PR #233, claude[bot] review): plan step 8 items 2-5 configured the update feed (D-34/D-43), so the original sentence went stale; the check now asserts INSTALL.md's honest replacement sentence instead of loosening or dropping the assertion."
     },
     {
       "id": "C-37",
