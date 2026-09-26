@@ -277,6 +277,12 @@ from so a reader can check it.
   single-field tests the second push added (`NavigationNode.label`,
   `RibbonAction.icon`) became strictly redundant with it and were dropped
   rather than left duplicating coverage.
+  A fourth `claude[bot]` review round found the `TEXT_FORBIDDEN_PATTERN`
+  rejection message named only four of the five categories the pattern
+  actually forbids — a value refused solely for a deprecated format control
+  (U+206A-U+206F) got a message describing none of its own reason. Fixed by
+  naming the fifth category; no test asserted the old message text, so
+  nothing else needed to change.
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two

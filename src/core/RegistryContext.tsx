@@ -478,7 +478,7 @@ function validateText(value: unknown, path: string, maxLength: number): string {
   if (TEXT_FORBIDDEN_PATTERN.test(value)) {
     throw new ShellUXError(
       'INVALID_FIELD',
-      `Field "${path}" must not contain a bidi control, a C0/C1 control, a line or paragraph separator, or an interlinear-annotation control.`,
+      `Field "${path}" must not contain a bidi control, a C0/C1 control, a line or paragraph separator, an interlinear-annotation control, or a deprecated format control.`,
       path,
     );
   }
