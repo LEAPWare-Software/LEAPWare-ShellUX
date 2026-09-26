@@ -3502,15 +3502,15 @@
           {
             "file": ".github/workflows/release.yml",
             "replace": [
-              "gh release upload \"${{ github.ref_name }}\" release/*.exe release/*.blockmap --repo \"${{ github.repository }}\" --clobber",
-              "gh release upload \"${{ github.ref_name }}\" release/latest.yml --repo \"${{ github.repository }}\" --clobber-INSTALLER-MARKER"
+              "gh release upload \"$TAG_NAME\" release/*.exe release/*.blockmap --repo \"$REPO\" --clobber",
+              "gh release upload \"$TAG_NAME\" release/latest.yml --repo \"$REPO\" --clobber-INSTALLER-MARKER"
             ]
           },
           {
             "file": ".github/workflows/release.yml",
             "replace": [
-              "gh release upload \"${{ github.ref_name }}\" release/latest.yml --repo \"${{ github.repository }}\" --clobber\n",
-              "gh release upload \"${{ github.ref_name }}\" release/*.exe release/*.blockmap --repo \"${{ github.repository }}\" --clobber\n"
+              "gh release upload \"$TAG_NAME\" release/latest.yml --repo \"$REPO\" --clobber\n",
+              "gh release upload \"$TAG_NAME\" release/*.exe release/*.blockmap --repo \"$REPO\" --clobber\n"
             ]
           },
           {
