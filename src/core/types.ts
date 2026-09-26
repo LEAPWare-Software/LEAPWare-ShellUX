@@ -1302,9 +1302,10 @@ export interface IShellAPI {
    * and nothing is stored. The array you passed is never retained: mutating it
    * afterwards changes nothing. Since D-56 (#172), that includes refusing a
    * `label`/`icon`/metric `description` carrying a bidi control, a C0/C1
-   * control, a line/paragraph separator or nothing but invisible characters —
-   * the same `validateText` gate `register` applies, at this door too, not a
-   * new one. *Tests:*
+   * control, a line or paragraph separator, an interlinear-annotation
+   * control, a deprecated format control, or nothing but invisible
+   * characters — the same `validateText` gate `register` applies, at this
+   * door too, not a new one. *Tests:*
    * `src/core/__tests__/navigationTree.test.tsx` — "setNavigationTree
    * re-normalises the whole tree at the door" and "setNavigationTree refuses
    * a label carrying a bidi control or a line separator".

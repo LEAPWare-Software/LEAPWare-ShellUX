@@ -236,9 +236,13 @@ export function diffSurface(before: ApiSurface, after: ApiSurface): ContractChan
   // Same reasoning as `EXTENSION_ID_PATTERN` above, and unconditionally a
   // major even for a WIDENING: there is no mechanical way to tell whether one
   // regular expression accepts a subset of another's strings, so the
-  // conservative answer is the one that cannot let a narrowing (or a
-  // per-field exception a plugin could not have anticipated) through as a
-  // minor. See `docs/adr/0006-runtime-plugin-host.md`.
+  // conservative answer is the one that cannot let a narrowing through as a
+  // minor. This only covers a change to the pattern STRING recorded here —
+  // a per-field exception added at a `validateText` call site changes
+  // neither `before.textForbiddenPattern` nor `after.textForbiddenPattern`,
+  // so it is invisible to this diff and gets no bump at all from this
+  // mechanism; that is a widening the baseline cannot see, review sets its
+  // version instead. See `docs/adr/0006-runtime-plugin-host.md`.
   if (before.textForbiddenPattern !== after.textForbiddenPattern) {
     changes.push({
       bump: 'major',

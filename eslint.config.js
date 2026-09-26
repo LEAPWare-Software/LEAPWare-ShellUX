@@ -207,10 +207,15 @@ export default tseslint.config(
   // lives — not to the whole codebase: a misleading character class written
   // anywhere else still fails the build. Flat config has no per-line
   // exception that is not an inline directive, and inline directives are the
-  // thing this repository has zero of; a config entry is reviewable in one
-  // place and fails loudly if either file gains an unrelated genuine mistake
-  // of this shape, which the docblocks on both patterns exist to make a
-  // reviewer check for by hand instead.
+  // thing this repository has zero of, so this necessarily turns the rule off
+  // for these two files in full (~1600 lines each), not only for the two
+  // patterns' own source text (measured: `printf 'export const R = /[❤️]/u;\n'
+  // | npx eslint --stdin --stdin-filename src/core/RegistryContext.tsx` exits
+  // 0). An unrelated genuine mistake of this shape written anywhere else in
+  // either file would pass silently, not fail loudly — this exception buys
+  // one reviewable config entry at the cost of a real, named gap, and the
+  // docblocks on both patterns exist so a human reviewer checks for that by
+  // hand, because the linter no longer will.
   // -------------------------------------------------------------------------
   {
     files: ['src/core/RegistryContext.tsx', 'electron/main/plugins/hostContract.ts'],
