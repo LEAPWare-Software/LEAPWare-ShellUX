@@ -3391,6 +3391,224 @@
       "evidence": "docs/claims-evidence/C-49-repo-visibility-and-ruleset-2026-09-25.txt",
       "provenOn": "2026-09-25",
       "addedBy": "lane C conductor (cloud, 2026-09-25): plan v1-production.md:131"
+    },
+    {
+      "id": "C-50",
+      "box": "`publish: { provider: github, owner, repo }` in `electron-builder.yml`. Update exactly the three places `docs/RELEASE.md` §1 names (`DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs`, and its fixture in `scripts/__tests__/check-portability.test.mjs`). Both gates must go red, then green.",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/publish-github-provider.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "publish_block_present",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "endpoints_still_empty",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "comment_cites_d34",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "fixture_added",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "portability_exit_zero",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "revert electron-builder.yml's publish provider from github back to generic",
+        "edits": [
+          {
+            "file": "electron-builder.yml",
+            "replace": [
+              "publish:\n  provider: github\n  owner: LEAPWare-Software\n  repo: LEAPWare-ShellUX",
+              "publish:\n  provider: generic\n  owner: LEAPWare-Software\n  repo: LEAPWare-ShellUX"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-26",
+      "addedBy": "lane C conductor (cloud, 2026-09-26): plan v1-production.md:185"
+    },
+    {
+      "id": "C-51",
+      "box": "A separate `release.yml` triggered by `v*` tags (as sessionkeeper does): run `verify` before releasing, then package. `desktop.yml` stays the non-publishing PR build. On a `v*` tag, build Windows only (D-26) and create a **draft** GitHub Release. Upload the installer and `.blockmap` first and `latest.yml` last (RELEASE.md §2.4). Publishing the draft stays a human step. The macOS leg is removed from release publishing (kept or dropped as a CI build, stated either way).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/release-workflow.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "triggers_on_v_tags",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "runs_verify_first",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "package_windows_only",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "creates_draft_release",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "upload_order_correct",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "no_macos_in_release_yml",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "desktop_still_non_publishing",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "desktop_keeps_macos_leg",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "retarget release.yml's tag trigger away from v*, so it would never fire on a real version tag",
+        "edits": [
+          {
+            "file": ".github/workflows/release.yml",
+            "replace": [
+              "on:\n  push:\n    tags:\n      - 'v*'",
+              "on:\n  push:\n    tags:\n      - 'release-*'"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-26",
+      "addedBy": "lane C conductor (cloud, 2026-09-26): plan v1-production.md:186"
+    },
+    {
+      "id": "C-52",
+      "box": "Record in `SECURITY.md` and `docs/RELEASE.md` that unsigned updates depend on `sha512` + HTTPS + GitHub account control, and that this is a **guardrail**. Name the test that pins it, or narrow the claim (Amendment G).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/update-guardrail-claim.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "security_md_states_guardrail",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "release_md_states_guardrail",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "amendment_g_points_at_manual_check",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "reword SECURITY.md's heading so it no longer distinguishes guardrail from integrity control",
+        "edits": [
+          {
+            "file": "SECURITY.md",
+            "replace": [
+              "## Update integrity is a guardrail, not an integrity control",
+              "## Update integrity is a guardrail, and an integrity control"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-26",
+      "addedBy": "lane C conductor (cloud, 2026-09-26): plan v1-production.md:187"
+    },
+    {
+      "id": "C-53",
+      "box": "Rewrite RELEASE.md §0 and §1 to the new truth in the same commit (rule 3).",
+      "class": "repo",
+      "checks": [
+        [
+          "node",
+          "scripts/claims/checks/release-md-rewrite.mjs"
+        ]
+      ],
+      "expect": [
+        {
+          "key": "section0_no_longer_unprovisioned",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "section0_cites_d34_d43",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "section0_names_guardrail",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "section1_decide_feed_ticked",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "section1_decide_visibility_ticked",
+          "op": "==",
+          "value": 1
+        },
+        {
+          "key": "section1_cites_github_route",
+          "op": "==",
+          "value": 1
+        }
+      ],
+      "probe": {
+        "name": "un-tick RELEASE.md's 'decide where updates come from' item, as if D-34 had not been recorded there",
+        "edits": [
+          {
+            "file": "docs/RELEASE.md",
+            "replace": [
+              "- [x] **Decide where updates come from.**",
+              "- [ ] **Decide where updates come from.**"
+            ]
+          }
+        ]
+      },
+      "provenOn": "2026-09-26",
+      "addedBy": "lane C conductor (cloud, 2026-09-26): plan v1-production.md:188"
     }
   ],
   "retired": []

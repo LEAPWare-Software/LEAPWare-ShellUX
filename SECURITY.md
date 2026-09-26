@@ -379,6 +379,40 @@ repository *claims* otherwise is genuinely valuable — see below.
 
 ---
 
+## Update integrity is a guardrail, not an integrity control
+
+Decision D-34 (`docs/DECISIONS.md`) made this repository public and chose
+`provider: github` for the desktop update feed: `electron-builder.yml`'s `publish`
+block names this repository, and a packaged build's update manifest and installer
+are plain public URLs served from its GitHub Releases — no token shipped, no host
+this organisation has to separately prove it owns (`docs/RELEASE.md` §1).
+
+**Nothing this project builds is signed yet** (D-25 names the signing vendor;
+the purchase itself waits on a separate spend gate). So the check standing
+between a running client and an update it should not install is `sha512` in
+`latest.yml`, fetched over HTTPS from the same GitHub release the installer sits
+in. That is real against the honest failure modes it was built for — a corrupted
+upload, a manifest edited by hand and no longer matching the file beside it, a
+`latest.yml` published before its installer finished uploading — which is why
+`docs/RELEASE.md` §2.4 fixes an upload order (installer and blockmap first,
+manifest last) around it. **It is a guardrail, using the term precisely: it
+enforces nothing against a caller who does not make an honest mistake.**
+Whoever controls the `LEAPWare-Software` GitHub account controls what every
+installed copy of this application downloads and runs next; nothing described
+here, or anywhere in this repository, checks that account's own security.
+
+Per Amendment G this claim is not written with an automated test citation,
+because no test in this repository drives a real network update and asserts on
+its outcome — the check is manual, is a step and not an assumption, and it lives
+in `docs/RELEASE.md` §3, in the manual checklist item about an old build updating
+itself, which is the step that would catch a `sha512` mismatch or a premature
+manifest publish, along with the honest result being recorded either way. That is
+the correct way to satisfy Amendment G here — name what actually verifies the
+claim rather than an automated test title that does not exist — not a gap left
+unlabelled.
+
+---
+
 ## Supported versions
 
 **There has been no release yet.** `package.json` declares version `0.1.0` and

@@ -14,6 +14,68 @@ from so a reader can check it.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Step 8 (release engineering), items 2-5: `provider: github` landed, a
+  `release.yml` publishing lane was added, and the update-integrity risk D-34
+  already accepted is now written where a reader will find it**
+  (`docs/plans/v1-production.md` lines 185-188).
+  - **Item 2.** `electron-builder.yml` gained `publish: { provider: github, owner:
+    LEAPWare-Software, repo: LEAPWare-ShellUX }`, replacing the absent `publish`
+    block the earlier `updates.leapware.dev` finding left behind. `DOCUMENTED_ENDPOINTS`
+    in `scripts/check-portability.mjs` **stays empty** — its comment was rewritten to
+    say why: `hardcoded-hostname` only matches an `https?://` literal, and a
+    GitHub-provider `publish` block is two identifiers, not a URL, so it introduces
+    none. The plan item's "both gates must go red, then green" does not hold under
+    the route actually taken (D-34's `provider: github`, not the `provider: generic`
+    route the item was written against) — forcing a red/green cycle would have meant
+    inventing a hostname finding that does not exist, which CLAUDE.md rules 2 and 4b
+    both forbid. A real fixture was added instead: *Test:*
+    `scripts/__tests__/check-portability.test.mjs` — "reports nothing for an
+    electron-builder.yml publish block using the GitHub provider, because owner/repo
+    are not a hostname literal". `npm run check:portability` passes on the real tree
+    (429 tracked files, 0 violations).
+  - **Item 3.** New `.github/workflows/release.yml`: a `verify` job (ubuntu-latest,
+    `npm run verify`) gates a `windows-latest` `package-and-draft-release` job
+    (D-26: Windows only), which runs `npm run verify:desktop`, creates a **draft**
+    GitHub Release via `gh release create --draft`, then uploads the installer and
+    `.blockmap` in one step and `latest.yml` in a separate, later step (RELEASE.md
+    §2.4's ordering). Publishing the draft is left to a human. `.github/workflows/desktop.yml`
+    is unchanged: still tag/dispatch-triggered, still `--publish never`, still
+    building both `windows-latest` and `macos-latest` as a **CI build** — the macOS
+    leg is removed from release *publishing* only, not from CI, and both workflows
+    can run from the same tag without depending on each other.
+  - **Item 4.** `SECURITY.md` gained an "Update integrity is a guardrail, not an
+    integrity control" section, and `docs/RELEASE.md` §0 gained a matching table row:
+    both name `sha512` + HTTPS + control of the `LEAPWare-Software` GitHub account as
+    what update integrity now rests on, quote D-34's own risk language, and use
+    "guardrail" precisely per `CLAUDE.md`'s vocabulary section. Per ADR-0001 Amendment
+    G, the claim is not backed by a fabricated automated test title — no test in this
+    repository drives a real network update — and instead names what actually
+    verifies it: the manual "an old build updates itself" checklist item in
+    `docs/RELEASE.md` §3.
+  - **Item 5.** `docs/RELEASE.md` §0 and §1 rewritten in this same commit: §0's
+    update-feed row no longer calls the host "not provisioned" (it names D-34's
+    `provider: github` and repo visibility, D-43, with the `gh api ... --jq
+    .visibility` → `public` check restated); §1's "decide where updates come from"
+    and "decide the repository's visibility" items are now recorded done and cite
+    D-34/D-43, and the "replace the placeholder host in exactly three places" item
+    is rewritten to explain the route actually taken and why it adds no hostname.
+    §2.2-2.4 were also touched (beyond the plan item's literal scope) so the tag,
+    upload-order and macOS checklist entries do not contradict the new `release.yml`
+    in the same commit that added it (CLAUDE.md rule 3).
+
+  Four new `docs/claims.json` register rows — **C-50**, **C-51**, **C-52**, **C-53**
+  — each with a check script under `scripts/claims/checks/` and a mutation probe,
+  prove these four items; `node --test scripts/__tests__/claims-prove.test.mjs`
+  passes all 51 assertions including each new row's probe. **Not done in this
+  change, and left unchecked on purpose:** Step 8 item 1 (the application icon)
+  needs a packaged Electron build to observe the fixed `default Electron icon is
+  used` log line, which is not doable in the cloud VM this work was done from; item
+  6 (bumping to `1.0.0-rc.1`) is held because issues #211, #213 and #214 are open
+  owner questions and gate 4's approval scope (#189) is unsettled, so declaring an
+  RC now would overclaim readiness.
+
 ### Security
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the

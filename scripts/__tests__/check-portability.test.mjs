@@ -366,11 +366,18 @@ describe('content rules', () => {
 // and nothing here is signed.
 //
 // So this fixture no longer asserts anything about a *particular* host. It
-// asserts the MECHANISM, which is what has to keep working when the first real
-// feed is declared: with the map empty, every hostname is reported — including
-// one that would previously have been declared — and the lookalike is reported
-// too. When a row returns, the first assertion below is the one that must be
-// inverted, and the second must not.
+// asserts the MECHANISM, which is what has to keep working if a future feed named
+// a host over `generic`: with the map empty, every hostname is reported —
+// including one that would previously have been declared — and the lookalike is
+// reported too. If that route is ever taken, the first assertion below is the one
+// that must be inverted, and the second must not.
+//
+// UPDATED again once `electron-builder.yml` gained a `publish` block: D-34 chose
+// `provider: github` instead, which is the row just below this comment and needs
+// no host declared at all — see `DOCUMENTED_ENDPOINTS` in
+// `scripts/check-portability.mjs` for why. The two assertions above are left
+// exactly as they were, still describing the `generic` route this repository did
+// not take, because they are what protects that route if it is ever taken later.
 // ---------------------------------------------------------------------------
 
 describe('packaging build commands and the declared update feed', () => {
@@ -421,6 +428,36 @@ describe('packaging build commands and the declared update feed', () => {
     // registers; exact equality is what refuses it.
     const rules = rulesFor(report, 'lookalike.yml');
     assert.ok(rules.includes('hardcoded-hostname'), JSON.stringify(rules));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-34: `provider: github` in `electron-builder.yml`'s real `publish` block adds
+// no row to `DOCUMENTED_ENDPOINTS`, and this fixture is why that is safe rather
+// than an oversight. `hardcoded-hostname`'s pattern is `\bhttps?:\/\/(...)`; a
+// GitHub-provider publish block names an `owner` and a `repo`, neither of which is
+// a URL, so the rule never fires on it and there is nothing for the map to
+// declare. Written with the actual owner/repo this repository uses, since neither
+// is a network host and the "no sample is a literal" rule at the top of this file
+// is about hostnames, IPs and paths, not about a GitHub org name.
+// ---------------------------------------------------------------------------
+
+describe('the github publish provider, which introduces no hostname literal', () => {
+  const root = newRepo('publish-github');
+
+  const paths = [
+    write(
+      root,
+      'electron-builder.yml',
+      'publish:\n  provider: github\n  owner: LEAPWare-Software\n  repo: LEAPWare-ShellUX\n',
+    ),
+  ];
+
+  track(root, ...paths);
+  const report = run(root);
+
+  it('reports nothing for an electron-builder.yml publish block using the GitHub provider, because owner/repo are not a hostname literal', () => {
+    assert.deepEqual(rulesFor(report, 'electron-builder.yml'), []);
   });
 });
 

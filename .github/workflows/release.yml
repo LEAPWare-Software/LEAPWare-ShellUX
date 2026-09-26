@@ -1,0 +1,139 @@
+name: Release
+
+# ---------------------------------------------------------------------------
+# THE PUBLISHING LANE, SEPARATE FROM `desktop.yml` ON PURPOSE.
+#
+# `desktop.yml` packages Windows and macOS on a tag or on manual dispatch and
+# NEVER publishes — `--publish never` is not negotiable there, and it stays that
+# way. This file is the one place a GitHub Release gets created, and it is a
+# **draft**: the last step, publishing that draft, stays a human decision
+# (`docs/RELEASE.md` section 2.4). Both workflows can run from the same `v*` tag
+# push; they do different jobs and neither depends on the other.
+#
+# WINDOWS ONLY, PER D-26. `docs/DECISIONS.md` D-26 took macOS out of v1: it is
+# configured in `electron-builder.yml` and has never once been built, so its
+# true cost is unknown, and shipping one platform that has been seen to work
+# beats two that have not. The macOS leg stays as a CI build in `desktop.yml`'s
+# matrix — it is exercised there, on every tag, so a packaging regression is
+# still caught — but this lane, the one that creates a release, packages and
+# uploads Windows only. Reversing D-26 is an edit to this file's `runs-on` and
+# its upload globs, not a rewrite.
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# `contents: write` is scoped to the `release` job alone, which is the only one
+# that creates or uploads to a release. `verify` reads the repository and needs
+# nothing else.
+permissions:
+  contents: read
+
+# One in-flight run per tag. `cancel-in-progress: false`, unlike every other
+# workflow in this repository: a tag is pushed once, this lane uploads assets to
+# a draft release in a fixed order (installer and blockmap, then the manifest —
+# see the upload step below), and cancelling it mid-upload would leave that
+# draft in the exact half-published state section 2.4 exists to prevent. A
+# second push of the same tag is a mistake to investigate, not a race to resolve
+# by cancelling the first run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Run `verify` before releasing anything. A tag that fails `verify` must not
+  # reach a packaging step, let alone a draft release — this is what "run verify
+  # before releasing, then package" (plan step 8, item 3) means concretely.
+  verify:
+    name: Verify before release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+  package-and-draft-release:
+    name: Package Windows and draft the release
+    needs: verify
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      # Needed to create a draft release and upload assets to it. Nothing else:
+      # no issues, no packages, no pull-request scopes.
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Same signing environment as `desktop.yml`: every name is declared in
+      # `docs/signing.md`, and every one of them is optional. With none of them
+      # set this produces a working, installable, UNSIGNED artifact — the state
+      # this project ships in until D-25's Azure Trusted Signing identity is
+      # bought (step 6, gated on D-10).
+      - name: Build and package (Windows)
+        run: npm run verify:desktop
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      # Draft first, empty. `gh release create` with no file arguments creates the
+      # release object with no assets, so every asset this job uploads lands on a
+      # release that already exists rather than racing its own creation.
+      # One line, deliberately: `platform-only-path-separator` in
+      # `scripts/check-portability.mjs` reads a trailing backslash line
+      # continuation in a `.github/workflows/` command as a Windows assumption,
+      # and this job's shell is `bash` on a `windows-latest` runner precisely so
+      # it stays portable — a real backslash would be exactly backwards here.
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release create "${{ github.ref_name }}" --draft --title "${{ github.ref_name }}" --notes "Draft release for ${{ github.ref_name }}, packaged by .github/workflows/release.yml. Unsigned unless D-25's signing identity is configured, verify with the platform's own tool per docs/RELEASE.md section 2.3, not by the absence of a warning in this build log. Publishing this draft is a human step (docs/RELEASE.md section 2.4)." --repo "${{ github.repository }}"
+
+      # THE INSTALLER AND ITS BLOCKMAP, FIRST. RELEASE.md section 2.4: the
+      # blockmap is what makes a differential update possible, and uploading it
+      # alongside the installer (not after `latest.yml`) keeps the manifest from
+      # ever pointing at an installer whose blockmap has not landed yet.
+      - name: Upload installer and blockmap
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload "${{ github.ref_name }}" release/*.exe release/*.blockmap --repo "${{ github.repository }}" --clobber
+
+      # `latest.yml` LAST, AND ONLY AFTER THE ABOVE SUCCEEDED. RELEASE.md
+      # section 2.4: this is the file electron-updater reads to decide an update
+      # exists, so publishing it before its installer is a window in which every
+      # running client tries to download a file that is not there yet. A
+      # separate step, after the first has already exited 0, is what keeps that
+      # window from opening even inside one workflow run.
+      - name: Upload the update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release upload "${{ github.ref_name }}" release/latest.yml --repo "${{ github.repository }}" --clobber
