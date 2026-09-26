@@ -243,6 +243,19 @@ from so a reader can check it.
   `scripts/__tests__/check-portability.test.mjs` — the new `unc-path` FIRING
   case proving the identical escape-run text in a different file is still
   caught.
+  A third `claude[bot]` review round found the docblock's claim that
+  freezing a `RegExp` leaves its `lastIndex`/`compile()` unaffected was
+  itself factually wrong: `lastIndex` is an own,
+  writable data property, so freeze genuinely blocks a direct write to it.
+  Measuring further (not something the reviewer could execute) found
+  `.compile()` is worse than either version claimed: it silently rewrites
+  `source`/`flags`/`global` from internal slots freeze does not protect, and
+  only throws when it reaches the one step that touches an own property
+  (`lastIndex`) — so it is not a safe no-op attempt, it is a partial,
+  irreversible mutation that happens to also throw. Corrected the docblock
+  to state both halves precisely. *Test:*
+  `src/core/__tests__/hostConstants.test.ts` — "freezing blocks a direct
+  lastIndex write, but compile() is worse than that".
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two

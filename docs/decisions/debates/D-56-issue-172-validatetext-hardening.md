@@ -556,3 +556,20 @@ debate's decision; all three are corrected in the same PR, not deferred.
    `api-surface.json` — so the actual fix checks `context.file` inside
    `accept` itself, and a new test proves the same escape-shaped text in a
    different file is still caught.
+4. **A third `claude[bot]` review round found the "Object.freeze ... does
+   not stop lastIndex/compile()" docblock sentence (repeated verbatim in
+   this record's rounds 2 and 3, above) is itself factually wrong, not just
+   informally imprecise — flagged as PLAUSIBLE rather than CONFIRMED because
+   the reviewer could not execute code to measure it.** Measured directly:
+   `lastIndex` is an own, writable data property, so `Object.freeze` makes it
+   non-writable, and both a direct assignment and a call to `.compile()`
+   (which re-writes `lastIndex` internally) throw a `TypeError` in this
+   always-strict ES-module code. The debate rounds above are left as they
+   are — that is what was actually said in the actual debate, wrong claim
+   included, per this record's own opening note about reproducing the real
+   transcript rather than a corrected one — but the shipped docblock in
+   `RegistryContext.tsx` is corrected to state the measured fact (freeze
+   *does* protect `lastIndex`; it costs nothing here only because neither
+   pattern carries `g`/`y`, so nothing ever reads or writes it), and a new
+   test pins the measurement rather than asserting it from memory a second
+   time.

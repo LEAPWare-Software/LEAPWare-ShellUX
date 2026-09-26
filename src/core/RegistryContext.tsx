@@ -101,10 +101,32 @@ export const EXTENSION_ID_PATTERN = Object.freeze(/^[a-z0-9][a-z0-9-]{0,63}$/);
  * nothing about a string that reaches display some other way. Both are
  * `Object.freeze`d against replacement, same as `EXTENSION_ID_PATTERN` above —
  * and that claim is exactly as large as it is there and no larger: it stops an
- * own property being added, replaced or deleted (so `.test` cannot be
- * shadowed), and nothing else. A `RegExp`'s `lastIndex` and `compile()` stay
- * mutable regardless of `Object.freeze`, which is why neither pattern is
- * described as "fixed" or "immutable".
+ * own property being added, replaced or deleted, and nothing else. `lastIndex`
+ * IS an own, writable data property, so freezing genuinely does make a direct
+ * write to it throw a `TypeError` in this always-strict ES-module code —
+ * measured: `Object.freeze(/a/u).lastIndex = 1` throws "Cannot assign to read
+ * only property 'lastIndex'", with no partial effect either way.
+ *
+ * `.compile()` is a different and worse case, not covered by that claim: it
+ * rewrites `source`/`flags`/`global` from internal slots freeze does not
+ * protect (the same class of gap as a frozen `Set`'s `.add()` still
+ * working), and only THEN throws, when it reaches the one step that touches
+ * an own property (resetting `lastIndex` to 0). Measured: a frozen clone's
+ * `.compile('b', 'g')` still throws that same `TypeError` — but by the time
+ * it does, `.source` already reads `'b'` and `.flags` already reads `'g'`.
+ * Calling `.compile()` on a frozen `RegExp` is not a safe no-op attempt; it
+ * is a partial, irreversible mutation into a different pattern that happens
+ * to also throw. Nothing in this codebase calls `.compile()` on either
+ * export, so this is a documented latent hazard, not a live one.
+ *
+ * Both of the above cost nothing here regardless, because `.test()`/`.exec()`
+ * only ever read or write `lastIndex` for a `g`- or `y`-flagged pattern, and
+ * neither export carries one (see "the shared text patterns carry no global
+ * flag" below) — the same register as `EXTENSION_ID_PATTERN`'s "hardened
+ * against replacement, not against a determined caller" above. Neither
+ * pattern is described as "fixed" or "immutable" for that reason: replacing
+ * `.test` as an own property is
+ * refused, but neither export claims more than that.
  *
  * `electron/main/plugins/hostContract.ts` carries mirrored copies for the
  * package validator, since main cannot import `src/` (ADR-0001 Amendment O
@@ -122,7 +144,8 @@ export const EXTENSION_ID_PATTERN = Object.freeze(/^[a-z0-9][a-z0-9-]{0,63}$/);
  * by ZWNJ is not blank (D-56, #172)", "an emoji with a variation selector is
  * not blank (D-56, #172)"; `src/core/__tests__/hostConstants.test.ts` —
  * "the shared text patterns carry no global flag, so repeated test calls
- * agree".
+ * agree" and "freezing blocks a direct lastIndex write, but compile() is
+ * worse than that".
  */
 export const TEXT_FORBIDDEN_PATTERN = Object.freeze(/[\p{Cc}\u061C\u200E-\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029\uFFF9-\uFFFB\u206A-\u206F]/u);
 
