@@ -573,3 +573,22 @@ debate's decision; all three are corrected in the same PR, not deferred.
    pattern carries `g`/`y`, so nothing ever reads or writes it), and a new
    test pins the measurement rather than asserting it from memory a second
    time.
+5. **An independent `shellux-cloud-reviewer` (opus, host-security path) pass
+   found a fifth issue, F4: "all 7 fields" was claimed but only blueprint
+   `name` was directly tested** — true by construction (one shared
+   `validateText`), but unobserved for `version`, command `label`/`icon`,
+   nav node `label`/`icon` and nav metric `description`. Flagged PLAUSIBLE
+   (coverage gap, not disproven) rather than a functional defect, and not
+   on the reviewer's own "Fix for MERGE" list, but closed anyway rather than
+   left as a standing gap: a new test in `validation.test.ts` drives the
+   same bidi override through each of the other six call sites directly,
+   and `DEVELOPER.md`'s field tables (which the same review separately
+   found had no `2.0`/bidi-restriction note anywhere) gain matching
+   pointers and a dedicated subsection under "Security: plugin-supplied
+   strings are untrusted."
+6. **The same cloud-reviewer pass caught this PR's own bookkeeping error**:
+   an earlier PR-body "Known defects" entry mislabeled the exhaustive-scan
+   arithmetic fix as coming from `claude[bot]`'s round 2, when it was
+   actually round 1's second finding (round 2's own findings were the
+   `unc-path` and `setNavigationTree` gaps, items 1 and 4 above) — corrected
+   in the PR body's next revision.

@@ -268,6 +268,45 @@ describe('validateBlueprint — text fields', () => {
     }
   });
 
+  it('rejects the same bidi override at each of the other 6 validateText call sites (D-56, #172)', () => {
+    // F4, cloud-reviewer verdict on PR #236: the CHANGELOG/ADR/DECISIONS claim
+    // hardening for "all 7" display-string fields, but every prior test above
+    // drives blueprint `name` only -- true by construction (one shared
+    // validateText), unobserved for the other six. This exercises each one
+    // directly, through the same public validateBlueprint entry point.
+    const bidi = '\u202E' + 'gnik'; // RIGHT-TO-LEFT OVERRIDE
+    const cases: [Record<string, unknown>, string][] = [
+      [{ version: bidi }, 'version'],
+      [
+        { ribbonActions: [{ ...makeAction(), label: bidi }] },
+        'ribbonActions[0].label',
+      ],
+      [
+        { ribbonActions: [{ ...makeAction(), icon: bidi }] },
+        'ribbonActions[0].icon',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: bidi }] },
+        'navigationTree[0].label',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: 'Root A', icon: bidi }] },
+        'navigationTree[0].icon',
+      ],
+      [
+        {
+          navigationTree: [
+            { id: 'root-a', label: 'Root A', metric: { kind: 'bar', value: 0.5, description: bidi } },
+          ],
+        },
+        'navigationTree[0].metric.description',
+      ],
+    ];
+    for (const [overrides, field] of cases) {
+      expectRejection(makeBlueprint(overrides), 'INVALID_FIELD', field);
+    }
+  });
+
   it('a string made only of two or more different invisible characters is blank (D-56, #172)', () => {
     // Reproduces the trap in the decision: calling `.replace(pattern, '')`
     // WITHOUT rebuilding a fresh `'gu'` copy removes only the first match,

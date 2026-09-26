@@ -214,7 +214,13 @@ from so a reader can check it.
   (D-56, #172)", "a string made only of two or more different invisible
   characters is blank (D-56, #172)", "a Persian name held together by ZWNJ is
   not blank (D-56, #172)", "an emoji with a variation selector is not blank
-  (D-56, #172)"; `src/core/__tests__/hostConstants.test.ts` — "the shared
+  (D-56, #172)", "rejects the same bidi override at each of the other 6
+  validateText call sites (D-56, #172)" (`version`, command `label`/`icon`,
+  nav node `label`/`icon`, nav metric `description` — the prior tests all
+  drove blueprint `name` only, true-by-construction but unobserved for the
+  other six until a cloud-reviewer pass named the gap); `DEVELOPER.md` gains
+  the matching field-table pointers and version note.
+  `src/core/__tests__/hostConstants.test.ts` — "the shared
   text patterns carry no global flag, so repeated test calls agree";
   `electron/__tests__/pluginPackage.test.ts` — "refuses a title carrying a
   bidi control, a C0 or C1 control, a line/paragraph separator, an
