@@ -262,6 +262,21 @@ from so a reader can check it.
   to state both halves precisely. *Test:*
   `src/core/__tests__/hostConstants.test.ts` — "freezing blocks a direct
   lastIndex write, but compile() is worse than that".
+  A separate post-implementation review pass (finding F1) independently
+  found the same `DEVELOPER.md` staleness noted above — the field-rule
+  tables for `name`, `NavigationNode.label`/`.icon` and `RibbonAction.label`/
+  `.icon` read only their pre-D-56 length/blankness rule, with no mention of
+  the D-56 rejection rule or the `2.0` bump. Two concurrent pushes to the
+  same branch closed this from different directions (a genuine parallel-work
+  collision, reconciled by merge rather than by discarding either side): one
+  added a shared "Display text is also refused..." subsection plus the
+  cross-field coverage test named above; the other added per-field
+  a per-field New-in-2.0 note directly on each row. The merged result
+  keeps both — the detailed per-row prose and the shared subsection — and
+  cites the one comprehensive test from every row, since the two narrower,
+  single-field tests the second push added (`NavigationNode.label`,
+  `RibbonAction.icon`) became strictly redundant with it and were dropped
+  rather than left duplicating coverage.
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two
