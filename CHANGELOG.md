@@ -42,10 +42,12 @@ from so a reader can check it.
     ("a packaged build's real update check still fails today") rather than
     loosened or dropped.
   - Also found in this round, filed rather than fixed here (CLAUDE.md rule 7):
-    most of C-51/C-52/C-53's `expect` keys, and a pre-existing pattern in older
-    rows (C-44 through C-48), are never independently exercised by their row's one
-    mutation probe when a check emits several keys — the same failure class as the
-    `upload_order_correct` bug below, generalized. This is a claims-register
+    most of C-50/C-51/C-52/C-53's `expect` keys, and a pre-existing pattern in
+    older rows (C-44 through C-48), are never independently exercised by their
+    row's one mutation probe when a check emits several keys — the same failure
+    class as the `upload_order_correct` bug below, generalized (C-50 itself: 4 of
+    its 5 keys are untouched by its one probe, which only flips the provider
+    string). This is a claims-register
     schema question (how many probes a row may declare), not a one-line fix; filed
     as issue #234 with the reviewer's own evidence.
 
