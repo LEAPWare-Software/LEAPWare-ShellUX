@@ -278,11 +278,11 @@ describe('the host constants', () => {
     expect(TEXT_FORBIDDEN_PATTERN.flags).toBe('u');
     expect(TEXT_INVISIBLE_PATTERN.flags).toBe('u');
 
-    const forbiddenInput = '؜';
+    const forbiddenInput = '\u061C'; // ARABIC LETTER MARK
     expect(TEXT_FORBIDDEN_PATTERN.test(forbiddenInput)).toBe(true);
     expect(TEXT_FORBIDDEN_PATTERN.test(forbiddenInput)).toBe(true);
 
-    const invisibleInput = '​';
+    const invisibleInput = '\u200B'; // ZERO WIDTH SPACE
     expect(TEXT_INVISIBLE_PATTERN.test(invisibleInput)).toBe(true);
     expect(TEXT_INVISIBLE_PATTERN.test(invisibleInput)).toBe(true);
 
