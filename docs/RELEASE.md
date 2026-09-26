@@ -1,7 +1,8 @@
 # Releasing a desktop build
 
-**Nothing has been released.** `package.json` declares `0.1.0`, the package is
-marked private, there is no tag, and the update feed host is **not provisioned**.
+**Nothing has been released.** `package.json` declares `0.1.0`, the npm package is
+marked private, there is no tag, and the update feed is decided and configured
+(D-34/D-43) but has never been exercised end to end — see the table below.
 This document is the checklist that has to be true before the first release is,
 and it is written so that the first person to use it can tell what has been
 observed from what has only been configured.
@@ -19,79 +20,96 @@ things down.
 |---|---|
 | Windows NSIS installer | **Built and observed.** `npm run verify:desktop` on Windows produced `release/leapware-shellux-0.1.0-win-x64.exe` |
 | The installer's signature | **Unsigned, and verified to be unsigned** with the platform's own tool, not inferred from a quiet build log |
-| macOS dmg + zip | **Configured, never built.** It cannot be built from Windows; the `macos-latest` leg of `.github/workflows/desktop.yml` is where it is first exercised |
-| Notarization | **Configured by omission** — runs when the Apple credentials are present, skips with a warning when they are not. Never executed |
-| The update feed | **Wired end to end, pointing at a host that does not exist.** The packaged application reads `app-update.yml`, contacts the feed, and reports `net::ERR_NAME_NOT_RESOLVED`. Every part of that path is real except the bucket |
+| macOS dmg + zip | **Configured, never built, and out of the release path.** D-26 took macOS out of v1: it cannot be built from Windows, `.github/workflows/desktop.yml`'s `macos-latest` matrix leg is where it is exercised as a CI build only, and `.github/workflows/release.yml` — the lane that creates a GitHub Release — packages and uploads Windows exclusively |
+| Notarization | **Configured by omission** — runs when the Apple credentials are present, skips with a warning when they are not. Never executed. Moot for the v1 release path per D-26 above; still exercised by `desktop.yml`'s CI leg |
+| The update feed | **Decided and configured, never yet exercised end to end.** D-34 chose `provider: github`: `electron-builder.yml`'s `publish` block names this repository, now public (D-43, verified `gh api repos/LEAPWare-Software/LEAPWare-ShellUX --jq .visibility` → `public`), so `app-update.yml` points a packaged build at this repository's GitHub Releases with no token shipped. No release has been tagged or published yet, so no packaged build has ever actually checked for or received an update — that is Step 9 of `docs/plans/v1-production.md`, not this section |
+| Update integrity | **A guardrail, not an integrity control (D-34).** Nothing built here is signed. Once a release is public, `sha512` in `latest.yml` served over HTTPS from this repository's GitHub Releases is what a client checks before installing an update — real against an honest mistake (a corrupted upload, a wrong URL), and enforcing nothing against whoever controls the `LEAPWare-Software` GitHub account, who can publish any binary as the next update. See `SECURITY.md` and §2.3/§2.4 below |
 | The palette commands | **Observed in the packaged application.** "Check for updates — last check failed" appears in the palette of a packaged build, which is the end-to-end evidence that the main process, the preload bridge and the command registry are connected |
 
 ---
 
 ## 1. Once, before the first release
 
-- [ ] **Decide where updates come from. There is no feed configured, deliberately.**
+- [x] **Decide where updates come from.** D-34 (`docs/DECISIONS.md`) chose route
+      (a) below, and it is done, not merely chosen: `electron-builder.yml` carries
+      `publish: { provider: github, owner: LEAPWare-Software, repo:
+      LEAPWare-ShellUX }`.
 
       > **The previous placeholder was an invented host and it has been deleted.**
-      > `electron-builder.yml` pointed at `updates.leapware.dev`, which looks like
-      > this project's domain and is not owned by it. With `provider: generic` that
-      > single URL is the sole authority for both the manifest and the installer it
-      > names, and nothing here is signed — so a shipped build would have asked a
-      > stranger's server what to download and then run it. It never shipped. The
-      > `publish` block is now absent, `DOCUMENTED_ENDPOINTS` is empty, and the
-      > hostname rule is fully on, so it cannot come back quietly.
+      > `electron-builder.yml` used to point at `updates.leapware.dev`, which looks
+      > like this project's domain and was never owned by it. With `provider:
+      > generic` that single URL would have been the sole authority for both the
+      > manifest and the installer it names, and nothing here is signed — so a
+      > shipped build would have asked a stranger's server what to download and
+      > then run it. It never shipped. The `publish` block was deleted rather than
+      > pointed at a placeholder, and `DOCUMENTED_ENDPOINTS` in
+      > `scripts/check-portability.mjs` was left empty with the hostname rule fully
+      > on, so it could not come back quietly.
 
-      Two routes, and the first is much cheaper than it looks:
+      Two routes were weighed. **(a), taken:** make the repository public and use
+      `provider: github`. The GitHub provider was rejected the first time on one
+      fact: this repository was private, so release assets needed authentication,
+      which would mean a token inside the shipped client. **On a public repository
+      those assets are plain public URLs** — no host to own, no DNS record, no
+      bucket, no static site to keep alive. D-43 made the repository public on
+      2026-09-18; D-34 named the provider in the same round. This was also the
+      decision that unblocked branch protection and private vulnerability
+      reporting, now both live (`docs/DECISIONS.md` D-27, D-34; `SECURITY.md`).
 
-      **(a) Make the repository public and use `provider: github`.** The GitHub
-      provider was rejected on one fact: this repository is private, so release
-      assets need authentication, which would mean a token inside the shipped
-      client. **On a public repository those assets are plain public URLs** — no
-      host to own, no DNS record, no bucket, no static site to keep alive. The feed
-      becomes GitHub Releases, which the release workflow is already producing
-      artifacts for. This is also the same decision that unblocks branch protection
-      (HANDOFF §5) and private vulnerability reporting (HANDOFF §6.2). One choice,
-      three blockers.
+      **(b), not taken:** own a static HTTPS host and use `provider: generic`. Any
+      object store or static host serving one directory, keeping the source closed
+      at the cost of a host somebody has to prove they control and a DNS record.
+      Left here as the route to return to if the repository is ever made private
+      again — in which case `provider: github` stops being safe and must be
+      reverted in the same change, not left in place with a token bolted on.
+- [x] **Update exactly the places a feed host would need changing — and note that
+      `provider: github` needs none.** The plan for this item assumed a literal
+      host, because it was written against route (b). Route (a) was taken instead,
+      and `hardcoded-hostname` in `scripts/check-portability.mjs` matches only an
+      `https?://` literal: `publish: { provider: github, owner: ..., repo: ... }`
+      is two identifiers, not a URL, so it introduces none. Concretely:
+      1. `electron-builder.yml`'s `publish` block is the only place the *build*
+         reads the provider from, and the only place a running application's feed
+         comes from — done, above.
+      2. `DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs` **stays empty**,
+         and its comment now says why: an empty map is not "no feed chosen", it is
+         "the chosen feed introduces no hostname literal". A row belongs there only
+         if a future change goes back to route (b), for a host this organisation
+         can prove it owns.
+      3. `scripts/__tests__/check-portability.test.mjs` gained a fixture pinning
+         this: a real `provider: github` publish block reports no
+         `hardcoded-hostname` finding. *Test:*
+         `scripts/__tests__/check-portability.test.mjs` — "reports nothing for an
+         electron-builder.yml publish block using the GitHub provider, because
+         owner/repo are not a hostname literal".
 
-      **(b) Own a static HTTPS host and use `provider: generic`.** Any object store
-      or static host serving one directory. No compute, no reader authentication, no
-      API — electron-updater fetches `latest.yml`, then the installer named in it.
-      Keeps the source closed. Costs a host somebody has to prove they control, and
-      a DNS record.
-
-      Whichever is chosen, **the host must be one this organisation demonstrably
-      owns.** A name that merely resolves proves somebody owns it, not that you do —
-      which is exactly the inference that produced the defect above.
-- [ ] **Replace the placeholder host in exactly three places, and no more.**
-      1. `electron-builder.yml`'s `publish.url` — the only place the *build* reads
-         it, and the only place a running application's feed comes from.
-      2. The row in `DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs` —
-         ADR-0002's declaration. Until it is updated, `npm run check:portability`
-         fails on the new host.
-      3. The `packaging build commands and the declared update feed` fixture in
-         `scripts/__tests__/check-portability.test.mjs`, which asserts that the
-         declared host passes and a lookalike does not. Until it is updated,
-         `npm run test:scripts` fails.
-
-      Two of those three are gates failing on purpose, and that is the point: the
-      feed host cannot be changed quietly. If a **fourth** place needs changing,
-      something has copied the URL and that copy is the defect — nothing in `src/`,
-      nothing in `electron/` and nothing in any workflow contains it.
-- [ ] **Decide the repository's visibility on its own merits.** Three tracked
-      blockers share one root cause — branch protection returns `403` (HANDOFF §5),
-      private vulnerability reporting is unavailable (HANDOFF §6.2), and the GitHub
-      update provider needs a shipped token. Making the repository public fixes all
-      three; paying for a plan fixes the first two. The static feed means this
-      decision is no longer *forced* by the updater, which is exactly why it should
-      be taken deliberately rather than by default.
+      **What this means for "both gates must go red, then green", as the plan item
+      originally read:** they do not, and forcing them to would mean either
+      re-adding a hostname this repository does not need (reopening the finding
+      route (b) exists to guard against) or manufacturing a red state with no real
+      defect behind it, which rule 4b and rule 2 both rule out. The gates were
+      exercised honestly instead: `npm run check:portability` and
+      `npm run test:scripts` both ran, both passed, and the new fixture is what
+      would go red if a hostname literal were ever added here without being
+      declared.
+- [x] **Decide the repository's visibility on its own merits.** Done: public,
+      2026-09-18 (D-43), on its own merits per that decision's reasoning, and
+      confirmed again above.
 - [ ] **Obtain a code-signing identity**, and read `docs/signing.md` §3 first. The
       packaging configuration contains no signing configuration at all, so the
       provider is whatever `CSC_LINK` points at and switching providers is a change
-      of secret, not a change of build.
-- [ ] **Store the secrets** the `env` block of `.github/workflows/desktop.yml`
-      already names: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`,
+      of secret, not a change of build. D-25 names the vendor (Azure Trusted
+      Signing) but the purchase itself waits on D-10's spend gate (step 6).
+- [ ] **Store the secrets** the `env` blocks of `.github/workflows/desktop.yml` and
+      `.github/workflows/release.yml` already name: `CSC_LINK`,
+      `CSC_KEY_PASSWORD`, and (for `desktop.yml`'s macOS CI leg only) `APPLE_ID`,
       `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Every one of them is optional
       and the lane produces an unsigned artifact without them.
 - [ ] **Add an application icon.** The build currently logs `default Electron icon
       is used`, which means the first release would ship with Electron's own logo.
+      Needs a packaged Electron build to observe the fixed log line, which is not
+      doable in the cloud VM this plan item was worked from — left for the owner or
+      a VM session (plan step 8, item 1).
 
 ---
 
@@ -110,10 +128,18 @@ things down.
 
 ### 2.2 The tag
 
-- [ ] Tag `vX.Y.Z` and push it. `.github/workflows/desktop.yml` runs on
-      `windows-latest` and `macos-latest`, signs if the secrets are present, and
-      **publishes nothing** — `--publish never` is not negotiable in that lane.
-- [ ] Download both artifacts from the workflow run.
+- [ ] Tag `vX.Y.Z` and push it. Two workflows run from the same tag, and neither
+      depends on the other:
+      - `.github/workflows/desktop.yml` runs on `windows-latest` and
+        `macos-latest`, signs if the secrets are present, and **publishes
+        nothing** — `--publish never` is not negotiable in that lane. Its macOS
+        leg is a CI build only (D-26); nothing it produces reaches a release.
+      - `.github/workflows/release.yml` runs `verify`, then packages **Windows
+        only** (D-26) and creates a **draft** GitHub Release, uploading the
+        installer and `.blockmap` first and `latest.yml` last — see §2.4. It
+        never uploads a macOS artifact.
+- [ ] Download the Windows artifact from either workflow run, or from the draft
+      release `release.yml` created.
 
 ### 2.3 Verify before publishing, not after
 
@@ -122,21 +148,36 @@ things down.
       `electron-builder` logs `signing with signtool.exe` on Windows even when there
       is no certificate and nothing is signed. Verified this way once already, and
       that is how the "unsigned" row in section 0 is known.
-- [ ] **The macOS zip is present alongside the dmg.** electron-updater updates a
-      macOS application from the zip. A dmg-only release installs fine and can never
-      update itself, and nothing about it looks wrong until the release after it.
-- [ ] **`latest.yml` and `latest-mac.yml` are present**, and the `version` in each
-      is the version just tagged.
+- [ ] **The macOS zip is present alongside the dmg — moot while D-26 holds.**
+      `release.yml` uploads no macOS artifact, so there is nothing to check here
+      for the v1 release path. Kept as a checklist item in case D-26 is ever
+      reversed and macOS rejoins release publishing: electron-updater updates a
+      macOS application from the zip, and a dmg-only release installs fine and can
+      never update itself, with nothing about it looking wrong until the release
+      after it.
+- [ ] **`latest.yml` is present**, and the `version` in it is the version just
+      tagged. (`latest-mac.yml` does not apply while D-26 holds, for the same
+      reason as the row above.)
 
 ### 2.4 Publish
 
-- [ ] Upload the installers **and** the `latest*.yml` manifests **and** the
-      `.blockmap` files to the feed. The blockmap is what makes a differential
+`release.yml` performs this section's ordering automatically for the Windows
+release path — see §2.2 — so the checklist below is what to *verify happened*, not
+a set of manual uploads to perform by hand, unless the workflow was bypassed.
+
+- [ ] Upload the installer **and** the `latest.yml` manifest **and** the
+      `.blockmap` file to the feed. The blockmap is what makes a differential
       download possible; without it every update is a full download that still
       works, which is why forgetting it is easy.
 - [ ] Upload the manifest **last**. It is the file that tells running applications
       an update exists, so a manifest published before its installer is a window in
       which every client tries to download a file that is not there yet.
+
+**Retrying a failed run.** `release.yml`'s draft-creation step checks whether the
+tag's release already exists before creating it, so re-running the job after a
+partial failure (say, a transient network error on one of the two upload steps)
+does not fail at "release already exists" — it skips straight to the uploads,
+which are already `--clobber`-safe to repeat.
 
 ---
 
