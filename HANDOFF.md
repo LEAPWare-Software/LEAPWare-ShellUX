@@ -14,21 +14,18 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 ## What landed on 2026-09-18 and 19
 
 `git log --oneline` is the full list; the landmarks:
-- Public, ruleset/merge queue (#141); Claude review working (#151); ADR-0006 Accepted
-  (#145). Proof of completion adopted (D-50, #152/#156/#169), then complete (#181, C-37).
-- The plugin store, ADR-0006 step 4 (#182).
-- Wave-3 W3-1 state primitives (#184); plugin lifecycle/nav tree/badge clear (#185);
-  proof rows C-38–C-43 (#186).
+- Public, ruleset/merge queue (#141); ADR-0006 Accepted (#145). Proof of
+  completion adopted (D-50, #152/#156/#169), then complete (#181, C-37).
+- The plugin store, ADR-0006 step 4 (#182). Wave-3 W3-1 state primitives
+  (#184); plugin lifecycle/nav tree/badge clear (#185); proof rows C-38–C-43.
 - Cloud lanes can merge (#192, lane C item 0a); the runbook, `lw-*` roles and
   gate-4 record (#188, D-52).
-- Proof audit corrected, `npm run status` falls back locally (0e); D-27 struck,
-  superseded by D-34 (C-44).
 - ADR-0006 steps 7-8 (#217/#57): plugins in `plugins/*`; `plugin:check` + CI.
-- ADR-0006 step 11 (#222): Release-URL install source, org allowlist.
-- ADR-0006 step 10 prep: packaged e2e lane, never run; owner/VM:
+  Step 11 (#222): Release-URL install source, org allowlist. Step 10 prep:
+  packaged e2e lane, never run; owner/VM:
   [`docs/runbooks/packaged-plugin-e2e.md`](docs/runbooks/packaged-plugin-e2e.md).
-- Plan lines 129/133/131 ticked: `SECURITY.md`/README reorder (body moved to
-  `docs/readme-body.md`); #74/#103 raw API evidence (C-49).
+- Plan lines 129/133/131 ticked: `SECURITY.md`/README reorder; #74/#103 raw
+  API evidence (C-49).
 
 ## In flight
 
@@ -40,6 +37,8 @@ repository refer to [`docs/history/handoff-archive-2026-08.md`](docs/history/han
 - D-55 (#211/#223/#226) landed: `claude[bot]` merge gate, `issue_comment` trigger
   dropped (fork code-exec finding). `claude.yml` follow-up (#227): gh pr
   view/diff/comment grant widened, fork-guarded.
+- D-56 (#172): `validateText` hardened (bidi/C0-C1, invisible strings), all 7
+  display fields; `HOST_API_VERSION` 1.1→2.0. Bidi isolation filed (#235).
 
 ## The next step
 

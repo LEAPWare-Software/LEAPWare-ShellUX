@@ -9,7 +9,14 @@ import { HOST_API_VERSION as SDK_HOST_API_VERSION } from '../../src/sdk';
 import { FALLBACK_ICON, SHELL_ICONS } from '../../src/components/ui/shellIcons';
 import { resolveShellIcon } from '../../src/components/ui/resolveShellIcon';
 import { compareHostApiVersion } from '../main/plugins/compatibility';
-import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS } from '../main/plugins/hostContract';
+import {
+  EXTENSION_ID_PATTERN,
+  HOST_API_VERSION,
+  MAX_TEXT_LENGTH,
+  RESERVED_IDS,
+  TEXT_FORBIDDEN_PATTERN,
+  TEXT_INVISIBLE_PATTERN,
+} from '../main/plugins/hostContract';
 import {
   ICON_KEY_PATTERN,
   MAX_PACKAGE_BYTES,
@@ -168,8 +175,21 @@ describe('the .lwplugin package', () => {
     for (const [result, reason] of cases) expect(reasonOf(result)).toBe(reason);
   });
 
-  it('refuses a title carrying a bidi control, a C0 or C1 control, or nothing but invisible characters', () => {
-    const controls = ['\u202Eliam', 'Mail\u200F', 'Ma\u2066il', '\u061CMail', 'Mail\u0000', 'Mail\n', 'Mail\u007F', 'Mail\u0085'];
+  it('refuses a title carrying a bidi control, a C0 or C1 control, a line/paragraph separator, an interlinear-annotation control, or nothing but invisible characters', () => {
+    const controls = [
+      '\u202Eliam',
+      'Mail\u200F',
+      'Ma\u2066il',
+      '\u061CMail',
+      'Mail\u0000',
+      'Mail\n',
+      'Mail\u007F',
+      'Mail\u0085',
+      'Mail\u2028Chain', // LINE SEPARATOR (D-56, #172)
+      'Mail\u2029Chain', // PARAGRAPH SEPARATOR
+      'Mail\uFFF9anno\uFFFB', // interlinear annotation anchor/terminator
+      'Mail\u206Achain', // deprecated format control (INHIBIT SYMMETRIC SWAPPING)
+    ];
     for (const title of controls) {
       expect(reasonOf(parse({ title }))).toBe('manifest.title must not contain control characters or bidi controls');
     }
@@ -181,16 +201,36 @@ describe('the .lwplugin package', () => {
       '\u3164', // HANGUL FILLER
       '\u115F\u1160', // HANGUL CHOSEONG and JUNGSEONG FILLER
       '\uFFA0', // HALFWIDTH HANGUL FILLER
-      '\u180E', // MONGOLIAN VOWEL SEPARATOR
+      '\u180E', // MONGOLIAN VOWEL SEPARATOR (subsumed by the U+180B-180F range)
       '\u00AD', // SOFT HYPHEN
       '\u{E0041}\u{E0042}', // TAG LATIN CAPITAL A, B
-      '\u{E0000}\u{E007F}', // the ends of the tag block
+      '\u{E0000}\u{E007F}', // the ends of the original tag block
+      '\u{E0080}\u{E0FFF}', // the widened part of the tag block (D-56, #172)
+      '\u2061\u2062\u2065', // the extended U+2060-2065 range (U+2065 is unassigned+default-ignorable)
+      '\u034F', // COMBINING GRAPHEME JOINER
+      '\u17B4\u17B5', // Khmer inherent vowels
+      '\u180B\u180C\u180D\u180F', // Mongolian variation selectors
+      '\uFE00\uFE0F', // variation selectors (BMP)
+      '\u{E0100}\u{E01EF}', // variation selectors (supplementary)
+      '\uFFF0\uFFF8', // unassigned/default-ignorable
+      '\u{1BCA0}\u{1BCA3}', // shorthand format controls
+      '\u{1D173}\u{1D17A}', // musical format controls
+      '\u2800', // BRAILLE PATTERN BLANK alone \u2014 named by decision, not by Default_Ignorable
+      // Two DIFFERENT invisible characters together: this is the trap a bare
+      // `.replace(TEXT_INVISIBLE_PATTERN, '')` (no fresh `g` copy) falls into,
+      // since it removes only the FIRST match and leaves the second, making
+      // the string look non-blank. D-56, #172.
+      '\u200B\u034F',
     ];
     for (const title of invisible) {
       expect(reasonOf(parse({ title }))).toBe('manifest.title must not be blank');
     }
     // Zero-width characters inside a real title are left alone.
     expect(parse({ title: 'Ma\u200Dil' }).ok).toBe(true);
+    // A Persian title held together by ZWNJ is not blank (D-56, #172).
+    expect(parse({ title: '\u0645\u06CC\u200C\u0634\u0648\u062F' }).ok).toBe(true);
+    // An emoji with a variation selector is not blank.
+    expect(parse({ title: '\u2764\uFE0F' }).ok).toBe(true);
   });
 
   it('quotes an untrusted value in a refusal cut short and escaped', () => {
@@ -311,7 +351,7 @@ describe('the hostApiVersion rule', () => {
     expect(compareHostApiVersion('one', '1.0').state).toBe('incompatible');
   });
 
-  it("mirrors the SDK baseline's version, id pattern, reserved ids and text bound", () => {
+  it("mirrors the SDK baseline's version, id pattern, text patterns, reserved ids and text bound", () => {
     // Main cannot import `src/` (ADR-0001 Amendment O decision 6), so
     // `hostContract.ts` writes these out and this assertion holds them to the
     // committed baseline and to the SDK's own export. A guardrail: it makes an
@@ -321,6 +361,10 @@ describe('the hostApiVersion rule', () => {
     expect(EXTENSION_ID_PATTERN.source).toBe(baseline.extensionIdPattern);
     // The baseline records the source only; a flag would change what it accepts.
     expect(EXTENSION_ID_PATTERN.flags).toBe('');
+    // These carry the `u` flag and it changes what the classes mean, so
+    // `String(...)`, flags included, is what the baseline records (D-56, #172).
+    expect(String(TEXT_FORBIDDEN_PATTERN)).toBe(baseline.textForbiddenPattern);
+    expect(String(TEXT_INVISIBLE_PATTERN)).toBe(baseline.textInvisiblePattern);
     expect([...RESERVED_IDS].sort()).toEqual([...baseline.reservedIds].sort());
     expect(MAX_TEXT_LENGTH).toBe(baseline.registryLimits.MAX_TEXT_LENGTH);
   });
@@ -495,8 +539,16 @@ describe('reading a package from disk, through the injected filesystem', () => {
   });
 
   it('passes the host version through, so the rule runs against the host it is told', () => {
-    const fs = fakeFs({ 'mail.lwplugin': { bytes: encode(packageObject({ hostApiVersion: '1.1' })) } });
-    const result = readPluginPackage(fs, 'mail.lwplugin', '1.0');
+    // Derived from `HOST_API_VERSION`, not a bare literal, so this scenario
+    // (a plugin declaring a newer minor than the told host offers) moves with
+    // the constant rather than silently drifting from it.
+    const [hostMajorPart, hostMinorPart] = HOST_API_VERSION.split('.');
+    const hostMajor = Number(hostMajorPart);
+    const hostMinor = Number(hostMinorPart);
+    const toldHostVersion = `${hostMajor}.${hostMinor}`;
+    const newerMinor = `${hostMajor}.${hostMinor + 1}`;
+    const fs = fakeFs({ 'mail.lwplugin': { bytes: encode(packageObject({ hostApiVersion: newerMinor })) } });
+    const result = readPluginPackage(fs, 'mail.lwplugin', toldHostVersion);
     if (!result.ok) throw new Error(result.reason);
     expect(result.plugin.compatibility.state).toBe('incompatible');
   });

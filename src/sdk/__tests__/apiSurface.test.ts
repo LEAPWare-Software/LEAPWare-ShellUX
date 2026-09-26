@@ -53,6 +53,7 @@ describe('the bump rule', () => {
   // not rewrite these cases. They were literal `1.0`/`1.1` until 1.1 shipped.
   const parsed = parseHostApiVersion(baseline.version)!;
   const nextMinor = `${parsed.major}.${parsed.minor + 1}`;
+  const nextMajor = `${parsed.major + 1}.0`;
 
   it('fails when the contract changes and the version does not move', () => {
     const current = changed({
@@ -87,17 +88,17 @@ describe('the bump rule', () => {
 
   it('accepts a major bump for a minor change', () => {
     const current = changed({
-      version: '2.0',
+      version: nextMajor,
       shellApi: { ...baseline.shellApi, required: [...baseline.shellApi.required, 'newMember'] },
     });
-    expect(assessContract(baseline, current)).toEqual([expect.stringContaining('(version 2.0)')]);
+    expect(assessContract(baseline, current)).toEqual([expect.stringContaining(`(version ${nextMajor})`)]);
   });
 
   it('asks for the baseline to be re-recorded when the version moves with no change of shape', () => {
     // A behavioural narrowing has no shape; its major bump is legitimate and the
     // baseline must still record the new number.
-    expect(assessContract(baseline, changed({ version: '2.0' }))).toEqual([
-      expect.stringContaining('does not record the contract as it stands (version 2.0)'),
+    expect(assessContract(baseline, changed({ version: nextMajor }))).toEqual([
+      expect.stringContaining(`does not record the contract as it stands (version ${nextMajor})`),
     ]);
   });
 
@@ -222,6 +223,18 @@ describe('the bump each change requires, one row of the table at a time', () => 
     ['a reserved id added', { reservedIds: [...baseline.reservedIds, 'shell'] }, 'major'],
     ['a reserved id removed', { reservedIds: baseline.reservedIds.slice(1) }, 'minor'],
     ['the id pattern changed', { extensionIdPattern: '^[a-z][a-z0-9-]{0,63}$' }, 'major'],
+    // D-56, GitHub issue #172: any change to either text pattern, even a
+    // WIDENING, is a major — same reasoning as `extensionIdPattern` above.
+    [
+      'the forbidden text pattern changed',
+      { textForbiddenPattern: `${baseline.textForbiddenPattern}extra` },
+      'major',
+    ],
+    [
+      'the invisible text pattern changed',
+      { textInvisiblePattern: `${baseline.textInvisiblePattern}extra` },
+      'major',
+    ],
     ['a registry bound added', { registryLimits: { ...baseline.registryLimits, MAX_NEW: 1 } }, 'major'],
     [
       'a registry bound lowered',
@@ -268,6 +281,24 @@ describe('the bump each change requires, one row of the table at a time', () => 
     const after = changed({ shellApi: { required: ['a', 'b'], optional: [] } });
     expect(diffSurface(before, after)).toEqual([
       { bump: 'minor', reason: 'IShellAPI: "b" is an optional member made required' },
+    ]);
+  });
+
+  it('names the pattern and both sides of the change in the reason string for each text pattern (D-56, #172)', () => {
+    const forbiddenAfter = changed({ textForbiddenPattern: `${baseline.textForbiddenPattern}extra` });
+    expect(diffSurface(baseline, forbiddenAfter)).toEqual([
+      {
+        bump: 'major',
+        reason: `TEXT_FORBIDDEN_PATTERN: ${baseline.textForbiddenPattern} → ${baseline.textForbiddenPattern}extra`,
+      },
+    ]);
+
+    const invisibleAfter = changed({ textInvisiblePattern: `${baseline.textInvisiblePattern}extra` });
+    expect(diffSurface(baseline, invisibleAfter)).toEqual([
+      {
+        bump: 'major',
+        reason: `TEXT_INVISIBLE_PATTERN: ${baseline.textInvisiblePattern} → ${baseline.textInvisiblePattern}extra`,
+      },
     ]);
   });
 

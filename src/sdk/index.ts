@@ -42,7 +42,7 @@
  * Major moves when a plugin must change to keep working; minor moves on anything
  * additive. The rule the baseline enforces is in `./apiSurface.ts`.
  */
-export const HOST_API_VERSION = '1.1';
+export const HOST_API_VERSION = '2.0';
 
 export { useChannelPayload } from '../core/payload/PayloadChannel';
 export { TOKEN_CLASS } from '../core/theme/tokenClasses';

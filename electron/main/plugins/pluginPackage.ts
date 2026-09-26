@@ -2,7 +2,14 @@ import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { compareHostApiVersion, CONTRACT_VERSION_PATTERN, quoteUntrusted } from './compatibility.js';
 import type { Compatibility } from './compatibility.js';
-import { EXTENSION_ID_PATTERN, HOST_API_VERSION, MAX_TEXT_LENGTH, RESERVED_IDS } from './hostContract.js';
+import {
+  EXTENSION_ID_PATTERN,
+  HOST_API_VERSION,
+  MAX_TEXT_LENGTH,
+  RESERVED_IDS,
+  TEXT_FORBIDDEN_PATTERN,
+  TEXT_INVISIBLE_PATTERN,
+} from './hostContract.js';
 
 /**
  * ============================================================================
@@ -177,23 +184,6 @@ export const nodePluginPackageFs: PluginPackageFs = {
   closeSync,
 };
 
-/**
- * Bidi controls (ALM, LRM, RLM, the embeddings and overrides, the isolates) and
- * Unicode `Cc`. A title is host-chrome text: an RLO in it reorders what the
- * plugin manager shows beside it, and a NUL or a newline is never display text.
- */
-const TITLE_FORBIDDEN_PATTERN = /[\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/u;
-
-/**
- * Characters that draw nothing, removed before the blank check so a title of
- * only these is blank: the zero-width space, joiners and word joiner, the BOM,
- * the soft hyphen, the Mongolian vowel separator, the Hangul fillers, and the
- * tag characters. *Tests:* `electron/__tests__/pluginPackage.test.ts` —
- * "refuses a title carrying a bidi control, a C0 or C1 control, or nothing but
- * invisible characters".
- */
-const INVISIBLE_PATTERN = /[\u00AD\u115F\u1160\u180E\u200B-\u200D\u2060\u3164\uFEFF\uFFA0\u{E0000}-\u{E007F}]/gu;
-
 /** Base64 SHA-512 of `bytes`, the form the manifest records. Step 4's serve-time rehash reuses it. */
 export function sha512Base64(bytes: Uint8Array): string {
   return createHash('sha512').update(bytes).digest('base64');
@@ -245,10 +235,15 @@ function validateManifest(value: unknown): PluginManifest {
   }
 
   const title = requireString(value, 'title', 'manifest');
-  if (TITLE_FORBIDDEN_PATTERN.test(title)) {
+  if (TEXT_FORBIDDEN_PATTERN.test(title)) {
     refuse('manifest.title must not contain control characters or bidi controls');
   }
-  if (title.replace(INVISIBLE_PATTERN, '').trim().length === 0) refuse('manifest.title must not be blank');
+  // Fresh, locally-built `g` copy: `TEXT_INVISIBLE_PATTERN` carries no `g` flag
+  // (see its docblock in hostContract.ts). Calling `.replace(TEXT_INVISIBLE_PATTERN, '')`
+  // directly would remove only the FIRST match, leaving a title made of two or
+  // more different invisible characters looking non-blank when it draws nothing.
+  const strippedForBlankCheck = title.replace(new RegExp(TEXT_INVISIBLE_PATTERN.source, 'gu'), '');
+  if (strippedForBlankCheck.trim().length === 0) refuse('manifest.title must not be blank');
   if (title.length > MAX_TEXT_LENGTH) {
     refuse(`manifest.title exceeds ${String(MAX_TEXT_LENGTH)} characters`);
   }

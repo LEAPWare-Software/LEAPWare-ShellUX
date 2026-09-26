@@ -16,6 +16,50 @@ from so a reader can check it.
 
 ### Security
 
+- **`validateText` (the door for all 7 blueprint display-string fields —
+  `name`, `version`, command `label`/`icon`, nav node `label`/`icon`, nav
+  metric `description`) hardened against bidi control overrides, C0/C1
+  controls and zero-width-only strings** (D-56, #172). Two new, `Object.freeze`d,
+  canonical exports of `src/core/RegistryContext.tsx` — `TEXT_FORBIDDEN_PATTERN`
+  (refuses the whole string: bidi controls, Unicode `Cc`, the line/paragraph
+  separators U+2028-2029, the interlinear-annotation controls U+FFF9-FFFB, the
+  deprecated format controls U+206A-206F) and `TEXT_INVISIBLE_PATTERN`
+  (stripped by a fresh, call-site-built `'gu'` copy only to decide blankness —
+  the shared export itself carries no `g` flag, since a `g`-flagged `RegExp`
+  is stateful across `.test()` calls on its own `lastIndex`) — replace the
+  bare `trim().length===0` check. Mirrored, unfrozen, in
+  `electron/main/plugins/hostContract.ts` (main cannot import `src/`);
+  `pluginPackage.ts` deletes its own `TITLE_FORBIDDEN_PATTERN`/
+  `INVISIBLE_PATTERN` and imports the mirror instead. Verified exhaustively
+  against every codepoint U+0000-U+10FFFF for `Default_Ignorable_Code_Point`
+  coverage (Node v22.22.2, Unicode 17.0): 4174 default-ignorable codepoints
+  scanned, 0 uncovered. **Baseline-visible:** `ApiSurface.textForbiddenPattern`
+  and `.textInvisiblePattern` record `String(pattern)` (flags included), and
+  any change to either is an unconditional major in `diffSurface` —
+  `HOST_API_VERSION` moves `1.1` → `2.0`
+  (`src/sdk/index.ts`, `electron/main/plugins/hostContract.ts`,
+  `src/sdk/api-surface.json`). Deliberately, permanently accepted and not
+  forbidden: ordinary RTL letters, confusables/homoglyphs, ZWJ/ZWNJ/tag
+  characters/soft hyphen alongside visible text. *Tests:*
+  `src/core/__tests__/validation.test.ts` — "rejects a bidi control, a C0/C1
+  control, a line/paragraph separator or an interlinear-annotation control
+  (D-56, #172)", "a string made only of two or more different invisible
+  characters is blank (D-56, #172)", "a Persian name held together by ZWNJ is
+  not blank (D-56, #172)", "an emoji with a variation selector is not blank
+  (D-56, #172)"; `src/core/__tests__/hostConstants.test.ts` — "the shared
+  text patterns carry no global flag, so repeated test calls agree";
+  `electron/__tests__/pluginPackage.test.ts` — "refuses a title carrying a
+  bidi control, a C0 or C1 control, a line/paragraph separator, an
+  interlinear-annotation control, or nothing but invisible characters",
+  "mirrors the SDK baseline's version, id pattern, text patterns, reserved
+  ids and text bound"; `src/sdk/__tests__/apiSurface.test.ts` — "names the
+  pattern and both sides of the change in the reason string for each text
+  pattern (D-56, #172)". Full debate record:
+  `docs/decisions/debates/D-56-issue-172-validatetext-hardening.md`. **Filed
+  as a sibling, not fixed here: #235.** Chrome text beside a plugin-authored
+  RTL label is not bidi-isolated — proposed `<bdi>`/`unicode-bidi: isolate`,
+  needs a Playwright measurement since jsdom cannot observe layout.
+
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two
   problems found and fixed as PR A of D-55 (#211): (1) the prompt had the

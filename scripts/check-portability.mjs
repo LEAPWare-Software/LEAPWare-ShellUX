@@ -458,6 +458,17 @@ const CONTENT_RULES = [
     // path in a source string, which is the drive-letter rule's finding to report
     // and not this one's.
     patterns: [/(?<![\\/:\w.$-])\\\\[A-Za-z0-9][A-Za-z0-9._-]+\\/g],
+    // D-56 (#172) sharpened this after a real false positive: a JSON file
+    // recording a `RegExp`'s `String(...)` form (`src/sdk/api-surface.json`'s
+    // `textForbiddenPattern`/`textInvisiblePattern`) writes runs of JSON-escaped
+    // `\uXXXX` Unicode escapes back to back — e.g. `\\u200E\\u200F` — and two
+    // adjacent escapes are exactly `\\` + four alnum hex digits + `\\`, the same
+    // shape this pattern looks for. A UNC host component is never a literal
+    // lowercase `u` followed by four hex digits and nothing else, so that shape
+    // is excluded rather than allowlisting the whole file, which would also
+    // have switched this rule off for a real UNC path typed into the same file
+    // by mistake later.
+    accept: (match) => /^u[0-9A-Fa-f]{4}$/.test(match[0].slice(2, -1)),
   },
   {
     id: 'developer-username',

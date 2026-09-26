@@ -10,6 +10,8 @@ import {
   HOTKEY_KEYS,
   REGISTRY_LIMITS,
   RESERVED_IDS,
+  TEXT_FORBIDDEN_PATTERN,
+  TEXT_INVISIBLE_PATTERN,
 } from '../RegistryContext';
 import { SHELL_UX_ERROR_CODES } from '../types';
 import { HYDRATION_LIMITS } from '../services/HydrationEngine';
@@ -264,5 +266,31 @@ describe('the host constants', () => {
     // freezing the instance does not break repeated use.
     expect(EXTENSION_ID_PATTERN.global).toBe(false);
     expect(EXTENSION_ID_PATTERN.test('mail-ext')).toBe(true);
+  });
+
+  it('the shared text patterns carry no global flag, so repeated test calls agree', () => {
+    // D-56, GitHub issue #172. Measured: a `g`-flagged `RegExp` is stateful
+    // across calls on its own `lastIndex` — `/a/g.test('a')` answers `true`
+    // then `false` on the identical input the second time. A shared,
+    // module-level `g` pattern reused across call sites would silently skip
+    // characters depending on call order, which is why neither export carries
+    // one; every call site builds its own fresh `'gu'` copy instead.
+    expect(TEXT_FORBIDDEN_PATTERN.flags).toBe('u');
+    expect(TEXT_INVISIBLE_PATTERN.flags).toBe('u');
+
+    const forbiddenInput = '؜';
+    expect(TEXT_FORBIDDEN_PATTERN.test(forbiddenInput)).toBe(true);
+    expect(TEXT_FORBIDDEN_PATTERN.test(forbiddenInput)).toBe(true);
+
+    const invisibleInput = '​';
+    expect(TEXT_INVISIBLE_PATTERN.test(invisibleInput)).toBe(true);
+    expect(TEXT_INVISIBLE_PATTERN.test(invisibleInput)).toBe(true);
+
+    // The measurement the docblock cites, reproduced here: a `g`-flagged
+    // sibling of the same pattern DOES disagree with itself across calls,
+    // which is exactly the bug the exported, `g`-less pattern avoids.
+    const statefulSibling = new RegExp(TEXT_FORBIDDEN_PATTERN.source, 'gu');
+    expect(statefulSibling.test(forbiddenInput)).toBe(true);
+    expect(statefulSibling.test(forbiddenInput)).toBe(false);
   });
 });

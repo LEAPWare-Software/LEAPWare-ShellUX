@@ -252,6 +252,18 @@ const ACCEPTED = [
     text: `powershell -Command build; a${BS}b`,
     why: 'platform-only-invocation and platform-only-path-separator are scoped to files that run commands',
   },
+  {
+    // D-56 (#172): a JSON file recording `String(someRegExp)` writes runs of
+    // JSON-escaped `\uXXXX` Unicode escapes back to back, and two adjacent
+    // ones are exactly the shape unc-path looks for (`\\` + alnum run + `\\`).
+    // A UNC host is never a literal lowercase `u` plus four hex digits and
+    // nothing else, so this is the `unc-path` rule's own `accept` exclusion,
+    // not the ALLOWLIST — a real UNC path typed into the same file afterwards
+    // still gets caught.
+    file: 'src/api-surface-like.ts',
+    text: assemble(BS, BS, 'u', '2', '0', '6', 'A', BS, BS, 'u', '2', '0', '6', 'F'),
+    why: 'a run of JSON-escaped \\uXXXX Unicode escapes is not a UNC path naming a host',
+  },
 ];
 
 describe('content rules', () => {
