@@ -3497,19 +3497,33 @@
         }
       ],
       "probe": {
-        "name": "retarget release.yml's tag trigger away from v*, so it would never fire on a real version tag",
+        "name": "swap which release-upload step carries the installer/blockmap vs. the update manifest, so latest.yml would publish before its installer exists",
         "edits": [
           {
             "file": ".github/workflows/release.yml",
             "replace": [
-              "on:\n  push:\n    tags:\n      - 'v*'",
-              "on:\n  push:\n    tags:\n      - 'release-*'"
+              "gh release upload \"${{ github.ref_name }}\" release/*.exe release/*.blockmap --repo \"${{ github.repository }}\" --clobber",
+              "gh release upload \"${{ github.ref_name }}\" release/latest.yml --repo \"${{ github.repository }}\" --clobber-INSTALLER-MARKER"
+            ]
+          },
+          {
+            "file": ".github/workflows/release.yml",
+            "replace": [
+              "gh release upload \"${{ github.ref_name }}\" release/latest.yml --repo \"${{ github.repository }}\" --clobber\n",
+              "gh release upload \"${{ github.ref_name }}\" release/*.exe release/*.blockmap --repo \"${{ github.repository }}\" --clobber\n"
+            ]
+          },
+          {
+            "file": ".github/workflows/release.yml",
+            "replace": [
+              "--clobber-INSTALLER-MARKER",
+              "--clobber"
             ]
           }
         ]
       },
       "provenOn": "2026-09-26",
-      "addedBy": "lane C conductor (cloud, 2026-09-26): plan v1-production.md:186"
+      "addedBy": "lane C conductor (cloud, 2026-09-26): plan v1-production.md:186; probe corrected 2026-09-26 per claude[bot]'s review of PR #233 (upload_order_correct was vacuous)"
     },
     {
       "id": "C-52",

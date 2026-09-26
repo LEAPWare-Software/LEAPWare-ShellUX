@@ -14,6 +14,38 @@ from so a reader can check it.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`scripts/claims/checks/release-workflow.mjs`'s `upload_order_correct` key was
+  vacuous: it always evaluated true, regardless of the real upload order in
+  `.github/workflows/release.yml`.** `idxInstallerFiles` (a `.test()` boolean) was
+  compared with `>` against `idxLatestFile` (a `string.indexOf()` number); `true`/`false`
+  coerce to `1`/`0`, so the comparison silently reduced to `idxLatestFile > 1`, true for
+  almost any non-trivial step content. Found by `claude[bot]`'s automated review of PR
+  #233 (review comment on `scripts/claims/checks/release-workflow.mjs:31`), traced
+  through by hand with the upload order reversed to confirm the check stayed green
+  either way, then fixed: the script now indexes the package job's steps as an array and
+  compares step *positions*, never a boolean against a number. **Failure mode (rule
+  10):** two unrelated JavaScript values (a regex-test boolean and a string-index
+  number) were compared with `>` without either side being cast or asserted as a
+  number first, and nothing forced that assertion — TypeScript's structural typing over
+  a dynamically-`JSON.parse`d YAML tree does not catch it, because both operands of `>`
+  are already loosely typed as `any`/`unknown` by that point in the script. C-51's own
+  register row (`docs/claims.json`) is itself the second half of the failure: its probe
+  only mutated the tag trigger, so no mutation ever exercised `upload_order_correct`
+  before this — a passing register row is not evidence for the specific `expect` key
+  nothing has ever probed (CLAUDE.md rule 4b). The probe now swaps which
+  `gh release upload` step carries the installer/blockmap vs. the update manifest. This
+  is confirmed by `scripts/__tests__/claims-prove.test.mjs`'s generic per-row subtest
+  (line 241: `` it(`${row.id} passes here, and its probe "${row.probe.name}" turns it
+  red`, ...) ``, run for C-51, passing above) — not cited with a `*Test:*` marker here
+  because its title interpolates `row.probe.name`, a multi-word value, which
+  `scripts/check-citations.mjs`'s own documented limits (`patternFor`) say is
+  permanently out of reach for that checker to resolve; narrowing the claim to the
+  file and line instead of a title it cannot check. The workflow file itself
+  (`.github/workflows/release.yml`) was never wrong; only the proof that it stays right
+  was broken.
+
 ### Documentation
 
 - **Step 8 (release engineering), items 2-5: `provider: github` landed, a

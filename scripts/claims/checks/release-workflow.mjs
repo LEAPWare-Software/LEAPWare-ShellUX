@@ -21,14 +21,24 @@ const packageJobId = jobIds.find((id) => (jobs[id].needs ?? []) === 'verify' || 
 const packageJob = jobs[packageJobId ?? ''] ?? {};
 const packageWindowsOnly = packageJob['runs-on'] === 'windows-latest';
 
-const steps = (packageJob.steps ?? []).map((s) => s.run ?? '').join('\n---\n');
-const createsDraft = /gh release create[\s\S]*--draft/.test(steps);
-const idxCreate = steps.indexOf('gh release create');
-const idxInstaller = steps.indexOf('gh release upload');
-const idxInstallerFiles = /gh release upload[\s\S]*?release\/\*\.exe[\s\S]*?release\/\*\.blockmap/.test(steps);
-const idxLatestUpload = steps.lastIndexOf('gh release upload');
-const idxLatestFile = steps.indexOf('release/latest.yml');
-const uploadOrderCorrect = idxCreate !== -1 && idxInstaller !== -1 && idxInstaller < idxLatestUpload && idxLatestFile > idxInstallerFiles;
+// Per-step array, not a joined string: `upload_order_correct` compares step
+// *positions*, and a joined string with `indexOf`/`lastIndexOf` conflates
+// "first/last occurrence of a substring" with "which step this is", which
+// silently degraded to comparing a boolean against a number once one side
+// was a `.test()` result. That bug shipped with this file and made
+// `upload_order_correct` true unconditionally; caught by `claude[bot]`'s
+// review of PR #233, fixed here, and now exercised by C-51's own probe in
+// `docs/claims.json` ("swap which release-upload step carries the
+// installer/blockmap vs. the update manifest"), which this array rewrite is
+// what lets that probe actually catch.
+const stepRuns = (packageJob.steps ?? []).map((s) => s.run ?? '');
+const createsDraft = stepRuns.some((run) => /gh release create[\s\S]*--draft/.test(run));
+const idxCreate = stepRuns.findIndex((run) => run.includes('gh release create'));
+const idxInstallerUpload = stepRuns.findIndex(
+  (run) => run.includes('gh release upload') && /release\/\*\.exe/.test(run) && /release\/\*\.blockmap/.test(run),
+);
+const idxLatestUpload = stepRuns.findIndex((run) => run.includes('gh release upload') && run.includes('release/latest.yml'));
+const uploadOrderCorrect = idxCreate !== -1 && idxInstallerUpload !== -1 && idxLatestUpload !== -1 && idxCreate < idxInstallerUpload && idxInstallerUpload < idxLatestUpload;
 
 const noMacInRelease = !JSON.stringify(release).includes('macos');
 
