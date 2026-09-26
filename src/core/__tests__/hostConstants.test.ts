@@ -10,6 +10,8 @@ import {
   HOTKEY_KEYS,
   REGISTRY_LIMITS,
   RESERVED_IDS,
+  TEXT_FORBIDDEN_PATTERN,
+  TEXT_INVISIBLE_PATTERN,
 } from '../RegistryContext';
 import { SHELL_UX_ERROR_CODES } from '../types';
 import { HYDRATION_LIMITS } from '../services/HydrationEngine';
@@ -264,5 +266,70 @@ describe('the host constants', () => {
     // freezing the instance does not break repeated use.
     expect(EXTENSION_ID_PATTERN.global).toBe(false);
     expect(EXTENSION_ID_PATTERN.test('mail-ext')).toBe(true);
+  });
+
+  it('the shared text patterns carry no global flag, so repeated test calls agree', () => {
+    // D-56, GitHub issue #172. Measured: a `g`-flagged `RegExp` is stateful
+    // across calls on its own `lastIndex` — `/a/g.test('a')` answers `true`
+    // then `false` on the identical input the second time. A shared,
+    // module-level `g` pattern reused across call sites would silently skip
+    // characters depending on call order, which is why neither export carries
+    // one; every call site builds its own fresh `'gu'` copy instead.
+    expect(TEXT_FORBIDDEN_PATTERN.flags).toBe('u');
+    expect(TEXT_INVISIBLE_PATTERN.flags).toBe('u');
+
+    const forbiddenInput = '\u061C'; // ARABIC LETTER MARK
+    expect(TEXT_FORBIDDEN_PATTERN.test(forbiddenInput)).toBe(true);
+    expect(TEXT_FORBIDDEN_PATTERN.test(forbiddenInput)).toBe(true);
+
+    const invisibleInput = '\u200B'; // ZERO WIDTH SPACE
+    expect(TEXT_INVISIBLE_PATTERN.test(invisibleInput)).toBe(true);
+    expect(TEXT_INVISIBLE_PATTERN.test(invisibleInput)).toBe(true);
+
+    // The measurement the docblock cites, reproduced here: a `g`-flagged
+    // sibling of the same pattern DOES disagree with itself across calls,
+    // which is exactly the bug the exported, `g`-less pattern avoids.
+    const statefulSibling = new RegExp(TEXT_FORBIDDEN_PATTERN.source, 'gu');
+    expect(statefulSibling.test(forbiddenInput)).toBe(true);
+    expect(statefulSibling.test(forbiddenInput)).toBe(false);
+  });
+
+  it('freezing blocks a direct lastIndex write, but compile() is worse than that', () => {
+    // A claude[bot] review on D-56 (#172) caught the docblock above claiming
+    // the opposite of the first half here -- that a RegExp's lastIndex "stays
+    // mutable regardless of Object.freeze". Measured on the real export
+    // (safe: a plain property write either succeeds or throws, with no
+    // partial effect), that claim was false: lastIndex is an own, writable
+    // data property, so freeze makes it non-writable.
+    expect(() => {
+      (TEXT_FORBIDDEN_PATTERN as unknown as { lastIndex: number }).lastIndex = 5;
+    }).toThrow(TypeError);
+
+    // compile() is measured on a disposable clone, never the shared export:
+    // it does NOT cleanly throw-and-leave-unchanged the way a plain property
+    // write does. It rewrites source/flags/global from internal slots freeze
+    // does not protect (the same class of gap as a frozen Set's .add() still
+    // working), and only THEN throws, when it reaches the one step that
+    // touches an own property (resetting lastIndex to 0). The call "throws",
+    // but the object it was called on is left silently changed into a
+    // different pattern first -- calling compile() on a frozen RegExp is not
+    // a safe no-op attempt, it is a partial, irreversible mutation that
+    // happens to also throw.
+    const disposableClone = Object.freeze(new RegExp(TEXT_INVISIBLE_PATTERN.source, TEXT_INVISIBLE_PATTERN.flags));
+    expect(disposableClone.source).toBe(TEXT_INVISIBLE_PATTERN.source);
+    expect(() => {
+      (disposableClone as unknown as { compile: (source: string, flags?: string) => void }).compile('b', 'g');
+    }).toThrow(TypeError);
+    expect(disposableClone.source).toBe('b'); // already rewritten before the throw
+    expect(disposableClone.flags).toBe('g'); // ditto
+    expect(disposableClone.lastIndex).toBe(0); // the one write that DID fail
+
+    // None of this reaches the real exports: nothing in this codebase calls
+    // .compile() on TEXT_FORBIDDEN_PATTERN/TEXT_INVISIBLE_PATTERN. Freeze
+    // costs nothing either way: lastIndex is always read (then reset to 0
+    // locally for a non-g/y pattern), but only written back for g/y, and
+    // neither export carries one, so .test()/.exec() never write it here.
+    expect(TEXT_FORBIDDEN_PATTERN.global).toBe(false);
+    expect(TEXT_INVISIBLE_PATTERN.global).toBe(false);
   });
 });

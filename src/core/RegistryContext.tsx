@@ -75,6 +75,101 @@ import { hotkeyToken } from './hotkeys';
 export const EXTENSION_ID_PATTERN = Object.freeze(/^[a-z0-9][a-z0-9-]{0,63}$/);
 
 /**
+ * The text gate for every display string a blueprint hands the host: blueprint
+ * `name`/`version`, command `label`/`icon`, nav node `label`/`icon`, nav metric
+ * `description` — every call site is `validateText` below, so there is one rule
+ * for all seven fields, not seven.
+ *
+ * `TEXT_FORBIDDEN_PATTERN` refuses the whole string outright: bidi control
+ * characters (U+061C, U+200E-200F, the embeddings/overrides U+202A-202E, the
+ * isolates U+2066-2069), the deprecated format controls U+206A-206F, the
+ * interlinear-annotation controls U+FFF9-FFFB, the line/paragraph separators
+ * U+2028-2029, and Unicode `Cc`. These are layout-changing or otherwise not
+ * display text at all, so no position in the string is an acceptable place for
+ * one — refusing the whole field is the only honest response.
+ *
+ * `TEXT_INVISIBLE_PATTERN` is different in kind: these characters draw nothing,
+ * but are legitimate NEXT TO visible text (ZWJ/ZWNJ hold real scripts and emoji
+ * together, a variation selector picks emoji-presentation, soft hyphen is a
+ * real hyphenation hint) — GitHub issue #172. `validateText` strips a FRESH
+ * copy of this pattern only to decide whether the string is blank; the
+ * original, unstripped string is what is stored. See "the shared text patterns
+ * carry no global flag" below for why every call site must build its own
+ * `'gu'` copy rather than reusing this export directly.
+ *
+ * Both are **entry-point validation**: real at `validateText`'s door, and say
+ * nothing about a string that reaches display some other way. Both are
+ * `Object.freeze`d against replacement, same as `EXTENSION_ID_PATTERN` above —
+ * and that claim is exactly as large as it is there and no larger: it stops an
+ * own property being added, replaced or deleted, and nothing else. `lastIndex`
+ * IS an own, writable data property, so freezing genuinely does make a direct
+ * write to it throw a `TypeError` in this always-strict ES-module code —
+ * measured: `Object.freeze(/a/u).lastIndex = 1` throws "Cannot assign to read
+ * only property 'lastIndex'", with no partial effect either way.
+ *
+ * `.compile()` is a different and worse case, not covered by that claim: it
+ * rewrites `source`/`flags`/`global` from internal slots freeze does not
+ * protect (the same class of gap as a frozen `Set`'s `.add()` still
+ * working), and only THEN throws, when it reaches the one step that touches
+ * an own property (resetting `lastIndex` to 0). Measured: a frozen clone's
+ * `.compile('b', 'g')` still throws that same `TypeError` — but by the time
+ * it does, `.source` already reads `'b'` and `.flags` already reads `'g'`.
+ * Calling `.compile()` on a frozen `RegExp` is not a safe no-op attempt; it
+ * is a partial, irreversible mutation into a different pattern that happens
+ * to also throw. Nothing in this codebase calls `.compile()` on either
+ * export, so this is a documented latent hazard, not a live one.
+ *
+ * Both of the above cost nothing here regardless: per the spec algorithm
+ * `.test()`/`.exec()` call, `lastIndex` is always READ (then locally reset to
+ * 0 for a non-`g`/`y` pattern before the search runs), but only WRITTEN back
+ * for a `g`- or `y`-flagged pattern — and neither export carries one (see
+ * "the shared text patterns carry no global flag" below), so the read is a
+ * no-op against a value that's always 0 and the write never happens at all.
+ * (Not independently re-instrumented here: `lastIndex` is non-configurable
+ * even before freezing, which blocks both a getter trap and a `Proxy`, since
+ * `RegExp.prototype.exec` refuses a receiver without the internal slot — the
+ * "always reads" half is spec text, not a repro run against V8 specifically.)
+ * The same register as `EXTENSION_ID_PATTERN`'s "hardened
+ * against replacement, not against a determined caller" above. Neither
+ * pattern is described as "fixed" or "immutable" for that reason: replacing
+ * `.test` as an own property is
+ * refused, but neither export claims more than that.
+ *
+ * `electron/main/plugins/hostContract.ts` carries mirrored copies for the
+ * package validator, since main cannot import `src/` (ADR-0001 Amendment O
+ * decision 6) — those copies are a **guardrail**, not entry-point validation:
+ * real only if kept in step with these, which a baseline test enforces.
+ *
+ * A change to either pattern, including a widening, is a `major` bump in
+ * `src/sdk/apiSurface.ts`'s `diffSurface` — see `ApiSurface.textForbiddenPattern`
+ * / `.textInvisiblePattern` and `docs/adr/0006-runtime-plugin-host.md`.
+ *
+ * *Tests:* `src/core/__tests__/validation.test.ts` — "rejects a bidi control,
+ * a C0/C1 control, a line/paragraph separator or an interlinear-annotation
+ * control (D-56, #172)", "a string made only of two or more different
+ * invisible characters is blank (D-56, #172)", "a Persian name held together
+ * by ZWNJ is not blank (D-56, #172)", "an emoji with a variation selector is
+ * not blank (D-56, #172)"; `src/core/__tests__/hostConstants.test.ts` —
+ * "the shared text patterns carry no global flag, so repeated test calls
+ * agree" and "freezing blocks a direct lastIndex write, but compile() is
+ * worse than that".
+ */
+export const TEXT_FORBIDDEN_PATTERN = Object.freeze(/[\p{Cc}\u061C\u200E-\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029\uFFF9-\uFFFB\u206A-\u206F]/u);
+
+/**
+ * No `g` flag: a `g`-flagged `RegExp` is stateful across `.test()`/`.exec()`
+ * calls on its OWN `lastIndex` — measured, `/a/g.test('a')` returns `true` then
+ * `false` on the identical input the second time. A shared, module-level `g`
+ * pattern reused across calls would silently skip characters depending on call
+ * order. Every call site that strips these builds a fresh global copy inline:
+ * `value.replace(new RegExp(TEXT_INVISIBLE_PATTERN.source, 'gu'), '')`. Calling
+ * `.replace(TEXT_INVISIBLE_PATTERN, '')` directly removes only the FIRST match
+ * (no `g`), which can leave a string of two-or-more different invisible
+ * characters looking non-blank when it draws nothing at all.
+ */
+export const TEXT_INVISIBLE_PATTERN = Object.freeze(/[\u00AD\u115F\u1160\u180B-\u180F\u200B-\u200D\u2060-\u2065\u034F\u17B4\u17B5\u3164\uFEFF\uFFA0\uFFF0-\uFFF8\uFE00-\uFE0F\u2800\u{E0080}-\u{E0FFF}\u{E0000}-\u{E007F}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}]/u);
+
+/**
  * Identifiers rejected outright.
  *
  * `__proto__` already fails the pattern above, but `constructor` and
@@ -387,7 +482,18 @@ function validateText(value: unknown, path: string, maxLength: number): string {
       path,
     );
   }
-  if (value.trim().length === 0) {
+  if (TEXT_FORBIDDEN_PATTERN.test(value)) {
+    throw new ShellUXError(
+      'INVALID_FIELD',
+      `Field "${path}" must not contain a bidi control, a C0/C1 control, a line or paragraph separator, an interlinear-annotation control, or a deprecated format control.`,
+      path,
+    );
+  }
+  // Fresh, locally-built `g` copy: `TEXT_INVISIBLE_PATTERN` itself carries no
+  // `g` flag (see its docblock), and a stripped copy is used ONLY to decide
+  // blankness — the original, unstripped `value` is what is returned below.
+  const strippedForBlankCheck = value.replace(new RegExp(TEXT_INVISIBLE_PATTERN.source, 'gu'), '');
+  if (strippedForBlankCheck.trim().length === 0) {
     throw new ShellUXError('INVALID_FIELD', `Field "${path}" must not be blank.`, path);
   }
   if (value.length > maxLength) {

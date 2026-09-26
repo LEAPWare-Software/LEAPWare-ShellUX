@@ -184,6 +184,120 @@ from so a reader can check it.
 
 ### Security
 
+- **`validateText` (the door for all 7 blueprint display-string fields —
+  `name`, `version`, command `label`/`icon`, nav node `label`/`icon`, nav
+  metric `description`) hardened against bidi control overrides, C0/C1
+  controls and zero-width-only strings** (D-56, #172). Two new, `Object.freeze`d,
+  canonical exports of `src/core/RegistryContext.tsx` — `TEXT_FORBIDDEN_PATTERN`
+  (refuses the whole string: bidi controls, Unicode `Cc`, the line/paragraph
+  separators U+2028-2029, the interlinear-annotation controls U+FFF9-FFFB, the
+  deprecated format controls U+206A-206F) and `TEXT_INVISIBLE_PATTERN`
+  (stripped by a fresh, call-site-built `'gu'` copy only to decide blankness —
+  the shared export itself carries no `g` flag, since a `g`-flagged `RegExp`
+  is stateful across `.test()` calls on its own `lastIndex`) — replace the
+  bare `trim().length===0` check. Mirrored, unfrozen, in
+  `electron/main/plugins/hostContract.ts` (main cannot import `src/`);
+  `pluginPackage.ts` deletes its own `TITLE_FORBIDDEN_PATTERN`/
+  `INVISIBLE_PATTERN` and imports the mirror instead. Verified exhaustively
+  against every codepoint U+0000-U+10FFFF for `Default_Ignorable_Code_Point`
+  coverage: `node scripts/scan-default-ignorable-coverage.mjs`
+  (`npm run scan:unicode-coverage`), committed rather than left as a chat
+  transcript a rule-9/Amendment-G reviewer can't reproduce — at Node
+  v22.22.2, Unicode 17.0: 4174 default-ignorable codepoints scanned, 0
+  uncovered. Deliberately not part of `npm run verify`, since its result
+  depends on the Node build's own Unicode-data version (the script's own
+  header says so). **Baseline-visible:** `ApiSurface.textForbiddenPattern`
+  and `.textInvisiblePattern` record `String(pattern)` (flags included), and
+  any change to either is an unconditional major in `diffSurface` —
+  `HOST_API_VERSION` moves `1.1` → `2.0`
+  (`src/sdk/index.ts`, `electron/main/plugins/hostContract.ts`,
+  `src/sdk/api-surface.json`). Deliberately, permanently accepted and not
+  forbidden: ordinary RTL letters, confusables/homoglyphs, ZWJ/ZWNJ/tag
+  characters/soft hyphen alongside visible text. *Tests:*
+  `src/core/__tests__/validation.test.ts` — "rejects a bidi control, a C0/C1
+  control, a line/paragraph separator or an interlinear-annotation control
+  (D-56, #172)", "a string made only of two or more different invisible
+  characters is blank (D-56, #172)", "a Persian name held together by ZWNJ is
+  not blank (D-56, #172)", "an emoji with a variation selector is not blank
+  (D-56, #172)", "rejects the same bidi override, and an invisible-only
+  blank, at each of the other 6 validateText call sites (D-56, #172)"
+  (`version`, command `label`/`icon`, nav node `label`/`icon`, nav metric
+  `description` — the prior tests all drove blueprint `name` only,
+  true-by-construction but unobserved for the other six until a
+  cloud-reviewer pass named the gap; a later pass caught a parallel-work
+  merge that had dropped a non-redundant invisible-only-blank case for
+  `RibbonAction.icon` while removing a truly redundant one — both shapes are
+  now checked at every site, not just the forbidden/bidi-override one);
+  `DEVELOPER.md` gains the matching field-table pointers and version note.
+  `src/core/__tests__/hostConstants.test.ts` — "the shared
+  text patterns carry no global flag, so repeated test calls agree";
+  `electron/__tests__/pluginPackage.test.ts` — "refuses a title carrying a
+  bidi control, a C0 or C1 control, a line/paragraph separator, an
+  interlinear-annotation control, or nothing but invisible characters",
+  "mirrors the SDK baseline's version, id pattern, text patterns, reserved
+  ids and text bound"; `src/sdk/__tests__/apiSurface.test.ts` — "names the
+  pattern and both sides of the change in the reason string for each text
+  pattern (D-56, #172)"; `src/core/__tests__/navigationTree.test.tsx` —
+  "setNavigationTree refuses a label carrying a bidi control or a line
+  separator", pinning that the runtime `setNavigationTree` door is refused
+  through the same gate as registration, not merely assumed from the shared
+  function (a debate commitment that had been conceded but not shipped,
+  caught by a `claude[bot]` review round; `DEVELOPER.md` and `types.ts` gain
+  the matching citation and user-data-cleaning guidance in the same commit).
+  Full debate record:
+  `docs/decisions/debates/D-56-issue-172-validatetext-hardening.md`. **Filed
+  as a sibling, not fixed here: #235.** Chrome text beside a plugin-authored
+  RTL label is not bidi-isolated — proposed `<bdi>`/`unicode-bidi: isolate`,
+  needs a Playwright measurement since jsdom cannot observe layout.
+  A second `claude[bot]` review round also found `scripts/check-portability.mjs`'s
+  `unc-path` false-positive exclusion (added for this same change) was
+  file-agnostic and asserted a false "never" about UNC hostname shapes —
+  fixed by scoping the exclusion to `context.file === 'src/sdk/api-surface.json'`
+  rather than gating the whole rule via `onlyFiles` (which would have
+  disabled `unc-path` detection everywhere else). *Test:*
+  `scripts/__tests__/check-portability.test.mjs` — the new `unc-path` FIRING
+  case proving the identical escape-run text in a different file is still
+  caught.
+  A third `claude[bot]` review round found the docblock's claim that
+  freezing a `RegExp` leaves its `lastIndex`/`compile()` unaffected was
+  itself factually wrong: `lastIndex` is an own,
+  writable data property, so freeze genuinely blocks a direct write to it.
+  Measuring further (not something the reviewer could execute) found
+  `.compile()` is worse than either version claimed: it silently rewrites
+  `source`/`flags`/`global` from internal slots freeze does not protect, and
+  only throws when it reaches the one step that touches an own property
+  (`lastIndex`) — so it is not a safe no-op attempt, it is a partial,
+  irreversible mutation that happens to also throw. Corrected the docblock
+  to state both halves precisely. *Test:*
+  `src/core/__tests__/hostConstants.test.ts` — "freezing blocks a direct
+  lastIndex write, but compile() is worse than that".
+  A separate post-implementation review pass (finding F1) independently
+  found the same `DEVELOPER.md` staleness noted above — the field-rule
+  tables for `name`, `NavigationNode.label`/`.icon` and `RibbonAction.label`/
+  `.icon` read only their pre-D-56 length/blankness rule, with no mention of
+  the D-56 rejection rule or the `2.0` bump. Two concurrent pushes to the
+  same branch closed this from different directions (a genuine parallel-work
+  collision, reconciled by merge rather than by discarding either side): one
+  added a shared "Display text is also refused..." subsection plus the
+  cross-field coverage test named above; the other added a per-field
+  New-in-2.0 note directly on each row. The merged result keeps both — the
+  detailed per-row prose and the shared subsection — and cites the one
+  comprehensive test from every row. Of the second push's two narrower,
+  single-field tests, `NavigationNode.label`'s was genuinely redundant with
+  the comprehensive test and was dropped; `RibbonAction.icon`'s covered an
+  invisible-only blank string, a shape the comprehensive test didn't check
+  at any non-`name` site at the time — a real gap, not a duplicate, caught
+  by a later cloud-reviewer pass (F3) and closed by extending the
+  comprehensive test to check both the forbidden/bidi-override shape and an
+  invisible-only blank at every site, rather than reintroducing the
+  single-field test.
+  A fourth `claude[bot]` review round found the `TEXT_FORBIDDEN_PATTERN`
+  rejection message named only four of the five categories the pattern
+  actually forbids — a value refused solely for a deprecated format control
+  (U+206A-U+206F) got a message describing none of its own reason. Fixed by
+  naming the fifth category; no test asserted the old message text, so
+  nothing else needed to change.
+
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two
   problems found and fixed as PR A of D-55 (#211): (1) the prompt had the

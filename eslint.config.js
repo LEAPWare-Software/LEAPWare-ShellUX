@@ -176,4 +176,51 @@ export default tseslint.config(
       ],
     },
   },
+  // -------------------------------------------------------------------------
+  // `TEXT_FORBIDDEN_PATTERN`/`TEXT_INVISIBLE_PATTERN` (D-56, #172), and the
+  // third exception this config makes.
+  //
+  // `no-misleading-character-class` exists to catch a real authoring mistake:
+  // writing what looks like ONE character (a base letter plus a combining
+  // accent, an emoji plus a variation selector) as if it were two SEPARATE
+  // alternatives inside a `[...]` class, when the source likely meant one
+  // literal grapheme. That is the right rule for ordinary text.
+  //
+  // `TEXT_INVISIBLE_PATTERN` (in `src/core/RegistryContext.tsx`, mirrored in
+  // `electron/main/plugins/hostContract.ts`) is not ordinary text: it is a
+  // character class whose MEMBERS are, by design, combining marks and
+  // variation selectors — U+034F COMBINING GRAPHEME JOINER, U+180B-180F the
+  // Mongolian variation selectors, U+FE00-FE0F the BMP variation selectors,
+  // and U+E0080-E0FFF (which covers the supplementary variation selectors,
+  // U+E0100-E01EF, as part of a wider default-ignorable plane-14 range) —
+  // listed as alternatives precisely
+  // because each one, ALONE, must be caught and stripped for the blankness
+  // check. Two of them sitting next to each other in the class's source text
+  // is not a mistaken "did you mean one combined glyph" — it is the class
+  // doing its job, and every "combined" pair the linter names here is two
+  // members of one enumerated set, never two halves of one intended
+  // character. Rewriting the class to separate every combining-class member
+  // from its neighbour with a filler would not make the pattern more correct;
+  // it would only hide the same shape from a future reader.
+  //
+  // Scoped to these two files only — the only place either pattern's source
+  // lives — not to the whole codebase: a misleading character class written
+  // anywhere else still fails the build. Flat config has no per-line
+  // exception that is not an inline directive, and inline directives are the
+  // thing this repository has zero of, so this necessarily turns the rule off
+  // for these two files in full (~1600 lines each), not only for the two
+  // patterns' own source text (measured: `printf 'export const R = /[❤️]/u;\n'
+  // | npx eslint --stdin --stdin-filename src/core/RegistryContext.tsx` exits
+  // 0). An unrelated genuine mistake of this shape written anywhere else in
+  // either file would pass silently, not fail loudly — this exception buys
+  // one reviewable config entry at the cost of a real, named gap, and the
+  // docblocks on both patterns exist so a human reviewer checks for that by
+  // hand, because the linter no longer will.
+  // -------------------------------------------------------------------------
+  {
+    files: ['src/core/RegistryContext.tsx', 'electron/main/plugins/hostContract.ts'],
+    rules: {
+      'no-misleading-character-class': 'off',
+    },
+  },
 );

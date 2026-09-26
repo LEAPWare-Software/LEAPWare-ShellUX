@@ -126,6 +126,25 @@ describe('setNavigationTree', () => {
     expect(host.current.registry.getExtension('mail-ext')?.navigationTree).toBe(declared);
   });
 
+  it('setNavigationTree refuses a label carrying a bidi control or a line separator', () => {
+    // D-56, GitHub issue #172. This runtime door re-normalises through the same
+    // validateText TEXT_FORBIDDEN_PATTERN/TEXT_INVISIBLE_PATTERN gate registration
+    // uses (RegistryContext.tsx's docblock above setNavigationTree says one
+    // validator runs at both doors) -- this pins that the runtime door genuinely
+    // does, not just that the shared function does in isolation.
+    const { host, active } = activated();
+    const bidiOverride = '\u202E' + 'gnik';
+    const lineSeparator = 'Sent' + '\u2028' + 'Items';
+    expect(
+      refusal(() => active.shell.setNavigationTree([{ id: 'a', label: bidiOverride }] as never)),
+    ).toEqual(['INVALID_FIELD', 'nodes[0].label']);
+    expect(
+      refusal(() => active.shell.setNavigationTree([{ id: 'b', label: lineSeparator }] as never)),
+    ).toEqual(['INVALID_FIELD', 'nodes[0].label']);
+    // A refused tree stores nothing -- same invariant the main test above pins.
+    expect(host.current.store.getNavigationTree('mail-ext')).toBeUndefined();
+  });
+
   it('is refused on a revoked handle, like every other write', () => {
     const { host, active } = activated();
     act(() => {

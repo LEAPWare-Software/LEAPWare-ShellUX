@@ -415,8 +415,53 @@ invisible to it, and still depends on review.
 > does with an incompatible package is step 4's. *Tests:*
 > `electron/__tests__/pluginPackage.test.ts` — "marks a plugin incompatible when
 > its major differs", "marks a plugin incompatible when it needs a newer minor
-> than the host offers", "mirrors the SDK baseline's version, id pattern,
+> than the host offers", "mirrors the SDK baseline's version, id pattern, text patterns,
 > reserved ids and text bound".
+>
+> **2026-09-26, D-56 (GitHub issue #172) — `TEXT_FORBIDDEN_PATTERN` and
+> `TEXT_INVISIBLE_PATTERN` join the baseline; `HOST_API_VERSION` moves `1.1` →
+> `2.0`.** `validateText` in `src/core/RegistryContext.tsx` — the text gate for
+> blueprint `name`/`version`, command `label`/`icon`, nav node `label`/`icon`,
+> nav metric `description`, one rule for all seven fields — accepted bidi
+> control overrides, C0/C1 controls and zero-width-only strings. Two exported,
+> `Object.freeze`d patterns now close that: `TEXT_FORBIDDEN_PATTERN` refuses a
+> string outright (bidi controls, `Cc`, the line/paragraph separators
+> U+2028-2029, the interlinear-annotation controls U+FFF9-FFFB, the deprecated
+> format controls U+206A-206F); `TEXT_INVISIBLE_PATTERN` is stripped by a
+> fresh, locally-built `'gu'` copy ONLY to decide blankness, never to decide
+> what is stored — neither export carries a `g` flag itself, since a shared
+> `g`-flagged `RegExp` is stateful across calls on its own `lastIndex`.
+> `electron/main/plugins/hostContract.ts` carries mirrored copies, same
+> reasoning as `EXTENSION_ID_PATTERN`'s mirror there (main cannot import
+> `src/`); `pluginPackage.ts`'s own `TITLE_FORBIDDEN_PATTERN`/`INVISIBLE_PATTERN`
+> are deleted in favour of importing the mirror. The baseline now records
+> `String(TEXT_FORBIDDEN_PATTERN)` and `String(TEXT_INVISIBLE_PATTERN)` —
+> flags included, not `.source` alone, because the `u` flag changes what the
+> character classes mean and must be part of what is compared. **Any change to
+> either recorded pattern needs a major. Shipping a widening as a minor means
+> changing that rule in `apiSurface.ts`, with review.** **A per-field
+> exception, such as allowing `\n` in a metric `description`, would be a
+> widening the baseline cannot see. Review sets its version.** The version
+> moves `1.1` → `2.0` for this change alone; it does not ride with GitHub issue
+> #106 (the React 19 migration), which is recorded as its own later `3.0`.
+> Deliberately out of scope, filed rather than fixed: confusables/homoglyphs
+> (needs UTS #39); ordinary strong-RTL letters, which are legitimate text and a
+> separate rendering concern — filed as a sibling issue, #235, on bidi
+> isolation of host chrome next to plugin-authored strings, not gated on
+> here. *Tests:*
+> `src/core/__tests__/validation.test.ts` — "rejects a bidi control, a C0/C1
+> control, a line/paragraph separator or an interlinear-annotation control
+> (D-56, #172)", "a string made only of two or more different invisible
+> characters is blank (D-56, #172)", "a Persian name held together by ZWNJ is
+> not blank (D-56, #172)", "an emoji with a variation selector is not blank
+> (D-56, #172)"; `src/core/__tests__/hostConstants.test.ts` — "the shared text
+> patterns carry no global flag, so repeated test calls agree";
+> `electron/__tests__/pluginPackage.test.ts` — "refuses a title carrying a
+> bidi control, a C0 or C1 control, a line/paragraph separator, an
+> interlinear-annotation control, or nothing but invisible characters";
+> `src/sdk/__tests__/apiSurface.test.ts` — "names the pattern and both sides of
+> the change in the reason string for each text pattern (D-56, #172)". Full
+> debate record: `docs/decisions/debates/D-56-issue-172-validatetext-hardening.md`.
 
 **Rejected:**
 

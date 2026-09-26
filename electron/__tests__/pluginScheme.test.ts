@@ -164,7 +164,8 @@ describe('the /plugins/ route', () => {
     h.install(packageText({ id: 'news', title: 'News', sha512: hashOf(newsBundle) }, newsBundle));
     valueOf(h.store.setEnabled('news', false));
     // Built against the next minor contract; this host offers HOST_API_VERSION.
-    // (Literal '1.1' against a '1.0' host until the host itself moved to 1.1.)
+    // `NEXT_MINOR` is derived from it above, so this stays correct across a
+    // bump (e.g. 1.1 → 2.0 for D-56, #172) instead of naming a stale literal.
     h.install(packageText({ id: 'future', title: 'Future', hostApiVersion: NEXT_MINOR }));
     expect(statusesOf(h.store)).toEqual({ future: 'incompatible', mail: 'enabled', news: 'disabled' });
 
@@ -346,8 +347,16 @@ describe('the plugin store', () => {
 
   it('installs an incompatible package, lists it with its reason, and refuses to enable it', () => {
     const h = harness();
-    const listing = h.install(packageText({ hostApiVersion: '2.0' }));
-    expect(listing).toMatchObject({ status: 'incompatible', reason: 'built for host contract 2, this shell offers 1' });
+    // Derived from `HOST_API_VERSION` (a next-major value), not a bare literal
+    // (D-56, #172): this scenario is "built for a newer major" and must stay
+    // that shape across a host bump rather than silently becoming "same major".
+    const hostMajor = Number(HOST_API_VERSION.split('.')[0]);
+    const nextMajor = `${hostMajor + 1}.0`;
+    const listing = h.install(packageText({ hostApiVersion: nextMajor }));
+    expect(listing).toMatchObject({
+      status: 'incompatible',
+      reason: `built for host contract ${hostMajor + 1}, this shell offers ${hostMajor}`,
+    });
     expect(reasonOf(h.store.setEnabled('mail', true))).toBe('mail is incompatible and cannot be enabled');
   });
 

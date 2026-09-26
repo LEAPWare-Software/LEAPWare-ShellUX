@@ -251,6 +251,126 @@ describe('validateBlueprint — text fields', () => {
     expectRejection(makeBlueprint({ [field]: '   \t\n ' }), 'INVALID_FIELD', field);
   });
 
+  it('rejects a bidi control, a C0/C1 control, a line/paragraph separator or an interlinear-annotation control (D-56, #172)', () => {
+    const forbidden = [
+      '\u202Eeman', // RIGHT-TO-LEFT OVERRIDE
+      'name\u200F', // RLM
+      'na\u2066me', // LRI
+      '\u061Cname', // ARABIC LETTER MARK
+      'name\n', // C0 control (also caught the same way as before)
+      'name\u2028wide', // LINE SEPARATOR
+      'name\u2029wide', // PARAGRAPH SEPARATOR
+      'name\uFFF9anno\uFFFB', // interlinear annotation anchor/terminator
+      'name\u206Awide', // deprecated format control
+    ];
+    for (const name of forbidden) {
+      expectRejection(makeBlueprint({ name }), 'INVALID_FIELD', 'name');
+    }
+  });
+
+  it('rejects the same bidi override, and an invisible-only blank, at each of the other 6 validateText call sites (D-56, #172)', () => {
+    // F4, cloud-reviewer verdict on PR #236: the CHANGELOG/ADR/DECISIONS claim
+    // hardening for "all 7" display-string fields, but every prior test above
+    // drives blueprint `name` only -- true by construction (one shared
+    // validateText), unobserved for the other six. This exercises each one
+    // directly, through the same public validateBlueprint entry point.
+    //
+    // F3, a later cloud-reviewer pass: a parallel-work merge dropped a
+    // RibbonAction.icon case that covered an invisible-only blank string, not
+    // just the forbidden/bidi-override path this test originally checked --
+    // that was a real, non-redundant gap, not the duplicate it was taken for.
+    // Both shapes are checked at every site now, not just the forbidden one.
+    const bidi = '\u202E' + 'gnik'; // RIGHT-TO-LEFT OVERRIDE
+    const blank = '\u200B\u034F'; // ZERO WIDTH SPACE + COMBINING GRAPHEME JOINER
+    const cases: [Record<string, unknown>, string][] = [
+      [{ version: bidi }, 'version'],
+      [{ version: blank }, 'version'],
+      [
+        { ribbonActions: [{ ...makeAction(), label: bidi }] },
+        'ribbonActions[0].label',
+      ],
+      [
+        { ribbonActions: [{ ...makeAction(), label: blank }] },
+        'ribbonActions[0].label',
+      ],
+      [
+        { ribbonActions: [{ ...makeAction(), icon: bidi }] },
+        'ribbonActions[0].icon',
+      ],
+      [
+        { ribbonActions: [{ ...makeAction(), icon: blank }] },
+        'ribbonActions[0].icon',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: bidi }] },
+        'navigationTree[0].label',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: blank }] },
+        'navigationTree[0].label',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: 'Root A', icon: bidi }] },
+        'navigationTree[0].icon',
+      ],
+      [
+        { navigationTree: [{ id: 'root-a', label: 'Root A', icon: blank }] },
+        'navigationTree[0].icon',
+      ],
+      [
+        {
+          navigationTree: [
+            { id: 'root-a', label: 'Root A', metric: { kind: 'bar', value: 0.5, description: bidi } },
+          ],
+        },
+        'navigationTree[0].metric.description',
+      ],
+      [
+        {
+          navigationTree: [
+            { id: 'root-a', label: 'Root A', metric: { kind: 'bar', value: 0.5, description: blank } },
+          ],
+        },
+        'navigationTree[0].metric.description',
+      ],
+    ];
+    for (const [overrides, field] of cases) {
+      expectRejection(makeBlueprint(overrides), 'INVALID_FIELD', field);
+    }
+  });
+
+  it('a string made only of two or more different invisible characters is blank (D-56, #172)', () => {
+    // Reproduces the trap in the decision: calling `.replace(pattern, '')`
+    // WITHOUT rebuilding a fresh `'gu'` copy removes only the first match,
+    // leaving a second invisible character behind and the string looking
+    // non-blank. `validateText` builds a fresh copy every call, so both are
+    // stripped and this is refused as blank exactly like a single one is.
+    const blank = [
+      '\u200B\u034F', // ZERO WIDTH SPACE + COMBINING GRAPHEME JOINER
+      '\uFEFF\u2060\u180B', // BOM + WORD JOINER + Mongolian FVS1
+    ];
+    for (const name of blank) {
+      expectRejection(makeBlueprint({ name }), 'INVALID_FIELD', 'name');
+    }
+  });
+
+  it('a string made only of U+2800 BRAILLE PATTERN BLANK is blank, though it is not Default_Ignorable (D-56, #172)', () => {
+    // A distinct claim from the two-or-more-invisible-characters test above:
+    // this is a single character, named into TEXT_INVISIBLE_PATTERN by
+    // decision rather than by the Default_Ignorable_Code_Point property.
+    expectRejection(makeBlueprint({ name: '\u2800' }), 'INVALID_FIELD', 'name');
+  });
+
+  it('a Persian name held together by ZWNJ is not blank (D-56, #172)', () => {
+    const name = '\u0645\u06CC\u200C\u0634\u0648\u062F';
+    expect(validateBlueprint(makeBlueprint({ name })).name).toBe(name);
+  });
+
+  it('an emoji with a variation selector is not blank (D-56, #172)', () => {
+    const name = '\u2764\uFE0F';
+    expect(validateBlueprint(makeBlueprint({ name })).name).toBe(name);
+  });
+
   it('rejects an oversized name', () => {
     const name = 'n'.repeat(REGISTRY_LIMITS.MAX_TEXT_LENGTH + 1);
     expectRejection(makeBlueprint({ name }), 'PAYLOAD_TOO_LARGE', 'name');

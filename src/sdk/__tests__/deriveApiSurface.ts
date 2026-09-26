@@ -7,6 +7,8 @@ import {
   HOTKEY_MODIFIER_REQUIRED_KEYS,
   REGISTRY_LIMITS,
   RESERVED_IDS,
+  TEXT_FORBIDDEN_PATTERN,
+  TEXT_INVISIBLE_PATTERN,
 } from '../../core/RegistryContext';
 import { canonicalSurface } from '../apiSurface';
 import type { ApiSurface } from '../apiSurface';
@@ -116,6 +118,11 @@ export function deriveApiSurface(): ApiSurface {
     hotkeyKeys: [...HOTKEY_KEYS],
     hotkeyModifierRequiredKeys: [...HOTKEY_MODIFIER_REQUIRED_KEYS],
     extensionIdPattern: EXTENSION_ID_PATTERN.source,
+    // `String(...)`, not `.source`: these carry the `u` flag and it changes
+    // what the character classes mean, so the flags must be part of what's
+    // recorded and compared — see `ApiSurface.textForbiddenPattern`.
+    textForbiddenPattern: String(TEXT_FORBIDDEN_PATTERN),
+    textInvisiblePattern: String(TEXT_INVISIBLE_PATTERN),
     reservedIds: [...RESERVED_IDS],
     registryLimits: { ...REGISTRY_LIMITS },
   });

@@ -21,6 +21,7 @@
  * | `HOTKEY_KEYS` (an allowlist) | a key removed | a key added |
  * | `HOTKEY_MODIFIER_REQUIRED_KEYS`, `RESERVED_IDS` (denylists) | an entry added | an entry removed |
  * | `EXTENSION_ID_PATTERN` | any change to its source | — |
+ * | `TEXT_FORBIDDEN_PATTERN`, `TEXT_INVISIBLE_PATTERN` | any change, including a widening | — |
  * | `REGISTRY_LIMITS` | a bound added or lowered | a bound removed or raised |
  *
  * `IShellAPI` runs the other way from the blueprint: the host PROVIDES it and a
@@ -72,6 +73,16 @@ export interface ApiSurface {
   readonly hotkeyModifierRequiredKeys: readonly string[];
   /** `EXTENSION_ID_PATTERN.source`. */
   readonly extensionIdPattern: string;
+  /**
+   * `String(TEXT_FORBIDDEN_PATTERN)`, flags included. Unlike
+   * `extensionIdPattern`, which has no flags and can record `.source` alone,
+   * `TEXT_FORBIDDEN_PATTERN` and `TEXT_INVISIBLE_PATTERN` carry the `u` flag
+   * and it changes what their character classes mean, so the flags are part of
+   * what must be compared.
+   */
+  readonly textForbiddenPattern: string;
+  /** `String(TEXT_INVISIBLE_PATTERN)`, flags included — see `textForbiddenPattern`. */
+  readonly textInvisiblePattern: string;
   readonly reservedIds: readonly string[];
   readonly registryLimits: Readonly<Record<string, number>>;
 }
@@ -222,6 +233,28 @@ export function diffSurface(before: ApiSurface, after: ApiSurface): ContractChan
       reason: `EXTENSION_ID_PATTERN: /${before.extensionIdPattern}/ → /${after.extensionIdPattern}/`,
     });
   }
+  // Same reasoning as `EXTENSION_ID_PATTERN` above, and unconditionally a
+  // major even for a WIDENING: there is no mechanical way to tell whether one
+  // regular expression accepts a subset of another's strings, so the
+  // conservative answer is the one that cannot let a narrowing through as a
+  // minor. This only covers a change to the pattern STRING recorded here —
+  // a per-field exception added at a `validateText` call site changes
+  // neither `before.textForbiddenPattern` nor `after.textForbiddenPattern`,
+  // so it is invisible to this diff and gets no bump at all from this
+  // mechanism; that is a widening the baseline cannot see, review sets its
+  // version instead. See `docs/adr/0006-runtime-plugin-host.md`.
+  if (before.textForbiddenPattern !== after.textForbiddenPattern) {
+    changes.push({
+      bump: 'major',
+      reason: `TEXT_FORBIDDEN_PATTERN: ${before.textForbiddenPattern} → ${after.textForbiddenPattern}`,
+    });
+  }
+  if (before.textInvisiblePattern !== after.textInvisiblePattern) {
+    changes.push({
+      bump: 'major',
+      reason: `TEXT_INVISIBLE_PATTERN: ${before.textInvisiblePattern} → ${after.textInvisiblePattern}`,
+    });
+  }
   return changes;
 }
 
@@ -249,6 +282,8 @@ export function canonicalSurface(surface: ApiSurface): ApiSurface {
     hotkeyKeys: sorted(surface.hotkeyKeys),
     hotkeyModifierRequiredKeys: sorted(surface.hotkeyModifierRequiredKeys),
     extensionIdPattern: surface.extensionIdPattern,
+    textForbiddenPattern: surface.textForbiddenPattern,
+    textInvisiblePattern: surface.textInvisiblePattern,
     reservedIds: sorted(surface.reservedIds),
     registryLimits: Object.fromEntries(
       Object.entries(surface.registryLimits).sort(([a], [b]) => a.localeCompare(b)),
