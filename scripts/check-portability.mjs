@@ -128,28 +128,40 @@ const DOCUMENTED_PORTS = new Map([
 const DOCUMENTED_ENDPOINTS = new Map();
 
 /*
- * EMPTY ON PURPOSE, AND THE REASON IS A SECURITY FINDING RATHER THAN A STYLE ONE.
+ * EMPTY ON PURPOSE, AND — AFTER `electron-builder.yml` GAINED A `publish` BLOCK —
+ * STILL EMPTY ON PURPOSE, FOR A DIFFERENT REASON THAN IT WAS BEFORE.
  *
  * This map held one row: `updates.leapware.dev`, declared as the desktop update
  * feed. **That host was invented.** It was written to look plausible under the
  * project's brand, this organisation has never owned it, and a DNS lookup
  * returning an address was mistaken for proof of ownership — the apex resolves to
- * a netblock belonging to somebody else entirely.
+ * a netblock belonging to somebody else entirely. With `provider: generic`, that
+ * one URL would have been the sole authority for BOTH the `latest.yml` manifest
+ * and the installer it names; nothing this project produces is signed, so
+ * signature verification would not have refused a stranger's answer. That is
+ * remote code execution by configuration, and it was caught before any release,
+ * any tag, or any user holding a build. The row was deleted rather than pointed at
+ * a placeholder, and the rule this map softens was switched fully back on: every
+ * hostname in every tracked non-Markdown file is reported unless it is declared
+ * here, by exact match.
  *
- * Why an invented feed host is worse than an invented anything else. The updater
- * uses `provider: generic`, so that one URL is the sole authority for BOTH the
- * `latest.yml` manifest and the installer the manifest names. A shipped
- * application would have asked a stranger's server what to download, and then run
- * it. Nothing this project produces is signed, so signature verification would not
- * have refused the answer. That is remote code execution by configuration, and it
- * was caught before any release, any tag, or any user holding a build.
+ * Decision D-34 (`docs/DECISIONS.md`) then chose `provider: github` instead of
+ * `generic`, once the repository went public (D-43) — see `electron-builder.yml`'s
+ * `publish` block and `docs/RELEASE.md` section 1. **That choice adds no row here,
+ * and it is not an oversight.** `hardcoded-hostname`, just below, only matches an
+ * `https?://` literal; `publish: { provider: github, owner: ..., repo: ... }` is
+ * two identifiers, not a URL — electron-updater resolves the GitHub API host
+ * itself, and no literal hostname is written anywhere in this repository's
+ * packaging configuration for it to catch. So this map has nothing to declare: an
+ * empty `DOCUMENTED_ENDPOINTS` is not "no feed host chosen yet", it is "the chosen
+ * feed introduces no hostname literal", and the two states must not be confused.
+ * A row would belong here only if a future change went back to `provider: generic`
+ * (or anything else that writes a literal host into a tracked file), and even then
+ * only for a host this organisation can prove it owns.
  *
- * The rule this map softens is therefore switched fully back on: EVERY hostname in
- * every tracked non-Markdown file is now reported. Restoring a row here is how the
- * first real feed is declared, and it should happen in the same change that points
- * `electron-builder.yml` at a host somebody can prove they control — see
- * `docs/RELEASE.md` section 1. Until then the empty map is the honest state, and it
- * is what makes an accidental re-introduction fail the build.
+ * *Tests:* `scripts/__tests__/check-portability.test.mjs` — "reports nothing for
+ * an electron-builder.yml publish block using the GitHub provider, because
+ * owner/repo are not a hostname literal".
  *
  * The `endsWith`-versus-equality argument below is kept because it survives the
  * deletion and is the trap the next person will meet: a suffix test would accept

@@ -106,51 +106,51 @@ files:
   - '!**/node_modules/**/*.map'
 
 # ---------------------------------------------------------------------------
-# THE UPDATE FEED. ONE URL, IN ONE FILE, AND NOT A GITHUB TOKEN.
+# THE UPDATE FEED. `provider: github`, AND WHY THAT IS NO LONGER THE RISK IT WAS.
 #
-# `generic` and not `github`, on a verified fact rather than a preference: this
-# repository is private on a free plan - HANDOFF.md section 5 records the 403
-# and its "upgrade or make this repository public" message - and
-# electron-updater's GitHub provider against a private repository requires a
-# token inside the shipped client, where anyone who downloads the installer can
-# extract it. docs/adr/0004-native-host-runtime.md clause 7 records the two
-# alternatives that were weighed and why each was set aside.
+# This used to be `provider: generic` pointed at an INVENTED host
+# (`updates.leapware.dev`) - written to look plausible under the project's brand,
+# never owned by this organisation, with a DNS lookup mistaken for proof of
+# ownership. That was remote code execution by configuration: with `generic`, one
+# URL is the sole authority for both `latest.yml` and the installer it names, and
+# nothing this project builds is signed, so signature verification would not have
+# refused a stranger's answer. It was caught before any release, any tag, or any
+# user having a build, and the `publish` block was deleted rather than pointed at
+# a placeholder.
 #
-# **THE HOST BELOW IS NOT PROVISIONED.** It names the static endpoint the release
-# lane will publish to, it is deliberately the ONLY place in the repository where
-# a feed host appears, and replacing it is a one-line edit to this file followed
-# by a rebuild. `DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs` declares
-# it under ADR-0002 - declared, not exempted - and `docs/RELEASE.md` makes
-# provisioning it a blocking step of the first release rather than something a
-# reader is expected to infer from a comment.
+# `github` was rejected the first time on one fact: the repository was private, so
+# electron-updater's GitHub provider needs a token inside the shipped client,
+# extractable by anyone who downloads the installer. That fact changed. Decision
+# D-34 (`docs/DECISIONS.md`) made the repository PUBLIC and named `provider:
+# github` as the route taken, gated on D-42 (licence) and D-43 (execution of the
+# visibility flip) - both satisfied: `gh api repos/LEAPWare-Software/LEAPWare-ShellUX
+# --jq .visibility` returns `public` (register row C-49). On a public repository a
+# release asset is a plain public URL over HTTPS; there is no token to ship, no
+# host to own, no DNS record, and no static site to keep alive. `owner` and `repo`
+# below are identifiers, not a network endpoint - electron-updater resolves the
+# GitHub API host itself and no literal hostname is written in this file, which is
+# why `DOCUMENTED_ENDPOINTS` in `scripts/check-portability.mjs` stays empty: there
+# is no new host for it to declare, and the map's job - refusing an invented one -
+# is unaffected.
+#
+# **What this is NOT: an integrity control.** D-34 records the risk it accepts in
+# those words, and `docs/RELEASE.md` section 0 and `SECURITY.md` repeat it: an
+# unsigned installer becomes downloadable by anyone with a browser, and update
+# integrity then rests on the `sha512` in `latest.yml` served over HTTPS from the
+# same GitHub release. Whoever controls the GitHub account controls what every
+# client installs. That is a **guardrail** - it closes the "asked a stranger's
+# server" route this section used to describe, and it enforces nothing against a
+# hostile actor who controls the account itself.
 #
 # electron-builder writes this block into `app-update.yml` inside the packaged
 # application's resources. That file, and not this one, is what the running
 # application reads - which is why `electron/main/updater.ts` contains no URL at
 # all and why the renderer has no way to name a feed.
 # ---------------------------------------------------------------------------
-# THE FEED HOST IS DELIBERATELY UNSET, AND MUST STAY UNSET UNTIL SOMEBODY OWNS ONE.
-#
-# This block used to name `updates.leapware.dev`. That host was INVENTED - it was
-# written to look plausible under the project's brand, it was never owned by this
-# organisation, and a DNS lookup was mistaken for proof of ownership. The apex
-# resolves to a Dutch netblock belonging to somebody else.
-#
-# Why that is a security defect and not a naming mistake. `provider: generic`
-# means the URL below is the sole authority for both `latest.yml` AND the
-# installer that manifest names. A shipped application would have asked a
-# stranger's server what to download and then run it. Nothing this project builds
-# is signed, so signature verification would not have refused the answer. That is
-# remote code execution by configuration.
-#
-# It was caught before any release, any tag, or any user having a build.
-#
-# To enable updates: own a host, serve a directory over HTTPS, and change the URL
-# in the THREE places `docs/RELEASE.md` section 1 enumerates. Two of the three are
-# gates that fail until they agree, which is the property that makes the feed
-# impossible to change quietly. With no `publish` block at all, electron-builder
-# writes no `app-update.yml`, `electron/main/updater.ts` finds no feed, and the
-# palette reports the updater as unconfigured - which is the honest state.
+publish:
+  provider: github
+  owner: LEAPWare-Software
+  repo: LEAPWare-ShellUX
 
 # ---------------------------------------------------------------------------
 # WINDOWS.

@@ -80,14 +80,18 @@ relevant lines from this file.
 
 ## 5. How updates arrive
 
-**The update feed is not live yet.** `electron-builder.yml` currently has no
-`publish` block at all — a placeholder host that this organization did not
-own was found and deliberately removed (see `docs/RELEASE.md` §1) — so a
-packaged build's real check against a nonexistent feed fails, and the command
-palette shows **"Check for updates — last check failed"** rather than
-pointing at nothing. Plan step 8 wires `publish: { provider: github, ... }`
-up; once that lands and the first release ships, this is how updates will
-work:
+**The update feed is configured, but nothing has been published to it yet.**
+`electron-builder.yml` now has `publish: { provider: github, owner:
+LEAPWare-Software, repo: LEAPWare-ShellUX }` (plan step 8, item 2) — a
+placeholder host that this organization did not own was found and
+deliberately removed first (see `docs/RELEASE.md` §1) before this route was
+wired up. Because no GitHub Release has ever been published on this
+repository (plan step 9 is what proves that path end to end, and has not run
+yet), a packaged build's real update check still fails today, the same way it
+did before this route existed — the command palette shows **"Check for
+updates — last check failed"** — but the failure reason has changed from "no
+feed configured" to "the feed exists and has no releases on it." Once the
+first release ships, this is how updates will work:
 
 - The application checks for an update on launch and every 6 hours
   (`electron/main/updater.ts`), through **electron-updater** against **GitHub
