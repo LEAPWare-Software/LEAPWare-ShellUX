@@ -137,7 +137,7 @@ export const TEXT_FORBIDDEN_PATTERN = Object.freeze(/[\p{Cc}\u061C\u200E-\u200F\
  * (no `g`), which can leave a string of two-or-more different invisible
  * characters looking non-blank when it draws nothing at all.
  */
-export const TEXT_INVISIBLE_PATTERN = Object.freeze(/[\u00AD\u115F\u1160\u180B-\u180F\u200B-\u200D\u2060-\u2065\u034F\u17B4\u17B5\u3164\uFEFF\uFFA0\uFFF0-\uFFF8\uFE00-\uFE0F\u2800\u{E0080}-\u{E0FFF}\u{E0000}-\u{E007F}\u{E0100}-\u{E01EF}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}]/u);
+export const TEXT_INVISIBLE_PATTERN = Object.freeze(/[\u00AD\u115F\u1160\u180B-\u180F\u200B-\u200D\u2060-\u2065\u034F\u17B4\u17B5\u3164\uFEFF\uFFA0\uFFF0-\uFFF8\uFE00-\uFE0F\u2800\u{E0080}-\u{E0FFF}\u{E0000}-\u{E007F}\u{1BCA0}-\u{1BCA3}\u{1D173}-\u{1D17A}]/u);
 
 /**
  * Identifiers rejected outright.
