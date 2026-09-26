@@ -256,6 +256,27 @@ from so a reader can check it.
   to state both halves precisely. *Test:*
   `src/core/__tests__/hostConstants.test.ts` — "freezing blocks a direct
   lastIndex write, but compile() is worse than that".
+  A post-implementation review of PR #236 (finding F1) found `DEVELOPER.md`'s
+  field-rule tables for the extension blueprint's `name` (~line 171),
+  `NavigationNode.label`/`.icon` (~line 226-227) and `RibbonAction.label`/
+  `.icon` (~line 237-238) still read only their pre-D-56 length/blankness
+  rule, with no mention of the D-56 rejection rule those same doors now
+  enforce — only the already-landed `setNavigationTree` row named it. Fixed
+  by adding a New-in-host-contract-2.0 (D-56, #172) note to each of the five
+  rows (`HOST_API_VERSION` confirmed `2.0` in
+  `src/sdk/index.ts`), matching the phrasing and citation style the
+  `setNavigationTree` row already used. Narrowed, not closed: the coverage
+  gap the debate's QA round flagged (every D-56 case in
+  `src/core/__tests__/validation.test.ts` drove only the blueprint `name`
+  field) now also has one case each for `NavigationNode.label` and
+  `RibbonAction.icon`, but `NavigationNode.icon`, `RibbonAction.label`, and
+  the nav metric `description` remain untested at their own call sites —
+  `DEVELOPER.md`'s `icon?`/`RibbonAction.label` rows say so by pointing at
+  the shared-door test rather than one of their own, and no doc claims this
+  gap closed. *Tests:* `src/core/__tests__/validation.test.ts` — "rejects a
+  bidi override in a NavigationNode.label the same way it rejects one in
+  name (D-56, #172)", "rejects a RibbonAction.icon made only of invisible
+  characters as blank (D-56, #172)".
 
 - **`claude-code-review.yml`: the reviewed SHA could go stale mid-run, and the
   checkout kept a writable credential the reviewer agent could read.** Two

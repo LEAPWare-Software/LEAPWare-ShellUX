@@ -294,6 +294,36 @@ describe('validateBlueprint — text fields', () => {
     expect(validateBlueprint(makeBlueprint({ name })).name).toBe(name);
   });
 
+  it('rejects a bidi override in a NavigationNode.label the same way it rejects one in name (D-56, #172)', () => {
+    // `validateText` is one function for all seven fields (docblock on
+    // `TEXT_FORBIDDEN_PATTERN`/`TEXT_INVISIBLE_PATTERN` in
+    // `RegistryContext.tsx`) \u2014 this narrows the coverage gap the D-56 debate's
+    // QA round flagged: every case above drove only `name`.
+    expectRejection(
+      makeBlueprint({ navigationTree: [{ id: 'root-a', label: '\u202Eleman' }] }),
+      'INVALID_FIELD',
+      'navigationTree[0].label',
+    );
+  });
+
+  it('rejects a RibbonAction.icon made only of invisible characters as blank (D-56, #172)', () => {
+    expectRejection(
+      makeBlueprint({
+        ribbonActions: [
+          {
+            id: 'act-one',
+            label: 'A',
+            icon: '\u200B\u034F',
+            isVisible: () => true,
+            onExecute: () => undefined,
+          },
+        ],
+      }),
+      'INVALID_FIELD',
+      'ribbonActions[0].icon',
+    );
+  });
+
   it('rejects an oversized name', () => {
     const name = 'n'.repeat(REGISTRY_LIMITS.MAX_TEXT_LENGTH + 1);
     expectRejection(makeBlueprint({ name }), 'PAYLOAD_TOO_LARGE', 'name');
